@@ -4,13 +4,12 @@
     "module": "CommonJS",
     "moduleResolution": "Node",
     "declaration": true,
-    "outDir": "dist",
+    "outDir": "dist/cjs",
     "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "verbatimModuleSyntax": false
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"]
