@@ -1,4 +1,4 @@
-const en: Record<string, string> = {
+export const en: Record<string, string> = {
   'nav.dashboard': 'Dashboard',
   'nav.send': 'Send money',
   'nav.scan': 'Scan & pay',
@@ -98,4 +98,4 @@ const en: Record<string, string> = {
   'landing.getStarted': 'Get started free',
   'landing.merchant': 'Accept payments',
 };
-export default en;
+

@@ -19,7 +19,8 @@
     "seed": "npm run seed -w @bitripay/api",
     "test": "npm run build:shared && npm run test -w @bitripay/shared && npm run test -w @bitripay/api",
     "typecheck": "npm run build:shared && npm run typecheck -w @bitripay/api && npm run typecheck -w @bitripay/web && npm run typecheck -w @bitripay/admin",
-    "start": "npm run start -w @bitripay/api"
+    "start": "npm run start -w @bitripay/api",
+    "mobile": "cd apps/mobile && npx expo start"
   },
   "engines": {
     "node": ">=20"

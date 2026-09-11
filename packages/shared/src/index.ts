@@ -5,3 +5,4 @@ export * from './cards';
 export * from './types';
 export * from './countries';
 export * from './currencies';
+export * from './locales';

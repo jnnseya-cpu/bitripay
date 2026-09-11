@@ -1,0 +1,39 @@
+import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
+
+export type RootParams = {
+  Onboarding: undefined;
+  Login: undefined;
+  Register: { role?: string } | undefined;
+  Main: undefined;
+  Send: { to?: string; amount?: string; currency?: string; note?: string } | undefined;
+  PayTarget: { data?: string; code?: string };
+  QrLink: undefined;
+  Checkout: { code: string };
+  Requests: undefined;
+  AddMoney: undefined;
+  Withdraw: undefined;
+  Exchange: undefined;
+  Agents: { agent?: string } | undefined;
+  Remittance: undefined;
+  Cards: undefined;
+  Bills: undefined;
+  Topup: undefined;
+  GiftCards: undefined;
+  P2P: undefined;
+  Trade: { id: string };
+  TxDetail: { id: string };
+  Settings: undefined;
+  Security: undefined;
+  Kyc: undefined;
+  Referrals: undefined;
+  Support: undefined;
+  Notifications: undefined;
+  Merchant: undefined;
+  MerchantGateway: undefined;
+  Agent: undefined;
+};
+
+export type Nav = NativeStackNavigationProp<RootParams>;
+export type ScreenProps<K extends keyof RootParams> = NativeStackScreenProps<RootParams, K>;
+export const useNav = () => useNavigation<Nav>();

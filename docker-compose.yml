@@ -1,0 +1,38 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      WEB_URL: ${WEB_URL:-http://localhost:8080}
+      ADMIN_URL: ${ADMIN_URL:-http://localhost:8081}
+      API_URL: ${API_URL:-http://localhost:4000}
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt}
+      APP_SECRET: ${APP_SECRET:-change-me-app}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@bitripay.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin123!}
+      DATABASE_PATH: /data/bitripay.db
+    volumes:
+      - api-data:/data
+    ports:
+      - "4000:4000"
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+    ports:
+      - "8081:80"
+    depends_on:
+      - api
+volumes:
+  api-data:

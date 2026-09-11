@@ -1,0 +1,39 @@
+### BitriPay API quick reference (VS Code REST Client format)
+@api = http://localhost:4000
+@token = paste-jwt-here
+
+### Public config
+GET {{api}}/api/config
+
+### Register
+POST {{api}}/api/auth/register
+Content-Type: application/json
+
+{ "fullName": "Alice", "email": "alice@example.com", "password": "Password123!", "role": "user" }
+
+### Login
+POST {{api}}/api/auth/login
+Content-Type: application/json
+
+{ "identifier": "alice@example.com", "password": "Password123!" }
+
+### Send money
+POST {{api}}/api/transfers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "to": "@bob", "amount": "12.50", "currency": "USD", "note": "Lunch", "pin": "1234" }
+
+### Resolve a scanned QR
+POST {{api}}/api/qr/resolve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "data": "bitripay://pay?v=1&t=u&id=bob" }
+
+### Merchant API: create a payment request
+POST {{api}}/v1/payment-requests
+Authorization: Bearer bp_live_xxx
+Content-Type: application/json
+
+{ "amount": "49.99", "currency": "USD", "description": "Order #1001", "metadata": { "orderId": 1001 } }

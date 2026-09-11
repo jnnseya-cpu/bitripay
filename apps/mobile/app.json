@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "BitriPay",
+    "slug": "bitripay",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "bitripay",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": { "backgroundColor": "#0f172a", "resizeMode": "contain" },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.bitripay.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "BitriPay uses the camera to scan payment QR codes.",
+        "NSFaceIDUsageDescription": "BitriPay uses Face ID to unlock the app."
+      },
+      "associatedDomains": ["applinks:pay.bitripay.app"]
+    },
+    "android": {
+      "package": "com.bitripay.app",
+      "permissions": ["CAMERA", "USE_BIOMETRIC", "USE_FINGERPRINT", "POST_NOTIFICATIONS"],
+      "intentFilters": [
+        { "action": "VIEW", "autoVerify": true, "data": [{ "scheme": "https", "host": "pay.bitripay.app", "pathPrefix": "/q" }, { "scheme": "https", "host": "pay.bitripay.app", "pathPrefix": "/pay" }], "category": ["BROWSABLE", "DEFAULT"] }
+      ]
+    },
+    "plugins": [
+      ["expo-camera", { "cameraPermission": "Allow BitriPay to access your camera to scan QR codes." }],
+      ["expo-local-authentication", { "faceIDPermission": "Allow BitriPay to use Face ID." }],
+      ["expo-notifications", { "color": "#2563eb" }],
+      "expo-secure-store"
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:4000",
+      "webUrl": "http://localhost:5173",
+      "eas": { "projectId": "" }
+    }
+  }
+}
