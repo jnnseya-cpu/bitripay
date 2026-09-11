@@ -116,3 +116,20 @@ export function ConfirmButton({ onConfirm, children, prompt, variant, size }: { 
     </>
   );
 }
+
+/** Administrative approvals need a fresh step-up: the admin's PIN (a registered passkey token is attached automatically when present). */
+export function StepUpButton({ onConfirm, children, prompt, variant, size, title }: { onConfirm: (pin: string, reason?: string) => void; children: ReactNode; prompt?: string; variant?: 'danger' | 'secondary' | 'success' | 'ghost'; size?: 'sm'; title?: string }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [pin, setPin] = useState('');
+  return (
+    <>
+      <Button size={size} variant={variant} onClick={() => setOpen(true)}>{children}</Button>
+      <Modal open={open} onClose={() => setOpen(false)} title={title ?? 'Approve with step-up'}>
+        {prompt && <Field label={prompt}><Input value={reason} onChange={(e) => setReason(e.target.value)} autoFocus /></Field>}
+        <Field label="Your transaction PIN" hint="Maker-checker: this decision is recorded under your identity. Set a PIN in My profile if you have none."><Input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} autoFocus={!prompt} /></Field>
+        <div className="row"><Button variant={variant === 'danger' ? 'danger' : undefined} disabled={pin.length < 4 || (!!prompt && reason.length < 2)} onClick={() => { onConfirm(pin, reason); setOpen(false); setReason(''); setPin(''); }}>Confirm</Button><Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button></div>
+      </Modal>
+    </>
+  );
+}

@@ -27,6 +27,8 @@ export function Checkout() {
   const [amount, setAmount] = useState('');
   const [operatorId, setOperatorId] = useState('');
   const [opCountry, setOpCountry] = useState('');
+  const [declaration, setDeclaration] = useState<any>(null);
+  const [pinFor, setPinFor] = useState<'wallet' | 'external' | 'authenticate'>('wallet');
 
   const load = () => api.get<any>(`/api/checkout/${code}`).then((r) => { setInfo(r); if (!method) setMethod(r.methods[0] ?? 'wallet'); }).catch((e) => setError(e.message));
   useEffect(() => { load(); }, [code]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -35,8 +37,8 @@ export function Checkout() {
     if (pid) api.get<{ payment: PaymentView }>(`/api/checkout/${code}/payments/${pid}`).then((r) => setPayment(r.payment)).catch(() => {});
   }, [params, code]);
   useEffect(() => {
-    if (!payment || !['pending', 'initiated'].includes(payment.status)) return;
-    const t = setInterval(() => api.get<{ payment: PaymentView; paymentRequest: PaymentRequest }>(`/api/checkout/${code}/payments/${payment.id}`).then((r) => { setPayment(r.payment); if (r.payment.status === 'succeeded') { setDone(r.paymentRequest); load(); } }), 3000);
+    if (!payment || !['pending', 'initiated'].includes(payment.status) || payment.stage === 'AUTHENTICATION_REQUIRED') return;
+    const t = setInterval(() => api.get<{ payment: PaymentView; paymentRequest: PaymentRequest }>(`/api/checkout/${code}/payments/${payment.id}`).then((r) => { if (r.payment.stage !== payment.stage) setPayment(r.payment); if (r.payment.status === 'succeeded') { setDone(r.paymentRequest); load(); } }), payment.next?.type === 'bank_instructions' ? 10000 : 3000);
     return () => clearInterval(t);
   }, [payment, code]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -49,13 +51,17 @@ export function Checkout() {
   const money = (m: number) => formatMoney(m, cur);
   const successUrl = pr.successUrl || null;
 
-  const payExternal = async () => {
+  const cardBody = () => ({ number: card.number.replace(/\s/g, ''), expMonth: Number(card.expMonth), expYear: Number(card.expYear.length === 2 ? '20' + card.expYear : card.expYear), cvc: card.cvc, holderName: card.holderName });
+  /** Guests are authenticated by the rail itself (3-D Secure, their operator app); signed-in payers confirm with biometrics or PIN first. */
+  const payExternal = async (pin?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const body: any = { method, email: email || undefined, phone: phone || undefined, operatorId: operatorId || undefined, name: card.holderName || user?.fullName || undefined, returnUrl: window.location.href.split('?')[0] };
-      if (method === 'card' || method === 'virtual_card') body.card = { number: card.number.replace(/\s/g, ''), expMonth: Number(card.expMonth), expYear: Number(card.expYear.length === 2 ? '20' + card.expYear : card.expYear), cvc: card.cvc, holderName: card.holderName };
+      const body: any = { method, email: email || undefined, phone: phone || undefined, operatorId: operatorId || undefined, name: card.holderName || user?.fullName || undefined, returnUrl: window.location.href.split('?')[0], pin: pin || undefined };
+      if (method === 'card' || method === 'virtual_card') body.card = cardBody();
       const r = await api.post<any>(`/api/checkout/${code}/pay`, body);
+      setPinOpen(false);
+      if (r.declaration) setDeclaration(r.declaration);
       if (r.status === 'succeeded') { setDone(r.paymentRequest); load(); }
       else {
         setPayment(r.payment);
@@ -64,9 +70,31 @@ export function Checkout() {
       }
     } catch (err) {
       setError((err as Error).message);
+      setPinOpen(false);
     } finally {
       setLoading(false);
     }
+  };
+  const authenticate = async (pin: string) => {
+    if (!payment) return;
+    setLoading(true);
+    try {
+      const body: any = { pin: pin || undefined };
+      if (payment.method === 'card') body.card = cardBody();
+      const r = await api.post<any>(`/api/checkout/${code}/payments/${payment.id}/authenticate`, body);
+      setPinOpen(false);
+      setPayment(r.payment);
+      if (r.payment.status === 'succeeded') { setDone(r.paymentRequest); load(); }
+      else if (r.payment.next?.type === 'redirect' && r.payment.next.url) window.location.href = r.payment.next.url;
+    } catch (err) {
+      setError((err as Error).message);
+      setPinOpen(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const startExternal = () => {
+    if (user) { setPinFor('external'); setPinOpen(true); } else void payExternal();
   };
   const payWallet = async (pin: string) => {
     setLoading(true);
@@ -111,7 +139,7 @@ export function Checkout() {
             ) : pr.status !== 'open' ? (
               <Alert kind="warning">This payment request is {pr.status}.{pr.cancelUrl && <> <a href={pr.cancelUrl}>Back to merchant</a></>}</Alert>
             ) : payment ? (
-              <PaymentStatus payment={payment} onDone={() => setPayment(null)} />
+              <PaymentStatus payment={payment} declaration={declaration} onDone={() => setPayment(null)} onAuthenticate={payment.stage === 'AUTHENTICATION_REQUIRED' ? () => { setPinFor('authenticate'); setPinOpen(true); } : undefined} />
             ) : (
               <>
                 <h3>Pay with</h3>
@@ -123,7 +151,7 @@ export function Checkout() {
                     <>
                       {!fixed && <Field label={`Amount (${cur.code})`}><Input className="amount-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} /></Field>}
                       <KV k="Your balance" v={wallet ? money(wallet.balance) : `No ${cur.code} wallet`} />
-                      <Button block size="lg" className="mt" disabled={!wallet || (fixed ? wallet.balance < pr.amount! : !amount)} onClick={() => setPinOpen(true)}>Pay {fixed ? money(pr.amount!) : ''} from wallet</Button>
+                      <Button block size="lg" className="mt" disabled={!wallet || (fixed ? wallet.balance < pr.amount! : !amount)} onClick={() => { setPinFor('wallet'); setPinOpen(true); }}>Pay {fixed ? money(pr.amount!) : ''} from wallet</Button>
                     </>
                   ) : (
                     <div className="center"><p className="muted">Sign in to pay from your BitriPay wallet.</p><Link className="btn block" to={`/login?next=${encodeURIComponent(window.location.pathname)}`}>Sign in</Link><p className="small mt-sm"><Link to={`/register?next=${encodeURIComponent(window.location.pathname)}`}>Create an account</Link></p></div>
@@ -135,7 +163,7 @@ export function Checkout() {
                     {method === 'virtual_card' && <Alert kind="info">Enter the details of your BitriPay virtual card (starts with 6273 11).</Alert>}
                     <CardForm value={card} onChange={setCard} />
                     <Field label="Email for receipt"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-                    <Button block size="lg" loading={loading} disabled={!fixed || card.number.length < 12} onClick={payExternal}>Pay {money(pr.amount ?? 0)}</Button>
+                    <Button block size="lg" loading={loading} disabled={!fixed || card.number.length < 12} onClick={startExternal}>{user ? '🔐 Confirm and pay' : 'Pay'} {money(pr.amount ?? 0)}</Button>
                   </>
                 )}
                 {method === 'mobile_money' && (
@@ -143,22 +171,22 @@ export function Checkout() {
                     <OperatorPicker value={operatorId} onChange={setOperatorId} country={opCountry} onCountry={setOpCountry} />
                     <Field label="Mobile money number"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+233…" /></Field>
                     <Field label="Email for receipt"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-                    <Button block size="lg" loading={loading} disabled={!fixed || !phone} onClick={payExternal}>Send payment prompt</Button>
+                    <Button block size="lg" loading={loading} disabled={!fixed || !phone} onClick={startExternal}>{user ? '🔐 Confirm and pay' : 'Pay'} by mobile money</Button>
                   </>
                 )}
                 {method === 'bank' && (
                   <>
                     <Field label="Email for receipt"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-                    <Button block size="lg" loading={loading} disabled={!fixed} onClick={payExternal}>Get bank transfer details</Button>
+                    <Button block size="lg" loading={loading} disabled={!fixed} onClick={startExternal}>Get bank transfer details</Button>
                   </>
                 )}
-                <p className="tiny muted center mt">🔒 Secured by BitriPay. {pr.cancelUrl && <a href={pr.cancelUrl}>Cancel and return</a>}</p>
+                <p className="tiny muted center mt">🔒 Secured by BitriPay. Card payments are processed by a licensed processor; mobile money and bank payments are confirmed from the operator or bank before the merchant is credited. {pr.cancelUrl && <a href={pr.cancelUrl}>Cancel and return</a>}</p>
               </>
             )}
           </div>
         </div>
       </div>
-      <PinModal open={pinOpen} onClose={() => setPinOpen(false)} onSubmit={payWallet} loading={loading} summary={<KV k={`Pay ${merchant.businessName || merchant.fullName}`} v={fixed ? money(pr.amount!) : `${amount} ${cur.code}`} />} />
+      <PinModal open={pinOpen} onClose={() => setPinOpen(false)} onSubmit={(pin) => (pinFor === 'wallet' ? payWallet(pin) : pinFor === 'authenticate' ? authenticate(pin) : payExternal(pin))} loading={loading} title="Authorise this payment" summary={<KV k={`Pay ${merchant.businessName || merchant.fullName}`} v={fixed ? money(pr.amount!) : `${amount} ${cur.code}`} />} />
     </div>
   );
 }

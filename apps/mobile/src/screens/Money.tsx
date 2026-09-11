@@ -7,7 +7,23 @@ import { Header } from '../components/Header';
 import { useNav, type ScreenProps } from '../navigation';
 import type { BankAccount, PublicUser, Transaction } from '@bitripay/shared';
 
-interface PaymentView { id: string; status: string; method: string; amount: number; currency: string; fee: number; failureReason: string | null; next: any; gatewayName: string; createdAt: string }
+interface PaymentView { id: string; status: string; stage?: string; stageLabel?: string; stageGroup?: string; stageDescription?: string; authMethod?: string | null; expiresAt?: string | null; method: string; amount: number; currency: string; fee: number; failureReason: string | null; next: any; gatewayName: string; createdAt: string }
+const OPEN = (p: PaymentView) => !['succeeded', 'failed', 'cancelled'].includes(p.status);
+const STEPS: [string, string[]][] = [['Initiated', ['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED']], ['Sent', ['PAYMENT_SENT']], ['Verifying', ['EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED']], ['Confirmed', ['CONFIRMED']], ['Settled', ['SETTLED']]];
+
+/** Initiated → sent → verifying → confirmed → settled, so nobody mistakes an instruction for money. */
+export function StageBar({ stage, label, description }: { stage?: string; label?: string; description?: string }) {
+  if (!stage) return null;
+  const bad = ['EXPIRED', 'REJECTED', 'REVERSED'].includes(stage);
+  const warn = ['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'].includes(stage);
+  const idx = STEPS.findIndex(([, s]) => s.includes(stage));
+  return (
+    <View style={{ alignSelf: 'stretch', gap: 6 }}>
+      <Row style={{ gap: 3 }}>{STEPS.map(([name], i) => <View key={name} style={{ flex: 1, alignItems: 'center' }}><View style={{ height: 6, borderRadius: 3, alignSelf: 'stretch', backgroundColor: bad ? (i === 0 ? '#dc2626' : '#e5e7eb') : i < idx ? '#16a34a' : i === idx ? (warn ? '#f59e0b' : '#16a34a') : '#e5e7eb' }} /><T size={10} muted={i > idx}>{name}</T></View>)}</Row>
+      <T size={13}><T bold>{label ?? stage}</T>{description ? ` – ${description}` : ''}</T>
+    </View>
+  );
+}
 
 export function AddMoney() {
   const { t, money, config, wallets, toast, refreshWallets, user } = useStore();
@@ -24,6 +40,8 @@ export function AddMoney() {
   const [payment, setPayment] = useState<PaymentView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pin, setPin] = useState(false);
+  const [declaration, setDeclaration] = useState<any>(null);
   const options = useAsync(() => api.get<{ methods: any[] }>(`/api/deposits/options?currency=${cur}`), [cur]);
   const cards = useAsync(() => api.get<{ items: any[] }>('/api/cards'), [payment?.status]);
   const opt = options.data?.methods.find((m) => m.method === method);
@@ -32,19 +50,20 @@ export function AddMoney() {
     if (options.data && !opt) setMethod(options.data.methods[0]?.method ?? 'card');
   }, [options.data, opt]);
   useEffect(() => {
-    if (!payment || !['pending', 'initiated'].includes(payment.status) || payment.method === 'bank') return;
+    if (!payment || !OPEN(payment) || payment.stage === 'AUTHENTICATION_REQUIRED') return;
     const id = setInterval(async () => {
       const r = await api.get<{ payment: PaymentView }>(`/api/deposits/${payment.id}`);
-      setPayment(r.payment);
-      if (r.payment.status === 'succeeded') { toast('Money added', 'success'); refreshWallets(); }
-    }, 3000);
+      if (r.payment.stage !== payment.stage) setPayment(r.payment);
+      if (r.payment.status === 'succeeded' && payment.status !== 'succeeded') { toast('Money added', 'success'); refreshWallets(); }
+    }, payment.next?.type === 'bank_instructions' ? 10000 : 3000);
     return () => clearInterval(id);
   }, [payment]); // eslint-disable-line react-hooks/exhaustive-deps
-  const submit = async () => {
+  /** Device biometrics (PinSheet) or PIN authorise the intent before any instruction is issued. */
+  const submit = async (p?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const body: any = { method, amount, currency: cur, gateway: gw?.id, saveCard: true };
+      const body: any = { method, amount, currency: cur, gateway: method === 'mobile_money' ? undefined : gw?.id, saveCard: true, pin: p || undefined };
       if (method === 'card') {
         if (savedCardId) body.savedCardId = savedCardId;
         else if (gw?.provider !== 'stripe') body.card = { number: card.number.replace(/\s/g, ''), expMonth: Number(card.expMonth), expYear: Number(card.expYear.length === 2 ? '20' + card.expYear : card.expYear), cvc: card.cvc, holderName: card.holderName };
@@ -53,12 +72,15 @@ export function AddMoney() {
         body.phone = phone;
         if (operatorId) body.operatorId = operatorId;
       }
-      const r = await api.post<{ payment: PaymentView }>('/api/deposits', body);
+      const r = await api.post<{ payment: PaymentView; declaration?: any }>('/api/deposits', body);
+      setPin(false);
       setPayment(r.payment);
+      setDeclaration(r.declaration ?? null);
       if (r.payment.status === 'succeeded') { toast('Money added', 'success'); refreshWallets(); }
       else if (r.payment.next?.type === 'redirect' || r.payment.next?.type === 'stripe_payment_intent') Linking.openURL(r.payment.next.url ?? `${config?.webUrl}/add-money?payment=${r.payment.id}`);
     } catch (err) {
       setError((err as Error).message);
+      setPin(false);
     } finally {
       setLoading(false);
     }
@@ -69,20 +91,28 @@ export function AddMoney() {
       <Header title={t('addMoney.title')} />
       {payment ? (
         <Card style={{ alignItems: 'center' }}>
-          <T size={44}>{payment.status === 'succeeded' ? '✅' : payment.status === 'failed' ? '❌' : '⏳'}</T>
+          <T size={44}>{payment.status === 'succeeded' ? '✅' : payment.status === 'failed' ? '❌' : payment.stageGroup === 'exception' ? '🔍' : '⏳'}</T>
           <T bold size={26}>{money(payment.amount, payment.currency)}</T>
-          <Status status={payment.status} />
+          <Status status={payment.stageLabel ?? payment.status} />
+          <StageBar stage={payment.stage} label={payment.stageLabel} description={payment.stageDescription} />
+          {error && <Alert kind="error" text={error} />}
           {payment.failureReason && <Alert kind="error" text={payment.failureReason} />}
-          {payment.next?.type === 'prompt' && payment.status !== 'succeeded' && <Alert text={payment.next.message} />}
-          {payment.next?.type === 'bank_instructions' && payment.status !== 'succeeded' && (
+          {payment.stage === 'AUTHENTICATION_REQUIRED' && <Button title="🔐 Confirm with biometrics or PIN" onPress={() => setPin(true)} />}
+          {payment.next?.type === 'prompt' && OPEN(payment) && <Alert text={payment.next.message} />}
+          {payment.next?.type === 'bank_instructions' && OPEN(payment) && (
             <View style={{ alignSelf: 'stretch', gap: 8 }}>
-              <Alert text={payment.next.message} />
-              {Object.entries(payment.next.instructions ?? {}).map(([k, v]) => <KV key={k} k={k} v={String(v)} />)}
-              <Input label={payment.method === 'mobile_money' ? 'Transaction ID from your receipt' : 'Transfer reference'} value={proof} onChangeText={setProof} />
-              <Button title="Submit proof" variant="secondary" disabled={!proof} onPress={() => api.post<{ payment: PaymentView }>(`/api/deposits/${payment.id}/proof`, { reference: proof }).then((r) => { setPayment(r.payment); toast('Proof submitted', 'success'); })} />
+              {['INSTRUCTION_ISSUED', 'PAYMENT_SENT'].includes(payment.stage ?? '') && <><Alert text={payment.next.message} />{Object.entries(payment.next.instructions ?? {}).map(([k, v]) => <KV key={k} k={k} v={String(v)} />)}</>}
+              {payment.stage === 'INSTRUCTION_ISSUED' && <>
+                <Input label={payment.method === 'mobile_money' ? 'Transaction ID from your receipt (optional)' : 'Transfer reference (optional)'} value={proof} onChangeText={setProof} />
+                <T muted size={12}>Supporting note only – your wallet is credited when the operator/bank confirmation is matched, never from a typed reference or screenshot.</T>
+                <Button title="I have sent the money" variant="secondary" onPress={() => api.post<{ payment: PaymentView }>(`/api/deposits/${payment.id}/sent`, { reference: proof || undefined }).then((r) => { setPayment(r.payment); toast('Waiting for confirmation', 'success'); }).catch((e) => setError(e.message))} />
+              </>}
+              {payment.stage === 'PAYMENT_SENT' && <Alert kind="warning" text="Waiting for independent confirmation. Nothing has been credited yet." />}
+              {['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE'].includes(payment.stage ?? '') && <Alert kind="warning" text="A verifier is reviewing this payment. Nothing is credited until it is confirmed." />}
             </View>
           )}
-          <Button title="Done" variant="secondary" onPress={() => setPayment(null)} />
+          {declaration && <Card soft><T bold size={13}>How this works · {declaration.processing} · {declaration.expectedCompletion}</T><T size={12}>Confirmation: {declaration.confirmation}</T><T size={12}>Settlement: {declaration.settlement}</T></Card>}
+          <Button title={OPEN(payment) ? 'Back' : 'Done'} variant="secondary" onPress={() => { setPayment(null); setDeclaration(null); setError(null); }} />
         </Card>
       ) : (
         <Card>
@@ -110,10 +140,11 @@ export function AddMoney() {
               <Input label="Your mobile money number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+233…" />
             </>
           )}
-          {method === 'bank' && <Alert text="You'll receive bank details and a reference. Your wallet is credited once we confirm the transfer." />}
-          <Button title={`Add ${amount ? `${amount} ${cur}` : 'money'}`} loading={loading} onPress={submit} disabled={!amount || !opt} />
+          {method === 'bank' && <Alert text="You'll receive bank details and a reference. Your wallet is credited only once the transfer is independently confirmed." />}
+          <Button title={`🔐 Confirm and add ${amount ? `${amount} ${cur}` : 'money'}`} loading={loading} onPress={() => setPin(true)} disabled={!amount || !opt} />
         </Card>
       )}
+      <PinSheet open={pin} onClose={() => setPin(false)} title="Authorise this payment" onSubmit={(p) => (payment?.stage === 'AUTHENTICATION_REQUIRED' ? api.post<{ payment: PaymentView }>(`/api/deposits/${payment.id}/authenticate`, { pin: p || undefined }).then((r) => { setPin(false); setPayment(r.payment); }).catch((e) => { setPin(false); setError(e.message); }) : submit(p))} loading={loading} summary={<KV k={`Add money via ${labels[method]}`} v={payment ? money(payment.amount, payment.currency) : `${amount} ${cur}`} />} />
     </Screen>
   );
 }
@@ -148,6 +179,7 @@ export function Withdraw() {
   const [pin, setPin] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [bank, setBank] = useState({ bankName: '', accountName: '', accountNumber: '', currency: cur });
+  const [bankPin, setBankPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const eligible = (accounts.data?.items ?? []).filter((a) => a.currency === cur);
@@ -184,7 +216,7 @@ export function Withdraw() {
         {dest === 'mobile_money' && <><OperatorPicker country={opCountry} onCountry={setOpCountry} value={operatorId} onChange={setOperatorId} /><Input label="Mobile money number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" /></>}
         {fee != null && <Card soft><KV k={t('common.fee')} v={money(fee, cur)} /></Card>}
         <Button title="Withdraw" onPress={() => setPin(true)} disabled={!amount || (dest === 'bank' ? eligible.length === 0 : !operatorId || !phone)} />
-        <T muted size={12}>Withdrawals are reviewed and paid out by our team, usually within one business day. Prefer cash? Use an agent.</T>
+        <T muted size={12}>Payouts are executed from the platform's bank / mobile money accounts by our treasury team under maker-checker approval, usually within one business day. New beneficiaries have a short cooling-off period for larger amounts. Prefer cash? Use an agent.</T>
       </Card>
       <Card>
         <T bold>Bank accounts</T>
@@ -197,7 +229,8 @@ export function Withdraw() {
         <Input label="Account holder" value={bank.accountName} onChangeText={(v) => setBank({ ...bank, accountName: v })} />
         <Input label="Account number / IBAN" value={bank.accountNumber} onChangeText={(v) => setBank({ ...bank, accountNumber: v })} />
         <Select label={t('common.currency')} value={bank.currency} onChange={(v) => setBank({ ...bank, currency: v })} options={(config?.currencies ?? []).map((c: any) => ({ value: c.code, label: c.code }))} />
-        <Button title={t('common.save')} onPress={() => api.post('/api/bank-accounts', bank).then(() => { setAddOpen(false); accounts.reload(); }).catch((e) => toast(e.message, 'error'))} disabled={!bank.bankName || !bank.accountName || !bank.accountNumber} />
+        <Input label="Transaction PIN (beneficiary changes are step-up protected)" value={bankPin} onChangeText={setBankPin} keyboardType="number-pad" secureTextEntry maxLength={6} />
+        <Button title={t('common.save')} onPress={() => api.post('/api/bank-accounts', { ...bank, pin: bankPin }).then(() => { setAddOpen(false); setBankPin(''); accounts.reload(); }).catch((e) => toast(e.message, 'error'))} disabled={!bank.bankName || !bank.accountName || !bank.accountNumber || bankPin.length < 4} />
       </Sheet>
     </Screen>
   );

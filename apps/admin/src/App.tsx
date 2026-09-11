@@ -7,6 +7,8 @@ import { Dashboard } from './pages/Dashboard';
 import { Users } from './pages/Users';
 import { Transactions } from './pages/Transactions';
 import { Approvals, Kyc } from './pages/Approvals';
+import { Verification } from './pages/Verification';
+import { Controls } from './pages/Controls';
 import { Currencies } from './pages/Currencies';
 import { Fees } from './pages/Fees';
 import { Gateways } from './pages/Gateways';
@@ -40,6 +42,8 @@ export function App() {
         <Route path="/users/:id" element={<P><Users /></P>} />
         <Route path="/transactions" element={<P><Transactions /></P>} />
         <Route path="/approvals" element={<P><Approvals /></P>} />
+        <Route path="/verification" element={<P><Verification /></P>} />
+        <Route path="/controls" element={<P><Controls /></P>} />
         <Route path="/kyc" element={<P><Kyc /></P>} />
         <Route path="/currencies" element={<P><Currencies /></P>} />
         <Route path="/fees" element={<P><Fees /></P>} />

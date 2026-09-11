@@ -7,12 +7,12 @@ import { QrImage } from '../components/ui';
 const FEATURES = [
   ['📷', 'Transfer with QR code', 'Scan a friend, a shop or an agent and pay in seconds.'],
   ['🔳', 'Receive with QR code', 'Your personal QR code accepts payments instantly and securely.'],
-  ['💳', 'Add money', 'Top up by card, bank transfer, cash at an agent or mobile money from 250+ operators worldwide – no operator API needed.'],
-  ['🔀', 'Any to any', 'Move money from any bank, card, QR code or mobile money to any other, end to end.'],
+  ['💳', 'Add money', 'Top up by card (licensed processor), bank transfer, cash at an agent or mobile money from 250+ operators worldwide – confirmed from the operator receipt, no operator API needed.'],
+  ['🔀', 'Any to any', 'Route money from a card, bank or mobile money to a wallet, QR code, bank account, mobile money number or agent – one ledger coordinates both legs, each credited only once the external payment is independently confirmed.'],
   ['🏪', 'Merchant payments', 'Merchants accept QR, card, mobile money and virtual card payments.'],
   ['🏦', 'Withdraw money', 'Send funds to your bank account or cash out at a nearby agent.'],
   ['🌍', 'Remittance', 'Send money abroad to a wallet, a bank account or for cash pickup.'],
-  ['💱', 'Multi-currency', 'Hold every world currency and convert at live exchange rates.'],
+  ['💱', 'Multi-currency', 'Hold every world currency and convert with the reference rate, its source and our markup disclosed up front.'],
   ['💳', 'Virtual cards', 'Create secure virtual cards for online purchases.'],
   ['🎁', 'Gift cards', 'Buy digital gift cards for popular brands directly from your wallet.'],
   ['🧾', 'Bill payment', 'Pay utilities, internet and TV subscriptions in a tap.'],
@@ -20,7 +20,7 @@ const FEATURES = [
   ['🤝', 'P2P trading', 'Buy and sell currency with other users, protected by escrow.'],
   ['🔗', 'Payment links', 'Generate links and invoices to collect payments from anyone.'],
   ['🎉', 'Referral rewards', 'Earn multi-level rewards for inviting friends.'],
-  ['🔐', 'Biometric login', 'Passkeys on web and checkout, Face ID / fingerprint in the apps, 2FA, KYC and PIN.'],
+  ['🔐', 'Biometric login', 'Passkeys on web and checkout, Face ID / fingerprint in the apps, step-up approval on every payment, 2FA, KYC and PIN fallback. Biometric data never leaves your device.'],
   ['🔌', 'Payment gateway & API', 'Developer API, webhooks and a WooCommerce plugin.'],
 ];
 

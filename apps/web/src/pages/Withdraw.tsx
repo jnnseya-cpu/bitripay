@@ -58,9 +58,12 @@ export function Withdraw() {
     }
   };
 
-  const addBank = async () => {
+  const [pinFor, setPinFor] = useState<'withdraw' | 'bank'>('withdraw');
+  /** Beneficiary changes are step-up protected: biometrics or PIN. */
+  const addBank = async (pin?: string) => {
     try {
-      await api.post('/api/bank-accounts', { ...bank, country: bank.country || null, swift: bank.swift || null });
+      await api.post('/api/bank-accounts', { ...bank, country: bank.country || null, swift: bank.swift || null, pin: pin || undefined });
+      setPinOpen(false);
       setAddOpen(false);
       accounts.reload();
       toast('Bank account added', 'success');
@@ -105,7 +108,7 @@ export function Withdraw() {
               <KV k="You receive" v={`${amount} ${cur}`} />
             </div>
           )}
-          <Button block size="lg" disabled={!amount || (dest === 'bank' ? eligible.length === 0 : !operatorId || !phone)} onClick={() => setPinOpen(true)}>Withdraw</Button>
+          <Button block size="lg" disabled={!amount || (dest === 'bank' ? eligible.length === 0 : !operatorId || !phone)} onClick={() => { setPinFor('withdraw'); setPinOpen(true); }}>🔐 Confirm and withdraw</Button>
           <p className="small muted mt">Bank withdrawals and mobile money payouts (to any operator worldwide) are reviewed and paid out by our team or a local agent, usually within one business day.</p>
         </div>
         <div className="card">
@@ -129,7 +132,7 @@ export function Withdraw() {
           </div>
         </div>
       </div>
-      <PinModal open={pinOpen} onClose={() => setPinOpen(false)} onSubmit={submit} loading={loading} summary={<KV k="Withdraw" v={`${amount} ${cur}`} />} />
+      <PinModal open={pinOpen} onClose={() => setPinOpen(false)} onSubmit={(pin) => (pinFor === 'bank' ? addBank(pin) : submit(pin))} loading={loading} summary={<KV k="Withdraw" v={`${amount} ${cur}`} />} />
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add bank account">
         <Field label="Bank name"><Input value={bank.bankName} onChange={(e) => setBank({ ...bank, bankName: e.target.value })} /></Field>
         <Field label="Account holder name"><Input value={bank.accountName} onChange={(e) => setBank({ ...bank, accountName: e.target.value })} /></Field>
@@ -143,7 +146,7 @@ export function Withdraw() {
           </Field>
         </div>
         <Field label="SWIFT / routing (optional)"><Input value={bank.swift} onChange={(e) => setBank({ ...bank, swift: e.target.value })} /></Field>
-        <Button block onClick={addBank} disabled={!bank.bankName || !bank.accountName || !bank.accountNumber}>{t('common.save')}</Button>
+        <Button block onClick={() => { setPinFor('bank'); setPinOpen(true); }} disabled={!bank.bankName || !bank.accountName || !bank.accountNumber}>{t('common.save')}</Button>
       </Modal>
     </div>
   );

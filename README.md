@@ -17,23 +17,60 @@ bitripay/
 
 ## Features
 
-**Any → any money movement** – fund from a card, bank transfer, mobile money or your wallet and deliver
-to a BitriPay user, a QR code / payment link, a bank account, any mobile money number or cash at an agent,
-in one request (`POST /api/money`), with fee- and FX-aware quotes. The wallet is the hub, so no extra
-integration is needed between rails.
+**Operating principle** – BitriPay never claims to move money between unrelated banks, cards or
+mobile money operators without access to their regulated rails. The shared ledger coordinates every
+route, but an external leg only ever moves value through the payer's own bank or operator, or a licensed
+card processor. External payments stay unsettled (`AWAITING_CONFIRMATION` stages) until they are
+independently confirmed; the ledger never marks unverified external funds as settled.
 
-**Mobile money without operator APIs** – a directory of 253 mobile money operators in 128 countries
-(MTN, Airtel, M-Pesa, Orange, Wave, bKash, GCash, Paytm, Pix, …) ships in `@bitripay/shared`. Give an
-operator your collection/merchant number in the admin panel and customers pay from their own mobile
-money app or USSD with a reference; the payment is confirmed automatically from the operator's receipt
-SMS (forward it to `POST /api/webhooks/manual_momo` with any SMS-forwarder app), by an agent, or by an
-admin. Payouts to any mobile money number are queued for your team or agents. When an API gateway
-(Flutterwave, Paystack, MTN MoMo, M-Pesa Daraja) covers an operator it is used automatically instead.
+**Payment lifecycle** – every payment intent moves through
+`CREATED → AUTHENTICATION_REQUIRED → INSTRUCTION_ISSUED → PAYMENT_SENT → EVIDENCE_RECEIVED → VERIFYING → CONFIRMED → SETTLED`
+with the exception states `EXPIRED · REJECTED · MISMATCHED · DUPLICATE · DISPUTED · REVERSED · MANUAL_REVIEW`.
+An intent settles only after (1) biometric or approved-fallback authentication, (2) confirmation from
+a processor, a device-signed SMS or an authorised verifier, (3) matching of reference, amount,
+currency, sender, recipient and time window, (4) duplicate/replay checks, (5) fraud and sanctions
+controls and (6) a balanced double-entry posting. Every stage change is time-stamped, attributable and
+appended to a hash-chained, append-only event log. The UI always distinguishes *initiated*,
+*confirmed* and *settled*.
 
-**Biometric login** – passkeys (WebAuthn) on the web app and hosted checkout: sign in with Face ID,
-Touch ID, Windows Hello or a phone fingerprint, and confirm payments with biometrics instead of the PIN
-(a 5-minute step-up token is accepted wherever a PIN is required). The mobile app uses the device's
-biometrics to unlock and to confirm payments.
+**Any → any routing** – fund from a card, bank transfer, mobile money or your wallet and deliver to a
+BitriPay user, a QR code / payment link, a bank account, any mobile money number or cash at an agent
+in one request (`POST /api/money`). Each logical route is *declared* (`GET /api/money/catalog`):
+initiation method, confirmation method, settlement mechanism, expected completion, fees and rate,
+refund method, and whether processing is automatic, assisted or manual.
+
+**No-API verification engine** – a directory of 253 mobile money operators in 128 countries ships in
+`@bitripay/shared`. Give an operator your collection number and customers pay from their own app or
+USSD with a reference. The receipt SMS is forwarded by a **registered device** that signs each message
+with its Ed25519 key (`POST /api/evidence/sms`); the engine parses it with configurable
+operator-specific templates, extracts reference / amount / currency / sender / recipient / timestamp /
+balance, matches it to the intent, rejects reused references, replayed nonces, altered messages and
+inconsistent amounts, and settles automatically only above the configured confidence with a trusted
+device. Everything else – unsupported messages, low confidence, shared-secret webhooks, manual
+entries – lands in the **verification console**, where one administrator proposes and a *different*
+administrator approves under biometric/PIN step-up (maker-checker). Screenshots and typed references
+are stored as supporting notes only, never as authoritative evidence. Raw evidence, parsed values,
+verifier identity and the full history are preserved.
+
+**Cards** – card payments require a licensed acquiring processor (Stripe, Paystack, Flutterwave).
+The sandbox processor runs the full flow end to end for development and must stay disabled in
+production.
+
+**Biometric authentication** – passkeys (WebAuthn) on the web app and hosted checkout; Android
+BiometricPrompt / Face ID / Touch ID through `expo-local-authentication` in the apps; PIN fallback.
+Step-up approval is required for payments, beneficiary changes (bank accounts, saved recipients),
+withdrawals and administrative approvals. Biometric templates never leave the device: the
+authenticator signs a server-issued challenge with its device-bound private key.
+
+**Foreign exchange** – before authorising a conversion the customer sees source and destination
+currencies, the reference (mid-market) rate, the rate provider and timestamp, the markup, all charges,
+the exact amount sent, the estimated amount received and the rate expiry. Live, fresh rates can be
+locked for the quote TTL; administrator-entered or stale rates are labelled and never guaranteed.
+
+**Controls** – `Idempotency-Key` on every mutating request, timestamped webhook signatures with replay
+protection, sanctions list screening, velocity limits, cooling-off for new beneficiaries,
+device registration / revocation / risk scoring, per-currency ledger balance assertion on every
+posting, append-only audit / event / ledger tables (database triggers), reconciliation endpoint.
 
 **Users** – transfer & receive with QR code, send money by @tag / email / phone, money requests,
 payment links, add money (card, mobile money, bank transfer, agent cash-in), withdraw to bank,
@@ -108,6 +145,11 @@ configured in `app.json`.
 
 ### Tests
 
+Browser smoke tests (`scripts/e2e-*.mjs`, Playwright) cover the web and admin apps, including
+`scripts/e2e-gateway.mjs`: passkey registration and biometric sign-in with a virtual authenticator,
+PIN-gated intents on the direct rail, device-signed SMS settlement, forged-signature rejection,
+maker-checker approval in the verification console and biometric step-up on Move money.
+
 ```bash
 npm test          # shared unit tests + API integration suite (vitest)
 npm run typecheck # TypeScript across api, web and admin
@@ -138,11 +180,12 @@ for apps, `Authorization: Bearer bp_live_…` (merchant API key) for the v1 API.
 | Auth | `POST /api/auth/register`, `/login`, `/otp/request`, `/otp/verify`, `/2fa/verify`, `/password/forgot`, `/password/reset`, `GET /api/auth/me` |
 | Account | `PATCH /api/account/profile`, `POST /api/account/pin`, `/password`, `/2fa/setup|enable|disable`, `/verify/request|confirm`, `GET /api/account/notifications`, `/referrals`, `/lookup?q=` |
 | Wallets | `GET /api/wallets`, `POST /api/wallets`, `GET /api/wallets/transactions`, `/summary`, `/exchange/quote`, `POST /api/wallets/exchange` |
-| Any → any | `POST /api/money` (source: wallet/card/bank/mobile_money → destination: wallet/qr/bank/mobile_money/agent), `POST /api/money/preview`, `GET /api/money/:id`, `POST /api/money/:id/retry`, `GET /api/mobile-money-operators` |
+| Any → any | `POST /api/money` (source: wallet/card/bank/mobile_money → destination: wallet/qr/bank/mobile_money/agent; `quoteId` locks a guaranteed FX quote), `POST /api/money/preview` (quote + FX disclosure + route declaration), `GET /api/money/catalog`, `GET /api/money/:id`, `POST /api/money/:id/retry`, `GET /api/mobile-money-operators` |
+| Evidence | `POST /api/evidence/sms` (device-signed receipt SMS), `GET /api/evidence/canonical-format`, `GET/POST/DELETE /api/evidence/devices` (admins/agents), `POST /api/evidence/parse-test` |
 | Biometrics | `POST /api/auth/passkey/options|verify` (sign-in), `GET/DELETE /api/account/passkeys`, `POST /api/account/passkeys/register/options|verify`, `POST /api/account/passkeys/step-up/options|verify` → `X-Step-Up-Token` |
 | Payments | `POST /api/transfers`, `GET /api/qr/me`, `POST /api/qr/resolve`, `GET /api/qr/image.svg`, `POST /api/payment-requests`, `/:code/pay|cancel|decline` |
 | Checkout (public) | `GET /api/checkout/:code`, `POST /api/checkout/:code/pay` (card / mobile money / bank / virtual card), `/:code/wallet` |
-| Add money | `GET /api/deposits/options`, `POST /api/deposits`, `GET /api/deposits/:id`, `POST /api/deposits/:id/proof`, `GET /api/cards` |
+| Add money | `GET /api/deposits/options`, `POST /api/deposits` (`pin` or `X-Step-Up-Token`), `POST /api/deposits/:id/authenticate`, `GET /api/deposits/:id`, `POST /api/deposits/:id/sent` (payer's sent-report, non-authoritative), `GET /api/deposits/:id/events`, `GET /api/cards` |
 | Withdraw | `GET/POST /api/bank-accounts`, `POST /api/withdrawals` |
 | Agents | `GET /api/agents`, `POST /api/agents/cash-out`, `POST /api/agents/me/cash-in`, `/me/cash-out/confirm`, `/me/pickups/:code/payout`, `GET /api/agents/me/stats` |
 | Remittance | `GET /api/remittances/quote`, `POST /api/remittances`, `GET/POST /api/recipients` |
@@ -150,9 +193,33 @@ for apps, `Authorization: Bearer bp_live_…` (merchant API key) for the v1 API.
 | Merchant | `/api/merchant/stats`, `/gateway`, `/api-keys`, `/webhook`, `/settlements`, `POST /api/merchant/transactions/:id/refund` |
 | Merchant API v1 | `POST /v1/payment-requests`, `GET /v1/payment-requests/:code`, `POST /v1/payment-requests/:code/cancel`, `GET /v1/transactions`, `GET /v1/balance`, `GET /v1/me` |
 | Admin | `/api/admin/*` (stats, users, transactions, withdrawals, payments, remittances, kyc, settings, currencies, gateways, billers, operators, gift-products, pages, languages, translations, support, p2p, reports, audit-logs, …) |
+| Verification | `GET /api/admin/verifications`, `GET /api/admin/payments/:id/case`, `POST /api/admin/payments/:id/confirm|reject` (propose), `POST /api/admin/verifications/:id/approve|decline` (second admin, step-up), `POST /api/admin/payments/:id/evidence`, `GET /api/admin/evidence`, `/evidence/devices`, `/evidence/templates`, `GET /api/admin/events` (hash chain), `GET /api/admin/reconcile`, `/sanctions`, `/risk-events`, `/route-catalog`, settings keys `gateway`, `fx`, `risk` |
 
-Webhooks to merchants are signed: `X-BitriPay-Signature: sha256=<HMAC-SHA256(rawBody, webhookSecret)>`,
-events `payment.completed` and `payment_request.created`.
+Webhooks to merchants are signed with a timestamp for replay protection:
+`X-BitriPay-Signature: t=<unix seconds>,v1=<HMAC-SHA256("<t>.<rawBody>", webhookSecret)>` plus
+`X-BitriPay-Delivery-Id`. Reject deliveries older than 5 minutes and process each delivery id once.
+Events: `payment.completed`, `payment_request.created`.
+
+Mutating requests accept an `Idempotency-Key` header: a repeat with the same key and body replays the
+stored response (`Idempotent-Replayed: true`); a repeat with a different body is refused (422).
+
+### Signed SMS evidence (no operator API)
+
+The SMS-forwarder app on the collection phone generates an Ed25519 key pair, keeps the private key in
+secure storage and registers the public key (PEM or raw base64) as an evidence device. For each
+receipt SMS it posts to `POST /api/evidence/sms`:
+
+```json
+{ "deviceId": "…", "nonce": "<unique>", "receivedAt": "2026-09-11T10:15:00Z", "from": "MPESA",
+  "operatorId": "mpesa_ke", "text": "<the SMS>", "signature": "<base64 ed25519 over canonical>" }
+```
+
+`canonical = deviceId + "\n" + nonce + "\n" + receivedAt + "\n" + from + "\n" + operatorId + "\n" + text`.
+Nonces are single-use; invalid signatures and mismatches raise the device's risk score; a device can be
+revoked at any time. Parsing templates (regular expressions per operator) are managed in the admin
+panel under *Mobile money & evidence*; confidence is scored (reference 50, amount 25, currency 10,
+operator transaction id 10, sender 5) and only matches at or above `gateway.autoConfirmScore` from a
+trusted device settle automatically.
 
 ## WooCommerce plugin
 
@@ -184,6 +251,17 @@ The data layer is plain SQL through a thin adapter, so migrating to PostgreSQL i
   The sandbox provider is for development and must stay disabled in production.
 - Rate limiting on auth and public endpoints, role & permission checks on every admin route,
   audit log of all administrative actions.
+- Unconfirmed external payments never create spendable balances: settlement is only reachable through
+  `confirmAndSettle`, which requires an authenticated intent, an independent confirmation (processor,
+  device-signed evidence, or maker-checker approval), passing risk controls and a balanced posting.
+- Maker-checker for manual settlement; administrative approvals require a fresh passkey step-up or PIN.
+- Append-only audit, event and ledger tables (database triggers) with a hash-chained event log;
+  `GET /api/admin/reconcile` re-verifies the chain and every wallet against its entries.
+- Biometric templates are never collected or stored; WebAuthn credentials hold only public keys.
+- No CVV is ever stored for external cards; BitriPay-issued virtual cards keep their own CVV encrypted.
+- Live exchange-rate refresh needs outbound access to the rate provider (blocked inside some
+  development sandboxes); without it the platform labels rates as administrator-approved and disables
+  guaranteed quotes rather than presenting them as live.
 
 ## License
 

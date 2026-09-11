@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
-import { Alert, AmountInput, Button, Field, KV, PageHeader, PinModal, Select, useDebounce } from '../components/ui';
+import { Alert, AmountInput, Button, Field, KV, PageHeader, PinModal, RouteDisclosure, Select, useDebounce } from '../components/ui';
 
 export function Exchange() {
   const t = useT();
@@ -24,7 +24,7 @@ export function Exchange() {
     setLoading(true);
     setError(null);
     try {
-      await api.post('/api/wallets/exchange', { from, to, amount, pin });
+      await api.post('/api/wallets/exchange', { from, to, amount, pin: pin || undefined, quoteId: quote?.fx?.quoteId ?? null });
       toast('Exchange completed', 'success');
       setAmount('');
       setPinOpen(false);
@@ -45,7 +45,7 @@ export function Exchange() {
   };
   return (
     <div>
-      <PageHeader title={t('nav.exchange')} subtitle="Switch between currencies at live rates. One tap, no hidden spread." />
+      <PageHeader title={t('nav.exchange')} subtitle="Switch between currencies. The reference rate, its source and time, and our markup are shown before you confirm." />
       <div className="grid cols-2">
         <div className="card">
           {error && <Alert kind="error">{error}</Alert>}
@@ -59,9 +59,13 @@ export function Exchange() {
             <div className="card soft compact mb">
               <KV k="Rate" v={`1 ${from} = ${quote.rate.toFixed(6)} ${to}`} />
               <KV k="Mid-market" v={`${quote.midRate.toFixed(6)} (margin ${(quote.marginBps / 100).toFixed(2)}%)`} />
+              <KV k="Fee" v={money(quote.fee ?? 0, from)} />
               <KV k="You receive" v={<b style={{ color: 'var(--success)' }}>{money(quote.receive, to)}</b>} />
+              {quote.fx && <KV k="Rate source" v={<span className="small">{quote.fx.providerLabel}{quote.fx.rateTimestamp ? ` · ${new Date(quote.fx.rateTimestamp).toLocaleString()}` : ''}</span>} />}
+              {quote.fx && <KV k="Guarantee" v={quote.fx.guaranteed ? <span className="chip success">locked until {new Date(quote.fx.expiresAt).toLocaleTimeString()}</span> : <span className="chip warning">indicative – executes at the current rate</span>} />}
             </div>
           )}
+          {quote?.fx && <RouteDisclosure fx={quote.fx} />}
           <Button block size="lg" disabled={!quote} onClick={() => setPinOpen(true)}>Exchange</Button>
         </div>
         <div className="card">
@@ -84,7 +88,7 @@ export function Exchange() {
               <Button variant="secondary" onClick={addWallet} disabled={!newCur}>Add</Button>
             </div>
           </Field>
-          <h4 className="mt">Live rates (vs {config?.baseCurrency})</h4>
+          <h4 className="mt">Reference rates (vs {config?.baseCurrency})</h4>
           <div className="row wrap">
             {(config?.currencies ?? []).slice(0, 12).map((c) => <span key={c.code} className="chip">{c.code} {c.rateToBase}</span>)}
           </div>

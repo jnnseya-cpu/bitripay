@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
-import { Alert, AmountInput, Avatar, Button, Empty, Field, Input, KV, PageHeader, PinModal, Select, StatusBadge, Tabs, useAsync, useDebounce } from '../components/ui';
+import { Alert, AmountInput, Avatar, Button, Empty, Field, Input, KV, PageHeader, PinModal, RouteDisclosure, Select, StatusBadge, Tabs, useAsync, useDebounce } from '../components/ui';
 import { CardForm, type CardValues } from '../components/CardForm';
 import { OperatorPicker, PaymentStatus, type PaymentView } from './AddMoney';
 import type { BankAccount } from '@bitripay/shared';
@@ -60,12 +60,12 @@ export function MoveMoney() {
   }, [dAmount, cur, target, source, dest, dTo, dQr, dstOp.operatorId, dstOp.phone, bank.bankAccountId, bank.bankName, bank.accountNumber, agent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!route || route.status !== 'funding') return;
+    if (!route || !['funding', 'authentication_required'].includes(route.status)) return;
     const id = setInterval(async () => {
       const r = await api.get<{ route: any }>(`/api/money/${route.id}`);
-      setRoute(r.route);
-      if (r.route.status !== 'funding') { refreshWallets(); history.reload(); }
-    }, 3000);
+      if (r.route.status !== route.status || r.route.payment?.stage !== route.payment?.stage) setRoute(r.route);
+      if (!['funding', 'authentication_required'].includes(r.route.status)) { refreshWallets(); history.reload(); }
+    }, route.payment?.next?.type === 'bank_instructions' ? 10000 : 3000);
     return () => clearInterval(id);
   }, [route]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -77,7 +77,7 @@ export function MoveMoney() {
       if (source === 'card') src.card = { number: card.number.replace(/\s/g, ''), expMonth: Number(card.expMonth), expYear: Number(card.expYear.length === 2 ? '20' + card.expYear : card.expYear), cvc: card.cvc, holderName: card.holderName };
       if (source === 'mobile_money') { src.operatorId = srcOp.operatorId || null; src.phone = srcOp.phone; }
       if (source !== 'wallet') src.returnUrl = `${window.location.origin}/app/move`;
-      const r = await api.post<{ route: any }>('/api/money', { source: src, destination: destination(), amount, currency: cur, targetCurrency: target || null, note: note || null, pin });
+      const r = await api.post<{ route: any }>('/api/money', { source: src, destination: destination(), amount, currency: cur, targetCurrency: target || null, note: note || null, pin: pin || undefined, quoteId: preview?.fx?.quoteId ?? null });
       setRoute(r.route);
       setPinOpen(false);
       refreshWallets();
@@ -97,7 +97,7 @@ export function MoveMoney() {
 
   return (
     <div>
-      <PageHeader title="Move money" subtitle="From any bank, card, QR code or mobile money to any other, end to end – no extra integrations needed" />
+      <PageHeader title="Move money" subtitle="Fund from a card, bank, mobile money or your wallet and deliver to a wallet, QR code, bank account, mobile money number or agent. The BitriPay ledger coordinates both legs; external legs move only through your own bank, operator or a licensed processor and are credited or paid out after independent confirmation." />
       <div className="grid cols-3">
         <div className="card" style={{ gridColumn: 'span 2' }}>
           {route ? (
@@ -108,7 +108,8 @@ export function MoveMoney() {
                 <StatusBadge status={route.status} />
                 {route.error && <Alert kind="error">{route.error}</Alert>}
               </div>
-              {route.status === 'funding' && route.payment && <div className="mt"><PaymentStatus payment={route.payment as PaymentView} onDone={() => {}} /></div>}
+              {['funding', 'authentication_required'].includes(route.status) && route.payment && <div className="mt"><PaymentStatus payment={route.payment as PaymentView} onDone={() => {}} /></div>}
+              {route.status === 'authentication_required' && <Alert kind="warning">This transfer was not authorised. Start again and confirm with biometrics or your PIN.</Alert>}
               {route.status === 'pending' && <Alert kind="info">Your money arrived and the payout is queued. Bank and mobile money payouts are completed by our team or a local agent, usually within a business day.</Alert>}
               {route.destinationDetails?.cashOutCode && <Alert kind="success">Cash-out code for the agent: <b className="mono">{route.destinationDetails.cashOutCode}</b></Alert>}
               {route.status === 'funded' && <Button onClick={() => api.post(`/api/money/${route.id}/retry`, {}).then((r: any) => setRoute(r.route)).catch((e) => setError(e.message))}>Retry payout</Button>}
@@ -148,10 +149,12 @@ export function MoveMoney() {
                   {preview.quote.rate !== 1 && <KV k="Rate" v={`1 ${preview.quote.currency} = ${preview.quote.rate.toFixed(4)} ${preview.quote.targetCurrency}`} />}
                   {preview.quote.payoutFee > 0 && <KV k="Payout fee" v={money(preview.quote.payoutFee, preview.quote.targetCurrency)} />}
                   <KV k="Recipient gets" v={<b style={{ color: 'var(--success)' }}>{money(preview.quote.targetAmount, preview.quote.targetCurrency)}</b>} />
+                  {preview.quote.fx && !preview.quote.fx.guaranteed && preview.quote.fx.sourceCurrency !== preview.quote.fx.targetCurrency && <div className="tiny muted">Indicative rate ({preview.quote.fx.providerLabel}). The amount received may differ.</div>}
                 </div>
               )}
-              <Button block size="lg" loading={loading} disabled={!preview || !amount || (source === 'card' && card.number.length < 12) || (source === 'mobile_money' && !srcOp.phone)} onClick={() => (source === 'wallet' ? setPinOpen(true) : submit())}>
-                {source === 'wallet' ? 'Review & confirm' : `Pay ${amount ? `${amount} ${cur}` : ''} and deliver`}
+              {preview && <RouteDisclosure declaration={preview.declaration} fx={preview.fx} />}
+              <Button block size="lg" loading={loading} disabled={!preview || !amount || (source === 'card' && card.number.length < 12) || (source === 'mobile_money' && !srcOp.phone)} onClick={() => setPinOpen(true)}>
+                🔐 Confirm and {source === 'wallet' ? 'send' : `pay ${amount ? `${amount} ${cur}` : ''} and deliver`}
               </Button>
             </>
           )}
@@ -169,7 +172,7 @@ export function MoveMoney() {
           </div>
         </div>
       </div>
-      <PinModal open={pinOpen} onClose={() => setPinOpen(false)} onSubmit={(pin) => submit(pin)} loading={loading} summary={preview && <KV k={`Send to ${preview.destination.label}`} v={money(preview.quote.targetAmount, preview.quote.targetCurrency)} />} />
+      <PinModal open={pinOpen} onClose={() => setPinOpen(false)} onSubmit={(pin) => submit(pin)} loading={loading} title="Authorise this transfer" summary={preview && <KV k={`Send to ${preview.destination.label}`} v={money(preview.quote.targetAmount, preview.quote.targetCurrency)} />} />
     </div>
   );
 }

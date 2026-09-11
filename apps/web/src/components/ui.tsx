@@ -302,3 +302,66 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
     </div>
   );
 }
+
+/** Lifecycle of an external payment: makes the difference between initiated, confirmed and settled explicit. */
+export const STAGE_STEPS: { id: string; label: string; stages: string[] }[] = [
+  { id: 'initiated', label: 'Initiated', stages: ['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED'] },
+  { id: 'sent', label: 'Sent', stages: ['PAYMENT_SENT'] },
+  { id: 'verifying', label: 'Verifying', stages: ['EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'] },
+  { id: 'confirmed', label: 'Confirmed', stages: ['CONFIRMED'] },
+  { id: 'settled', label: 'Settled', stages: ['SETTLED'] },
+];
+export function StageTimeline({ stage, stageLabel, stageDescription }: { stage?: string; stageLabel?: string; stageDescription?: string }) {
+  if (!stage) return null;
+  const terminalBad = ['EXPIRED', 'REJECTED', 'REVERSED'].includes(stage);
+  const exception = ['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'].includes(stage);
+  const idx = STAGE_STEPS.findIndex((s) => s.stages.includes(stage));
+  return (
+    <div className="stage-timeline">
+      <div className="row" style={{ gap: 0, alignItems: 'stretch' }}>
+        {STAGE_STEPS.map((s, i) => {
+          const state = terminalBad ? (i === 0 ? 'failed' : 'off') : i < idx ? 'done' : i === idx ? (exception ? 'warn' : 'active') : 'off';
+          return (
+            <div key={s.id} style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ height: 6, borderRadius: 3, margin: '0 2px', background: state === 'done' || state === 'active' ? 'var(--success)' : state === 'warn' ? 'var(--warning, #f59e0b)' : state === 'failed' ? 'var(--danger)' : 'var(--border)' }} />
+              <div className="tiny mt-sm" style={{ color: state === 'off' ? 'var(--muted)' : 'inherit', fontWeight: state === 'active' || state === 'warn' ? 700 : 400 }}>{s.label}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="small mt-sm"><b>{stageLabel ?? stage}</b>{stageDescription ? <span className="muted"> – {stageDescription}</span> : null}</div>
+    </div>
+  );
+}
+
+/** How a leg is initiated, confirmed and settled, and how long it takes – shown before the payer authorises. */
+export function RouteDisclosure({ declaration, fx }: { declaration?: any; fx?: any }) {
+  if (!declaration && !fx) return null;
+  const leg = (title: string, l: any) => l ? (
+    <div className="mb-sm">
+      <div className="small bold">{title} · <span className={`chip ${l.processing === 'automatic' ? 'success' : l.processing === 'assisted' ? 'warning' : ''}`}>{l.processing}</span></div>
+      <div className="tiny"><b>Initiation:</b> {l.initiation}</div>
+      <div className="tiny"><b>Confirmation:</b> {l.confirmation}</div>
+      <div className="tiny"><b>Settlement:</b> {l.settlement}</div>
+      <div className="tiny"><b>Expected:</b> {l.expectedCompletion} · <b>Refund:</b> {l.refundMethod}</div>
+    </div>
+  ) : null;
+  return (
+    <details className="card soft compact mb">
+      <summary className="small bold" style={{ cursor: 'pointer' }}>How this payment works{declaration ? ` · ${declaration.processing ?? declaration.funding?.processing ?? ''} · ${declaration.expectedCompletion ?? ''}` : ''}</summary>
+      <div className="mt-sm">
+        {declaration?.funding ? leg('Money in', declaration.funding) : declaration?.initiation ? leg('Payment', declaration) : null}
+        {declaration?.payout && leg('Money out', declaration.payout)}
+        {declaration?.disclosure && <div className="tiny muted">{declaration.disclosure}</div>}
+        {fx && fx.sourceCurrency !== fx.targetCurrency && (
+          <div className="mt-sm">
+            <div className="small bold">Exchange rate</div>
+            <div className="tiny">Reference rate 1 {fx.sourceCurrency} = {Number(fx.midRate).toFixed(6)} {fx.targetCurrency} · {fx.providerLabel}{fx.rateTimestamp ? ` · ${new Date(fx.rateTimestamp).toLocaleString()}` : ''}</div>
+            <div className="tiny">Markup {(fx.markupBps / 100).toFixed(2)}% · your rate 1 {fx.sourceCurrency} = {Number(fx.rate).toFixed(6)} {fx.targetCurrency}</div>
+            <div className="tiny">{fx.guaranteed ? <span className="chip success">Rate guaranteed until {new Date(fx.expiresAt).toLocaleTimeString()}</span> : <span className="chip warning">Indicative rate – not guaranteed{fx.stale ? ' (administrator-approved / stale)' : ''}</span>}</div>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
