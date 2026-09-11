@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
-import { setupApp, registerUser, adminToken, fund } from './helpers';
+import { setupApp, registerUser, adminToken, fund, manualConfirm } from './helpers';
 import { signToken } from '../lib/jwt';
 
 let app: ReturnType<typeof setupApp>;
@@ -19,6 +19,8 @@ describe('direct mobile money rail (no operator API)', () => {
     const mtn = ops.body.items.find((o: any) => o.id === 'mtn_gh');
     await request(app).put('/api/admin/momo-operators/mtn_gh').set(admin.auth).send({ ...mtn, collectionNumber: '0244000000', collectionName: 'BitriPay Ltd', payoutEnabled: true, enabled: true });
     await request(app).put('/api/admin/gateways/manual_momo').set(admin.auth).send({ name: 'Mobile money (direct)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], credentials: { smsSecret: 'sms-secret' } });
+    // The shared-secret forwarder is only authoritative when the administrator explicitly opts in (device-signed evidence is the default).
+    await request(app).put('/api/admin/settings/gateway').set(admin.auth).send({ value: { sharedSecretAutoConfirm: true } });
 
     const u = await registerUser(app, { country: 'GH' });
     const options = await request(app).get('/api/deposits/options?currency=GHS').set(u.auth);
@@ -26,7 +28,7 @@ describe('direct mobile money rail (no operator API)', () => {
     expect(momo.gateways.some((g: any) => g.provider === 'manual_momo')).toBe(true);
     expect(momo.operators.find((o: any) => o.id === 'mtn_gh').directRail).toBe(true);
 
-    const dep = await request(app).post('/api/deposits').set(u.auth).send({ method: 'mobile_money', amount: '50', currency: 'GHS', operatorId: 'mtn_gh', phone: '+233244111222' });
+    const dep = await request(app).post('/api/deposits').set(u.auth).send({ pin: '1234', method: 'mobile_money', amount: '50', currency: 'GHS', operatorId: 'mtn_gh', phone: '+233244111222' });
     expect(dep.status).toBe(201);
     expect(dep.body.payment.status).toBe('pending');
     expect(dep.body.payment.next.type).toBe('bank_instructions');
@@ -35,7 +37,7 @@ describe('direct mobile money rail (no operator API)', () => {
     expect(ref).toMatch(/^MM[A-Z2-9]{6}$/);
 
     // Operator without a collection number falls back to the sandbox simulator in development.
-    const bad = await request(app).post('/api/deposits').set(u.auth).send({ method: 'mobile_money', amount: '10', currency: 'GHS', operatorId: 'vodafone_gh', phone: '+233200000000' });
+    const bad = await request(app).post('/api/deposits').set(u.auth).send({ pin: '1234', method: 'mobile_money', amount: '10', currency: 'GHS', operatorId: 'vodafone_gh', phone: '+233200000000' });
     expect(bad.status).toBe(201);
     expect(bad.body.payment.gateway).toBe('sandbox');
 
@@ -65,7 +67,7 @@ describe('direct mobile money rail (no operator API)', () => {
     const admin = await adminToken(app);
     const list = await request(app).get('/api/admin/withdrawals?status=pending').set(admin.auth);
     expect(list.body.items.some((t: any) => t.id === w.body.transaction.id)).toBe(true);
-    const ok = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/approve`).set(admin.auth).send({ payoutReference: 'MPESA-QX1' });
+    const ok = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/approve`).set(admin.auth).send({ payoutReference: 'MPESA-QX1', pin: admin.pin });
     expect(ok.body.transaction.status).toBe('completed');
   });
 });
@@ -77,7 +79,9 @@ describe('any → any routing', () => {
     const preview = await request(app).post('/api/money/preview').set(sender.auth).send({ destination: { method: 'wallet', to: '@route_rcv' }, amount: '40', currency: 'USD', targetCurrency: 'EUR' });
     expect(preview.body.destination.user.tag).toBe('route_rcv');
     expect(preview.body.quote.targetCurrency).toBe('EUR');
-    const r = await request(app).post('/api/money').set(sender.auth).send({ source: { method: 'card', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'Sender One' } }, destination: { method: 'wallet', to: '@route_rcv', note: 'Rent' }, amount: '40', currency: 'USD', targetCurrency: 'EUR' });
+    expect(preview.body.fx.provider).toBeTruthy();
+    expect(preview.body.declaration.funding.kind).toBe('wallet');
+    const r = await request(app).post('/api/money').set(sender.auth).send({ source: { method: 'card', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'Sender One' } }, destination: { method: 'wallet', to: '@route_rcv', note: 'Rent' }, amount: '40', currency: 'USD', targetCurrency: 'EUR', pin: '1234' });
     expect(r.status).toBe(201);
     expect(r.body.route.status).toBe('completed');
     expect(r.body.route.payoutTransactionId).toBeTruthy();
@@ -110,12 +114,12 @@ describe('any → any routing', () => {
     const admin = await adminToken(app);
     await request(app).put('/api/admin/momo-operators/airtel_ug').set(admin.auth).send({ name: 'Airtel Money', brand: 'Airtel', country: 'UG', currency: 'UGX', collectionNumber: '0750000000', payoutEnabled: true, enabled: true });
     const u = await registerUser(app);
-    const r = await request(app).post('/api/money').set(u.auth).send({ source: { method: 'mobile_money', operatorId: 'airtel_ug', phone: '+256750000009' }, destination: { method: 'bank', bankName: 'Stanbic', accountName: 'Okello', accountNumber: '9030001234', country: 'UG' }, amount: '100000', currency: 'UGX' });
+    const r = await request(app).post('/api/money').set(u.auth).send({ source: { method: 'mobile_money', operatorId: 'airtel_ug', phone: '+256750000009' }, destination: { method: 'bank', bankName: 'Stanbic', accountName: 'Okello', accountNumber: '9030001234', country: 'UG' }, amount: '100000', currency: 'UGX', pin: '1234' });
     expect(r.status).toBe(201);
     expect(r.body.route.status, JSON.stringify(r.body.route)).toBe('funding');
     expect(r.body.route.payment?.next?.instructions?.['Send to'], JSON.stringify(r.body.route.payment)).toBe('0750000000');
-    const confirm = await request(app).post(`/api/admin/payments/${r.body.route.paymentId}/confirm`).set(admin.auth);
-    expect(confirm.body.payment.status).toBe('succeeded');
+    const confirm = await manualConfirm(app, r.body.route.paymentId);
+    expect(confirm.payment.status).toBe('succeeded');
     const after = await request(app).get(`/api/money/${r.body.route.id}`).set(u.auth);
     expect(after.body.route.status, after.body.route.error ?? '').toBe('pending'); // payout leg queued for admin
     expect(after.body.route.payoutTransactionId).toBeTruthy();

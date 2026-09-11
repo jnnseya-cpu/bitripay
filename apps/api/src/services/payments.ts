@@ -19,6 +19,12 @@ import { saveCardFromToken } from './cards';
 import { getModules } from './modules';
 import { getOperator, listOperators } from './momo';
 import { continueRouteAfterFunding, type RouteDestination } from './routing';
+import { getGatewayControls } from './settings';
+import { recordEvent, type Actor } from './events';
+import { STAGE_LABELS, TERMINAL_STAGES, advanceThrough, transitionStage, type PaymentStage } from './lifecycle';
+import { assertPin } from './auth';
+import { verifyStepUpToken } from './webauthn';
+import { assessRisk } from './risk';
 
 export interface InitiatePaymentInput {
   purpose: 'deposit' | 'checkout';
@@ -41,6 +47,12 @@ export interface InitiatePaymentInput {
   routeId?: string | null;
 }
 
+/** Proof of a fresh biometric (passkey step-up token) or the transaction PIN, supplied by the payer. */
+export interface PaymentAuth {
+  pin?: string | null;
+  req?: Pick<Request, 'headers' | 'body'> | null;
+}
+
 export interface PaymentView {
   id: string;
   gateway: string;
@@ -51,6 +63,14 @@ export interface PaymentView {
   currency: string;
   fee: number;
   status: GatewayPaymentRow['status'];
+  stage: PaymentStage;
+  stageLabel: string;
+  /** initiated | confirmed | settled | exception – what the customer must understand about the money. */
+  stageGroup: 'initiated' | 'confirmed' | 'settled' | 'exception';
+  stageDescription: string;
+  authMethod: string | null;
+  authenticatedAt: string | null;
+  expiresAt: string | null;
   providerRef: string | null;
   transactionId: string | null;
   paymentRequestCode: string | null;
@@ -65,6 +85,8 @@ export interface PaymentView {
 export function toPaymentView(row: GatewayPaymentRow): PaymentView {
   const meta = parseJson<any>(row.metadata, {});
   const pr = row.payment_request_id ? (getDb().prepare('SELECT code FROM payment_requests WHERE id = ?').get(row.payment_request_id) as any) : null;
+  const stage = (row.stage ?? 'CREATED') as PaymentStage;
+  const label = STAGE_LABELS[stage];
   return {
     id: row.id,
     gateway: row.gateway,
@@ -75,6 +97,13 @@ export function toPaymentView(row: GatewayPaymentRow): PaymentView {
     currency: row.currency,
     fee: row.fee,
     status: row.status,
+    stage,
+    stageLabel: label.label,
+    stageGroup: label.group,
+    stageDescription: label.description,
+    authMethod: row.auth_method ?? null,
+    authenticatedAt: row.authenticated_at ?? null,
+    expiresAt: row.expires_at ?? null,
     providerRef: row.provider_ref,
     transactionId: row.transaction_id,
     paymentRequestCode: pr?.code ?? null,
@@ -98,6 +127,11 @@ function updatePayment(id: string, fields: Partial<Record<keyof GatewayPaymentRo
   getDb().prepare(`UPDATE gateway_payments SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(...keys.map((k) => (fields as any)[k]), now(), id);
 }
 
+function mergeMeta(id: string, patch: Record<string, unknown>) {
+  const current = parseJson<Record<string, unknown>>(getPayment(id).metadata, {});
+  updatePayment(id, { metadata: JSON.stringify({ ...current, ...patch }) });
+}
+
 /** Public list of deposit methods available for the payer's currency/country – used by the "Add money" screen and checkout. */
 export function paymentOptions(currency: string, country?: string | null, purpose: 'deposit' | 'checkout' = 'deposit') {
   const methods: PaymentMethod[] = ['card', 'mobile_money', 'bank'];
@@ -117,20 +151,38 @@ export function paymentOptions(currency: string, country?: string | null, purpos
  * wins; otherwise the direct rail (manual_momo) handles any operator with a collection number.
  */
 function pickMobileMoneyGateway(candidates: ReturnType<typeof availableGateways>, operatorId: string | null | undefined, preferred?: string | null) {
-  // An explicit gateway choice only applies when no operator is given; operators decide their own rail.
   if (preferred && !operatorId) return candidates.find((g) => g.id === preferred);
   if (!operatorId) return candidates.find((g) => g.provider !== 'manual_momo') ?? candidates[0];
   const op = getOperator(operatorId);
   const api = candidates.find((g) => g.provider !== 'manual_momo' && g.provider !== 'sandbox' && (g.countries.length === 0 || g.countries.includes(op.country)) && (g.currencies.length === 0 || g.currencies.includes(op.currency)));
   if (api) return api;
-  // Direct rail (collection number configured) is the real rail; the sandbox only simulates when nothing else applies.
   const direct = candidates.find((g) => g.provider === 'manual_momo');
   if (direct && op.collectionNumber) return direct;
   return candidates.find((g) => g.provider === 'sandbox') ?? direct ?? candidates[0];
 }
 
-/** Create a gateway payment and hand off to the provider. */
-export async function initiatePayment(user: UserRow | null, input: InitiatePaymentInput): Promise<PaymentView> {
+function actorFor(user: UserRow | null | undefined): Actor {
+  if (!user) return { type: 'guest' };
+  return { type: user.role === 'admin' ? 'admin' : user.role === 'agent' ? 'agent' : user.role === 'merchant' ? 'merchant' : 'user', id: user.id };
+}
+
+/** Which authentication the intent carries: passkey step-up, PIN, or the external rail's own authentication (guests). */
+function resolveAuthentication(user: UserRow | null, auth: PaymentAuth | undefined, gatewayProvider: string, method: PaymentMethod): { method: string | null; required: boolean } {
+  if (!user) {
+    // A guest is authenticated by the rail itself: the processor (3-D Secure / OTP) or the payer's own operator/bank app.
+    return { method: gatewayProvider === 'sandbox' ? 'sandbox' : method === 'card' ? 'processor' : method === 'mobile_money' ? 'operator' : 'payer_bank', required: false };
+  }
+  const token = (auth?.req?.headers?.['x-step-up-token'] as string | undefined) || auth?.req?.body?.stepUpToken;
+  if (token && verifyStepUpToken(user, token)) return { method: 'passkey', required: false };
+  if (auth?.pin) {
+    assertPin(user, auth.pin, undefined); // throws on a wrong PIN
+    return { method: 'pin', required: false };
+  }
+  return { method: null, required: true };
+}
+
+/** Create a payment intent. With a signed-in payer the intent waits in AUTHENTICATION_REQUIRED until biometrics/PIN are supplied. */
+export async function initiatePayment(user: UserRow | null, input: InitiatePaymentInput, auth?: PaymentAuth): Promise<PaymentView> {
   const modules = getModules();
   let amount = input.amount ?? 0;
   let currency = (input.currency || '').toUpperCase();
@@ -162,109 +214,232 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
     const op = getOperator(input.operatorId);
     if (op.currency !== cur.code) throw badRequest(`${op.name} collects ${op.currency}. Choose ${op.currency} as the currency to pay with this operator.`, 'operator_currency_mismatch');
   }
-  const provider = PROVIDERS[gateway.provider];
 
   const feeType = input.purpose === 'checkout' ? 'merchant_payment' : input.method === 'card' ? 'card_deposit' : input.method === 'mobile_money' ? 'mobile_money_deposit' : 'bank_deposit';
   const fee = calculateFee(feeType, amount, cur.code);
-
-  let savedCardToken: string | null = null;
   if (input.savedCardId) {
     if (!user) throw badRequest('Sign in to use a saved card');
     const card = getDb().prepare('SELECT * FROM saved_cards WHERE id = ? AND user_id = ?').get(input.savedCardId, user.id) as any;
     if (!card) throw notFound('Saved card not found');
     if (card.provider !== gateway.provider) throw badRequest(`This card can only be charged through ${card.provider}`);
-    savedCardToken = card.provider_ref;
   }
 
   const id = uuid();
   const ts = now();
+  const controls = getGatewayControls();
+  const expiresAt = new Date(Date.now() + controls.intentExpiryHours * 3600_000).toISOString();
+  // Non-sensitive inputs are kept so the intent can be dispatched after authentication. Card data is never stored.
+  const intentInput = { operatorId: input.operatorId ?? null, route: input.route ?? null, routeId: input.routeId ?? null, returnUrl: input.returnUrl ?? null, saveCard: !!input.saveCard, savedCardId: input.savedCardId ?? null };
   getDb()
     .prepare(
-      `INSERT INTO gateway_payments (id, gateway, provider_ref, method, purpose, user_id, payment_request_id, amount, currency, fee, status, payer_email, payer_phone, payer_name, saved_card_id, metadata, transaction_id, created_at, updated_at)
-       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 'initiated', ?, ?, ?, ?, '{}', NULL, ?, ?)`,
+      `INSERT INTO gateway_payments (id, gateway, provider_ref, method, purpose, user_id, payment_request_id, amount, currency, fee, status, stage, expires_at, payer_email, payer_phone, payer_name, saved_card_id, metadata, transaction_id, created_at, updated_at)
+       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 'initiated', 'CREATED', ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
     )
-    .run(id, gateway.id, input.method, input.purpose, user?.id ?? null, request?.id ?? null, amount, cur.code, fee, input.email ?? user?.email ?? null, input.phone ?? user?.phone ?? null, input.name ?? user?.full_name ?? null, input.savedCardId ?? null, ts, ts);
-  if (input.operatorId || input.route) updatePayment(id, { metadata: JSON.stringify({ operatorId: input.operatorId ?? null, route: input.route ?? null, routeId: input.routeId ?? null }) });
+    .run(id, gateway.id, input.method, input.purpose, user?.id ?? null, request?.id ?? null, amount, cur.code, fee, expiresAt, input.email ?? user?.email ?? null, input.phone ?? user?.phone ?? null, input.name ?? user?.full_name ?? null, input.savedCardId ?? null, JSON.stringify({ operatorId: input.operatorId ?? null, route: input.route ?? null, routeId: input.routeId ?? null, intentInput }), ts, ts);
+  const actor = actorFor(user);
+  recordEvent('payment', id, 'payment.created', actor, { purpose: input.purpose, method: input.method, gateway: gateway.id, amount, currency: cur.code, fee, operatorId: input.operatorId ?? null });
+  transitionStage(id, 'AUTHENTICATION_REQUIRED', { type: 'system' });
 
+  const authn = resolveAuthentication(user, auth, gateway.provider, input.method);
+  if (authn.required) {
+    mergeMeta(id, { next: { type: 'authenticate', message: 'Confirm this payment with biometrics or your transaction PIN.' } });
+    return toPaymentView(getPayment(id));
+  }
+  markAuthenticated(id, authn.method!, actor);
+  return dispatchToProvider(user, getPayment(id), { card: input.card, savedCardId: input.savedCardId, saveCard: input.saveCard, returnUrl: input.returnUrl });
+}
+
+function markAuthenticated(id: string, method: string, actor: Actor) {
+  updatePayment(id, { authenticated_at: now(), auth_method: method });
+  recordEvent('auth', id, 'payment.authenticated', actor, { method });
+}
+
+/** Second step for intents created without authentication: supply biometrics/PIN (and card details again for card payments). */
+export async function authenticatePayment(user: UserRow, id: string, body: { pin?: string | null; card?: CardInput; savedCardId?: string | null; saveCard?: boolean; returnUrl?: string | null }, req: Pick<Request, 'headers' | 'body'>): Promise<PaymentView> {
   const payment = getPayment(id);
-  const returnUrl = input.returnUrl || (input.purpose === 'checkout' ? `${config.webUrl}/pay/${request!.code}?payment=${id}` : `${config.webUrl}/add-money?payment=${id}`);
+  if (payment.user_id !== user.id) throw notFound('Payment not found');
+  if (payment.stage !== 'AUTHENTICATION_REQUIRED') throw conflict(`Payment is already ${STAGE_LABELS[payment.stage as PaymentStage].label.toLowerCase()}`, 'invalid_stage_transition');
+  if (payment.expires_at && payment.expires_at < now()) {
+    transitionStage(id, 'EXPIRED', { type: 'system' }, { reason: 'authentication_timeout' });
+    throw conflict('This payment intent has expired. Start again.', 'payment_expired');
+  }
+  const gateway = getGateway(payment.gateway)!;
+  const authn = resolveAuthentication(user, { pin: body.pin, req }, gateway.provider, payment.method);
+  if (authn.required) throw badRequest('Confirm with biometrics or your transaction PIN', 'authentication_required');
+  markAuthenticated(id, authn.method!, actorFor(user));
+  const stored = parseJson<any>(payment.metadata, {}).intentInput ?? {};
+  return dispatchToProvider(user, getPayment(id), { card: body.card, savedCardId: body.savedCardId ?? stored.savedCardId, saveCard: body.saveCard ?? stored.saveCard, returnUrl: body.returnUrl ?? stored.returnUrl });
+}
+
+/** Hand the authenticated intent to the rail: issue instructions / redirect / prompt, or settle immediately when the processor already confirmed. */
+async function dispatchToProvider(user: UserRow | null, payment: GatewayPaymentRow, secrets: { card?: CardInput; savedCardId?: string | null; saveCard?: boolean; returnUrl?: string | null }): Promise<PaymentView> {
+  const gateway = getGateway(payment.gateway)!;
+  const provider = PROVIDERS[gateway.provider];
+  const cur = getCurrency(payment.currency, false);
+  const meta = parseJson<any>(payment.metadata, {});
+  const request = payment.payment_request_id ? (getDb().prepare('SELECT * FROM payment_requests WHERE id = ?').get(payment.payment_request_id) as PaymentRequestRow) : null;
+  const merchant = request ? findUserById(request.requester_user_id) : null;
+  let savedCardToken: string | null = null;
+  if (secrets.savedCardId && user) {
+    const card = getDb().prepare('SELECT * FROM saved_cards WHERE id = ? AND user_id = ?').get(secrets.savedCardId, user.id) as any;
+    if (!card) throw notFound('Saved card not found');
+    savedCardToken = card.provider_ref;
+    updatePayment(payment.id, { saved_card_id: card.id });
+  }
+  const returnUrl = secrets.returnUrl || (payment.purpose === 'checkout' ? `${config.webUrl}/pay/${request!.code}?payment=${payment.id}` : `${config.webUrl}/add-money?payment=${payment.id}`);
   let result: InitiateResult;
   try {
     result = await provider.initiate({
       payment,
-      amountMinor: amount,
-      amountMajor: amount / 10 ** cur.decimals,
+      amountMinor: payment.amount,
+      amountMajor: payment.amount / 10 ** cur.decimals,
       currency: cur.code,
       decimals: cur.decimals,
-      method: input.method,
+      method: payment.method,
       payer: { email: payment.payer_email, phone: payment.payer_phone, name: payment.payer_name, userId: user?.id ?? null },
-      card: input.card,
+      card: secrets.card,
       savedCardToken,
-      saveCard: !!input.saveCard && !!user,
+      saveCard: !!secrets.saveCard && !!user,
       returnUrl,
       callbackUrl: `${config.apiUrl}/api/webhooks/${gateway.id}`,
       credentials: getGatewayCredentials(gateway.id),
-      description: input.purpose === 'checkout' ? `Payment to ${merchant!.business_name || merchant!.full_name}` : `${config.appName} wallet top-up`,
-      operatorId: input.operatorId ?? null,
+      description: payment.purpose === 'checkout' ? `Payment to ${merchant!.business_name || merchant!.full_name}` : `${config.appName} wallet top-up`,
+      operatorId: meta.operatorId ?? null,
     });
   } catch (err) {
-    updatePayment(id, { status: 'failed', metadata: JSON.stringify({ failureReason: (err as Error).message }) });
+    mergeMeta(payment.id, { failureReason: (err as Error).message });
+    transitionStage(payment.id, 'REJECTED', { type: 'processor', id: gateway.id }, { reason: (err as Error).message });
     throw unprocessable(`Payment could not be started: ${(err as Error).message}`, 'gateway_error');
   }
-  updatePayment(id, {
-    provider_ref: result.providerRef,
-    status: result.status === 'succeeded' ? 'pending' : result.status,
-    metadata: JSON.stringify({ ...parseJson(getPayment(id).metadata, {}), next: result.next, failureReason: result.failureReason ?? null }),
-  });
+  updatePayment(payment.id, { provider_ref: result.providerRef });
+  mergeMeta(payment.id, { next: result.next, failureReason: result.failureReason ?? null });
+  transitionStage(payment.id, 'INSTRUCTION_ISSUED', { type: 'processor', id: gateway.id }, { providerRef: result.providerRef, next: result.next?.type ?? 'none' });
   if (result.savedCard && user) saveCardFromToken(user.id, gateway.provider, result.savedCard, payment.payer_name || user.full_name);
-  if (result.status === 'succeeded') settlePayment(getPayment(id));
-  return toPaymentView(getPayment(id));
+  if (result.status === 'succeeded') {
+    confirmAndSettle(getPayment(payment.id), { actor: { type: 'processor', id: gateway.id }, source: 'processor', details: { providerRef: result.providerRef } });
+  } else if (result.status === 'failed') {
+    mergeMeta(payment.id, { failureReason: result.failureReason ?? 'Payment failed' });
+    transitionStage(payment.id, 'REJECTED', { type: 'processor', id: gateway.id }, { reason: result.failureReason ?? 'Payment failed' });
+  }
+  return toPaymentView(getPayment(payment.id));
 }
 
 /** Ask the provider for the latest status and settle if it succeeded. Safe to call repeatedly. */
 export async function verifyPayment(id: string): Promise<PaymentView> {
-  const payment = getPayment(id);
-  if (payment.status === 'succeeded' || payment.status === 'failed' || payment.status === 'cancelled') return toPaymentView(payment);
+  let payment = getPayment(id);
+  if (TERMINAL_STAGES.includes(payment.stage as PaymentStage)) return toPaymentView(payment);
+  if (expireIfDue(payment)) return toPaymentView(getPayment(id));
+  if (payment.stage === 'CREATED' || payment.stage === 'AUTHENTICATION_REQUIRED') return toPaymentView(payment);
   const gateway = getGateway(payment.gateway);
   const provider = gateway ? PROVIDERS[gateway.provider] : null;
   if (!provider) return toPaymentView(payment);
   let result: VerifyResult;
   try {
     result = await provider.verify(payment, getGatewayCredentials(gateway!.id));
-  } catch (err) {
-    return toPaymentView(payment); // transient provider error: stay pending
+  } catch {
+    return toPaymentView(payment); // transient provider error: stay where we are
   }
-  applyVerification(payment, result);
+  payment = getPayment(id);
+  applyProcessorResult(payment, result, { type: 'processor', id: gateway!.id });
   return toPaymentView(getPayment(id));
 }
 
-function applyVerification(payment: GatewayPaymentRow, result: VerifyResult) {
+/** Intents past their expiry that never received confirmation expire; ones the payer reported as sent go to manual review instead. */
+function expireIfDue(payment: GatewayPaymentRow): boolean {
+  if (!payment.expires_at || payment.expires_at > now()) return false;
+  if (['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED'].includes(payment.stage)) {
+    mergeMeta(payment.id, { failureReason: 'No confirmation arrived before the payment expired' });
+    transitionStage(payment.id, 'EXPIRED', { type: 'system' }, { expiresAt: payment.expires_at });
+    return true;
+  }
+  if (payment.stage === 'PAYMENT_SENT') {
+    transitionStage(payment.id, 'MANUAL_REVIEW', { type: 'system' }, { reason: 'reported_sent_but_unconfirmed_at_expiry' });
+    return true;
+  }
+  return false;
+}
+
+export function expireStalePayments(): number {
+  const rows = getDb().prepare("SELECT * FROM gateway_payments WHERE expires_at < ? AND stage IN ('CREATED','AUTHENTICATION_REQUIRED','INSTRUCTION_ISSUED','PAYMENT_SENT')").all(now()) as GatewayPaymentRow[];
+  let n = 0;
+  for (const r of rows) if (expireIfDue(r)) n += 1;
+  return n;
+}
+
+function applyProcessorResult(payment: GatewayPaymentRow, result: VerifyResult, actor: Actor) {
   if (result.status === 'succeeded') {
     if (result.savedCard && payment.user_id) {
       const gateway = getGateway(payment.gateway);
       if (gateway) saveCardFromToken(payment.user_id, gateway.provider, result.savedCard, payment.payer_name || '');
     }
-    settlePayment(getPayment(payment.id));
+    // Processor-confirmed rails (cards, operator APIs) carry the processor's own evidence.
+    if (['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'].includes(payment.stage)) return; // a human decides these
+    confirmAndSettle(getPayment(payment.id), { actor, source: 'processor', details: { raw: summarizeRaw(result.raw) } });
   } else if (result.status === 'failed') {
-    updatePayment(payment.id, { status: 'failed', metadata: JSON.stringify({ ...parseJson(payment.metadata, {}), failureReason: result.failureReason ?? 'Payment failed' }) });
+    if (!['INSTRUCTION_ISSUED', 'PAYMENT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW'].includes(payment.stage)) return;
+    mergeMeta(payment.id, { failureReason: result.failureReason ?? 'Payment failed' });
+    transitionStage(payment.id, 'REJECTED', actor, { reason: result.failureReason ?? 'Payment failed' });
     if (payment.user_id) notify(payment.user_id, 'Payment failed', result.failureReason ?? 'Your payment could not be completed.', { kind: 'payment_failed', paymentId: payment.id });
-  } else if (payment.status === 'initiated') {
-    updatePayment(payment.id, { status: 'pending' });
   }
 }
 
-/** Credit the ledger for a successful gateway payment. Idempotent per payment. */
-export function settlePayment(payment: GatewayPaymentRow): GatewayPaymentRow {
+function summarizeRaw(raw: unknown) {
+  if (!raw) return null;
+  try {
+    const s = JSON.stringify(raw);
+    return s.length > 2000 ? `${s.slice(0, 2000)}…` : JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
+export interface ConfirmationInput {
+  actor: Actor;
+  /** processor | signed_device | shared_secret | manual */
+  source: string;
+  evidenceId?: string | null;
+  verificationId?: string | null;
+  details?: Record<string, unknown>;
+}
+
+/**
+ * The only path to SETTLED. Requires the intent to be authenticated and independently confirmed:
+ *   EVIDENCE_RECEIVED → VERIFYING (fraud/sanctions/velocity) → CONFIRMED → SETTLED (balanced ledger posting).
+ * A risky payment stops in MANUAL_REVIEW; nothing is credited.
+ */
+export function confirmAndSettle(payment: GatewayPaymentRow, input: ConfirmationInput): GatewayPaymentRow {
   const db = getDb();
   return db.transaction(() => {
     const fresh = getPayment(payment.id);
-    if (fresh.status === 'succeeded' && fresh.transaction_id) return fresh;
+    if (fresh.stage === 'SETTLED' && fresh.transaction_id) return fresh;
+    if (TERMINAL_STAGES.includes(fresh.stage as PaymentStage)) throw conflict(`Payment is already ${fresh.stage.toLowerCase()}`, 'invalid_stage_transition');
+    if (!fresh.authenticated_at) throw conflict('Payment was never authenticated', 'authentication_required');
+    const details = { source: input.source, evidenceId: input.evidenceId ?? null, verificationId: input.verificationId ?? null, ...(input.details ?? {}) };
+    advanceThrough(fresh.id, ['EVIDENCE_RECEIVED', 'VERIFYING'], input.actor, details);
+    // Fraud, sanctions and velocity controls run on every confirmation, whatever its source.
+    const risk = assessRisk({ userId: fresh.user_id, kind: 'payment_in', amount: fresh.amount, currency: fresh.currency, subjectType: 'payment', subjectId: fresh.id, counterparty: { name: fresh.payer_name, phone: fresh.payer_phone, email: fresh.payer_email } });
+    if (risk.action !== 'allow' && input.source !== 'manual') {
+      mergeMeta(fresh.id, { riskFlags: risk.flags, riskScore: risk.score });
+      transitionStage(fresh.id, 'MANUAL_REVIEW', { type: 'system' }, { reason: 'risk', score: risk.score, flags: risk.flags });
+      return getPayment(fresh.id);
+    }
+    transitionStage(fresh.id, 'CONFIRMED', input.actor, details);
+    return settlePayment(getPayment(fresh.id), input.actor);
+  })();
+}
+
+/** Post the balanced ledger entries for a CONFIRMED intent and mark it SETTLED. Idempotent per payment. */
+export function settlePayment(payment: GatewayPaymentRow, actor: Actor = { type: 'system' }): GatewayPaymentRow {
+  const db = getDb();
+  return db.transaction(() => {
+    const fresh = getPayment(payment.id);
+    if (fresh.stage === 'SETTLED' && fresh.transaction_id) return fresh;
+    if (fresh.stage !== 'CONFIRMED') throw conflict('Only confirmed payments can be settled', 'invalid_stage_transition');
     const cur = getCurrency(fresh.currency, false);
     const gateway = getGateway(fresh.gateway);
     if (fresh.purpose === 'deposit') {
       const wallet = ensureWallet(fresh.user_id!, cur.code);
       const type = fresh.method === 'card' ? 'card_deposit' : fresh.method === 'mobile_money' ? 'mobile_money_deposit' : 'bank_deposit';
-      // The payer pays `amount` externally; the platform fee is deducted from the credited amount.
       const credited = fresh.amount - fresh.fee;
       const tx = postTransaction({
         type,
@@ -278,14 +453,12 @@ export function settlePayment(payment: GatewayPaymentRow): GatewayPaymentRow {
         metadata: { gateway: fresh.gateway, method: fresh.method, providerRef: fresh.provider_ref, paymentId: fresh.id },
         feeFrom: 'receiver',
       });
-      updatePayment(fresh.id, { status: 'succeeded', transaction_id: tx.id });
+      updatePayment(fresh.id, { transaction_id: tx.id });
+      transitionStage(fresh.id, 'SETTLED', actor, { transactionId: tx.id, credited });
       notify(fresh.user_id!, 'Money added', `${formatMoney(credited, cur)} was added to your ${cur.code} wallet.`, { kind: 'deposit', transactionId: tx.id });
       onDepositCompleted(fresh.user_id!);
       const meta = parseJson<{ route?: RouteDestination | null; routeId?: string | null }>(fresh.metadata, {});
-      if (meta.route && meta.routeId) {
-        // Any → any: the funding leg landed, execute the onward destination with the credited amount.
-        continueRouteAfterFunding(meta.routeId, fresh.id, tx.id, credited);
-      }
+      if (meta.route && meta.routeId) continueRouteAfterFunding(meta.routeId, fresh.id, tx.id, credited);
     } else {
       const request = db.prepare('SELECT * FROM payment_requests WHERE id = ?').get(fresh.payment_request_id) as PaymentRequestRow;
       const merchant = findUserById(request.requester_user_id)!;
@@ -303,7 +476,8 @@ export function settlePayment(payment: GatewayPaymentRow): GatewayPaymentRow {
         note: request.description ?? `Payment via ${fresh.method.replace('_', ' ')}`,
         metadata: { gateway: fresh.gateway, method: fresh.method, providerRef: fresh.provider_ref, paymentId: fresh.id, paymentRequestId: request.id, paymentRequestCode: request.code, payerEmail: fresh.payer_email, payerPhone: fresh.payer_phone, payerName: fresh.payer_name, ...parseJson(request.metadata, {}) },
       });
-      updatePayment(fresh.id, { status: 'succeeded', transaction_id: tx.id });
+      updatePayment(fresh.id, { transaction_id: tx.id });
+      transitionStage(fresh.id, 'SETTLED', actor, { transactionId: tx.id });
       if (request.status === 'open') markPaidByGateway(request.code, tx.id, fresh.user_id);
       void dispatchWebhook(merchant.id, 'payment.completed', {
         paymentRequest: toPaymentRequest(getPaymentRequestByCode(request.code)),
@@ -314,26 +488,32 @@ export function settlePayment(payment: GatewayPaymentRow): GatewayPaymentRow {
   })();
 }
 
-/** Admin confirms a manual bank transfer was received (or rejects it). */
-export function confirmManualPayment(id: string, outcome: 'succeeded' | 'failed', reason?: string): PaymentView {
+/** Reject an open intent (verifier decision or processor failure). Nothing was credited. */
+export function rejectPayment(id: string, actor: Actor, reason: string): PaymentView {
   const payment = getPayment(id);
-  if (payment.status !== 'pending' && payment.status !== 'initiated') throw conflict(`Payment is already ${payment.status}`);
-  if (outcome === 'succeeded') settlePayment(payment);
-  else {
-    updatePayment(id, { status: 'failed', metadata: JSON.stringify({ ...parseJson(payment.metadata, {}), failureReason: reason ?? 'Rejected by admin' }) });
-    if (payment.user_id) notify(payment.user_id, 'Deposit rejected', reason ?? 'Your bank transfer could not be confirmed.', { kind: 'payment_failed', paymentId: id });
-  }
+  if (TERMINAL_STAGES.includes(payment.stage as PaymentStage)) throw conflict(`Payment is already ${payment.stage.toLowerCase()}`, 'invalid_stage_transition');
+  mergeMeta(id, { failureReason: reason });
+  transitionStage(id, 'REJECTED', actor, { reason });
+  if (payment.user_id) notify(payment.user_id, 'Payment rejected', reason, { kind: 'payment_failed', paymentId: id });
   return toPaymentView(getPayment(id));
 }
 
-/** Attach a proof/reference for a pending manual bank transfer. */
-export function attachBankProof(user: UserRow, id: string, proof: { reference?: string; note?: string; image?: string }) {
+/**
+ * The payer reports that they sent the external payment. Screenshots and typed references are kept as
+ * supporting notes only – they are never authoritative evidence. Settlement still needs independent confirmation.
+ */
+export function markPaymentSent(user: UserRow, id: string, proof: { reference?: string; note?: string; image?: string }): PaymentView {
   const payment = getPayment(id);
   if (payment.user_id !== user.id) throw notFound('Payment not found');
-  if (payment.method !== 'bank' && payment.method !== 'mobile_money') throw badRequest('Only bank and mobile money transfers accept proof');
-  updatePayment(id, { status: 'pending', metadata: JSON.stringify({ ...parseJson(payment.metadata, {}), proof: { ...proof, submittedAt: now() } }) });
+  if (payment.method !== 'bank' && payment.method !== 'mobile_money') throw badRequest('Only bank and mobile money transfers accept a sent report');
+  if (!['INSTRUCTION_ISSUED', 'PAYMENT_SENT'].includes(payment.stage)) throw conflict(`Payment is ${STAGE_LABELS[payment.stage as PaymentStage].label.toLowerCase()}`, 'invalid_stage_transition');
+  mergeMeta(id, { proof: { reference: proof.reference ?? null, note: proof.note ?? null, hasImage: !!proof.image, image: proof.image ?? null, submittedAt: now(), authoritative: false } });
+  if (payment.stage === 'INSTRUCTION_ISSUED') transitionStage(id, 'PAYMENT_SENT', actorFor(user), { reference: proof.reference ?? null, hasImage: !!proof.image });
+  else recordEvent('payment', id, 'payment.sent_report_updated', actorFor(user), { reference: proof.reference ?? null, hasImage: !!proof.image });
   return toPaymentView(getPayment(id));
 }
+/** @deprecated use markPaymentSent */
+export const attachBankProof = markPaymentSent;
 
 export async function handleGatewayWebhook(gatewayId: string, req: Request): Promise<{ handled: number }> {
   const gateway = getGateway(gatewayId) ?? listGateways().find((g) => g.provider === gatewayId);
@@ -344,14 +524,19 @@ export async function handleGatewayWebhook(gatewayId: string, req: Request): Pro
   let handled = 0;
   for (const ev of events) {
     const payment = getDb().prepare('SELECT * FROM gateway_payments WHERE gateway = ? AND provider_ref = ?').get(gateway.id, ev.providerRef) as GatewayPaymentRow | undefined;
-    if (!payment || payment.status === 'succeeded' || payment.status === 'failed') continue;
-    applyVerification(payment, { status: ev.status, raw: ev.raw });
+    if (!payment || TERMINAL_STAGES.includes(payment.stage as PaymentStage)) continue;
+    recordEvent('evidence', payment.id, 'processor.webhook', { type: 'processor', id: gateway.id }, { status: ev.status, raw: summarizeRaw(ev.raw) });
+    applyProcessorResult(payment, { status: ev.status, raw: ev.raw }, { type: 'processor', id: gateway.id });
     handled += 1;
   }
   return { handled };
 }
 
-export function listPayments(filter: { userId?: string; purpose?: string; status?: string; method?: string; page: number; pageSize: number }) {
+export function findPaymentByReference(reference: string): GatewayPaymentRow | undefined {
+  return getDb().prepare('SELECT * FROM gateway_payments WHERE provider_ref = ? ORDER BY created_at DESC LIMIT 1').get(reference) as GatewayPaymentRow | undefined;
+}
+
+export function listPayments(filter: { userId?: string; purpose?: string; status?: string; stage?: string; stages?: string[]; method?: string; page: number; pageSize: number }) {
   const db = getDb();
   const where: string[] = [];
   const params: unknown[] = [];
@@ -366,6 +551,14 @@ export function listPayments(filter: { userId?: string; purpose?: string; status
   if (filter.status) {
     where.push('status = ?');
     params.push(filter.status);
+  }
+  if (filter.stage) {
+    where.push('stage = ?');
+    params.push(filter.stage);
+  }
+  if (filter.stages?.length) {
+    where.push(`stage IN (${filter.stages.map(() => '?').join(',')})`);
+    params.push(...filter.stages);
   }
   if (filter.method) {
     where.push('method = ?');

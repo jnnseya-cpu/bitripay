@@ -4,6 +4,7 @@ import { badRequest, forbidden, notFound, unprocessable } from '../lib/errors';
 import { formatMoney, type BankAccount } from '@bitripay/shared';
 import { getCurrency } from './currencies';
 import { calculateFee, completeTransaction, enforceLimits, postTransaction, reverseTransaction, type TransactionRow } from './ledger';
+import { enforceOutboundRisk } from './risk';
 import { getUserWallet } from './wallets';
 import type { UserRow } from './users';
 import { notify } from './notifications';
@@ -84,6 +85,18 @@ export function requestWithdrawal(user: UserRow, input: { amount: number; curren
   }
   const fee = calculateFee('withdrawal', input.amount, cur.code);
   enforceLimits(user, input.amount, cur.code);
+  // New beneficiaries cool off: a bank account added minutes ago, or a mobile money number never paid before.
+  const beneficiaryCreatedAt = (() => {
+    if (metadata.method === 'bank' && 'bankAccountId' in dest && dest.bankAccountId) return (getDb().prepare('SELECT created_at FROM bank_accounts WHERE id = ?').get(dest.bankAccountId) as any)?.created_at ?? now();
+    if (metadata.method === 'mobile_money') {
+      const prior = getDb().prepare("SELECT created_at FROM transactions WHERE sender_user_id = ? AND type = 'withdrawal' AND status = 'completed' AND metadata LIKE ? ORDER BY created_at ASC LIMIT 1").get(user.id, `%${(metadata as any).phone}%`) as any;
+      return prior?.created_at ?? now();
+    }
+    return now(); // free-form bank details are always a brand-new beneficiary
+  })();
+  const counterparty = metadata.method === 'mobile_money' ? { name: (metadata as any).recipientName, phone: (metadata as any).phone, country: (metadata as any).operator?.country } : { name: (metadata as any).bankAccount?.accountName, country: (metadata as any).bankAccount?.country };
+  const risk = enforceOutboundRisk({ userId: user.id, kind: 'withdrawal', amount: input.amount, currency: cur.code, subjectType: 'withdrawal', counterparty, beneficiaryCreatedAt });
+  if (risk.action === 'review') metadata = { ...metadata, riskFlags: risk.flags, riskScore: risk.score };
   const wallet = getUserWallet(user.id, cur.code);
   const tx = postTransaction({
     type: 'withdrawal',

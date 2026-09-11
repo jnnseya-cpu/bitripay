@@ -2,6 +2,8 @@ import { badRequest, unprocessable } from '../lib/errors';
 import { formatMoney } from '@bitripay/shared';
 import { calculateFee, enforceLimits, postTransaction, type TransactionRow } from './ledger';
 import { getCurrency, convertWithMargin } from './currencies';
+import { resolveQuote } from './fx';
+import { enforceOutboundRisk } from './risk';
 import { getUserWallet, ensureWallet } from './wallets';
 import { findUserByIdentifier, type UserRow } from './users';
 import { notify } from './notifications';
@@ -27,6 +29,7 @@ export function sendMoney(sender: UserRow, input: TransferInput): TransactionRow
   if (type === 'transfer' && !modules.transfers) throw unprocessable('Transfers are currently disabled', 'module_disabled');
   const fee = calculateFee(type, input.amount, currency.code);
   enforceLimits(sender, input.amount, currency.code);
+  enforceOutboundRisk({ userId: sender.id, kind: 'transfer', amount: input.amount, currency: currency.code, subjectType: 'transfer', counterparty: { name: recipient.full_name, phone: recipient.phone, email: recipient.email, country: recipient.country } });
   const fromWallet = getUserWallet(sender.id, currency.code);
   const toWallet = ensureWallet(recipient.id, currency.code);
   const tx = postTransaction({
@@ -51,13 +54,16 @@ export function sendMoney(sender: UserRow, input: TransferInput): TransactionRow
 }
 
 /** Exchange between the user's own wallets at the platform rate (mid-market minus margin). */
-export function exchange(user: UserRow, fromCurrency: string, toCurrency: string, amount: number): { tx: TransactionRow; rate: number; received: number } {
+export function exchange(user: UserRow, fromCurrency: string, toCurrency: string, amount: number, opts: { quoteId?: string | null } = {}): { tx: TransactionRow; rate: number; received: number; quoteId: string | null; guaranteed: boolean } {
   if (!getModules().exchange) throw unprocessable('Currency exchange is currently disabled', 'module_disabled');
   const from = getCurrency(fromCurrency);
   const to = getCurrency(toCurrency);
   if (from.code === to.code) throw badRequest('Choose two different currencies');
   const fee = calculateFee('exchange', amount, from.code);
-  const quote = convertWithMargin(amount, from.code, to.code);
+  const live = convertWithMargin(amount, from.code, to.code);
+  const locked = resolveQuote(opts.quoteId, user.id, from.code, to.code);
+  // A guaranteed, unexpired quote fixes the customer rate; otherwise the current disclosed rate applies.
+  const quote = locked ? { amount: Math.round((amount / 10 ** from.decimals) * locked.rate * 10 ** to.decimals), rate: locked.rate, midRate: locked.midRate, marginBps: locked.markupBps } : live;
   if (quote.amount <= 0) throw badRequest('Amount too small to convert');
   const fromWallet = getUserWallet(user.id, from.code);
   const toWallet = ensureWallet(user.id, to.code);
@@ -73,7 +79,7 @@ export function exchange(user: UserRow, fromCurrency: string, toCurrency: string
     senderUserId: user.id,
     receiverUserId: user.id,
     note: `Exchange ${from.code} → ${to.code}`,
-    metadata: { rate: quote.rate, midRate: quote.midRate, marginBps: quote.marginBps },
+    metadata: { rate: quote.rate, midRate: quote.midRate, marginBps: quote.marginBps, quoteId: locked?.id ?? null, guaranteed: !!locked, provider: locked?.provider ?? null },
   });
-  return { tx, rate: quote.rate, received: quote.amount };
+  return { tx, rate: quote.rate, received: quote.amount, quoteId: locked?.id ?? null, guaranteed: !!locked };
 }

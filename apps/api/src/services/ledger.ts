@@ -8,6 +8,7 @@ import { getFees, getLimits } from './settings';
 import { fromBase, toBase } from './currencies';
 import { getSystemUser, usersById, type UserRow } from './users';
 import { ensureWallet, getWallet, type WalletRow } from './wallets';
+import { recordEvent } from './events';
 
 export interface TransactionRow {
   id: string;
@@ -93,6 +94,27 @@ export function enforceLimits(user: UserRow, amount: number, currency: string) {
       throw unprocessable('This transaction would exceed your daily limit', 'daily_limit_exceeded');
     }
   }
+}
+
+/**
+ * Every transaction must balance: total debits == total credits across its ledger entries.
+ * Called at the end of every posting; a violation aborts the surrounding database transaction.
+ */
+export function assertLedgerBalanced(txId: string) {
+  // Balanced per currency: a conversion is two balanced legs (source currency and target currency) through the treasury.
+  const rows = getDb().prepare("SELECT w.currency, COALESCE(SUM(CASE WHEN e.direction = 'debit' THEN e.amount ELSE 0 END), 0) d, COALESCE(SUM(CASE WHEN e.direction = 'credit' THEN e.amount ELSE 0 END), 0) c FROM ledger_entries e JOIN wallets w ON w.id = e.wallet_id WHERE e.transaction_id = ? GROUP BY w.currency").all(txId) as { currency: string; d: number; c: number }[];
+  for (const r of rows) if (r.d !== r.c) throw new Error(`Ledger imbalance on ${txId} (${r.currency}): debits ${r.d} != credits ${r.c}`);
+  return { d: rows.reduce((a, r) => a + r.d, 0), c: rows.reduce((a, r) => a + r.c, 0), currencies: rows.map((r) => r.currency) };
+}
+
+/** Whole-ledger check used by reconciliation: every wallet balance equals the sum of its entries and every transaction balances. */
+export function reconcileLedger(): { ok: boolean; transactionsChecked: number; unbalancedTransactions: string[]; walletMismatches: { walletId: string; balance: number; computed: number }[] } {
+  const db = getDb();
+  const unbalanced = db.prepare("SELECT DISTINCT transaction_id id FROM (SELECT e.transaction_id, w.currency FROM ledger_entries e JOIN wallets w ON w.id = e.wallet_id GROUP BY e.transaction_id, w.currency HAVING SUM(CASE WHEN e.direction = 'debit' THEN e.amount ELSE -e.amount END) != 0)").all() as { id: string }[];
+  const wallets = db.prepare("SELECT w.id, w.balance, COALESCE((SELECT SUM(CASE WHEN direction = 'credit' THEN amount ELSE -amount END) FROM ledger_entries e WHERE e.wallet_id = w.id), 0) computed FROM wallets w").all() as { id: string; balance: number; computed: number }[];
+  const mismatches = wallets.filter((w) => w.balance !== w.computed).map((w) => ({ walletId: w.id, balance: w.balance, computed: w.computed }));
+  const total = (db.prepare('SELECT COUNT(DISTINCT transaction_id) c FROM ledger_entries').get() as any).c as number;
+  return { ok: unbalanced.length === 0 && mismatches.length === 0, transactionsChecked: total, unbalancedTransactions: unbalanced.map((u) => u.id), walletMismatches: mismatches };
 }
 
 function insertLedgerEntry(txId: string, wallet: WalletRow, direction: 'debit' | 'credit', amount: number) {
@@ -206,13 +228,25 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     if (status === 'completed') {
       insertLedgerEntry(id, toWallet, 'credit', receiveAmount);
       creditFees(id, fee, input.currency, revenue.id, input.feeSplits);
+      if (receiveCurrency !== input.currency) postConversionLegs(id, input.currency, feeFrom === 'receiver' ? input.amount - fee : input.amount, receiveCurrency, receiveAmount, treasury.id);
     } else {
       // Hold: park the funds (amount in sender currency + fee) in the escrow account until completion.
       const escrow = ensureWallet(getSystemUser('escrow').id, input.currency);
       insertLedgerEntry(id, escrow, 'credit', totalDebit);
     }
+    const balance = assertLedgerBalanced(id);
+    recordEvent('ledger', id, `ledger.posted.${status}`, { type: 'system' }, { type: input.type, amount: input.amount, fee, currency: input.currency, debits: balance.d, credits: balance.c, senderUserId: input.senderUserId ?? null, receiverUserId: input.receiverUserId ?? null });
     return db.prepare('SELECT * FROM transactions WHERE id = ?').get(id) as TransactionRow;
   })();
+}
+
+/**
+ * Currency conversion is booked as two balanced legs through the treasury's FX position:
+ * the treasury receives the source-currency amount and gives out the target-currency amount.
+ */
+function postConversionLegs(txId: string, fromCurrency: string, fromAmount: number, toCurrency: string, toAmount: number, treasuryUserId: string) {
+  insertLedgerEntry(txId, ensureWallet(treasuryUserId, fromCurrency), 'credit', fromAmount);
+  insertLedgerEntry(txId, ensureWallet(treasuryUserId, toCurrency), 'debit', toAmount);
 }
 
 function creditFees(txId: string, fee: number, currency: string, revenueUserId: string, splits?: { walletId: string; amount: number }[]) {
@@ -244,8 +278,11 @@ export function completeTransaction(id: string, extraMetadata?: Record<string, u
     const toWallet = getWallet(tx.receiver_wallet_id!);
     insertLedgerEntry(tx.id, toWallet, 'credit', tx.receive_amount ?? tx.amount);
     creditFees(tx.id, tx.fee, tx.currency, getSystemUser('fees').id, feeSplits);
+    if (tx.receive_currency && tx.receive_currency !== tx.currency) postConversionLegs(tx.id, tx.currency, heldAmount(tx) - tx.fee, tx.receive_currency, tx.receive_amount ?? tx.amount, getSystemUser('treasury').id);
     const metadata = { ...parseJson(tx.metadata, {}), ...(extraMetadata ?? {}) };
     db.prepare("UPDATE transactions SET status = 'completed', completed_at = ?, metadata = ? WHERE id = ?").run(now(), JSON.stringify(metadata), tx.id);
+    const balance = assertLedgerBalanced(tx.id);
+    recordEvent('ledger', tx.id, 'ledger.completed', { type: 'system' }, { debits: balance.d, credits: balance.c, ...(extraMetadata ?? {}) });
     return getTransaction(tx.id)!;
   })();
 }
@@ -263,6 +300,8 @@ export function reverseTransaction(id: string, status: 'rejected' | 'cancelled' 
     insertLedgerEntry(tx.id, fromWallet, 'credit', heldAmount(tx));
     const metadata = { ...parseJson(tx.metadata, {}), reason: reason ?? null };
     db.prepare('UPDATE transactions SET status = ?, completed_at = ?, metadata = ? WHERE id = ?').run(status, now(), JSON.stringify(metadata), tx.id);
+    const balance = assertLedgerBalanced(tx.id);
+    recordEvent('ledger', tx.id, `ledger.${status}`, { type: 'system' }, { reason: reason ?? null, debits: balance.d, credits: balance.c });
     return getTransaction(tx.id)!;
   })();
 }
@@ -295,6 +334,8 @@ export function refundTransaction(id: string, options: { refundFee?: boolean; no
       insertLedgerEntry(refund.id, getWallet(tx.sender_wallet_id), 'credit', tx.fee);
     }
     db.prepare("UPDATE transactions SET status = 'reversed', metadata = ? WHERE id = ?").run(JSON.stringify({ ...parseJson(tx.metadata, {}), refundTransactionId: refund.id }), tx.id);
+    assertLedgerBalanced(refund.id);
+    recordEvent('ledger', tx.id, 'ledger.reversed', { type: 'system' }, { refundTransactionId: refund.id, refundFee: !!options.refundFee });
     return refund;
   })();
 }

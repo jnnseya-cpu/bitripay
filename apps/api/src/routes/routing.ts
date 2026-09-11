@@ -7,6 +7,7 @@ import { getCurrency } from '../services/currencies';
 import { toMinor } from '@bitripay/shared';
 import { createRoute, getRoute, listRoutes, previewDestination, quoteRoute, refreshRoute, retryRoute } from '../services/routing';
 import { listOperators } from '../services/momo';
+import { routeCatalog, describeRoute } from '../services/railCatalog';
 
 const cardSchema = z.object({ number: z.string().min(12).max(23), expMonth: z.coerce.number().int().min(1).max(12), expYear: z.coerce.number().int().min(0).max(2100), cvc: z.string().min(3).max(4), holderName: z.string().min(2).max(120) });
 const destinationSchema = z.discriminatedUnion('method', [
@@ -32,25 +33,32 @@ const sourceSchema = z.object({
 export const routingRouter = Router();
 routingRouter.use(requireAuth);
 
+/** Every declared logical route (initiation, confirmation, settlement, timing, fees, refund, processing mode). */
+routingRouter.get('/catalog', (req, res) => {
+  const cur = getCurrency(String(req.query.currency || 'USD'));
+  res.json({ currency: cur.code, items: routeCatalog({ currency: cur.code, country: req.user!.country }) });
+});
 routingRouter.get('/operators', (req, res) => res.json({ items: listOperators({ country: req.query.country ? String(req.query.country) : null, currency: req.query.currency ? String(req.query.currency) : null }) }));
 
 routingRouter.post(
   '/preview',
   wrap(async (req, res) => {
-    const body = validate(z.object({ destination: destinationSchema, sourceMethod: z.enum(['wallet', 'card', 'bank', 'mobile_money']).default('wallet'), amount: z.string(), currency: z.string().length(3), targetCurrency: z.string().length(3).optional().nullable() }), req.body);
+    const body = validate(z.object({ destination: destinationSchema, sourceMethod: z.enum(['wallet', 'card', 'bank', 'mobile_money']).default('wallet'), sourceOperatorId: z.string().optional().nullable(), gateway: z.string().optional().nullable(), amount: z.string(), currency: z.string().length(3), targetCurrency: z.string().length(3).optional().nullable() }), req.body);
     const cur = getCurrency(body.currency);
     const amount = toMinor(body.amount, cur.decimals);
-    res.json({ destination: previewDestination(body.destination), quote: quoteRoute(amount, cur.code, (body.targetCurrency || cur.code).toUpperCase(), body.sourceMethod, body.destination) });
+    const quote = quoteRoute(amount, cur.code, (body.targetCurrency || cur.code).toUpperCase(), body.sourceMethod, body.destination, { userId: req.user!.id, country: req.user!.country, operatorId: body.sourceOperatorId, gateway: body.gateway });
+    res.json({ destination: previewDestination(body.destination), quote, declaration: quote.declaration, fx: quote.fx });
   }),
 );
 
 routingRouter.post(
   '/',
   wrap(async (req, res) => {
-    const body = validate(z.object({ source: sourceSchema, destination: destinationSchema, amount: z.string(), currency: z.string().length(3), targetCurrency: z.string().length(3).optional().nullable(), note: z.string().max(200).optional().nullable(), pin: z.string().optional() }), req.body);
+    const body = validate(z.object({ source: sourceSchema, destination: destinationSchema, amount: z.string(), currency: z.string().length(3), targetCurrency: z.string().length(3).optional().nullable(), note: z.string().max(200).optional().nullable(), quoteId: z.string().optional().nullable(), pin: z.string().optional() }), req.body);
+    // Every route is a payment: wallet-funded routes need biometrics/PIN now; externally funded ones carry the same proof into the intent.
     if (body.source.method === 'wallet') assertPin(req.user!, body.pin, req);
     const cur = getCurrency(body.currency);
-    const route = await createRoute(req.user!, { source: body.source, destination: body.destination, amount: toMinor(body.amount, cur.decimals), currency: cur.code, targetCurrency: body.targetCurrency?.toUpperCase() ?? null, note: body.note });
+    const route = await createRoute(req.user!, { source: body.source, destination: body.destination, amount: toMinor(body.amount, cur.decimals), currency: cur.code, targetCurrency: body.targetCurrency?.toUpperCase() ?? null, note: body.note, quoteId: body.quoteId }, { pin: body.pin, req });
     res.status(201).json({ route });
   }),
 );
@@ -65,4 +73,4 @@ routingRouter.post(
     res.json({ route: retryRoute(req.user!, String(req.params.id), body.destination) });
   }),
 );
-export { getRoute };
+export { getRoute, describeRoute };

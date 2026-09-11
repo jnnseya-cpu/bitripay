@@ -20,9 +20,41 @@ export async function registerUser(app: ReturnType<typeof createApp>, overrides:
   return { token, user: res.body.user as any, auth: { Authorization: `Bearer ${token}` } };
 }
 
+export const ADMIN_PIN = '9999';
+export const CHECKER_PIN = '2222';
+
+/** Seeded super admin. Sets a transaction PIN once so administrative step-up works in tests. */
 export async function adminToken(app: ReturnType<typeof createApp>) {
   const res = await request(app).post('/api/auth/login').send({ identifier: 'admin@bitripay.local', password: 'Admin123!' });
-  return { token: res.body.token as string, auth: { Authorization: `Bearer ${res.body.token}` } };
+  const auth = { Authorization: `Bearer ${res.body.token}` };
+  await request(app).post('/api/account/pin').set(auth).send({ pin: ADMIN_PIN }); // no-op once set
+  return { token: res.body.token as string, auth, pin: ADMIN_PIN };
+}
+
+/** A second administrator (the "checker") for maker-checker approvals. */
+export async function checkerToken(app: ReturnType<typeof createApp>) {
+  const admin = await adminToken(app);
+  const login = async () => request(app).post('/api/auth/login').send({ identifier: 'checker@bitripay.local', password: 'Checker123!' });
+  let res = await login();
+  if (res.status !== 200) {
+    const created = await request(app).post('/api/admin/users').set(admin.auth).send({ fullName: 'Checker Admin', email: 'checker@bitripay.local', password: 'Checker123!', role: 'admin', permissions: [] });
+    if (created.status !== 201) throw new Error(`checker create failed: ${JSON.stringify(created.body)}`);
+    res = await login();
+  }
+  const auth = { Authorization: `Bearer ${res.body.token}` };
+  await request(app).post('/api/account/pin').set(auth).send({ pin: CHECKER_PIN });
+  return { token: res.body.token as string, auth, pin: CHECKER_PIN, user: res.body.user as any };
+}
+
+/** Maker-checker manual confirmation of an external payment: the admin proposes, the checker approves under PIN step-up. */
+export async function manualConfirm(app: ReturnType<typeof createApp>, paymentId: string) {
+  const admin = await adminToken(app);
+  const checker = await checkerToken(app);
+  const proposed = await request(app).post(`/api/admin/payments/${paymentId}/confirm`).set(admin.auth).send({ note: 'Seen on statement' });
+  if (proposed.status !== 200) throw new Error(`propose failed: ${JSON.stringify(proposed.body)}`);
+  const approved = await request(app).post(`/api/admin/verifications/${proposed.body.verification.id}/approve`).set(checker.auth).send({ pin: checker.pin });
+  if (approved.status !== 200) throw new Error(`approve failed: ${JSON.stringify(approved.body)}`);
+  return approved.body as { verification: any; payment: any };
 }
 
 export async function fund(app: ReturnType<typeof createApp>, userId: string, amount: string, currency = 'USD') {

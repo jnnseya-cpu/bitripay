@@ -3,6 +3,7 @@ import { now } from './lib/ids';
 import { getAppSettings } from './services/settings';
 import { refreshRatesFromProvider } from './services/currencies';
 import { runAutoSettlements } from './services/merchant';
+import { expireStalePayments } from './services/payments';
 import { config } from './config';
 
 let lastRateRefresh = 0;
@@ -16,6 +17,10 @@ export function startJobs() {
       const db = getDb();
       db.prepare("UPDATE payment_requests SET status = 'expired' WHERE status = 'open' AND expires_at IS NOT NULL AND expires_at < ?").run(now());
       db.prepare("UPDATE cash_requests SET status = 'expired' WHERE status = 'pending' AND expires_at < ?").run(now());
+      const expired = expireStalePayments();
+      if (expired) console.log(`[jobs] expired ${expired} unconfirmed payment intents`);
+      db.prepare("DELETE FROM idempotency_keys WHERE created_at < ?").run(new Date(Date.now() - 24 * 3600_000).toISOString());
+      db.prepare("DELETE FROM evidence_nonces WHERE created_at < ?").run(new Date(Date.now() - 7 * 86_400_000).toISOString());
       const app = getAppSettings();
       if (app.rateAutoRefreshHours > 0 && app.rateProvider !== 'manual' && Date.now() - lastRateRefresh > app.rateAutoRefreshHours * 3600_000) {
         lastRateRefresh = Date.now();

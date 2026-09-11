@@ -9,7 +9,7 @@ import { uuid, now } from '../lib/ids';
 import { badRequest, notFound, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
 import { decodeQr, formatMoney } from '@bitripay/shared';
-import { getCurrency, convertWithMargin, fromBase } from './currencies';
+import { getCurrency, fromBase } from './currencies';
 import { getFees } from './settings';
 import { calculateFee } from './ledger';
 import { getUserById, findUserByIdentifier, findUserByTag, toPublicUser, type UserRow } from './users';
@@ -18,7 +18,10 @@ import { sendMoney, exchange } from './transfers';
 import { requestWithdrawal } from './withdrawals';
 import { payWithWallet, getPaymentRequestByCode } from './paymentRequests';
 import { createCashOutRequest } from './agents';
-import { initiatePayment, verifyPayment, type InitiatePaymentInput, type PaymentView, toPaymentView, getPayment } from './payments';
+import { initiatePayment, verifyPayment, type InitiatePaymentInput, type PaymentAuth, type PaymentView, toPaymentView, getPayment } from './payments';
+import { fxDisclosure, type FxDisclosure } from './fx';
+import { describeRoute, type RouteDeclaration } from './railCatalog';
+import { recordEvent } from './events';
 import { notify } from './notifications';
 import { getOperator } from './momo';
 
@@ -153,11 +156,11 @@ function payoutFeeType(dest: RouteDestination, targetUser?: UserRow | null): str
  * Execute the payout leg from the user's wallet. `amount` is in `currency` (the wallet that was funded);
  * `targetCurrency` triggers an exchange first when different.
  */
-export function executeDestination(user: UserRow, dest: RouteDestination, amount: number, currency: string, targetCurrency: string, note?: string | null): { transactionId: string | null; status: string; extra?: Record<string, unknown> } {
+export function executeDestination(user: UserRow, dest: RouteDestination, amount: number, currency: string, targetCurrency: string, note?: string | null, quoteId?: string | null): { transactionId: string | null; status: string; extra?: Record<string, unknown> } {
   let payCurrency = currency;
   let payAmount = amount;
   if (targetCurrency !== currency) {
-    const ex = exchange(user, currency, targetCurrency, maxSendable('exchange', amount, currency));
+    const ex = exchange(user, currency, targetCurrency, maxSendable('exchange', amount, currency), { quoteId });
     payCurrency = targetCurrency;
     payAmount = ex.received;
   }
@@ -198,8 +201,23 @@ export function executeDestination(user: UserRow, dest: RouteDestination, amount
   }
 }
 
-/** Quote how much arrives at the destination after funding fee, FX and payout fee. */
-export function quoteRoute(amount: number, currency: string, targetCurrency: string, sourceMethod: RouteSource['method'] = 'wallet', dest?: RouteDestination) {
+export interface RouteQuote {
+  amount: number;
+  currency: string;
+  fundingFee: number;
+  exchangeFee: number;
+  rate: number;
+  payoutFee: number;
+  targetAmount: number;
+  targetCurrency: string;
+  /** Full FX disclosure (reference rate, provider, timestamp, markup, expiry) – null for same-currency routes. */
+  fx: FxDisclosure | null;
+  /** The declared route: initiation, confirmation, settlement, timing, refund and processing mode. */
+  declaration: RouteDeclaration;
+}
+
+/** Quote how much arrives at the destination after funding fee, FX and payout fee, with the full disclosure. */
+export function quoteRoute(amount: number, currency: string, targetCurrency: string, sourceMethod: RouteSource['method'] = 'wallet', dest?: RouteDestination, ctx: { userId?: string | null; country?: string | null; operatorId?: string | null; gateway?: string | null; persistQuote?: boolean } = {}): RouteQuote {
   const c = getCurrency(currency);
   const t = getCurrency(targetCurrency);
   const fundingFeeType = sourceMethod === 'card' ? 'card_deposit' : sourceMethod === 'mobile_money' ? 'mobile_money_deposit' : sourceMethod === 'bank' ? 'bank_deposit' : null;
@@ -208,33 +226,37 @@ export function quoteRoute(amount: number, currency: string, targetCurrency: str
   let exchangeFee = 0;
   let rate = 1;
   let converted = available;
+  let fx: FxDisclosure | null = null;
   if (c.code !== t.code) {
     const sendable = maxSendable('exchange', available, c.code);
     exchangeFee = available - sendable;
-    const fx = convertWithMargin(sendable, c.code, t.code);
-    converted = fx.amount;
+    fx = fxDisclosure(c.code, t.code, ctx.userId ?? null, ctx.persistQuote !== false);
+    converted = Math.round((sendable / 10 ** c.decimals) * fx.rate * 10 ** t.decimals);
     rate = fx.rate;
   }
   let targetUser: UserRow | null = null;
   if (dest?.method === 'wallet') targetUser = findUserByIdentifier(dest.to) ?? null;
   const feeType = dest ? payoutFeeType(dest, targetUser) : null;
   const delivered = feeType ? maxSendable(feeType, converted, t.code) : converted;
-  return { amount, currency: c.code, fundingFee, exchangeFee, rate, payoutFee: converted - delivered, targetAmount: delivered, targetCurrency: t.code };
+  const destKind = dest?.method === 'wallet' && targetUser?.role === 'merchant' ? 'merchant' : dest?.method ?? 'keep';
+  const declaration = describeRoute(sourceMethod, destKind as any, { currency: c.code, targetCurrency: t.code, country: ctx.country, operatorId: ctx.operatorId, destinationOperatorId: dest?.method === 'mobile_money' ? dest.operatorId : null, gateway: ctx.gateway });
+  return { amount, currency: c.code, fundingFee, exchangeFee, rate, payoutFee: converted - delivered, targetAmount: delivered, targetCurrency: t.code, fx, declaration };
 }
 
-export async function createRoute(user: UserRow, input: { source: RouteSource; destination: RouteDestination; amount: number; currency: string; targetCurrency?: string | null; note?: string | null }): Promise<RouteView> {
+export async function createRoute(user: UserRow, input: { source: RouteSource; destination: RouteDestination; amount: number; currency: string; targetCurrency?: string | null; note?: string | null; quoteId?: string | null }, auth?: PaymentAuth): Promise<RouteView> {
   const cur = getCurrency(input.currency);
   const target = getCurrency(input.targetCurrency || input.currency);
   previewDestination(input.destination); // validates
   const id = uuid();
   getDb()
     .prepare('INSERT INTO money_routes (id, user_id, source_method, source_details, destination_method, destination_details, amount, currency, target_currency, status, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, user.id, input.source.method, JSON.stringify({ operatorId: input.source.operatorId ?? null, phone: input.source.phone ?? null, gateway: input.source.gateway ?? null }), input.destination.method, JSON.stringify(input.destination), input.amount, cur.code, target.code, 'pending', input.note ?? null, now(), now());
+    .run(id, user.id, input.source.method, JSON.stringify({ operatorId: input.source.operatorId ?? null, phone: input.source.phone ?? null, gateway: input.source.gateway ?? null, quoteId: input.quoteId ?? null }), input.destination.method, JSON.stringify(input.destination), input.amount, cur.code, target.code, 'pending', input.note ?? null, now(), now());
+  recordEvent('route', id, 'route.created', { type: 'user', id: user.id }, { source: input.source.method, destination: input.destination.method, amount: input.amount, currency: cur.code, targetCurrency: target.code, quoteId: input.quoteId ?? null });
 
   if (input.source.method === 'wallet') {
     try {
       getUserWallet(user.id, cur.code);
-      const r = executeDestination(user, input.destination, input.amount, cur.code, target.code, input.note);
+      const r = executeDestination(user, input.destination, input.amount, cur.code, target.code, input.note, input.quoteId);
       setRoute(id, { status: r.status, payout_transaction_id: r.transactionId, destination_details: JSON.stringify({ ...input.destination, ...(r.extra ?? {}) }) });
     } catch (err) {
       setRoute(id, { status: 'failed', error: (err as Error).message });
@@ -258,9 +280,9 @@ export async function createRoute(user: UserRow, input: { source: RouteSource; d
     returnUrl: input.source.returnUrl,
     route: input.destination,
     routeId: id,
-  });
+  }, auth);
   const current = getDb().prepare('SELECT status FROM money_routes WHERE id = ?').get(id) as any;
-  if (current.status === 'pending') setRoute(id, { payment_id: payment.id, status: payment.status === 'failed' ? 'failed' : 'funding', error: payment.failureReason });
+  if (current.status === 'pending') setRoute(id, { payment_id: payment.id, status: payment.status === 'failed' ? 'failed' : payment.stage === 'AUTHENTICATION_REQUIRED' ? 'authentication_required' : 'funding', error: payment.failureReason });
   else setRoute(id, { payment_id: payment.id });
   return getRoute(user.id, id);
 }
@@ -273,8 +295,9 @@ export function continueRouteAfterFunding(routeId: string, paymentId: string, fu
   db.prepare('UPDATE money_routes SET payment_id = ? WHERE id = ?').run(paymentId, routeId);
   const user = getUserById(row.user_id);
   const dest = parseJson<RouteDestination>(row.destination_details, { method: 'keep' });
+  const src = parseJson<{ quoteId?: string | null }>(row.source_details, {});
   try {
-    const r = executeDestination(user, dest, creditedAmount, row.currency, row.target_currency, row.note);
+    const r = executeDestination(user, dest, creditedAmount, row.currency, row.target_currency, row.note, src.quoteId ?? null);
     setRoute(row.id, { status: r.status, funding_transaction_id: fundingTxId, payout_transaction_id: r.transactionId, destination_details: JSON.stringify({ ...dest, ...(r.extra ?? {}) }) });
     notify(user.id, 'Money on its way', `${formatMoney(creditedAmount, getCurrency(row.currency, false))} arrived and was ${r.status === 'completed' ? 'delivered' : 'queued for payout'} to ${previewDestination(dest).label}.`, { kind: 'route', routeId: row.id });
   } catch (err) {
@@ -309,9 +332,10 @@ export function listRoutes(userId: string): RouteView[] {
 export async function refreshRoute(userId: string, id: string): Promise<RouteView> {
   const row = getDb().prepare('SELECT * FROM money_routes WHERE id = ? AND user_id = ?').get(id, userId) as any;
   if (!row) throw notFound('Route not found');
-  if (row.status === 'funding' && row.payment_id) {
+  if ((row.status === 'funding' || row.status === 'authentication_required') && row.payment_id) {
     const p = await verifyPayment(row.payment_id);
     if (p.status === 'failed') setRoute(id, { status: 'failed', error: p.failureReason });
+    else if (row.status === 'authentication_required' && p.stage !== 'AUTHENTICATION_REQUIRED') setRoute(id, { status: 'funding' });
   }
   // ensure the wallet-source path with a withdrawal reflects final status
   const fresh = getDb().prepare('SELECT * FROM money_routes WHERE id = ?').get(id) as any;

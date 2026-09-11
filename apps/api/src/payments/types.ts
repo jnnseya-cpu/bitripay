@@ -15,6 +15,11 @@ export interface GatewayPaymentRow {
   currency: string;
   fee: number;
   status: 'initiated' | 'pending' | 'succeeded' | 'failed' | 'cancelled';
+  /** Lifecycle stage (see services/lifecycle.ts). `status` is derived from it. */
+  stage: string;
+  expires_at: string | null;
+  authenticated_at: string | null;
+  auth_method: string | null;
   payer_email: string | null;
   payer_phone: string | null;
   payer_name: string | null;

@@ -70,11 +70,55 @@ const DEFAULT_APP: AppSettings = {
   p2pFeeBps: 50,
 };
 
+export interface GatewayControls {
+  /** Hours an intent may wait for confirmation before it expires (nothing is credited). */
+  intentExpiryHours: number;
+  /** Evidence must have been received within this many hours of the intent being created. */
+  evidenceWindowHours: number;
+  /** Parsed-evidence confidence needed to settle automatically (0-100). */
+  autoConfirmScore: number;
+  /** Below this the evidence is treated as unsupported and routed to manual review. */
+  reviewScore: number;
+  /** Accept the legacy shared-secret SMS webhook as authoritative (device-signed evidence is the standard). */
+  sharedSecretAutoConfirm: boolean;
+  /** Manual settlement needs a proposer and a different approver. */
+  makerChecker: boolean;
+  /** Administrative approvals require a fresh biometric (passkey) or PIN step-up. */
+  adminStepUp: boolean;
+}
+const DEFAULT_GATEWAY: GatewayControls = { intentExpiryHours: 48, evidenceWindowHours: 48, autoConfirmScore: 80, reviewScore: 50, sharedSecretAutoConfirm: false, makerChecker: true, adminStepUp: true };
+
+export interface FxSettings {
+  /** Seconds a quoted rate stays guaranteed. */
+  quoteTtlSeconds: number;
+  /** Live rates older than this are stale: guaranteed conversion is disabled and the rate is labelled. */
+  maxRateAgeHours: number;
+  /** Offer guaranteed (locked) rates at all. */
+  guaranteedQuotes: boolean;
+}
+const DEFAULT_FX: FxSettings = { quoteTtlSeconds: 120, maxRateAgeHours: 24, guaranteedQuotes: true };
+
+export interface RiskSettings {
+  maxTxPerHour: number;
+  maxTxPerDay: number;
+  /** New beneficiaries (bank accounts, recipients) cannot receive more than coolingOffAmount (base minor) for this long. */
+  coolingOffMinutes: number;
+  coolingOffAmount: number;
+  /** Score at/above which an inbound payment is held for manual review instead of settling. */
+  reviewScore: number;
+  /** Score at/above which an outbound movement is blocked. */
+  blockScore: number;
+}
+const DEFAULT_RISK: RiskSettings = { maxTxPerHour: 20, maxTxPerDay: 100, coolingOffMinutes: 60, coolingOffAmount: 50_000, reviewScore: 60, blockScore: 90 };
+
 const DEFAULTS: Record<string, unknown> = {
   fees: DEFAULT_FEES,
   limits: DEFAULT_LIMITS,
   referral: DEFAULT_REFERRAL,
   app: DEFAULT_APP,
+  gateway: DEFAULT_GATEWAY,
+  fx: DEFAULT_FX,
+  risk: DEFAULT_RISK,
 };
 
 export function getSetting<T>(key: string, fallback?: T): T {
@@ -99,3 +143,6 @@ export const getFees = () => getSetting<Record<string, FeeConfig>>('fees');
 export const getLimits = () => getSetting<typeof DEFAULT_LIMITS>('limits');
 export const getReferralSettings = () => getSetting<ReferralSettings>('referral');
 export const getAppSettings = () => getSetting<AppSettings>('app');
+export const getGatewayControls = () => getSetting<GatewayControls>('gateway');
+export const getFxSettings = () => getSetting<FxSettings>('fx');
+export const getRiskSettings = () => getSetting<RiskSettings>('risk');

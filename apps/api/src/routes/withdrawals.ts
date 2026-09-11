@@ -15,8 +15,11 @@ bankAccountsRouter.get('/', (req, res) => res.json({ items: listBankAccounts(req
 bankAccountsRouter.post(
   '/',
   wrap(async (req, res) => {
-    const body = validate(z.object({ bankName: z.string().min(2).max(120), accountName: z.string().min(2).max(120), accountNumber: z.string().min(4).max(40), currency: z.string().length(3), country: z.string().length(2).optional().nullable(), swift: z.string().max(20).optional().nullable() }), req.body);
-    res.status(201).json({ bankAccount: addBankAccount(req.user!.id, body) });
+    const body = validate(z.object({ bankName: z.string().min(2).max(120), accountName: z.string().min(2).max(120), accountNumber: z.string().min(4).max(40), currency: z.string().length(3), country: z.string().length(2).optional().nullable(), swift: z.string().max(20).optional().nullable(), pin: z.string().optional() }), req.body);
+    // Beneficiary changes are step-up protected (biometrics or PIN).
+    assertPin(req.user!, body.pin, req);
+    const { pin: _pin, ...account } = body;
+    res.status(201).json({ bankAccount: addBankAccount(req.user!.id, account) });
   }),
 );
 bankAccountsRouter.delete('/:id', (req, res) => {

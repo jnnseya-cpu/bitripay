@@ -10,11 +10,18 @@ import { hashPassword } from '../../lib/password';
 import { listWallets, toWallet, ensureWallet } from '../../services/wallets';
 import { listTransactions, getTransaction, toTransaction, postTransaction, refundTransaction } from '../../services/ledger';
 import { approveWithdrawal, rejectWithdrawal } from '../../services/withdrawals';
-import { listPayments, confirmManualPayment } from '../../services/payments';
+import { listPayments, getPayment, toPaymentView } from '../../services/payments';
+import { proposeVerification, approveVerification, declineVerification, listVerifications, verificationCase, assertAdminStepUp } from '../../services/verification';
+import { listEvidence, ingestEvidence, listDevices, registerDevice, revokeDevice, listTemplates, upsertTemplate, deleteTemplate, parseEvidenceText } from '../../services/evidence';
+import { listEvents, verifyEventChain } from '../../services/events';
+import { addSanction, listSanctions, deleteSanction, listRiskEvents } from '../../services/risk';
+import { reconcileLedger } from '../../services/ledger';
+import { routeCatalog } from '../../services/railCatalog';
+import { OPEN_STAGES, STAGE_LABELS } from '../../services/lifecycle';
 import { listKyc, getKyc, reviewKyc } from '../../services/kyc';
 import { settleRemittance, toRemittance } from '../../services/remittance';
 import { getCurrency, listCurrencies, upsertCurrency, refreshRatesFromProvider } from '../../services/currencies';
-import { getSetting, setSetting, getFees, getLimits, getReferralSettings, getAppSettings } from '../../services/settings';
+import { getSetting, setSetting, getFees, getLimits, getReferralSettings, getAppSettings, getGatewayControls, getFxSettings, getRiskSettings } from '../../services/settings';
 import { getModules, DEFAULT_MODULES } from '../../services/modules';
 import { listGateways, upsertGateway, deleteGateway, PROVIDERS } from '../../payments';
 import { listBillers, upsertBiller, deleteBiller, listOperators, upsertOperator, deleteOperator, listGiftProducts, upsertGiftProduct, deleteGiftProduct } from '../../services/services';
@@ -237,12 +244,14 @@ adminRouter.get('/withdrawals', requirePermission('approvals'), (req, res) => {
   res.json({ ...result, items: result.items.map((t) => ({ ...t, sender: users.get(t.senderUserId!) ?? null })), page, pageSize });
 });
 adminRouter.post('/withdrawals/:id/approve', requirePermission('approvals'), (req, res) => {
+  assertAdminStepUp(req.user!, req.body?.pin, req);
   const tx = approveWithdrawal(String(req.params.id), req.user!.id, req.body?.payoutReference);
   audit(req.user!.id, 'withdrawal.approve', 'transaction', tx.id);
   res.json({ transaction: toTransaction(tx) });
 });
 adminRouter.post('/withdrawals/:id/reject', requirePermission('approvals'), (req, res) => {
-  const body = validate(z.object({ reason: z.string().min(2).max(300) }), req.body);
+  const body = validate(z.object({ reason: z.string().min(2).max(300), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
   const tx = rejectWithdrawal(String(req.params.id), req.user!.id, body.reason);
   audit(req.user!.id, 'withdrawal.reject', 'transaction', tx.id, body);
   res.json({ transaction: toTransaction(tx) });
@@ -255,24 +264,106 @@ adminRouter.get('/payments', requirePermission('approvals'), (req, res) => {
   const users = usersById(rows.map((r) => r.user_id));
   res.json({ ...result, items: result.items.map((p) => ({ ...p, user: users.get(byId.get(p.id)?.user_id) ?? null, payerEmail: byId.get(p.id)?.payer_email, payerName: byId.get(p.id)?.payer_name, proof: JSON.parse(byId.get(p.id)?.metadata || '{}').proof ?? null })), page, pageSize });
 });
+// Manual settlement is maker-checker: /payments/:id/confirm and /reject PROPOSE a decision; a different admin approves it under step-up.
 adminRouter.post('/payments/:id/confirm', requirePermission('approvals'), (req, res) => {
-  const payment = confirmManualPayment(String(req.params.id), 'succeeded');
-  audit(req.user!.id, 'payment.confirm', 'payment', String(req.params.id));
-  res.json({ payment });
+  const body = validate(z.object({ note: z.string().max(500).optional().nullable(), evidenceId: z.string().optional().nullable() }), req.body ?? {});
+  const verification = proposeVerification(req.user!, String(req.params.id), { action: 'confirm', note: body.note, evidenceId: body.evidenceId });
+  audit(req.user!.id, 'payment.confirm.proposed', 'payment', String(req.params.id), { verificationId: verification.id });
+  res.json({ verification, payment: toPaymentView(getPayment(String(req.params.id))) });
 });
 adminRouter.post('/payments/:id/reject', requirePermission('approvals'), (req, res) => {
   const body = validate(z.object({ reason: z.string().min(2).max(300) }), req.body);
-  const payment = confirmManualPayment(String(req.params.id), 'failed', body.reason);
-  audit(req.user!.id, 'payment.reject', 'payment', String(req.params.id), body);
-  res.json({ payment });
+  const verification = proposeVerification(req.user!, String(req.params.id), { action: 'reject', note: body.reason });
+  audit(req.user!.id, 'payment.reject.proposed', 'payment', String(req.params.id), { verificationId: verification.id, ...body });
+  res.json({ verification, payment: toPaymentView(getPayment(String(req.params.id))) });
 });
+adminRouter.get('/payments/:id/case', requirePermission('approvals'), (req, res) => res.json(verificationCase(String(req.params.id))));
+adminRouter.get('/verifications', requirePermission('approvals'), (req, res) => {
+  const queue = listPayments({ stages: req.query.stage ? [String(req.query.stage)] : OPEN_STAGES, page: 1, pageSize: 100 });
+  const users = usersById(queue.items.map((p) => (getPayment(p.id).user_id as string) ?? '').filter(Boolean));
+  res.json({ queue: queue.items.map((p) => ({ ...p, user: users.get(getPayment(p.id).user_id ?? '') ?? null })), pending: listVerifications({ status: 'proposed' }), recent: listVerifications({}).slice(0, 50), stages: STAGE_LABELS });
+});
+adminRouter.post('/verifications/:id/approve', requirePermission('approvals'), (req, res) => {
+  const body = validate(z.object({ pin: z.string().optional() }), req.body ?? {});
+  const verification = approveVerification(req.user!, String(req.params.id), body.pin, req);
+  audit(req.user!.id, `verification.approved.${verification.action}`, 'payment', verification.paymentId, { verificationId: verification.id });
+  res.json({ verification, payment: toPaymentView(getPayment(verification.paymentId)) });
+});
+adminRouter.post('/verifications/:id/decline', requirePermission('approvals'), (req, res) => {
+  const body = validate(z.object({ reason: z.string().min(2).max(300) }), req.body);
+  const verification = declineVerification(req.user!, String(req.params.id), body.reason);
+  audit(req.user!.id, 'verification.declined', 'payment', verification.paymentId, { verificationId: verification.id, reason: body.reason });
+  res.json({ verification, payment: toPaymentView(getPayment(verification.paymentId)) });
+});
+/** Verifier types in an SMS/statement line by hand: recorded as manual evidence that still needs maker-checker approval. */
+adminRouter.post('/payments/:id/evidence', requirePermission('approvals'), (req, res) => {
+  const body = validate(z.object({ text: z.string().min(5).max(2000), operatorId: z.string().optional().nullable(), from: z.string().max(40).optional().nullable(), receivedAt: z.string().datetime({ offset: true }).optional().nullable() }), req.body);
+  const evidence = ingestEvidence({ source: 'manual', text: body.text, operatorId: body.operatorId, from: body.from, receivedAt: body.receivedAt, actor: { type: 'admin', id: req.user!.id } });
+  audit(req.user!.id, 'evidence.manual', 'payment', String(req.params.id), { evidenceId: evidence.id, outcome: evidence.outcome });
+  res.status(201).json({ evidence, payment: toPaymentView(getPayment(String(req.params.id))) });
+});
+adminRouter.get('/evidence', requirePermission('approvals'), (req, res) => {
+  const { page, pageSize } = parsePagination(req.query, 50);
+  res.json({ ...listEvidence({ paymentId: req.query.paymentId ? String(req.query.paymentId) : null, outcome: req.query.outcome ? String(req.query.outcome) : null, page, pageSize }), page, pageSize });
+});
+adminRouter.get('/evidence/devices', requirePermission('gateways'), (_req, res) => res.json({ items: listDevices() }));
+adminRouter.post('/evidence/devices', requirePermission('gateways'), (req, res) => {
+  const body = validate(z.object({ name: z.string().min(2).max(80), publicKey: z.string().min(32).max(2000), operatorIds: z.array(z.string()).max(50).optional().nullable(), ownerUserId: z.string().optional().nullable() }), req.body);
+  const owner = body.ownerUserId ? getUserById(body.ownerUserId) : req.user!;
+  const device = registerDevice(owner, body, req.user!.id);
+  audit(req.user!.id, 'evidence_device.register', 'device', device.id, { name: body.name });
+  res.status(201).json({ device });
+});
+adminRouter.delete('/evidence/devices/:id', requirePermission('gateways'), (req, res) => {
+  const device = revokeDevice(String(req.params.id), { type: 'admin', id: req.user!.id }, req.body?.reason);
+  audit(req.user!.id, 'evidence_device.revoke', 'device', device.id, { reason: req.body?.reason ?? null });
+  res.json({ device });
+});
+adminRouter.get('/evidence/templates', requirePermission('gateways'), (_req, res) => res.json({ items: listTemplates() }));
+adminRouter.put('/evidence/templates/:id', requirePermission('gateways'), (req, res) => {
+  const body = validate(z.object({ operatorId: z.string().min(1), name: z.string().min(2).max(120), patterns: z.record(z.string(), z.any()), priority: z.number().int().optional(), enabled: z.boolean().optional() }), req.body);
+  const template = upsertTemplate({ id: String(req.params.id) === 'new' ? null : String(req.params.id), ...body });
+  audit(req.user!.id, 'parse_template.update', 'template', template.id, { operatorId: body.operatorId });
+  res.json({ template });
+});
+adminRouter.delete('/evidence/templates/:id', requirePermission('gateways'), (req, res) => {
+  deleteTemplate(String(req.params.id));
+  res.json({ ok: true });
+});
+adminRouter.post('/evidence/parse-test', requirePermission('gateways'), (req, res) => {
+  const body = validate(z.object({ text: z.string().min(1).max(2000), operatorId: z.string().optional().nullable() }), req.body);
+  res.json({ parsed: parseEvidenceText(body.text, body.operatorId) });
+});
+adminRouter.get('/events', requirePermission('admins'), (req, res) => {
+  const { page, pageSize } = parsePagination(req.query, 50);
+  res.json({ ...listEvents({ stream: req.query.stream ? (String(req.query.stream) as any) : undefined, subjectId: req.query.subjectId ? String(req.query.subjectId) : undefined, limit: pageSize, page }), page, pageSize, chain: verifyEventChain() });
+});
+adminRouter.get('/reconcile', requirePermission('reports'), (_req, res) => res.json({ ledger: reconcileLedger(), events: verifyEventChain() }));
+adminRouter.get('/sanctions', requirePermission('settings'), (_req, res) => res.json({ items: listSanctions() }));
+adminRouter.post('/sanctions', requirePermission('settings'), (req, res) => {
+  const body = validate(z.object({ kind: z.enum(['name', 'phone', 'email', 'country']), value: z.string().min(2).max(200), note: z.string().max(300).optional().nullable() }), req.body);
+  const entry = addSanction(body.kind, body.value, body.note, req.user!.id);
+  audit(req.user!.id, 'sanctions.add', 'sanction', entry.id, { kind: body.kind });
+  res.status(201).json({ entry });
+});
+adminRouter.delete('/sanctions/:id', requirePermission('settings'), (req, res) => {
+  deleteSanction(String(req.params.id));
+  audit(req.user!.id, 'sanctions.delete', 'sanction', String(req.params.id));
+  res.json({ ok: true });
+});
+adminRouter.get('/risk-events', requirePermission('reports'), (req, res) => {
+  const { page, pageSize } = parsePagination(req.query, 50);
+  res.json({ ...listRiskEvents(page, pageSize), page, pageSize });
+});
+adminRouter.get('/route-catalog', requirePermission('gateways'), (req, res) => res.json({ items: routeCatalog({ currency: req.query.currency ? String(req.query.currency) : 'USD' }) }));
 adminRouter.get('/remittances', requirePermission('approvals'), (req, res) => {
   const where = req.query.status ? 'WHERE status = ?' : '';
   const rows = getDb().prepare(`SELECT * FROM remittances ${where} ORDER BY created_at DESC LIMIT 200`).all(...(req.query.status ? [String(req.query.status)] : []));
   res.json({ items: rows.map(toRemittance) });
 });
 adminRouter.post('/remittances/:id/settle', requirePermission('approvals'), (req, res) => {
-  const body = validate(z.object({ outcome: z.enum(['completed', 'rejected']), reason: z.string().optional() }), req.body);
+  const body = validate(z.object({ outcome: z.enum(['completed', 'rejected']), reason: z.string().optional(), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
   const r = settleRemittance(String(req.params.id), req.user!.id, body.outcome, body.reason);
   audit(req.user!.id, `remittance.${body.outcome}`, 'remittance', String(req.params.id), body);
   res.json({ remittance: r });
@@ -303,6 +394,9 @@ adminRouter.get('/settings', requirePermission('settings'), (_req, res) => {
     limits: getLimits(),
     referral: getReferralSettings(),
     app: getAppSettings(),
+    gateway: getGatewayControls(),
+    fx: getFxSettings(),
+    risk: getRiskSettings(),
     modules: getModules(),
     moduleKeys: Object.keys(DEFAULT_MODULES),
     countries: getSetting('countries', { mode: 'none', countries: [] }),
@@ -317,7 +411,7 @@ adminRouter.put(
   requirePermission('settings'),
   wrap(async (req, res) => {
     const key = String(req.params.key);
-    const allowed = ['fees', 'limits', 'referral', 'app', 'modules', 'countries', 'smtp', 'sms'];
+    const allowed = ['fees', 'limits', 'referral', 'app', 'modules', 'countries', 'smtp', 'sms', 'gateway', 'fx', 'risk'];
     if (!allowed.includes(key)) throw badRequest('Unknown settings key');
     let value = req.body?.value ?? req.body;
     if (key === 'smtp' && value?.pass === '••••••••') value = { ...value, pass: getSmtpSettings().pass };

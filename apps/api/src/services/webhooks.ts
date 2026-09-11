@@ -1,13 +1,28 @@
 import { getDb } from '../db';
 import { uuid, now } from '../lib/ids';
-import { hmacSha256 } from '../lib/crypto';
+import { hmacSha256, safeEqual } from '../lib/crypto';
 import { findUserById } from './users';
 import { config } from '../config';
 
 /**
  * Deliver a signed webhook to a merchant's configured URL.
- * Signature: X-BitriPay-Signature: sha256=<hmac of raw body using the merchant's webhook secret>
+ * Signature header: X-BitriPay-Signature: t=<unix seconds>,v1=<hex hmac-sha256(secret, `${t}.${rawBody}`)>
+ * Receivers must reject deliveries whose timestamp is older than 5 minutes and remember
+ * X-BitriPay-Delivery-Id values they have already processed (replay protection).
  */
+export function signWebhookPayload(secret: string, payload: string, timestamp = Math.floor(Date.now() / 1000)): string {
+  return `t=${timestamp},v1=${hmacSha256(secret, `${timestamp}.${payload}`)}`;
+}
+
+/** Verify a signature produced by signWebhookPayload (used by tests and the SDK docs). */
+export function verifyWebhookSignature(secret: string, payload: string, header: string, toleranceSeconds = 300): boolean {
+  const parts = Object.fromEntries(header.split(',').map((kv) => kv.split('=') as [string, string]));
+  const t = Number(parts.t);
+  if (!t || !parts.v1) return false;
+  if (Math.abs(Date.now() / 1000 - t) > toleranceSeconds) return false;
+  return safeEqual(parts.v1, hmacSha256(secret, `${t}.${payload}`));
+}
+
 export async function dispatchWebhook(userId: string, event: string, data: Record<string, unknown>) {
   const user = findUserById(userId);
   if (!user?.webhook_url || !user.webhook_secret) return;
@@ -33,7 +48,7 @@ export async function attemptDelivery(deliveryId: string): Promise<void> {
   if (!row) return;
   const user = findUserById(row.user_id);
   if (!user?.webhook_secret) return;
-  const signature = `sha256=${hmacSha256(user.webhook_secret, row.payload)}`;
+  const signature = signWebhookPayload(user.webhook_secret, row.payload);
   let statusCode: number | null = null;
   let success = 0;
   let lastError: string | null = null;
@@ -42,7 +57,7 @@ export async function attemptDelivery(deliveryId: string): Promise<void> {
     const timer = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(row.url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-BitriPay-Signature': signature, 'X-BitriPay-Event': row.event, 'User-Agent': 'BitriPay-Webhooks/1.0' },
+      headers: { 'Content-Type': 'application/json', 'X-BitriPay-Signature': signature, 'X-BitriPay-Event': row.event, 'X-BitriPay-Delivery-Id': row.id, 'User-Agent': 'BitriPay-Webhooks/1.1' },
       body: row.payload,
       signal: controller.signal,
     });

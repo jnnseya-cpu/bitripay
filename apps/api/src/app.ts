@@ -25,6 +25,9 @@ import { merchantRouter, v1Router } from './routes/merchant';
 import { adminRouter } from './routes/admin';
 import { passkeysRouter, passkeyAuthRouter } from './routes/passkeys';
 import { routingRouter } from './routes/routing';
+import { evidenceRouter } from './routes/evidence';
+import { idempotency } from './middleware/idempotency';
+import { ensureParseTemplates } from './services/evidence';
 import { ensureMomoOperators } from './services/momo';
 import { ensureDefaultCurrencies } from './services/currencies';
 import { ensureAdminExists } from './services/auth';
@@ -41,6 +44,7 @@ export function bootstrap() {
   ensureAdminExists();
   ensureDefaultGateways();
   ensureMomoOperators();
+  ensureParseTemplates();
   seedDefaultCatalogs();
 }
 
@@ -63,6 +67,7 @@ export function createApp() {
     }),
   );
   app.use(express.urlencoded({ extended: true }));
+  app.use(idempotency);
 
   app.use('/api', publicRouter);
   app.use('/api/auth', authRouter);
@@ -70,6 +75,7 @@ export function createApp() {
   app.use('/api/account/passkeys', passkeysRouter);
   app.use('/api/auth/passkey', passkeyAuthRouter);
   app.use('/api/money', routingRouter);
+  app.use('/api/evidence', evidenceRouter);
   app.use('/api/wallets', walletsRouter);
   app.use('/api/transfers', transfersRouter);
   app.use('/api/qr', qrRouter);

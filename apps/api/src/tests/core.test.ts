@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
-import { setupApp, registerUser, adminToken, fund } from './helpers';
+import { setupApp, registerUser, adminToken, fund, manualConfirm } from './helpers';
 
 let app: ReturnType<typeof setupApp>;
 beforeAll(() => {
@@ -154,32 +154,43 @@ describe('deposits & checkout via sandbox gateway', () => {
     const a = await registerUser(app);
     const options = await request(app).get('/api/deposits/options?currency=USD').set(a.auth);
     expect(options.body.methods.find((m: any) => m.method === 'card').gateways[0].id).toBe('sandbox');
-    const ok = await request(app).post('/api/deposits').set(a.auth).send({ method: 'card', amount: '100.00', currency: 'USD', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'A B' }, saveCard: true });
+    const ok = await request(app).post('/api/deposits').set(a.auth).send({ pin: '1234', method: 'card', amount: '100.00', currency: 'USD', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'A B' }, saveCard: true });
     expect(ok.status).toBe(201);
     expect(ok.body.payment.status).toBe('succeeded');
     const wallets = await request(app).get('/api/wallets').set(a.auth);
     expect(wallets.body.items[0].balance).toBe(10000 - 30 - 290); // fixed 0.30 + 2.9%
-    const declined = await request(app).post('/api/deposits').set(a.auth).send({ method: 'card', amount: '10.00', currency: 'USD', card: { number: '4000000000000002', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'A B' } });
+    const declined = await request(app).post('/api/deposits').set(a.auth).send({ pin: '1234', method: 'card', amount: '10.00', currency: 'USD', card: { number: '4000000000000002', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'A B' } });
     expect(declined.body.payment.status).toBe('failed');
     expect(declined.body.payment.failureReason).toContain('declined');
     const cards = await request(app).get('/api/cards').set(a.auth);
     expect(cards.body.items).toHaveLength(1);
-    const saved = await request(app).post('/api/deposits').set(a.auth).send({ method: 'card', amount: '5.00', currency: 'USD', savedCardId: cards.body.items[0].id });
+    const saved = await request(app).post('/api/deposits').set(a.auth).send({ pin: '1234', method: 'card', amount: '5.00', currency: 'USD', savedCardId: cards.body.items[0].id });
     expect(saved.body.payment.status).toBe('succeeded');
   });
 
   it('simulates mobile money prompts and manual bank transfers', async () => {
     const a = await registerUser(app);
-    const momo = await request(app).post('/api/deposits').set(a.auth).send({ method: 'mobile_money', amount: '20.00', currency: 'USD', phone: '+233200000001' });
+    const momo = await request(app).post('/api/deposits').set(a.auth).send({ pin: '1234', method: 'mobile_money', amount: '20.00', currency: 'USD', phone: '+233200000001' });
     expect(momo.body.payment.status).toBe('pending');
     expect(momo.body.payment.next.type).toBe('prompt');
-    const bank = await request(app).post('/api/deposits').set(a.auth).send({ method: 'bank', amount: '30.00', currency: 'USD', gateway: 'manual_bank' });
+    const bank = await request(app).post('/api/deposits').set(a.auth).send({ pin: '1234', method: 'bank', amount: '30.00', currency: 'USD', gateway: 'manual_bank' });
     expect(bank.body.payment.next.type).toBe('bank_instructions');
     const admin = await adminToken(app);
     const pending = await request(app).get('/api/admin/payments?method=bank&status=pending').set(admin.auth);
     expect(pending.body.items.some((p: any) => p.id === bank.body.payment.id)).toBe(true);
-    const confirm = await request(app).post(`/api/admin/payments/${bank.body.payment.id}/confirm`).set(admin.auth);
+    // Manual bank confirmation is maker-checker: a single admin cannot settle it alone.
+    const alone = await request(app).post(`/api/admin/payments/${bank.body.payment.id}/confirm`).set(admin.auth).send({ note: 'seen' });
+    expect(alone.body.payment.stage).toBe('VERIFYING');
+    const self = await request(app).post(`/api/admin/verifications/${alone.body.verification.id}/approve`).set(admin.auth).send({ pin: admin.pin });
+    expect(self.status).toBe(403);
+    expect(self.body.error.code).toBe('maker_checker');
+    let wallets0 = await request(app).get('/api/wallets').set(a.auth);
+    expect(wallets0.body.items[0].balance).toBe(0); // nothing credited until approved
+    const checker = await (await import('./helpers')).checkerToken(app);
+    const confirm = await request(app).post(`/api/admin/verifications/${alone.body.verification.id}/approve`).set(checker.auth).send({ pin: checker.pin });
+    expect(confirm.status, JSON.stringify(confirm.body)).toBe(200);
     expect(confirm.body.payment.status).toBe('succeeded');
+    expect(confirm.body.payment.stage).toBe('SETTLED');
     const wallets = await request(app).get('/api/wallets').set(a.auth);
     expect(wallets.body.items[0].balance).toBe(3000);
   });
@@ -233,19 +244,19 @@ describe('withdrawals, agents, remittance', () => {
   it('holds withdrawal funds until admin approves or rejects', async () => {
     const a = await registerUser(app);
     await fund(app, a.user.id, '100.00');
-    const bank = await request(app).post('/api/bank-accounts').set(a.auth).send({ bankName: 'Test Bank', accountName: 'Alice Test', accountNumber: '12345678', currency: 'USD' });
+    const bank = await request(app).post('/api/bank-accounts').set(a.auth).send({ bankName: 'Test Bank', accountName: 'Alice Test', accountNumber: '12345678', currency: 'USD', pin: '1234' });
     const w = await request(app).post('/api/withdrawals').set(a.auth).send({ amount: '40.00', currency: 'USD', bankAccountId: bank.body.bankAccount.id, pin: '1234' });
     expect(w.status).toBe(201);
     expect(w.body.transaction.status).toBe('pending');
     let wallets = await request(app).get('/api/wallets').set(a.auth);
     expect(wallets.body.items[0].balance).toBe(10000 - 4000 - 140); // 1.00 fixed + 1%
     const admin = await adminToken(app);
-    const rej = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/reject`).set(admin.auth).send({ reason: 'bad account' });
+    const rej = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/reject`).set(admin.auth).send({ reason: 'bad account', pin: admin.pin });
     expect(rej.body.transaction.status).toBe('rejected');
     wallets = await request(app).get('/api/wallets').set(a.auth);
     expect(wallets.body.items[0].balance).toBe(10000);
     const w2 = await request(app).post('/api/withdrawals').set(a.auth).send({ amount: '10.00', currency: 'USD', bankAccountId: bank.body.bankAccount.id, pin: '1234' });
-    const ok = await request(app).post(`/api/admin/withdrawals/${w2.body.transaction.id}/approve`).set(admin.auth).send({ payoutReference: 'BANK-1' });
+    const ok = await request(app).post(`/api/admin/withdrawals/${w2.body.transaction.id}/approve`).set(admin.auth).send({ payoutReference: 'BANK-1', pin: admin.pin });
     expect(ok.body.transaction.status).toBe('completed');
   });
 
@@ -321,7 +332,7 @@ describe('services & referrals', () => {
     const l2 = await registerUser(app);
     const l1 = await registerUser(app, { referralCode: l2.user.referralCode });
     const newbie = await registerUser(app, { referralCode: l1.user.referralCode });
-    await request(app).post('/api/deposits').set(newbie.auth).send({ method: 'card', amount: '50.00', currency: 'USD', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'New User' } });
+    await request(app).post('/api/deposits').set(newbie.auth).send({ pin: '1234', method: 'card', amount: '50.00', currency: 'USD', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'New User' } });
     const w1 = await request(app).get('/api/wallets').set(l1.auth);
     const w2 = await request(app).get('/api/wallets').set(l2.auth);
     expect(w1.body.items[0].balance).toBe(500);

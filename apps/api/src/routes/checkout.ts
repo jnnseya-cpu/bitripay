@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { checkoutInfo, getPaymentRequestByCode, payWithWallet, toPaymentRequest, markPaidByGateway } from '../services/paymentRequests';
-import { initiatePayment, verifyPayment, paymentOptions } from '../services/payments';
+import { initiatePayment, verifyPayment, paymentOptions, authenticatePayment } from '../services/payments';
+import { describeFunding } from '../services/railCatalog';
 import { chargeVirtualCard } from '../services/virtualCards';
 import { assertPin } from '../services/auth';
 import { toTransaction } from '../services/ledger';
@@ -54,6 +55,7 @@ checkoutRouter.post(
         email: z.string().email().optional().nullable(),
         name: z.string().optional().nullable(),
         returnUrl: z.string().url().optional().nullable(),
+        pin: z.string().optional().nullable(),
       }),
       req.body,
     );
@@ -69,8 +71,20 @@ checkoutRouter.post(
       void dispatchWebhook(merchant.id, 'payment.completed', { paymentRequest: toPaymentRequest(updated), transaction: { id: tx.id, reference: tx.reference, amount: tx.amount, fee: tx.fee, currency: tx.currency, method: 'virtual_card' } });
       return res.status(201).json({ status: 'succeeded', transaction: toTransaction(tx), paymentRequest: toPaymentRequest(updated) });
     }
-    const payment = await initiatePayment(req.user ?? null, { purpose: 'checkout', paymentRequestCode: row.code, ...body });
-    res.status(201).json({ payment, paymentRequest: toPaymentRequest(getPaymentRequestByCode(row.code)) });
+    const { pin, ...rest } = body;
+    const payment = await initiatePayment(req.user ?? null, { purpose: 'checkout', paymentRequestCode: row.code, ...rest }, { pin, req });
+    res.status(201).json({ payment, paymentRequest: toPaymentRequest(getPaymentRequestByCode(row.code)), declaration: describeFunding(rest.method as 'card' | 'mobile_money' | 'bank', { currency: row.currency, operatorId: body.operatorId, gateway: body.gateway }) });
+  }),
+);
+
+/** Signed-in payers who started a checkout without biometrics/PIN complete it here. */
+checkoutRouter.post(
+  '/:code/payments/:paymentId/authenticate',
+  requireAuth,
+  wrap(async (req, res) => {
+    const body = validate(z.object({ pin: z.string().optional().nullable(), card: cardSchema.optional(), savedCardId: z.string().optional().nullable(), saveCard: z.boolean().optional(), returnUrl: z.string().url().optional().nullable() }), req.body);
+    const payment = await authenticatePayment(req.user!, String(req.params.paymentId), body, req);
+    res.json({ payment, paymentRequest: toPaymentRequest(getPaymentRequestByCode(String(req.params.code))) });
   }),
 );
 

@@ -3,9 +3,10 @@ import { z } from 'zod';
 import { validate, wrap, parsePagination } from '../lib/http';
 import { requireAuth } from '../middleware/auth';
 import { listWallets, toWallet, ensureWallet } from '../services/wallets';
-import { getTransaction, listTransactions, toTransaction } from '../services/ledger';
+import { getTransaction, listTransactions, toTransaction , calculateFee } from '../services/ledger';
 import { exchange } from '../services/transfers';
-import { convertWithMargin, getCurrency, listCurrencies } from '../services/currencies';
+import { getCurrency, listCurrencies } from '../services/currencies';
+import { fxDisclosure } from '../services/fx';
 import { toMinor } from '@bitripay/shared';
 import { assertPin } from '../services/auth';
 import { notFound } from '../lib/errors';
@@ -25,22 +26,26 @@ walletsRouter.post(
   }),
 );
 
+/** FX disclosure before authorising a conversion: reference rate, provider + timestamp, markup, effective rate, expiry. */
 walletsRouter.get('/exchange/quote', (req, res) => {
   const from = getCurrency(String(req.query.from || ''));
   const to = getCurrency(String(req.query.to || ''));
   const amount = toMinor(String(req.query.amount || '0'), from.decimals);
-  const q = convertWithMargin(amount, from.code, to.code);
-  res.json({ from: from.code, to: to.code, amount, receive: q.amount, rate: q.rate, midRate: q.midRate, marginBps: q.marginBps });
+  const fx = fxDisclosure(from.code, to.code, req.user!.id);
+  // The exchange fee is charged on top of the converted amount (see transfers.exchange).
+  const fee = calculateFee('exchange', amount, from.code);
+  const receive = Math.round((amount / 10 ** from.decimals) * fx.rate * 10 ** to.decimals);
+  res.json({ from: from.code, to: to.code, amount, fee, receive, estimatedReceive: receive, rate: fx.rate, midRate: fx.midRate, marginBps: fx.markupBps, fx, targetCurrency: to.code });
 });
 
 walletsRouter.post(
   '/exchange',
   wrap(async (req, res) => {
-    const body = validate(z.object({ from: z.string().length(3), to: z.string().length(3), amount: z.string(), pin: z.string().optional() }), req.body);
+    const body = validate(z.object({ from: z.string().length(3), to: z.string().length(3), amount: z.string(), pin: z.string().optional(), quoteId: z.string().optional().nullable() }), req.body);
     assertPin(req.user!, body.pin, req);
     const from = getCurrency(body.from);
-    const result = exchange(req.user!, from.code, body.to.toUpperCase(), toMinor(body.amount, from.decimals));
-    res.status(201).json({ transaction: toTransaction(result.tx, req.user!.id), rate: result.rate, received: result.received });
+    const result = exchange(req.user!, from.code, body.to.toUpperCase(), toMinor(body.amount, from.decimals), { quoteId: body.quoteId });
+    res.status(201).json({ transaction: toTransaction(result.tx, req.user!.id), rate: result.rate, received: result.received, quoteId: result.quoteId, guaranteed: result.guaranteed });
   }),
 );
 
