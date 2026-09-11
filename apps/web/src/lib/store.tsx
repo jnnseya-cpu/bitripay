@@ -34,6 +34,8 @@ interface Store {
   setLang: (l: string) => void;
   toast: (message: string, kind?: 'success' | 'error' | 'info') => void;
   toasts: { id: number; message: string; kind: 'success' | 'error' | 'info' }[];
+  hasPasskeys: boolean;
+  setHasPasskeys: (v: boolean) => void;
 }
 
 const StoreContext = createContext<Store | null>(null);
@@ -48,6 +50,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('bitripay.theme') as 'light' | 'dark') || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
   const [lang, setLangState] = useState(() => localStorage.getItem('bitripay.lang') || 'en');
   const [toasts, setToasts] = useState<Store['toasts']>([]);
+  const [hasPasskeys, setHasPasskeys] = useState(false);
 
   const toast = useCallback((message: string, kind: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now() + Math.random();
@@ -71,6 +74,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const me = await api.get<{ user: User }>('/api/auth/me');
         setUserState(me.user);
         await refreshWallets();
+        api.get<{ items: unknown[] }>('/api/account/passkeys').then((r) => setHasPasskeys(r.items.length > 0)).catch(() => {});
       }
     } catch {
       setUserState(null);
@@ -121,6 +125,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setToken(token);
         setUserState(u);
         await refreshWallets();
+        api.get<{ items: unknown[] }>('/api/account/passkeys').then((r) => setHasPasskeys(r.items.length > 0)).catch(() => {});
       },
       logout: () => {
         setToken(null);
@@ -136,8 +141,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setLang: setLangState,
       toast,
       toasts,
+      hasPasskeys,
+      setHasPasskeys,
     }),
-    [config, user, wallets, notifications, unread, loading, currency, money, refresh, refreshWallets, theme, lang, toast, toasts],
+    [config, user, wallets, notifications, unread, loading, currency, money, refresh, refreshWallets, theme, lang, toast, toasts, hasPasskeys],
   );
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

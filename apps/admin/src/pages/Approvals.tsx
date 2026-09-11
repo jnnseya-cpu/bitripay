@@ -17,13 +17,13 @@ export function Approvals() {
   return (
     <div>
       <PageHeader title="Approvals" subtitle="Withdrawals, bank deposits, remittance payouts and merchant settlements" />
-      <Tabs tabs={[{ id: 'withdrawals', label: 'Withdrawals' }, { id: 'deposits', label: 'Bank / manual deposits' }, { id: 'remittances', label: 'Remittances' }, { id: 'settlements', label: 'Settlements' }]} value={tab} onChange={(t) => setParams({ tab: t })} />
+      <Tabs tabs={[{ id: 'withdrawals', label: 'Withdrawals' }, { id: 'deposits', label: 'Bank & mobile money deposits' }, { id: 'remittances', label: 'Remittances' }, { id: 'settlements', label: 'Settlements' }]} value={tab} onChange={(t) => setParams({ tab: t })} />
       <div className="card">
         {tab !== 'settlements' && <div className="row mb"><Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 160 }}><option value="pending">Pending</option><option value="completed">Completed</option><option value="succeeded">Succeeded</option><option value="rejected">Rejected</option><option value="failed">Failed</option><option value="">All</option></Select></div>}
         {tab === 'withdrawals' && (
-          <Table head={['User', 'Amount', 'Fee', 'Bank', 'Requested', 'Status', '']} rows={(withdrawals.data?.items ?? []).map((t: any) => [
+          <Table head={['User', 'Amount', 'Fee', 'Destination', 'Requested', 'Status', '']} rows={(withdrawals.data?.items ?? []).map((t: any) => [
             <UserCell user={t.sender} />, <b>{money(t.amount, t.currency)}</b>, money(t.fee, t.currency),
-            <span className="small">{t.metadata?.bankAccount?.bankName}<br />{t.metadata?.bankAccount?.accountName} · {t.metadata?.bankAccount?.accountNumber}</span>, <span className="small">{fmtDate(t.createdAt)}</span>, <StatusBadge status={t.status} />,
+            t.metadata?.method === 'mobile_money' ? <span className="small">📱 {t.metadata.operator?.name} ({t.metadata.operator?.country})<br /><span className="mono">{t.metadata.phone}</span>{t.metadata.recipientName ? ` · ${t.metadata.recipientName}` : ''}</span> : <span className="small">🏦 {t.metadata?.bankAccount?.bankName}<br />{t.metadata?.bankAccount?.accountName} · {t.metadata?.bankAccount?.accountNumber}</span>, <span className="small">{fmtDate(t.createdAt)}</span>, <StatusBadge status={t.status} />,
             t.status === 'pending' ? <div className="row"><ConfirmButton size="sm" variant="success" prompt="Payout reference (optional)" onConfirm={(r) => act(api.post(`/api/admin/withdrawals/${t.id}/approve`, { payoutReference: r }), 'Withdrawal approved')}>Approve</ConfirmButton><ConfirmButton size="sm" variant="danger" prompt="Reason" onConfirm={(r) => act(api.post(`/api/admin/withdrawals/${t.id}/reject`, { reason: r }), 'Withdrawal rejected')}>Reject</ConfirmButton></div> : null,
           ])} />
         )}

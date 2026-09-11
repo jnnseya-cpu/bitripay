@@ -7,6 +7,7 @@ export type RootParams = {
   Register: { role?: string } | undefined;
   Main: undefined;
   Send: { to?: string; amount?: string; currency?: string; note?: string } | undefined;
+  Move: undefined;
   PayTarget: { data?: string; code?: string };
   QrLink: undefined;
   Checkout: { code: string };

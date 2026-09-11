@@ -106,11 +106,18 @@ export function Security() {
   const [code, setCode] = useState('');
   const [otp, setOtp] = useState<{ channel: 'email' | 'sms'; info: string } | null>(null);
   const [otpCode, setOtpCode] = useState('');
+  const [bioPinOpen, setBioPinOpen] = useState(false);
+  const [bioPin, setBioPin] = useState('');
   const run = (p: Promise<unknown>, msg: string) => p.then(() => { toast(msg, 'success'); refresh(); }).catch((e) => toast(e.message, 'error'));
   return (
     <Screen>
       <Header title={t('settings.security')} />
-      {biometricsAvailable && <Card><Row between><View><T bold>Biometric login</T><T muted size={12}>Unlock BitriPay with fingerprint or face</T></View><RNSwitch value={biometrics} onValueChange={setBiometrics} /></Row></Card>}
+      {biometricsAvailable && <Card><Row between><View style={{ flex: 1 }}><T bold>Biometric login & payments</T><T muted size={12}>Unlock BitriPay and confirm payments with fingerprint or face instead of your PIN</T></View><RNSwitch value={biometrics} onValueChange={(v) => (v ? setBioPinOpen(true) : setBiometrics(false))} /></Row></Card>}
+      <Sheet open={bioPinOpen} onClose={() => setBioPinOpen(false)} title="Enable biometrics">
+        <T muted size={13}>Enter your transaction PIN once. It is stored in the device's secure enclave and released only after a successful biometric check.</T>
+        <Input label={t('common.pin')} value={bioPin} onChangeText={(v) => setBioPin(v.replace(/\D/g, ''))} secureTextEntry keyboardType="number-pad" maxLength={6} />
+        <Button title="Enable" disabled={bioPin.length < 4} onPress={() => api.post('/api/account/pin/verify', { pin: bioPin }).then(() => setBiometrics(true, bioPin)).then(() => { setBioPinOpen(false); setBioPin(''); toast('Biometric login enabled', 'success'); }).catch((e) => toast(e.message, 'error'))} />
+      </Sheet>
       <Card>
         <T bold>{t('settings.pin')}</T>
         {user?.hasPin && <Input label="Current PIN" value={pin.currentPin} onChangeText={(v) => setPin({ ...pin, currentPin: v })} secureTextEntry keyboardType="number-pad" maxLength={6} />}

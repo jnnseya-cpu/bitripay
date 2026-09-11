@@ -13,6 +13,7 @@ import { Onboarding, Login, Register } from './src/screens/Auth';
 import { Home, More, Notifications } from './src/screens/Home';
 import { Scan, PayTarget, Send, Receive, Requests } from './src/screens/Pay';
 import { AddMoney, Withdraw, Exchange, Agents } from './src/screens/Money';
+import { Move } from './src/screens/Move';
 import { Remittance, Cards, Bills, Topup, GiftCards } from './src/screens/Services';
 import { P2P, Trade } from './src/screens/P2P';
 import { Activity, TxDetail, Settings, Security, Kyc, Referrals, Support } from './src/screens/Account';
@@ -94,6 +95,7 @@ function Root() {
           <>
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="Send" component={Send} />
+            <Stack.Screen name="Move" component={Move} />
             <Stack.Screen name="PayTarget" component={PayTarget} />
             <Stack.Screen name="QrLink" component={Scan} />
             <Stack.Screen name="Checkout" component={PayTarget} />

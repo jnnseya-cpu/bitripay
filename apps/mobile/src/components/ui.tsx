@@ -128,12 +128,25 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
 
 /** PIN prompt used before every money movement. */
 export function PinSheet({ open, onClose, onSubmit, summary, loading, title }: { open: boolean; onClose: () => void; onSubmit: (pin: string) => void; summary?: React.ReactNode; loading?: boolean; title?: string }) {
-  const { t, user } = useStore();
+  const { t, user, biometrics, biometricPin } = useStore();
   const [pin, setPin] = useState('');
-  useEffect(() => { if (open) setPin(''); }, [open]);
+  const [bioTried, setBioTried] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setPin('');
+      setBioTried(false);
+    }
+  }, [open]);
+  // Offer biometrics automatically when the sheet opens.
+  useEffect(() => {
+    if (!open || !biometrics || bioTried) return;
+    setBioTried(true);
+    biometricPin().then((p) => { if (p) onSubmit(p); });
+  }, [open, biometrics, bioTried, biometricPin, onSubmit]);
   return (
     <Sheet open={open} onClose={onClose} title={title ?? t('common.confirm')}>
       {summary}
+      {biometrics && user?.hasPin && <Button title="🔐 Confirm with biometrics" variant="secondary" onPress={() => biometricPin().then((p) => { if (p) onSubmit(p); })} />}
       {!user?.hasPin ? <Alert kind="warning" text="Set a transaction PIN in Settings → Security first." /> : (
         <>
           <Input label={t('common.pin')} value={pin} onChangeText={(v) => setPin(v.replace(/\D/g, ''))} keyboardType="number-pad" secureTextEntry maxLength={6} autoFocus style={{ textAlign: 'center', letterSpacing: 12, fontSize: 24 }} />

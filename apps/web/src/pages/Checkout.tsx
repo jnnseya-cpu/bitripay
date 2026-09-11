@@ -6,6 +6,7 @@ import { Alert, Avatar, Button, Field, Input, KV, Loading, PinModal, QrImage, St
 import { CardForm, type CardValues } from '../components/CardForm';
 import { PaymentStatus, type PaymentView } from './AddMoney';
 import { formatMoney, type PaymentRequest } from '@bitripay/shared';
+import { OperatorPicker } from './AddMoney';
 
 /** Hosted checkout page for payment links, invoices and API-created requests (guest friendly). */
 export function Checkout() {
@@ -24,6 +25,8 @@ export function Checkout() {
   const [pinOpen, setPinOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [amount, setAmount] = useState('');
+  const [operatorId, setOperatorId] = useState('');
+  const [opCountry, setOpCountry] = useState('');
 
   const load = () => api.get<any>(`/api/checkout/${code}`).then((r) => { setInfo(r); if (!method) setMethod(r.methods[0] ?? 'wallet'); }).catch((e) => setError(e.message));
   useEffect(() => { load(); }, [code]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -50,7 +53,7 @@ export function Checkout() {
     setLoading(true);
     setError(null);
     try {
-      const body: any = { method, email: email || undefined, phone: phone || undefined, name: card.holderName || user?.fullName || undefined, returnUrl: window.location.href.split('?')[0] };
+      const body: any = { method, email: email || undefined, phone: phone || undefined, operatorId: operatorId || undefined, name: card.holderName || user?.fullName || undefined, returnUrl: window.location.href.split('?')[0] };
       if (method === 'card' || method === 'virtual_card') body.card = { number: card.number.replace(/\s/g, ''), expMonth: Number(card.expMonth), expYear: Number(card.expYear.length === 2 ? '20' + card.expYear : card.expYear), cvc: card.cvc, holderName: card.holderName };
       const r = await api.post<any>(`/api/checkout/${code}/pay`, body);
       if (r.status === 'succeeded') { setDone(r.paymentRequest); load(); }
@@ -137,6 +140,7 @@ export function Checkout() {
                 )}
                 {method === 'mobile_money' && (
                   <>
+                    <OperatorPicker value={operatorId} onChange={setOperatorId} country={opCountry} onCountry={setOpCountry} />
                     <Field label="Mobile money number"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+233…" /></Field>
                     <Field label="Email for receipt"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
                     <Button block size="lg" loading={loading} disabled={!fixed || !phone} onClick={payExternal}>Send payment prompt</Button>

@@ -5,6 +5,7 @@ import { useT } from '../lib/i18n';
 import type { PublicUser, Transaction } from '@bitripay/shared';
 import { TRANSACTION_TYPE_LABELS } from '@bitripay/shared';
 import { Link } from 'react-router-dom';
+import { biometricStepUp, passkeysSupported } from '../lib/passkeys';
 
 export function Button({ children, loading, variant, size, block, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean; variant?: 'secondary' | 'ghost' | 'danger' | 'success'; size?: 'sm' | 'lg'; block?: boolean }) {
   return (
@@ -85,14 +86,40 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
 export function PinModal({ open, onClose, onSubmit, title, summary, loading }: { open: boolean; onClose: () => void; onSubmit: (pin: string) => void; title?: string; summary?: ReactNode; loading?: boolean }) {
   const t = useT();
   const [pin, setPin] = useState('');
-  const { user } = useStore();
+  const [bioBusy, setBioBusy] = useState(false);
+  const [bioError, setBioError] = useState<string | null>(null);
+  const { user, hasPasskeys } = useStore();
   useEffect(() => {
-    if (open) setPin('');
+    if (open) {
+      setPin('');
+      setBioError(null);
+    }
   }, [open]);
+  const useBiometrics = async () => {
+    setBioBusy(true);
+    setBioError(null);
+    try {
+      await biometricStepUp();
+      onSubmit(''); // the API client attaches the step-up token; the PIN is not needed
+    } catch (err) {
+      setBioError((err as Error).message || 'Biometric confirmation cancelled');
+    } finally {
+      setBioBusy(false);
+    }
+  };
   return (
     <Modal open={open} onClose={onClose} title={title ?? t('common.confirm')}>
       {summary}
-      {!user?.hasPin ? (
+      {hasPasskeys && passkeysSupported() && (
+        <div className="mb">
+          <Button block variant="secondary" loading={bioBusy} onClick={useBiometrics} type="button">
+            🔐 Confirm with biometrics
+          </Button>
+          {bioError && <div className="hint mt-sm" style={{ color: 'var(--danger)' }}>{bioError}</div>}
+          <div className="center tiny muted mt-sm">or enter your PIN</div>
+        </div>
+      )}
+      {!user?.hasPin && !hasPasskeys ? (
         <Alert kind="warning">
           Set a transaction PIN first in <Link to="/settings?tab=security">Security settings</Link>.
         </Alert>

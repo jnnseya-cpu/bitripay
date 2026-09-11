@@ -42,7 +42,7 @@ export function Gateways() {
   return (
     <div>
       <PageHeader title="Deposit & payment gateways (aggregator)" subtitle="Route cards, mobile money and bank transfers through multiple providers. Credentials are encrypted at rest; environment variables act as defaults." actions={<Button onClick={startNew}>+ Add gateway</Button>} />
-      <Alert kind="info">The <b>sandbox</b> gateway simulates every method for testing. Enable real providers by adding their keys. Order determines which gateway is used first for a method/currency.</Alert>
+      <Alert kind="info">The <b>sandbox</b> gateway simulates every method for testing. Enable real providers by adding their keys. Order determines which gateway is used first for a method/currency. Mobile money works for every operator in the world without an API through the <b>direct rail</b> – configure collection numbers under <b>Mobile money operators</b>.</Alert>
       <div className="card">
         <Table head={['Gateway', 'Provider', 'Methods', 'Currencies', 'Countries', 'Keys', 'Enabled', '']} rows={(data.data?.items ?? []).map((g) => [
           <b>{g.name}<br /><span className="tiny muted mono">{g.id}</span></b>, g.provider, <span className="row wrap">{g.methods.map((m: string) => <Chip key={m}>{m.replace('_', ' ')}</Chip>)}</span>, g.currencies.length ? g.currencies.join(', ') : <span className="muted">all</span>, g.countries.length ? g.countries.join(', ') : <span className="muted">all</span>,

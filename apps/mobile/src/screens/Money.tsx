@@ -15,7 +15,11 @@ export function AddMoney() {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<'card' | 'mobile_money' | 'bank'>('card');
   const [phone, setPhone] = useState(user?.phone ?? '');
-  const [card, setCard] = useState({ number: '', expMonth: '', expYear: '', cvc: '', holderName: user?.fullName ?? '' });
+  const [opCountry, setOpCountry] = useState(user?.country ?? '');
+  const [operatorId, setOperatorId] = useState('');
+  const [proof, setProof] = useState('');
+  const card0 = { number: '', expMonth: '', expYear: '', cvc: '', holderName: user?.fullName ?? '' };
+  const [card, setCard] = useState(card0);
   const [savedCardId, setSavedCardId] = useState('');
   const [payment, setPayment] = useState<PaymentView | null>(null);
   const [loading, setLoading] = useState(false);
@@ -45,7 +49,10 @@ export function AddMoney() {
         if (savedCardId) body.savedCardId = savedCardId;
         else if (gw?.provider !== 'stripe') body.card = { number: card.number.replace(/\s/g, ''), expMonth: Number(card.expMonth), expYear: Number(card.expYear.length === 2 ? '20' + card.expYear : card.expYear), cvc: card.cvc, holderName: card.holderName };
       }
-      if (method === 'mobile_money') body.phone = phone;
+      if (method === 'mobile_money') {
+        body.phone = phone;
+        if (operatorId) body.operatorId = operatorId;
+      }
       const r = await api.post<{ payment: PaymentView }>('/api/deposits', body);
       setPayment(r.payment);
       if (r.payment.status === 'succeeded') { toast('Money added', 'success'); refreshWallets(); }
@@ -67,7 +74,14 @@ export function AddMoney() {
           <Status status={payment.status} />
           {payment.failureReason && <Alert kind="error" text={payment.failureReason} />}
           {payment.next?.type === 'prompt' && payment.status !== 'succeeded' && <Alert text={payment.next.message} />}
-          {payment.next?.type === 'bank_instructions' && payment.status !== 'succeeded' && <View style={{ alignSelf: 'stretch' }}><Alert text={payment.next.message} />{Object.entries(payment.next.instructions ?? {}).map(([k, v]) => <KV key={k} k={k} v={String(v)} />)}</View>}
+          {payment.next?.type === 'bank_instructions' && payment.status !== 'succeeded' && (
+            <View style={{ alignSelf: 'stretch', gap: 8 }}>
+              <Alert text={payment.next.message} />
+              {Object.entries(payment.next.instructions ?? {}).map(([k, v]) => <KV key={k} k={k} v={String(v)} />)}
+              <Input label={payment.method === 'mobile_money' ? 'Transaction ID from your receipt' : 'Transfer reference'} value={proof} onChangeText={setProof} />
+              <Button title="Submit proof" variant="secondary" disabled={!proof} onPress={() => api.post<{ payment: PaymentView }>(`/api/deposits/${payment.id}/proof`, { reference: proof }).then((r) => { setPayment(r.payment); toast('Proof submitted', 'success'); })} />
+            </View>
+          )}
           <Button title="Done" variant="secondary" onPress={() => setPayment(null)} />
         </Card>
       ) : (
@@ -90,12 +104,32 @@ export function AddMoney() {
               {gw?.provider === 'sandbox' && <Alert text="Sandbox: use 4242 4242 4242 4242 with any future expiry." />}
             </>
           )}
-          {method === 'mobile_money' && <Input label="Mobile money number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+233…" />}
+          {method === 'mobile_money' && (
+            <>
+              <OperatorPicker country={opCountry} onCountry={setOpCountry} value={operatorId} onChange={setOperatorId} onCurrency={(c) => { if ((config?.currencies ?? []).some((x: any) => x.code === c)) setCur(c); }} />
+              <Input label="Your mobile money number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+233…" />
+            </>
+          )}
           {method === 'bank' && <Alert text="You'll receive bank details and a reference. Your wallet is credited once we confirm the transfer." />}
           <Button title={`Add ${amount ? `${amount} ${cur}` : 'money'}`} loading={loading} onPress={submit} disabled={!amount || !opt} />
         </Card>
       )}
     </Screen>
+  );
+}
+
+/** Any mobile money operator in the world; those with a collection number use the direct rail (no API). */
+export function OperatorPicker({ country, onCountry, value, onChange, onCurrency }: { country: string; onCountry: (c: string) => void; value: string; onChange: (id: string) => void; onCurrency?: (c: string) => void }) {
+  const { config } = useStore();
+  const ops = useAsync(() => api.get<{ items: any[] }>(`/api/mobile-money-operators${country ? `?country=${country}` : ''}`), [country]);
+  const items = ops.data?.items ?? [];
+  const sel = items.find((o) => o.id === value);
+  return (
+    <View style={{ gap: 8 }}>
+      <Select label="Country" value={country} onChange={(c) => { onCountry(c); onChange(''); }} options={[{ value: '', label: 'All countries' }, ...(config?.countries ?? []).map((c: any) => ({ value: c.code, label: c.name }))]} />
+      <Select label="Mobile money operator" value={value} onChange={(id) => { onChange(id); const o = items.find((x) => x.id === id); if (o && onCurrency) onCurrency(o.currency); }} options={[{ value: '', label: 'Choose operator…' }, ...items.map((o) => ({ value: o.id, label: `${o.name} · ${o.country} (${o.currency})` }))]} />
+      {sel && <Row style={{ flexWrap: 'wrap' }}><Chip label={sel.brand} /><Chip label={sel.currency} />{sel.ussd && <Chip label={`USSD ${sel.ussd}`} />}{sel.directRail && <Chip label="no API needed" kind="success" />}</Row>}
+    </View>
   );
 }
 
@@ -106,6 +140,10 @@ export function Withdraw() {
   const [amount, setAmount] = useState('');
   const [cur, setCur] = useState(wallets[0]?.currency || 'USD');
   const [bankId, setBankId] = useState('');
+  const [dest, setDest] = useState<'bank' | 'mobile_money'>('bank');
+  const [opCountry, setOpCountry] = useState('');
+  const [operatorId, setOperatorId] = useState('');
+  const [phone, setPhone] = useState('');
   const [fee, setFee] = useState<number | null>(null);
   const [pin, setPin] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -122,7 +160,8 @@ export function Withdraw() {
     setLoading(true);
     setError(null);
     try {
-      const r = await api.post<{ transaction: Transaction }>('/api/withdrawals', { amount, currency: cur, bankAccountId: bankId || eligible[0]?.id, pin: p });
+      const destination = dest === 'mobile_money' ? { method: 'mobile_money', operatorId, phone } : { method: 'bank', bankAccountId: bankId || eligible[0]?.id };
+      const r = await api.post<{ transaction: Transaction }>('/api/withdrawals', { amount, currency: cur, destination, pin: p });
       toast('Withdrawal requested', 'success');
       refreshWallets();
       setPin(false);
@@ -140,9 +179,11 @@ export function Withdraw() {
       <Card>
         {error && <Alert kind="error" text={error} />}
         <AmountInput label={t('common.amount')} amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} />
-        {eligible.length === 0 ? <Alert kind="warning" text={`No ${cur} bank account saved yet.`} /> : <Select label="Bank account" value={bankId || eligible[0].id} onChange={setBankId} options={eligible.map((a) => ({ value: a.id, label: `${a.bankName} · •••• ${a.accountNumber.slice(-4)}` }))} />}
+        <Tabs tabs={[{ id: 'bank', label: '🏦 Bank account' }, { id: 'mobile_money', label: '📱 Mobile money (any operator)' }]} value={dest} onChange={(v) => setDest(v as any)} />
+        {dest === 'bank' && (eligible.length === 0 ? <Alert kind="warning" text={`No ${cur} bank account saved yet.`} /> : <Select label="Bank account" value={bankId || eligible[0].id} onChange={setBankId} options={eligible.map((a) => ({ value: a.id, label: `${a.bankName} · •••• ${a.accountNumber.slice(-4)}` }))} />)}
+        {dest === 'mobile_money' && <><OperatorPicker country={opCountry} onCountry={setOpCountry} value={operatorId} onChange={setOperatorId} /><Input label="Mobile money number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" /></>}
         {fee != null && <Card soft><KV k={t('common.fee')} v={money(fee, cur)} /></Card>}
-        <Button title="Withdraw" onPress={() => setPin(true)} disabled={!amount || eligible.length === 0} />
+        <Button title="Withdraw" onPress={() => setPin(true)} disabled={!amount || (dest === 'bank' ? eligible.length === 0 : !operatorId || !phone)} />
         <T muted size={12}>Withdrawals are reviewed and paid out by our team, usually within one business day. Prefer cash? Use an agent.</T>
       </Card>
       <Card>

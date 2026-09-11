@@ -5,6 +5,7 @@ import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, Button, Field, Input, Select, Tabs } from '../components/ui';
 import type { User } from '@bitripay/shared';
+import { loginWithPasskey, passkeysSupported } from '../lib/passkeys';
 
 type AuthResult = { token: string; user: User; requiresTwoFactor?: boolean };
 
@@ -101,6 +102,26 @@ export function Login() {
           </>
         )}
         <Button block loading={loading}>{mfa ? t('common.confirm') : mode === 'otp' && !otpSent ? t('auth.sendCode') : t('auth.signIn')}</Button>
+        {!mfa && passkeysSupported() && (
+          <Button
+            block
+            type="button"
+            variant="secondary"
+            className="mt-sm"
+            onClick={async () => {
+              setError(null);
+              try {
+                const res = await loginWithPasskey();
+                await login(res.token, res.user);
+                nav(next);
+              } catch (err) {
+                setError((err as Error).message || 'Biometric sign-in cancelled');
+              }
+            }}
+          >
+            🔐 Sign in with biometrics / passkey
+          </Button>
+        )}
         {mode === 'password' && !mfa && (
           <p className="center mt-sm small">
             <Link to="/forgot">{t('auth.forgot')}</Link>

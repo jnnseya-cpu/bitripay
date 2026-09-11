@@ -26,6 +26,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/app/scan', key: 'nav.scan', ico: '📷', module: 'qrPayments' },
     { to: '/app/receive', key: 'nav.receive', ico: '🔳', module: 'qrPayments' },
     { to: '/app/send', key: 'nav.send', ico: '📤', module: 'transfers' },
+    { to: '/app/move', key: 'nav.move', ico: '🔀', module: 'transfers' },
     { to: '/app/requests', key: 'nav.requests', ico: '🔗', module: 'moneyRequests' },
     { to: '/app/add-money', key: 'nav.addMoney', ico: '➕', module: 'addMoney' },
     { to: '/app/withdraw', key: 'nav.withdraw', ico: '🏦', module: 'withdrawals' },

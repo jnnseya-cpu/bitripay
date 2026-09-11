@@ -17,6 +17,7 @@ export function Dashboard() {
   const actions = [
     ['/app/scan', '📷', t('nav.scan'), 'qrPayments'],
     ['/app/send', '📤', t('nav.send'), 'transfers'],
+    ['/app/move', '🔀', t('nav.move'), 'transfers'],
     ['/app/receive', '🔳', t('nav.receive'), 'qrPayments'],
     ['/app/add-money', '➕', t('nav.addMoney'), 'addMoney'],
     ['/app/requests', '🔗', t('nav.requests'), 'moneyRequests'],

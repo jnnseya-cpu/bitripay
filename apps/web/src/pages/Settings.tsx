@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, Avatar, Button, Chip, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
 import type { User } from '@bitripay/shared';
+import { registerPasskey, passkeysSupported, biometricsAvailable } from '../lib/passkeys';
 
 export function Settings() {
   const t = useT();
@@ -77,6 +78,40 @@ function Profile() {
   );
 }
 
+function Passkeys() {
+  const { toast, setHasPasskeys } = useStore();
+  const list = useAsync(() => api.get<{ items: any[] }>('/api/account/passkeys'), []);
+  const [platform, setPlatform] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { biometricsAvailable().then(setPlatform); }, []);
+  useEffect(() => { if (list.data) setHasPasskeys(list.data.items.length > 0); }, [list.data, setHasPasskeys]);
+  const add = async () => {
+    setBusy(true);
+    try {
+      await registerPasskey();
+      toast('Biometric login enabled on this device', 'success');
+      list.reload();
+    } catch (err) {
+      toast((err as Error).message || 'Registration cancelled', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="card" style={{ gridColumn: 'span 2' }}>
+      <div className="card-title"><h3>Biometric login & payment confirmation</h3>{list.data && list.data.items.length > 0 ? <Chip kind="success">{list.data.items.length} device{list.data.items.length > 1 ? 's' : ''}</Chip> : <Chip>Not set up</Chip>}</div>
+      <p className="small muted">Use Face ID, Touch ID, Windows Hello or your phone's fingerprint (passkeys) to sign in without a password and to confirm payments instead of typing your PIN.</p>
+      {!passkeysSupported() ? <Alert kind="warning">This browser does not support passkeys.</Alert> : platform === false ? <Alert kind="info">No built-in biometric sensor detected here; a security key or your phone can still be used as a passkey.</Alert> : null}
+      <div className="list">
+        {list.data?.items.map((k) => (
+          <div key={k.id} className="list-item"><div className="flex1"><div className="main-text">{k.deviceName || 'Passkey'} {k.deviceType === 'multiDevice' && <Chip>synced</Chip>}</div><div className="sub-text">Added {new Date(k.createdAt).toLocaleDateString()}{k.lastUsedAt ? ` · last used ${new Date(k.lastUsedAt).toLocaleString()}` : ''}</div></div><Button size="sm" variant="ghost" onClick={() => api.del(`/api/account/passkeys/${k.id}`).then(list.reload)}>Remove</Button></div>
+        ))}
+      </div>
+      {passkeysSupported() && <Button className="mt-sm" loading={busy} onClick={add}>🔐 Add this device</Button>}
+    </div>
+  );
+}
+
 function Security() {
   const t = useT();
   const { user, toast, refresh } = useStore();
@@ -96,6 +131,7 @@ function Security() {
   };
   return (
     <div className="grid cols-2">
+      <Passkeys />
       <div className="card">
         <h3>{t('settings.password')}</h3>
         <form onSubmit={(e) => { e.preventDefault(); run(() => api.post('/api/account/password', pw), 'Password changed').then(() => setPw({ currentPassword: '', newPassword: '' })); }}>

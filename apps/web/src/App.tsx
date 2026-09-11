@@ -25,6 +25,7 @@ import { MerchantDashboard, MerchantPos, MerchantGateway } from './pages/Merchan
 import { AgentDashboard } from './pages/Agent';
 import { Checkout } from './pages/Checkout';
 import { StaticPage, Contact } from './pages/Static';
+import { MoveMoney } from './pages/MoveMoney';
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { user, loading } = useStore();
@@ -50,6 +51,7 @@ export function App() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/app" element={<Protected><Dashboard /></Protected>} />
         <Route path="/app/send" element={<Protected><Send /></Protected>} />
+        <Route path="/app/move" element={<Protected><MoveMoney /></Protected>} />
         <Route path="/app/scan" element={<Protected><Scan /></Protected>} />
         <Route path="/app/receive" element={<Protected><Receive /></Protected>} />
         <Route path="/app/requests" element={<Protected><Requests /></Protected>} />

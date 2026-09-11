@@ -5,6 +5,7 @@ import { useT } from '../lib/i18n';
 import { Alert, AmountInput, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, StatusBadge, TxRow, useAsync } from '../components/ui';
 import type { BankAccount, Transaction } from '@bitripay/shared';
 import { useNavigate } from 'react-router-dom';
+import { OperatorPicker } from './AddMoney';
 
 export function Withdraw() {
   const t = useT();
@@ -15,6 +16,11 @@ export function Withdraw() {
   const [amount, setAmount] = useState('');
   const [cur, setCur] = useState(wallets[0]?.currency || 'USD');
   const [bankId, setBankId] = useState('');
+  const [dest, setDest] = useState<'bank' | 'mobile_money'>('bank');
+  const [operatorId, setOperatorId] = useState('');
+  const [opCountry, setOpCountry] = useState('');
+  const [phone, setPhone] = useState('');
+  const [recipientName, setRecipientName] = useState('');
   const [fee, setFee] = useState<number | null>(null);
   const [pinOpen, setPinOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -39,7 +45,8 @@ export function Withdraw() {
     setLoading(true);
     setError(null);
     try {
-      const r = await api.post<{ transaction: Transaction }>('/api/withdrawals', { amount, currency: cur, bankAccountId: bankId || eligible[0]?.id, pin });
+      const destination = dest === 'mobile_money' ? { method: 'mobile_money', operatorId, phone, name: recipientName || null } : { method: 'bank', bankAccountId: bankId || eligible[0]?.id };
+      const r = await api.post<{ transaction: Transaction }>('/api/withdrawals', { amount, currency: cur, destination, pin });
       toast('Withdrawal requested', 'success');
       refreshWallets();
       nav(`/app/transactions/${r.transaction.id}`);
@@ -64,14 +71,26 @@ export function Withdraw() {
 
   return (
     <div>
-      <PageHeader title={t('withdraw.title')} subtitle="Transfer wallet funds to your bank account. Prefer cash? Use an agent." actions={<Button variant="secondary" onClick={() => { setBank((b) => ({ ...b, currency: cur })); setAddOpen(true); }}>+ Add bank account</Button>} />
+      <PageHeader title={t('withdraw.title')} subtitle="Send wallet funds to your bank account or to any mobile money number in the world. Prefer cash? Use an agent." actions={<Button variant="secondary" onClick={() => { setBank((b) => ({ ...b, currency: cur })); setAddOpen(true); }}>+ Add bank account</Button>} />
       <div className="grid cols-2">
         <div className="card">
           {error && <Alert kind="error">{error}</Alert>}
           <Field label={t('common.amount')} hint={wallet ? `${t('common.balance')}: ${money(wallet.balance, wallet.currency)}` : undefined}>
             <AmountInput amount={amount} currency={cur} onAmount={(a) => quote(a, cur)} onCurrency={(c) => { setCur(c); quote(amount, c); }} big />
           </Field>
-          <Field label="Bank account">
+          <Field label="Pay out to">
+            <div className="pill-tabs"><button type="button" className={`tab ${dest === 'bank' ? 'active' : ''}`} onClick={() => setDest('bank')}>🏦 Bank account</button><button type="button" className={`tab ${dest === 'mobile_money' ? 'active' : ''}`} onClick={() => setDest('mobile_money')}>📱 Mobile money (any operator)</button></div>
+          </Field>
+          {dest === 'mobile_money' && (
+            <>
+              <OperatorPicker value={operatorId} onChange={setOperatorId} country={opCountry} onCountry={setOpCountry} />
+              <div className="grid cols-2">
+                <Field label="Mobile money number"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+2547…" /></Field>
+                <Field label="Recipient name (optional)"><Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} /></Field>
+              </div>
+            </>
+          )}
+          {dest === 'bank' && <Field label="Bank account">
             {eligible.length === 0 ? (
               <Alert kind="warning">No {cur} bank account saved yet. Add one to continue.</Alert>
             ) : (
@@ -79,15 +98,15 @@ export function Withdraw() {
                 {eligible.map((a) => <option key={a.id} value={a.id}>{a.bankName} · {a.accountName} · •••• {a.accountNumber.slice(-4)}</option>)}
               </Select>
             )}
-          </Field>
+          </Field>}
           {fee != null && amount && (
             <div className="card soft compact mb">
               <KV k={t('common.fee')} v={money(fee, cur)} />
               <KV k="You receive" v={`${amount} ${cur}`} />
             </div>
           )}
-          <Button block size="lg" disabled={!amount || eligible.length === 0} onClick={() => setPinOpen(true)}>Withdraw</Button>
-          <p className="small muted mt">Withdrawals are reviewed and paid out by our team, usually within one business day.</p>
+          <Button block size="lg" disabled={!amount || (dest === 'bank' ? eligible.length === 0 : !operatorId || !phone)} onClick={() => setPinOpen(true)}>Withdraw</Button>
+          <p className="small muted mt">Bank withdrawals and mobile money payouts (to any operator worldwide) are reviewed and paid out by our team or a local agent, usually within one business day.</p>
         </div>
         <div className="card">
           <h3>Bank accounts</h3>

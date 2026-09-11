@@ -117,7 +117,8 @@ export function paymentOptions(currency: string, country?: string | null, purpos
  * wins; otherwise the direct rail (manual_momo) handles any operator with a collection number.
  */
 function pickMobileMoneyGateway(candidates: ReturnType<typeof availableGateways>, operatorId: string | null | undefined, preferred?: string | null) {
-  if (preferred) return candidates.find((g) => g.id === preferred);
+  // An explicit gateway choice only applies when no operator is given; operators decide their own rail.
+  if (preferred && !operatorId) return candidates.find((g) => g.id === preferred);
   if (!operatorId) return candidates.find((g) => g.provider !== 'manual_momo') ?? candidates[0];
   const op = getOperator(operatorId);
   const api = candidates.find((g) => g.provider !== 'manual_momo' && g.provider !== 'sandbox' && (g.countries.length === 0 || g.countries.includes(op.country)) && (g.currencies.length === 0 || g.currencies.includes(op.currency)));
@@ -157,6 +158,10 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
   const candidates = availableGateways(input.method, cur.code, user?.country);
   const gateway = input.method === 'mobile_money' ? pickMobileMoneyGateway(candidates, input.operatorId, input.gateway) : input.gateway ? candidates.find((g) => g.id === input.gateway) : candidates.find((g) => g.provider !== 'manual_momo');
   if (!gateway) throw unprocessable(`No ${input.method.replace('_', ' ')} gateway is available for ${cur.code}`, 'no_gateway');
+  if (gateway.provider === 'manual_momo' && input.operatorId) {
+    const op = getOperator(input.operatorId);
+    if (op.currency !== cur.code) throw badRequest(`${op.name} collects ${op.currency}. Choose ${op.currency} as the currency to pay with this operator.`, 'operator_currency_mismatch');
+  }
   const provider = PROVIDERS[gateway.provider];
 
   const feeType = input.purpose === 'checkout' ? 'merchant_payment' : input.method === 'card' ? 'card_deposit' : input.method === 'mobile_money' ? 'mobile_money_deposit' : 'bank_deposit';

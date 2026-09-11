@@ -8,7 +8,8 @@ import { CardForm, type CardValues } from '../components/CardForm';
 import { StripePayment } from '../components/StripePayment';
 import type { SavedCard } from '@bitripay/shared';
 
-interface Option { method: 'card' | 'mobile_money' | 'bank'; gateways: { id: string; name: string; provider: string; publishableKey: string | null }[]; fee: number }
+interface Operator { id: string; name: string; brand: string; country: string; currency: string; ussd: string | null; color: string; directRail: boolean }
+interface Option { method: 'card' | 'mobile_money' | 'bank'; gateways: { id: string; name: string; provider: string; publishableKey: string | null }[]; fee: number; operators?: Operator[] }
 export interface PaymentView { id: string; status: string; method: string; amount: number; currency: string; fee: number; failureReason: string | null; next: { type: string; url?: string; clientSecret?: string; publishableKey?: string; message?: string; instructions?: Record<string, string> } | null; gatewayName: string; createdAt: string }
 
 export function AddMoney() {
@@ -20,6 +21,8 @@ export function AddMoney() {
   const [method, setMethod] = useState<'card' | 'mobile_money' | 'bank'>('card');
   const [gateway, setGateway] = useState('');
   const [phone, setPhone] = useState(user?.phone ?? '');
+  const [operatorId, setOperatorId] = useState('');
+  const [opCountry, setOpCountry] = useState(user?.country ?? '');
   const [card, setCard] = useState<CardValues>({ number: '', expMonth: '', expYear: '', cvc: '', holderName: user?.fullName ?? '' });
   const [savedCardId, setSavedCardId] = useState('');
   const [saveCard, setSaveCard] = useState(true);
@@ -59,7 +62,7 @@ export function AddMoney() {
     setError(null);
     setLoading(true);
     try {
-      const body: Record<string, unknown> = { method, amount, currency: cur, gateway: gw?.id };
+      const body: Record<string, unknown> = { method, amount, currency: cur, gateway: method === 'mobile_money' ? undefined : gw?.id };
       if (method === 'card') {
         if (savedCardId) body.savedCardId = savedCardId;
         else if (gw?.provider !== 'stripe') {
@@ -67,7 +70,10 @@ export function AddMoney() {
           body.saveCard = saveCard;
         } else body.saveCard = saveCard;
       }
-      if (method === 'mobile_money') body.phone = phone;
+      if (method === 'mobile_money') {
+        body.phone = phone;
+        if (operatorId) body.operatorId = operatorId;
+      }
       const r = await api.post<{ payment: PaymentView }>('/api/deposits', body);
       setPayment(r.payment);
       if (r.payment.status === 'succeeded') {
@@ -132,9 +138,12 @@ export function AddMoney() {
                 </>
               )}
               {method === 'mobile_money' && (
-                <Field label="Mobile money number">
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+233…" />
-                </Field>
+                <>
+                  <OperatorPicker value={operatorId} onChange={setOperatorId} country={opCountry} onCountry={setOpCountry} onCurrency={(c) => { if ((config?.currencies ?? []).some((x) => x.code === c)) setCur(c); }} />
+                  <Field label="Your mobile money number">
+                    <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+233…" />
+                  </Field>
+                </>
               )}
               {method === 'bank' && <Alert kind="info">You'll receive bank details and a reference. Your wallet is credited once the transfer is confirmed.</Alert>}
               {amount && opt && (
@@ -168,6 +177,33 @@ export function AddMoney() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Picks any mobile money operator in the world; operators with a collection number use the direct rail (no API). */
+export function OperatorPicker({ value, onChange, country, onCountry, onCurrency }: { value: string; onChange: (id: string) => void; country: string; onCountry: (c: string) => void; onCurrency?: (currency: string) => void }) {
+  const { config } = useStore();
+  const ops = useAsync(() => api.get<{ items: Operator[] }>(`/api/mobile-money-operators${country ? `?country=${country}` : ''}`), [country]);
+  const list = ops.data?.items ?? [];
+  const countriesWithOps = new Set((config?.countries ?? []).map((c) => c.code));
+  return (
+    <>
+      <div className="grid cols-2">
+        <Field label="Country">
+          <Select value={country} onChange={(e) => { onCountry(e.target.value); onChange(''); }}>
+            <option value="">All countries</option>
+            {(config?.countries ?? []).filter((c) => countriesWithOps.has(c.code)).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Mobile money operator" hint={value && list.find((o) => o.id === value)?.directRail ? 'Direct rail: pay from your own mobile money app with a reference' : value ? 'Routed through a connected gateway or the sandbox' : undefined}>
+          <Select value={value} onChange={(e) => { onChange(e.target.value); const o = list.find((x) => x.id === e.target.value); if (o && onCurrency) onCurrency(o.currency); }}>
+            <option value="">Choose operator…</option>
+            {list.map((o) => <option key={o.id} value={o.id}>{o.name} · {o.country} ({o.currency})</option>)}
+          </Select>
+        </Field>
+      </div>
+      {value && (() => { const o = list.find((x) => x.id === value); return o ? <div className="row wrap mb"><span className="chip" style={{ background: o.color, color: '#fff' }}>{o.brand}</span>{o.ussd && <span className="chip">USSD {o.ussd}</span>}<span className="chip">{o.currency}</span>{o.directRail && <span className="chip success">no API needed</span>}</div> : null; })()}
+    </>
   );
 }
 
@@ -205,9 +241,9 @@ export function PaymentStatus({ payment, onDone, proof, setProof, onProof }: { p
           </div>
           {setProof && onProof && (
             <div className="mt">
-              <Field label="Transfer reference / proof (optional)">
+              <Field label={payment.method === 'mobile_money' ? 'Transaction ID from your mobile money receipt' : 'Transfer reference / proof (optional)'}>
                 <div className="row">
-                  <Input value={proof} onChange={(e) => setProof(e.target.value)} placeholder="Bank reference number" />
+                  <Input value={proof} onChange={(e) => setProof(e.target.value)} placeholder={payment.method === 'mobile_money' ? 'e.g. MP240911.1234.A12345' : 'Bank reference number'} />
                   <Button variant="secondary" onClick={onProof}>Submit</Button>
                 </div>
               </Field>

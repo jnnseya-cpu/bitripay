@@ -1,3 +1,4 @@
+import { currentStepUpToken } from './passkeys';
 export class ApiError extends Error {
   code: string;
   status: number;
@@ -33,9 +34,10 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 async function request<T>(method: Method, path: string, body?: unknown, opts: { token?: string | null; raw?: boolean } = {}): Promise<T> {
   const token = opts.token === undefined ? getToken() : opts.token;
+  const stepUp = method !== 'GET' ? currentStepUpToken() : null;
   const res = await fetch(`${API_BASE}${path}`, {
     method,
-    headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(stepUp ? { 'X-Step-Up-Token': stepUp } : {}) },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (opts.raw) return (await res.text()) as unknown as T;

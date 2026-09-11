@@ -21,6 +21,7 @@ import { P2P } from './pages/P2P';
 import { Reports } from './pages/Reports';
 import { Audit } from './pages/Audit';
 import { Profile } from './pages/Profile';
+import { MobileMoney } from './pages/MobileMoney';
 
 function P({ children }: { children: React.ReactElement }) {
   const { user, loading } = useStore();
@@ -43,6 +44,7 @@ export function App() {
         <Route path="/currencies" element={<P><Currencies /></P>} />
         <Route path="/fees" element={<P><Fees /></P>} />
         <Route path="/gateways" element={<P><Gateways /></P>} />
+        <Route path="/mobile-money" element={<P><MobileMoney /></P>} />
         <Route path="/modules" element={<P><Modules /></P>} />
         <Route path="/catalogs" element={<P><Catalogs /></P>} />
         <Route path="/site" element={<P><Site /></P>} />

@@ -1,6 +1,6 @@
 export const en: Record<string, string> = {
   'nav.dashboard': 'Dashboard',
-  'nav.send': 'Send money',
+  'nav.move': 'Move money', 'nav.send': 'Send money',
   'nav.scan': 'Scan & pay',
   'nav.receive': 'Receive',
   'nav.requests': 'Requests & links',

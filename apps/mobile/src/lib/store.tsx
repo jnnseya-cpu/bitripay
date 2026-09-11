@@ -30,8 +30,10 @@ interface Store {
   dark: boolean;
   setDark: (d: boolean | null) => void;
   biometrics: boolean;
-  setBiometrics: (on: boolean) => Promise<void>;
+  setBiometrics: (on: boolean, pin?: string) => Promise<void>;
   biometricsAvailable: boolean;
+  /** Confirms with device biometrics and returns the securely stored PIN, or null if unavailable/cancelled. */
+  biometricPin: () => Promise<string | null>;
   toast: (m: string, kind?: 'success' | 'error' | 'info') => void;
   toasts: { id: number; message: string; kind: string }[];
 }
@@ -182,13 +184,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         else SecureStore.setItemAsync('dark', d ? '1' : '0');
       },
       biometrics,
-      setBiometrics: async (on) => {
+      setBiometrics: async (on, pin) => {
         if (on) {
           const res = await LocalAuthentication.authenticateAsync({ promptMessage: 'Confirm to enable biometric login' });
           if (!res.success) return;
+          if (pin) await SecureStore.setItemAsync('pin', pin, { requireAuthentication: false });
+        } else {
+          await SecureStore.deleteItemAsync('pin');
         }
         setBio(on);
         await SecureStore.setItemAsync('biometrics', on ? '1' : '0');
+      },
+      biometricPin: async () => {
+        if (!biometrics) return null;
+        const stored = await SecureStore.getItemAsync('pin');
+        if (!stored) return null;
+        const res = await LocalAuthentication.authenticateAsync({ promptMessage: 'Confirm payment', fallbackLabel: 'Use PIN' });
+        return res.success ? stored : null;
       },
       biometricsAvailable,
       toast,

@@ -17,6 +17,24 @@ bitripay/
 
 ## Features
 
+**Any → any money movement** – fund from a card, bank transfer, mobile money or your wallet and deliver
+to a BitriPay user, a QR code / payment link, a bank account, any mobile money number or cash at an agent,
+in one request (`POST /api/money`), with fee- and FX-aware quotes. The wallet is the hub, so no extra
+integration is needed between rails.
+
+**Mobile money without operator APIs** – a directory of 253 mobile money operators in 128 countries
+(MTN, Airtel, M-Pesa, Orange, Wave, bKash, GCash, Paytm, Pix, …) ships in `@bitripay/shared`. Give an
+operator your collection/merchant number in the admin panel and customers pay from their own mobile
+money app or USSD with a reference; the payment is confirmed automatically from the operator's receipt
+SMS (forward it to `POST /api/webhooks/manual_momo` with any SMS-forwarder app), by an agent, or by an
+admin. Payouts to any mobile money number are queued for your team or agents. When an API gateway
+(Flutterwave, Paystack, MTN MoMo, M-Pesa Daraja) covers an operator it is used automatically instead.
+
+**Biometric login** – passkeys (WebAuthn) on the web app and hosted checkout: sign in with Face ID,
+Touch ID, Windows Hello or a phone fingerprint, and confirm payments with biometrics instead of the PIN
+(a 5-minute step-up token is accepted wherever a PIN is required). The mobile app uses the device's
+biometrics to unlock and to confirm payments.
+
 **Users** – transfer & receive with QR code, send money by @tag / email / phone, money requests,
 payment links, add money (card, mobile money, bank transfer, agent cash-in), withdraw to bank,
 cash-out at an agent, remittance (wallet, bank transfer, cash pickup), saved recipients,
@@ -103,6 +121,9 @@ be changed at runtime in the admin panel and is stored in the database:
 - **Gateways** (`Admin → Deposit / payment gateways`): enable providers and paste credentials.
   Environment variables are used as defaults; admin-entered credentials are encrypted with `APP_SECRET`.
   Provider webhooks go to `POST /api/webhooks/<gatewayId>` (e.g. `/api/webhooks/stripe`).
+- **Mobile money operators** (`Admin → Mobile money operators`): enter your collection number per operator to
+  accept it directly; set the SMS shared secret to auto-confirm from forwarded receipt SMS.
+- **Passkeys**: `WEBAUTHN_RP_ID` (defaults to the `WEB_URL` hostname) and `WEBAUTHN_ORIGINS` (extra allowed origins).
 - **Exchange rates**: manual or automatic from `open.er-api.com` / Frankfurter (keyless);
   set the provider and refresh interval in `Admin → Currencies`.
 - **Fees / limits / referral / modules / countries / site / pages / languages / SMTP / SMS**: admin panel.
@@ -117,6 +138,8 @@ for apps, `Authorization: Bearer bp_live_…` (merchant API key) for the v1 API.
 | Auth | `POST /api/auth/register`, `/login`, `/otp/request`, `/otp/verify`, `/2fa/verify`, `/password/forgot`, `/password/reset`, `GET /api/auth/me` |
 | Account | `PATCH /api/account/profile`, `POST /api/account/pin`, `/password`, `/2fa/setup|enable|disable`, `/verify/request|confirm`, `GET /api/account/notifications`, `/referrals`, `/lookup?q=` |
 | Wallets | `GET /api/wallets`, `POST /api/wallets`, `GET /api/wallets/transactions`, `/summary`, `/exchange/quote`, `POST /api/wallets/exchange` |
+| Any → any | `POST /api/money` (source: wallet/card/bank/mobile_money → destination: wallet/qr/bank/mobile_money/agent), `POST /api/money/preview`, `GET /api/money/:id`, `POST /api/money/:id/retry`, `GET /api/mobile-money-operators` |
+| Biometrics | `POST /api/auth/passkey/options|verify` (sign-in), `GET/DELETE /api/account/passkeys`, `POST /api/account/passkeys/register/options|verify`, `POST /api/account/passkeys/step-up/options|verify` → `X-Step-Up-Token` |
 | Payments | `POST /api/transfers`, `GET /api/qr/me`, `POST /api/qr/resolve`, `GET /api/qr/image.svg`, `POST /api/payment-requests`, `/:code/pay|cancel|decline` |
 | Checkout (public) | `GET /api/checkout/:code`, `POST /api/checkout/:code/pay` (card / mobile money / bank / virtual card), `/:code/wallet` |
 | Add money | `GET /api/deposits/options`, `POST /api/deposits`, `GET /api/deposits/:id`, `POST /api/deposits/:id/proof`, `GET /api/cards` |

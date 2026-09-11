@@ -7,7 +7,8 @@ import { QrImage } from '../components/ui';
 const FEATURES = [
   ['📷', 'Transfer with QR code', 'Scan a friend, a shop or an agent and pay in seconds.'],
   ['🔳', 'Receive with QR code', 'Your personal QR code accepts payments instantly and securely.'],
-  ['💳', 'Add money', 'Top up by card, mobile money, bank transfer or cash at an agent.'],
+  ['💳', 'Add money', 'Top up by card, bank transfer, cash at an agent or mobile money from 250+ operators worldwide – no operator API needed.'],
+  ['🔀', 'Any to any', 'Move money from any bank, card, QR code or mobile money to any other, end to end.'],
   ['🏪', 'Merchant payments', 'Merchants accept QR, card, mobile money and virtual card payments.'],
   ['🏦', 'Withdraw money', 'Send funds to your bank account or cash out at a nearby agent.'],
   ['🌍', 'Remittance', 'Send money abroad to a wallet, a bank account or for cash pickup.'],
@@ -19,7 +20,7 @@ const FEATURES = [
   ['🤝', 'P2P trading', 'Buy and sell currency with other users, protected by escrow.'],
   ['🔗', 'Payment links', 'Generate links and invoices to collect payments from anyone.'],
   ['🎉', 'Referral rewards', 'Earn multi-level rewards for inviting friends.'],
-  ['🔐', '2FA, KYC & PIN', 'Bank-grade security with biometric login on mobile.'],
+  ['🔐', 'Biometric login', 'Passkeys on web and checkout, Face ID / fingerprint in the apps, 2FA, KYC and PIN.'],
   ['🔌', 'Payment gateway & API', 'Developer API, webhooks and a WooCommerce plugin.'],
 ];
 
