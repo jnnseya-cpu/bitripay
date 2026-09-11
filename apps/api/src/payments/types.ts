@@ -1,7 +1,7 @@
 import type { Request } from 'express';
 
 export type PaymentMethod = 'card' | 'mobile_money' | 'bank' | 'wallet' | 'virtual_card';
-export type GatewayProviderId = 'sandbox' | 'stripe' | 'paystack' | 'flutterwave' | 'mtn_momo' | 'mpesa' | 'manual_bank';
+export type GatewayProviderId = 'sandbox' | 'stripe' | 'paystack' | 'flutterwave' | 'mtn_momo' | 'mpesa' | 'manual_bank' | 'manual_momo';
 
 export interface GatewayPaymentRow {
   id: string;
@@ -50,6 +50,8 @@ export interface InitiateContext {
   callbackUrl: string;
   credentials: Record<string, string>;
   description: string;
+  /** Mobile money operator chosen by the payer (direct rail / routing hints). */
+  operatorId?: string | null;
 }
 
 export interface NextAction {

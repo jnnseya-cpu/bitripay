@@ -20,7 +20,7 @@ agentsRouter.post(
   '/cash-out',
   wrap(async (req, res) => {
     const body = validate(z.object({ agent: z.string().min(2), amount: z.string(), currency: z.string().length(3), pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const cur = getCurrency(body.currency);
     res.status(201).json({ request: createCashOutRequest(req.user!, { agent: body.agent, amount: toMinor(body.amount, cur.decimals), currency: cur.code }) });
   }),
@@ -38,7 +38,7 @@ agentsRouter.post(
   requireAgent,
   wrap(async (req, res) => {
     const body = validate(z.object({ customer: z.string().min(2), amount: z.string(), currency: z.string().length(3), note: z.string().max(200).optional().nullable(), pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const cur = getCurrency(body.currency);
     const tx = agentCashIn(req.user!, { customer: body.customer, amount: toMinor(body.amount, cur.decimals), currency: cur.code, note: body.note });
     res.status(201).json({ transaction: toTransaction(tx, req.user!.id, usersById([tx.receiver_user_id!])) });
@@ -49,7 +49,7 @@ agentsRouter.post(
   requireAgent,
   wrap(async (req, res) => {
     const body = validate(z.object({ code: z.string().min(4), pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const tx = confirmCashOut(req.user!, body.code);
     res.status(201).json({ transaction: toTransaction(tx, req.user!.id, usersById([tx.sender_user_id!])) });
   }),
@@ -63,7 +63,7 @@ agentsRouter.post(
   requireAgent,
   wrap(async (req, res) => {
     const body = validate(z.object({ recipientIdNumber: z.string().optional(), pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     res.json({ remittance: payoutCashPickup(req.user!, String(String(req.params.code)), body.recipientIdNumber) });
   }),
 );

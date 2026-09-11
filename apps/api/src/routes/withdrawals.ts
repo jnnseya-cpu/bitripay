@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { validate, wrap, parsePagination } from '../lib/http';
 import { requireAuth } from '../middleware/auth';
 import { listBankAccounts, addBankAccount, deleteBankAccount, requestWithdrawal } from '../services/withdrawals';
+import { listOperators } from '../services/momo';
 import { assertPin } from '../services/auth';
 import { getCurrency } from '../services/currencies';
 import { toMinor } from '@bitripay/shared';
@@ -25,6 +26,7 @@ bankAccountsRouter.delete('/:id', (req, res) => {
 
 export const withdrawalsRouter = Router();
 withdrawalsRouter.use(requireAuth);
+withdrawalsRouter.get('/operators', (req, res) => res.json({ items: listOperators({ country: req.query.country ? String(req.query.country) : null, currency: req.query.currency ? String(req.query.currency) : null }).filter((o) => o.payoutEnabled) }));
 withdrawalsRouter.get('/fee', (req, res) => {
   const cur = getCurrency(String(req.query.currency || 'USD'));
   const amount = toMinor(String(req.query.amount || '0'), cur.decimals);
@@ -33,10 +35,25 @@ withdrawalsRouter.get('/fee', (req, res) => {
 withdrawalsRouter.post(
   '/',
   wrap(async (req, res) => {
-    const body = validate(z.object({ amount: z.string(), currency: z.string().length(3), bankAccountId: z.string(), note: z.string().max(200).optional().nullable(), pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    const body = validate(
+      z.object({
+        amount: z.string(),
+        currency: z.string().length(3),
+        bankAccountId: z.string().optional().nullable(),
+        destination: z
+          .discriminatedUnion('method', [
+            z.object({ method: z.literal('bank'), bankAccountId: z.string() }),
+            z.object({ method: z.literal('mobile_money'), operatorId: z.string(), phone: z.string().min(6).max(20), name: z.string().max(120).optional().nullable() }),
+          ])
+          .optional(),
+        note: z.string().max(200).optional().nullable(),
+        pin: z.string().optional(),
+      }),
+      req.body,
+    );
+    assertPin(req.user!, body.pin, req);
     const cur = getCurrency(body.currency);
-    const tx = requestWithdrawal(req.user!, { ...body, amount: toMinor(body.amount, cur.decimals), currency: cur.code });
+    const tx = requestWithdrawal(req.user!, { amount: toMinor(body.amount, cur.decimals), currency: cur.code, bankAccountId: body.bankAccountId, destination: body.destination, note: body.note });
     res.status(201).json({ transaction: toTransaction(tx, req.user!.id) });
   }),
 );

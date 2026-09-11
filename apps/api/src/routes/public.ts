@@ -10,6 +10,7 @@ import { listGateways, isGatewayReady, getGatewayCredentials } from '../payments
 import { getSmtpSettings } from '../services/messaging';
 import { COUNTRIES } from '@bitripay/shared';
 import { rateLimit } from '../middleware/rateLimit';
+import { listOperators as listMomoOperators } from '../services/momo';
 
 export const publicRouter = Router();
 
@@ -30,6 +31,8 @@ publicRouter.get('/config', (_req, res) => {
       emailOtp: true,
       smsOtp: true,
       smtpConfigured: !!getSmtpSettings().host,
+      passkeys: true,
+      directMobileMoney: true,
     },
     webUrl: config.webUrl,
     apiUrl: config.apiUrl,
@@ -46,6 +49,7 @@ publicRouter.get('/config', (_req, res) => {
 });
 
 publicRouter.get('/countries', (_req, res) => res.json({ items: COUNTRIES }));
+publicRouter.get('/mobile-money-operators', (req, res) => res.json({ items: listMomoOperators({ country: req.query.country ? String(req.query.country) : null }) }));
 publicRouter.get('/currencies', (req, res) => res.json({ items: listCurrencies(req.query.all !== '1') }));
 publicRouter.get('/pages', (_req, res) => res.json({ items: listPages().map(({ content, ...p }) => p) }));
 publicRouter.get('/pages/:slug', (req, res) => res.json(getPage(String(req.params.slug))));

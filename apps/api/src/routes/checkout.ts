@@ -26,7 +26,7 @@ checkoutRouter.post(
   requireAuth,
   wrap(async (req, res) => {
     const body = validate(z.object({ pin: z.string().optional(), amount: z.string().optional().nullable() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const row = getPaymentRequestByCode(String(req.params.code));
     const { getCurrency } = await import('../services/currencies');
     const { toMinor } = await import('@bitripay/shared');
@@ -50,6 +50,7 @@ checkoutRouter.post(
         savedCardId: z.string().optional().nullable(),
         saveCard: z.boolean().optional(),
         phone: z.string().optional().nullable(),
+        operatorId: z.string().optional().nullable(),
         email: z.string().email().optional().nullable(),
         name: z.string().optional().nullable(),
         returnUrl: z.string().url().optional().nullable(),

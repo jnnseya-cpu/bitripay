@@ -17,6 +17,8 @@ import { dispatchWebhook } from './webhooks';
 import { onDepositCompleted } from './referrals';
 import { saveCardFromToken } from './cards';
 import { getModules } from './modules';
+import { getOperator, listOperators } from './momo';
+import { continueRouteAfterFunding, type RouteDestination } from './routing';
 
 export interface InitiatePaymentInput {
   purpose: 'deposit' | 'checkout';
@@ -32,6 +34,11 @@ export interface InitiatePaymentInput {
   name?: string | null;
   paymentRequestCode?: string | null;
   returnUrl?: string | null;
+  /** Mobile money operator (from the world directory). Routes to an API gateway covering it, else the direct rail. */
+  operatorId?: string | null;
+  /** Optional onward destination executed automatically once the money arrives (any → any). */
+  route?: RouteDestination | null;
+  routeId?: string | null;
 }
 
 export interface PaymentView {
@@ -49,6 +56,8 @@ export interface PaymentView {
   paymentRequestCode: string | null;
   failureReason: string | null;
   next: NextAction | null;
+  operatorId?: string | null;
+  route?: RouteDestination | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -71,6 +80,8 @@ export function toPaymentView(row: GatewayPaymentRow): PaymentView {
     paymentRequestCode: pr?.code ?? null,
     failureReason: meta.failureReason ?? null,
     next: meta.next ?? null,
+    operatorId: meta.operatorId ?? null,
+    route: meta.route ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -95,8 +106,26 @@ export function paymentOptions(currency: string, country?: string | null, purpos
       method,
       gateways: availableGateways(method, currency, country).map((g) => ({ id: g.id, name: g.name, provider: g.provider, publishableKey: g.provider === 'stripe' ? getGatewayCredentials(g.id).publishableKey || null : null })),
       fee: calculateFee(method === 'card' ? 'card_deposit' : method === 'mobile_money' ? 'mobile_money_deposit' : 'bank_deposit', 10000, currency),
+      /** Mobile money operators the payer can choose (world directory filtered by country when known). */
+      operators: method === 'mobile_money' ? listOperators({ country: country || undefined }).map((o) => ({ id: o.id, name: o.name, brand: o.brand, country: o.country, currency: o.currency, ussd: o.ussd, color: o.color, directRail: o.directRail })) : undefined,
     }))
     .filter((m) => m.gateways.length > 0 && (purpose === 'checkout' || m.method !== 'wallet'));
+}
+
+/**
+ * Pick the gateway for a mobile money payment: an API gateway whose country/currency covers the operator
+ * wins; otherwise the direct rail (manual_momo) handles any operator with a collection number.
+ */
+function pickMobileMoneyGateway(candidates: ReturnType<typeof availableGateways>, operatorId: string | null | undefined, preferred?: string | null) {
+  if (preferred) return candidates.find((g) => g.id === preferred);
+  if (!operatorId) return candidates.find((g) => g.provider !== 'manual_momo') ?? candidates[0];
+  const op = getOperator(operatorId);
+  const api = candidates.find((g) => g.provider !== 'manual_momo' && g.provider !== 'sandbox' && (g.countries.length === 0 || g.countries.includes(op.country)) && (g.currencies.length === 0 || g.currencies.includes(op.currency)));
+  if (api) return api;
+  // Direct rail (collection number configured) is the real rail; the sandbox only simulates when nothing else applies.
+  const direct = candidates.find((g) => g.provider === 'manual_momo');
+  if (direct && op.collectionNumber) return direct;
+  return candidates.find((g) => g.provider === 'sandbox') ?? direct ?? candidates[0];
 }
 
 /** Create a gateway payment and hand off to the provider. */
@@ -126,7 +155,7 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
   if (!Number.isInteger(amount) || amount <= 0) throw badRequest('Amount must be greater than zero', 'invalid_amount');
 
   const candidates = availableGateways(input.method, cur.code, user?.country);
-  const gateway = input.gateway ? candidates.find((g) => g.id === input.gateway) : candidates[0];
+  const gateway = input.method === 'mobile_money' ? pickMobileMoneyGateway(candidates, input.operatorId, input.gateway) : input.gateway ? candidates.find((g) => g.id === input.gateway) : candidates.find((g) => g.provider !== 'manual_momo');
   if (!gateway) throw unprocessable(`No ${input.method.replace('_', ' ')} gateway is available for ${cur.code}`, 'no_gateway');
   const provider = PROVIDERS[gateway.provider];
 
@@ -150,6 +179,7 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 'initiated', ?, ?, ?, ?, '{}', NULL, ?, ?)`,
     )
     .run(id, gateway.id, input.method, input.purpose, user?.id ?? null, request?.id ?? null, amount, cur.code, fee, input.email ?? user?.email ?? null, input.phone ?? user?.phone ?? null, input.name ?? user?.full_name ?? null, input.savedCardId ?? null, ts, ts);
+  if (input.operatorId || input.route) updatePayment(id, { metadata: JSON.stringify({ operatorId: input.operatorId ?? null, route: input.route ?? null, routeId: input.routeId ?? null }) });
 
   const payment = getPayment(id);
   const returnUrl = input.returnUrl || (input.purpose === 'checkout' ? `${config.webUrl}/pay/${request!.code}?payment=${id}` : `${config.webUrl}/add-money?payment=${id}`);
@@ -170,6 +200,7 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
       callbackUrl: `${config.apiUrl}/api/webhooks/${gateway.id}`,
       credentials: getGatewayCredentials(gateway.id),
       description: input.purpose === 'checkout' ? `Payment to ${merchant!.business_name || merchant!.full_name}` : `${config.appName} wallet top-up`,
+      operatorId: input.operatorId ?? null,
     });
   } catch (err) {
     updatePayment(id, { status: 'failed', metadata: JSON.stringify({ failureReason: (err as Error).message }) });
@@ -178,7 +209,7 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
   updatePayment(id, {
     provider_ref: result.providerRef,
     status: result.status === 'succeeded' ? 'pending' : result.status,
-    metadata: JSON.stringify({ next: result.next, failureReason: result.failureReason ?? null }),
+    metadata: JSON.stringify({ ...parseJson(getPayment(id).metadata, {}), next: result.next, failureReason: result.failureReason ?? null }),
   });
   if (result.savedCard && user) saveCardFromToken(user.id, gateway.provider, result.savedCard, payment.payer_name || user.full_name);
   if (result.status === 'succeeded') settlePayment(getPayment(id));
@@ -245,6 +276,11 @@ export function settlePayment(payment: GatewayPaymentRow): GatewayPaymentRow {
       updatePayment(fresh.id, { status: 'succeeded', transaction_id: tx.id });
       notify(fresh.user_id!, 'Money added', `${formatMoney(credited, cur)} was added to your ${cur.code} wallet.`, { kind: 'deposit', transactionId: tx.id });
       onDepositCompleted(fresh.user_id!);
+      const meta = parseJson<{ route?: RouteDestination | null; routeId?: string | null }>(fresh.metadata, {});
+      if (meta.route && meta.routeId) {
+        // Any → any: the funding leg landed, execute the onward destination with the credited amount.
+        continueRouteAfterFunding(meta.routeId, fresh.id, tx.id, credited);
+      }
     } else {
       const request = db.prepare('SELECT * FROM payment_requests WHERE id = ?').get(fresh.payment_request_id) as PaymentRequestRow;
       const merchant = findUserById(request.requester_user_id)!;
@@ -289,7 +325,7 @@ export function confirmManualPayment(id: string, outcome: 'succeeded' | 'failed'
 export function attachBankProof(user: UserRow, id: string, proof: { reference?: string; note?: string; image?: string }) {
   const payment = getPayment(id);
   if (payment.user_id !== user.id) throw notFound('Payment not found');
-  if (payment.method !== 'bank') throw badRequest('Only bank transfers accept proof');
+  if (payment.method !== 'bank' && payment.method !== 'mobile_money') throw badRequest('Only bank and mobile money transfers accept proof');
   updatePayment(id, { status: 'pending', metadata: JSON.stringify({ ...parseJson(payment.metadata, {}), proof: { ...proof, submittedAt: now() } }) });
   return toPaymentView(getPayment(id));
 }

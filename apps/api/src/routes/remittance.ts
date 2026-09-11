@@ -48,7 +48,7 @@ remittanceRouter.post(
       }),
       req.body,
     );
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const from = getCurrency(body.sourceCurrency);
     const result = sendRemittance(req.user!, { ...body, amount: toMinor(body.amount, from.decimals), sourceCurrency: from.code, targetCurrency: body.targetCurrency.toUpperCase() });
     res.status(201).json({ remittance: result, transaction: toTransaction(result.transaction, req.user!.id) });

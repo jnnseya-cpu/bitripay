@@ -31,6 +31,7 @@ depositsRouter.post(
         savedCardId: z.string().optional().nullable(),
         saveCard: z.boolean().optional(),
         phone: z.string().optional().nullable(),
+        operatorId: z.string().optional().nullable(),
         returnUrl: z.string().url().optional().nullable(),
       }),
       req.body,

@@ -17,7 +17,7 @@ billsRouter.post(
   '/',
   wrap(async (req, res) => {
     const body = validate(z.object({ billerId: z.string(), accountNumber: z.string().min(2).max(60), amount: z.string(), pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const biller = getDb().prepare('SELECT currency FROM billers WHERE id = ?').get(body.billerId) as any;
     const cur = getCurrency(biller?.currency ?? 'USD');
     const result = payBill(req.user!, { ...body, amount: toMinor(body.amount, cur.decimals) });
@@ -33,7 +33,7 @@ topupRouter.post(
   '/',
   wrap(async (req, res) => {
     const body = validate(z.object({ operatorId: z.string(), phone: z.string().min(7).max(20), amount: z.string(), pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const op = getDb().prepare('SELECT currency FROM topup_operators WHERE id = ?').get(body.operatorId) as any;
     const cur = getCurrency(op?.currency ?? 'USD');
     const result = mobileTopup(req.user!, { ...body, amount: toMinor(body.amount, cur.decimals) });
@@ -49,7 +49,7 @@ giftCardsRouter.post(
   '/',
   wrap(async (req, res) => {
     const body = validate(z.object({ productId: z.string(), amount: z.string(), recipientEmail: z.string().email().optional().nullable(), pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const product = getDb().prepare('SELECT currency FROM gift_card_products WHERE id = ?').get(body.productId) as any;
     const cur = getCurrency(product?.currency ?? 'USD');
     const result = buyGiftCard(req.user!, { ...body, amount: toMinor(body.amount, cur.decimals) });

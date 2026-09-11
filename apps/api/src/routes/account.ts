@@ -73,7 +73,7 @@ accountRouter.post(
   '/pin/verify',
   wrap(async (req, res) => {
     const body = validate(z.object({ pin: z.string() }), req.body);
-    auth.assertPin(req.user!, body.pin);
+    auth.assertPin(req.user!, body.pin, req);
     res.json({ ok: true });
   }),
 );

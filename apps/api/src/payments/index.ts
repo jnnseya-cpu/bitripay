@@ -10,6 +10,7 @@ import { flutterwaveProvider } from './flutterwave';
 import { mtnMomoProvider } from './mtnMomo';
 import { mpesaProvider } from './mpesa';
 import { manualBankProvider } from './manualBank';
+import { manualMomoProvider } from './manualMomo';
 import type { GatewayProvider, GatewayProviderId, PaymentMethod } from './types';
 
 export const PROVIDERS: Record<GatewayProviderId, GatewayProvider> = {
@@ -20,6 +21,7 @@ export const PROVIDERS: Record<GatewayProviderId, GatewayProvider> = {
   mtn_momo: mtnMomoProvider,
   mpesa: mpesaProvider,
   manual_bank: manualBankProvider,
+  manual_momo: manualMomoProvider,
 };
 
 export interface GatewayConfig {
@@ -97,6 +99,7 @@ export function isGatewayReady(g: GatewayConfig): boolean {
   if (!g.enabled) return false;
   const provider = PROVIDERS[g.provider];
   if (!provider) return false;
+  if (g.provider === 'manual_momo' || g.provider === 'manual_bank' || g.provider === 'sandbox') return true;
   const required = provider.credentialFields.filter((f) => f.secret || ['secretKey', 'consumerKey', 'apiUser', 'subscriptionKey'].includes(f.key));
   const creds = getGatewayCredentials(g.id);
   return required.every((f) => !!creds[f.key]);
@@ -166,7 +169,10 @@ export function deleteGateway(id: string) {
 /** Seed the default aggregator entries so admins can just toggle + add keys. */
 export function ensureDefaultGateways() {
   const count = (getDb().prepare('SELECT COUNT(*) c FROM gateways').get() as any).c;
-  if (count > 0) return;
+  if (count > 0) {
+    if (!getGateway('manual_momo')) upsertGateway({ id: 'manual_momo', name: 'Mobile money (direct, all operators)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], sortOrder: 7 });
+    return;
+  }
   upsertGateway({ id: 'sandbox', name: 'Sandbox (test)', provider: 'sandbox', enabled: !config.isProduction, methods: ['card', 'mobile_money', 'bank'], currencies: [], sortOrder: 0 });
   upsertGateway({ id: 'stripe', name: 'Stripe', provider: 'stripe', enabled: !!config.stripe.secretKey, methods: ['card'], currencies: [], sortOrder: 1 });
   upsertGateway({ id: 'paystack', name: 'Paystack', provider: 'paystack', enabled: !!config.paystack.secretKey, methods: ['card', 'mobile_money', 'bank'], currencies: ['NGN', 'GHS', 'KES', 'ZAR', 'USD'], sortOrder: 2 });
@@ -174,4 +180,5 @@ export function ensureDefaultGateways() {
   upsertGateway({ id: 'mtn_momo', name: 'MTN Mobile Money', provider: 'mtn_momo', enabled: !!config.mtnMomo.apiKey, methods: ['mobile_money'], currencies: ['GHS', 'UGX', 'XAF', 'XOF', 'RWF', 'ZMW', 'EUR'], sortOrder: 4 });
   upsertGateway({ id: 'mpesa', name: 'M-Pesa', provider: 'mpesa', enabled: !!config.mpesa.consumerKey, methods: ['mobile_money'], currencies: ['KES'], sortOrder: 5 });
   upsertGateway({ id: 'manual_bank', name: 'Bank transfer', provider: 'manual_bank', enabled: true, methods: ['bank'], currencies: [], sortOrder: 6 });
+  upsertGateway({ id: 'manual_momo', name: 'Mobile money (direct, all operators)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], sortOrder: 7 });
 }

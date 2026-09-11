@@ -32,7 +32,7 @@ transfersRouter.post(
   '/',
   wrap(async (req, res) => {
     const body = validate(schema, req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const cur = getCurrency(body.currency);
     const tx = sendMoney(req.user!, { to: body.to, amount: toMinor(body.amount, cur.decimals), currency: cur.code, note: body.note, idempotencyKey: body.idempotencyKey });
     res.status(201).json({ transaction: toTransaction(tx, req.user!.id, usersById([tx.receiver_user_id!])) });

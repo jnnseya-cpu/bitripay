@@ -37,7 +37,7 @@ walletsRouter.post(
   '/exchange',
   wrap(async (req, res) => {
     const body = validate(z.object({ from: z.string().length(3), to: z.string().length(3), amount: z.string(), pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const from = getCurrency(body.from);
     const result = exchange(req.user!, from.code, body.to.toUpperCase(), toMinor(body.amount, from.decimals));
     res.status(201).json({ transaction: toTransaction(result.tx, req.user!.id), rate: result.rate, received: result.received });

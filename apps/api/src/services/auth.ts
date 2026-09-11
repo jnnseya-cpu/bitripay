@@ -21,6 +21,7 @@ import { issueOtp, verifyOtp } from './otp';
 import { getAppSettings, getSetting } from './settings';
 import { notify } from './notifications';
 import { onUserRegistered } from './referrals';
+import { verifyStepUpToken } from './webauthn';
 
 export interface AuthResult {
   token: string;
@@ -137,8 +138,13 @@ export function setPin(row: UserRow, pin: string, currentPin?: string) {
   updateUser(row.id, { pin_hash: hashPassword(pin) });
 }
 
-/** Verify the transaction PIN; users without a PIN must set one before moving money. */
-export function assertPin(row: UserRow, pin?: string) {
+/**
+ * Authorize a money movement: a fresh biometric step-up token (passkey / device biometrics) or the
+ * transaction PIN. The token may arrive in the X-Step-Up-Token header or as `stepUpToken` in the body.
+ */
+export function assertPin(row: UserRow, pin?: string, req?: { headers?: Record<string, unknown>; body?: any }) {
+  const token = (req?.headers?.['x-step-up-token'] as string | undefined) || req?.body?.stepUpToken;
+  if (token && verifyStepUpToken(row, token)) return;
   if (!row.pin_hash) throw badRequest('Set a transaction PIN in security settings before sending money', 'pin_required');
   if (!pin || !verifyPassword(pin, row.pin_hash)) throw forbidden('Incorrect transaction PIN', 'invalid_pin');
 }

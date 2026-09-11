@@ -6,3 +6,4 @@ export * from './types';
 export * from './countries';
 export * from './currencies';
 export * from './locales';
+export * from './mobileMoney';

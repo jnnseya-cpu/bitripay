@@ -60,7 +60,7 @@ paymentRequestsRouter.post(
   '/:code/pay',
   wrap(async (req, res) => {
     const body = validate(z.object({ amount: z.string().optional().nullable(), note: z.string().max(200).optional().nullable(), pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const row = getPaymentRequestByCode(String(req.params.code));
     const cur = getCurrency(row.currency);
     const result = payWithWallet(req.user!, row.code, body.amount ? toMinor(body.amount, cur.decimals) : null, body.note);

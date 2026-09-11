@@ -65,7 +65,7 @@ p2pRouter.post(
   '/trades/:id/accept',
   wrap(async (req, res) => {
     const body = validate(z.object({ pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     res.json({ trade: p2p.acceptOffer(req.user!, String(String(req.params.id))) });
   }),
 );
@@ -74,7 +74,7 @@ p2pRouter.post(
   '/trades/:id/release',
   wrap(async (req, res) => {
     const body = validate(z.object({ pin: z.string().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     res.json({ trade: p2p.release(req.user!, String(String(req.params.id))) });
   }),
 );

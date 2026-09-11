@@ -29,6 +29,7 @@ import { badRequest, notFound } from '../../lib/errors';
 import { listPaymentRequests, toPaymentRequest, type PaymentRequestRow } from '../../services/paymentRequests';
 import { usersById } from '../../services/users';
 import { ADMIN_PERMISSIONS } from '../../middleware/permissions';
+import { listOperators as listMomo, upsertOperator as upsertMomo, deleteOperator as deleteMomo } from '../../services/momo';
 
 export const adminRouter = Router();
 adminRouter.use(...requireAdmin);
@@ -378,7 +379,7 @@ adminRouter.put(
     const body = validate(
       z.object({
         name: z.string().min(1),
-        provider: z.enum(['sandbox', 'stripe', 'paystack', 'flutterwave', 'mtn_momo', 'mpesa', 'manual_bank']),
+        provider: z.enum(['sandbox', 'stripe', 'paystack', 'flutterwave', 'mtn_momo', 'mpesa', 'manual_bank', 'manual_momo']),
         enabled: z.boolean(),
         methods: z.array(z.enum(['card', 'mobile_money', 'bank'])),
         currencies: z.array(z.string().length(3)),
@@ -427,6 +428,36 @@ adminRouter.put('/gift-products/:id', requirePermission('catalogs'), (req, res) 
 adminRouter.delete('/gift-products/:id', requirePermission('catalogs'), (req, res) => {
   deleteGiftProduct(String(req.params.id));
   res.json({ ok: true });
+});
+
+// ---------------- Mobile money operators (direct rail, all world operators) ----------------
+adminRouter.get('/momo-operators', requirePermission('gateways'), (req, res) => res.json({ items: listMomo({ country: req.query.country ? String(req.query.country) : null, onlyEnabled: false }) }));
+adminRouter.put(
+  '/momo-operators/:id',
+  requirePermission('gateways'),
+  wrap(async (req, res) => {
+    const body = validate(
+      z.object({ name: z.string().min(1), brand: z.string().min(1), country: z.string().length(2), currency: z.string().length(3), ussd: z.string().max(20).optional().nullable(), color: z.string().optional(), collectionNumber: z.string().max(40).optional().nullable(), collectionName: z.string().max(120).optional().nullable(), instructions: z.string().max(1000).optional().nullable(), payoutEnabled: z.boolean().default(true), enabled: z.boolean().default(true), sortOrder: z.number().int().optional() }),
+      req.body,
+    );
+    const op = upsertMomo({ id: String(req.params.id).toLowerCase().replace(/[^a-z0-9_]/g, '_'), ...body });
+    audit(req.user!.id, 'momo_operator.update', 'momo_operator', op.id, { enabled: body.enabled, collectionNumber: body.collectionNumber ? '***' : null });
+    res.json({ operator: op });
+  }),
+);
+adminRouter.delete('/momo-operators/:id', requirePermission('gateways'), (req, res) => {
+  deleteMomo(String(req.params.id));
+  res.json({ ok: true });
+});
+adminRouter.get('/money-routes', requirePermission('transactions'), (req, res) => {
+  const { page, pageSize } = parsePagination(req.query, 25);
+  const db = getDb();
+  const where = req.query.status ? 'WHERE status = ?' : '';
+  const params = req.query.status ? [String(req.query.status)] : [];
+  const total = (db.prepare(`SELECT COUNT(*) c FROM money_routes ${where}`).get(...params) as any).c;
+  const rows = db.prepare(`SELECT * FROM money_routes ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize) as any[];
+  const users = usersById(rows.map((r) => r.user_id));
+  res.json({ items: rows.map((r) => ({ id: r.id, user: users.get(r.user_id) ?? null, source: r.source_method, destination: r.destination_method, destinationDetails: JSON.parse(r.destination_details || '{}'), amount: r.amount, currency: r.currency, targetCurrency: r.target_currency, status: r.status, error: r.error, createdAt: r.created_at })), total, page, pageSize });
 });
 
 // ---------------- CMS: pages, languages, translations, contact, newsletter, notifications ----------------

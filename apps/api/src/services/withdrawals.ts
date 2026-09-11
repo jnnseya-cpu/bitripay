@@ -9,6 +9,8 @@ import type { UserRow } from './users';
 import { notify } from './notifications';
 import { getAppSettings } from './settings';
 import { getModules } from './modules';
+import { getOperator } from './momo';
+import { normalizePhone } from './users';
 
 export function toBankAccount(row: any): BankAccount {
   return { id: row.id, bankName: row.bank_name, accountName: row.account_name, accountNumber: row.account_number, currency: row.currency, country: row.country, isDefault: !!row.is_default };
@@ -43,14 +45,43 @@ export function deleteBankAccount(userId: string, id: string) {
   if (res.changes === 0) throw notFound('Bank account not found');
 }
 
-/** Request a withdrawal to a bank account. Funds are held until an admin marks the payout as sent. */
-export function requestWithdrawal(user: UserRow, input: { amount: number; currency: string; bankAccountId: string; note?: string | null }): TransactionRow {
+export type WithdrawalDestination =
+  | { method: 'bank'; bankAccountId: string }
+  | { method: 'bank'; bankName: string; accountName: string; accountNumber: string; country?: string | null; swift?: string | null }
+  | { method: 'mobile_money'; operatorId: string; phone: string; name?: string | null };
+
+/**
+ * Request a payout from the wallet to a bank account or ANY mobile money number (world operator directory).
+ * Funds are held until an admin (or an agent with float for that operator) marks the payout as sent –
+ * no operator API is required.
+ */
+export function requestWithdrawal(user: UserRow, input: { amount: number; currency: string; bankAccountId?: string | null; destination?: WithdrawalDestination; note?: string | null }): TransactionRow {
   if (!getModules().withdrawals) throw unprocessable('Withdrawals are currently disabled', 'module_disabled');
   if (getAppSettings().requireKycForWithdrawals && user.kyc_status !== 'verified') throw forbidden('Complete KYC verification before withdrawing', 'kyc_required');
-  const bank = getDb().prepare('SELECT * FROM bank_accounts WHERE id = ? AND user_id = ?').get(input.bankAccountId, user.id) as any;
-  if (!bank) throw notFound('Bank account not found');
   const cur = getCurrency(input.currency);
-  if (bank.currency !== cur.code) throw badRequest(`This bank account receives ${bank.currency}; choose a matching wallet or add another account`);
+  const dest: WithdrawalDestination = input.destination ?? { method: 'bank', bankAccountId: input.bankAccountId ?? '' };
+  let note = input.note ?? null;
+  let metadata: Record<string, unknown>;
+  if (dest.method === 'mobile_money') {
+    const op = getOperator(dest.operatorId);
+    if (!op.enabled || !op.payoutEnabled) throw unprocessable(`Payouts to ${op.name} are currently unavailable`, 'payout_unavailable');
+    const phone = normalizePhone(dest.phone);
+    if (!phone) throw badRequest('Enter a valid mobile money number');
+    metadata = { method: 'mobile_money', operator: { id: op.id, name: op.name, country: op.country, currency: op.currency }, phone, recipientName: dest.name ?? null };
+    note = note ?? `Payout to ${op.name} ${phone}`;
+  } else if ('bankAccountId' in dest && dest.bankAccountId) {
+    const bank = getDb().prepare('SELECT * FROM bank_accounts WHERE id = ? AND user_id = ?').get(dest.bankAccountId, user.id) as any;
+    if (!bank) throw notFound('Bank account not found');
+    if (bank.currency !== cur.code) throw badRequest(`This bank account receives ${bank.currency}; choose a matching wallet or add another account`);
+    metadata = { bankAccount: toBankAccount(bank), method: 'bank' };
+    note = note ?? `Withdrawal to ${bank.bank_name} •••• ${String(bank.account_number).slice(-4)}`;
+  } else if ('bankName' in dest) {
+    if (!dest.bankName || !dest.accountNumber) throw badRequest('Bank name and account number are required');
+    metadata = { bankAccount: { bankName: dest.bankName, accountName: dest.accountName, accountNumber: dest.accountNumber, country: dest.country ?? null, swift: dest.swift ?? null, currency: cur.code }, method: 'bank' };
+    note = note ?? `Bank transfer to ${dest.bankName} •••• ${String(dest.accountNumber).slice(-4)}`;
+  } else {
+    throw badRequest('Choose a payout destination');
+  }
   const fee = calculateFee('withdrawal', input.amount, cur.code);
   enforceLimits(user, input.amount, cur.code);
   const wallet = getUserWallet(user.id, cur.code);
@@ -64,10 +95,10 @@ export function requestWithdrawal(user: UserRow, input: { amount: number; curren
     senderUserId: user.id,
     receiverUserId: null,
     status: 'pending',
-    note: input.note ?? `Withdrawal to ${bank.bank_name} •••• ${String(bank.account_number).slice(-4)}`,
-    metadata: { bankAccount: toBankAccount(bank), method: 'bank' },
+    note,
+    metadata,
   });
-  notify(user.id, 'Withdrawal requested', `Your withdrawal of ${formatMoney(input.amount, cur)} is being processed.`, { kind: 'withdrawal', transactionId: tx.id });
+  notify(user.id, 'Payout requested', `Your payout of ${formatMoney(input.amount, cur)} is being processed.`, { kind: 'withdrawal', transactionId: tx.id });
   return tx;
 }
 

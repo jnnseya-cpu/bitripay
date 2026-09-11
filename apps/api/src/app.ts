@@ -23,6 +23,9 @@ import { supportRouter } from './routes/support';
 import { p2pRouter } from './routes/p2p';
 import { merchantRouter, v1Router } from './routes/merchant';
 import { adminRouter } from './routes/admin';
+import { passkeysRouter, passkeyAuthRouter } from './routes/passkeys';
+import { routingRouter } from './routes/routing';
+import { ensureMomoOperators } from './services/momo';
 import { ensureDefaultCurrencies } from './services/currencies';
 import { ensureAdminExists } from './services/auth';
 import { ensureDefaultGateways } from './payments';
@@ -37,6 +40,7 @@ export function bootstrap() {
   getSystemUser('escrow');
   ensureAdminExists();
   ensureDefaultGateways();
+  ensureMomoOperators();
   seedDefaultCatalogs();
 }
 
@@ -63,6 +67,9 @@ export function createApp() {
   app.use('/api', publicRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/account', accountRouter);
+  app.use('/api/account/passkeys', passkeysRouter);
+  app.use('/api/auth/passkey', passkeyAuthRouter);
+  app.use('/api/money', routingRouter);
   app.use('/api/wallets', walletsRouter);
   app.use('/api/transfers', transfersRouter);
   app.use('/api/qr', qrRouter);

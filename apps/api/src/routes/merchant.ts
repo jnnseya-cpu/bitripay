@@ -72,7 +72,7 @@ merchantRouter.post(
   '/transactions/:id/refund',
   wrap(async (req, res) => {
     const body = validate(z.object({ pin: z.string().optional(), refundFee: z.boolean().optional() }), req.body);
-    assertPin(req.user!, body.pin);
+    assertPin(req.user!, body.pin, req);
     const tx = getTransaction(String(req.params.id));
     if (!tx || tx.receiver_user_id !== req.user!.id) throw notFound('Transaction not found');
     res.json({ transaction: toTransaction(refundTransaction(tx.id, { refundFee: body.refundFee }), req.user!.id) });
