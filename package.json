@@ -1,0 +1,31 @@
+{
+  "name": "bitripay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BitriPay - launch your own QR code money transfer business with wallets, card payments, merchant tools, agents, web + admin + mobile apps.",
+  "workspaces": [
+    "packages/*",
+    "apps/api",
+    "apps/web",
+    "apps/admin"
+  ],
+  "scripts": {
+    "build": "npm run build -w @bitripay/shared && npm run build -w @bitripay/api && npm run build -w @bitripay/web && npm run build -w @bitripay/admin",
+    "build:shared": "npm run build -w @bitripay/shared",
+    "dev": "npm run build:shared && concurrently -n api,web,admin -c blue,green,magenta \"npm run dev -w @bitripay/api\" \"npm run dev -w @bitripay/web\" \"npm run dev -w @bitripay/admin\"",
+    "dev:api": "npm run dev -w @bitripay/api",
+    "dev:web": "npm run dev -w @bitripay/web",
+    "dev:admin": "npm run dev -w @bitripay/admin",
+    "seed": "npm run seed -w @bitripay/api",
+    "test": "npm run build:shared && npm run test -w @bitripay/shared && npm run test -w @bitripay/api",
+    "typecheck": "npm run build:shared && npm run typecheck -w @bitripay/api && npm run typecheck -w @bitripay/web && npm run typecheck -w @bitripay/admin",
+    "start": "npm run start -w @bitripay/api"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}

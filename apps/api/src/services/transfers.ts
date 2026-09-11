@@ -1,0 +1,79 @@
+import { badRequest, unprocessable } from '../lib/errors';
+import { formatMoney } from '@bitripay/shared';
+import { calculateFee, enforceLimits, postTransaction, type TransactionRow } from './ledger';
+import { getCurrency, convertWithMargin } from './currencies';
+import { getUserWallet, ensureWallet } from './wallets';
+import { findUserByIdentifier, type UserRow } from './users';
+import { notify } from './notifications';
+import { getModules } from './modules';
+
+export interface TransferInput {
+  to: string;
+  amount: number;
+  currency: string;
+  note?: string | null;
+  idempotencyKey?: string | null;
+  type?: 'transfer' | 'qr_payment' | 'merchant_payment';
+}
+
+export function sendMoney(sender: UserRow, input: TransferInput): TransactionRow {
+  const recipient = findUserByIdentifier(input.to);
+  if (!recipient || recipient.is_system) throw badRequest('Recipient not found', 'recipient_not_found');
+  if (recipient.id === sender.id) throw badRequest('You cannot send money to yourself', 'self_transfer');
+  if (recipient.status !== 'active') throw unprocessable('Recipient account is not active', 'recipient_inactive');
+  const currency = getCurrency(input.currency);
+  const type = input.type ?? (recipient.role === 'merchant' ? 'merchant_payment' : 'transfer');
+  const modules = getModules();
+  if (type === 'transfer' && !modules.transfers) throw unprocessable('Transfers are currently disabled', 'module_disabled');
+  const fee = calculateFee(type, input.amount, currency.code);
+  enforceLimits(sender, input.amount, currency.code);
+  const fromWallet = getUserWallet(sender.id, currency.code);
+  const toWallet = ensureWallet(recipient.id, currency.code);
+  const tx = postTransaction({
+    type,
+    amount: input.amount,
+    fee,
+    currency: currency.code,
+    fromWalletId: fromWallet.id,
+    toWalletId: toWallet.id,
+    senderUserId: sender.id,
+    receiverUserId: recipient.id,
+    note: input.note ?? null,
+    idempotencyKey: input.idempotencyKey ?? null,
+    feeFrom: type === 'merchant_payment' ? 'receiver' : 'sender',
+  });
+  notify(recipient.id, 'Money received', `${sender.full_name} (@${sender.tag}) sent you ${formatMoney(input.amount, currency)}${input.note ? ` – "${input.note}"` : ''}.`, {
+    kind: 'transfer_in',
+    transactionId: tx.id,
+  });
+  notify(sender.id, 'Money sent', `You sent ${formatMoney(input.amount, currency)} to ${recipient.full_name} (@${recipient.tag}).`, { kind: 'transfer_out', transactionId: tx.id });
+  return tx;
+}
+
+/** Exchange between the user's own wallets at the platform rate (mid-market minus margin). */
+export function exchange(user: UserRow, fromCurrency: string, toCurrency: string, amount: number): { tx: TransactionRow; rate: number; received: number } {
+  if (!getModules().exchange) throw unprocessable('Currency exchange is currently disabled', 'module_disabled');
+  const from = getCurrency(fromCurrency);
+  const to = getCurrency(toCurrency);
+  if (from.code === to.code) throw badRequest('Choose two different currencies');
+  const fee = calculateFee('exchange', amount, from.code);
+  const quote = convertWithMargin(amount, from.code, to.code);
+  if (quote.amount <= 0) throw badRequest('Amount too small to convert');
+  const fromWallet = getUserWallet(user.id, from.code);
+  const toWallet = ensureWallet(user.id, to.code);
+  const tx = postTransaction({
+    type: 'exchange',
+    amount,
+    fee,
+    currency: from.code,
+    receiveAmount: quote.amount,
+    receiveCurrency: to.code,
+    fromWalletId: fromWallet.id,
+    toWalletId: toWallet.id,
+    senderUserId: user.id,
+    receiverUserId: user.id,
+    note: `Exchange ${from.code} → ${to.code}`,
+    metadata: { rate: quote.rate, midRate: quote.midRate, marginBps: quote.marginBps },
+  });
+  return { tx, rate: quote.rate, received: quote.amount };
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@bitripay/shared",
+  "version": "1.0.0",
+  "description": "Shared types, money math, QR payload codec and card utilities for BitriPay",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types src/*.test.ts"
+  },
+  "license": "MIT"
+}
