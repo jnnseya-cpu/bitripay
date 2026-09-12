@@ -6,7 +6,7 @@ import { bootstrap } from './app';
 import { getDb } from './db';
 import { createUser, findUserByEmail, getUserById, updateUser } from './services/users';
 import { ensureWallet } from './services/wallets';
-import { postTransaction } from './services/ledger';
+import { proposeVerification, approveVerification } from './services/verification';
 import { hashPassword } from './lib/password';
 import { sendMoney } from './services/transfers';
 import { createPaymentRequest } from './services/paymentRequests';
@@ -21,6 +21,8 @@ import path from 'node:path';
 bootstrap();
 const db = getDb();
 
+const seedAdmin = () => findUserByEmail(process.env.ADMIN_EMAIL || 'admin@bitripay.local')!;
+
 function demoUser(email: string, fullName: string, role: 'user' | 'merchant' | 'agent', tag: string, extra: Record<string, unknown> = {}) {
   let u = findUserByEmail(email);
   if (!u) {
@@ -29,7 +31,10 @@ function demoUser(email: string, fullName: string, role: 'user' | 'merchant' | '
     if (role === 'merchant') upgradeToMerchant(getUserById(u.id), (extra.business as string) || fullName);
     for (const cur of ['USD', 'EUR', 'NGN']) {
       const w = ensureWallet(u.id, cur);
-      postTransaction({ type: 'admin_adjustment', amount: cur === 'NGN' ? 50_000_000 : 250_000, currency: cur, toWalletId: w.id, receiverUserId: u.id, note: 'Demo seed funding' });
+      void w;
+      // Demo funding is an administrator issuance; the seed self-approves (a real issuance needs a second admin).
+      const v = proposeVerification(seedAdmin(), u.id, { subjectType: 'issuance', action: 'confirm', note: 'Demo seed funding', payload: { direction: 'credit', amount: cur === 'NGN' ? 50_000_000 : 250_000, currency: cur, reason: 'Demo seed funding' } });
+      approveVerification(seedAdmin(), v.id, undefined, { headers: {}, body: {} }, true);
     }
     console.log(`created ${role}: ${email} / Password123! (PIN 1234)`);
   }

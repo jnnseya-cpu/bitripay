@@ -101,6 +101,16 @@ currencies, the reference (mid-market) rate, the rate provider and timestamp, th
 the exact amount sent, the estimated amount received and the rate expiry. Live, fresh rates can be
 locked for the quote TTL; administrator-entered or stale rates are labelled and never guaranteed.
 
+**E-money is created by administrators only** – balance enters circulation through exactly four
+authorities, enforced inside the ledger (`issuance_authority` on every creating transaction, plus an
+immutable issuance register): `external_funding` (a processor- or evidence-confirmed deposit),
+`admin` (one administrator with the *issuance* permission proposes a credit, a different one approves
+it under step-up), `liquidity` (treasury prefunding a payout float) and `programme` (an
+administrator-configured scheme such as referral rewards). Money returning from a platform-held
+float (virtual card balances, remittance escrow) is tagged `internal_release` with its origin
+transaction. Any other posting from the treasury is refused. `GET /api/admin/emoney` reports the
+outstanding supply per currency and how it was issued.
+
 **Controls** – `Idempotency-Key` on every mutating request, timestamped webhook signatures with replay
 protection, sanctions list screening, velocity limits, cooling-off for new beneficiaries,
 device registration / revocation / risk scoring, per-currency ledger balance assertion on every

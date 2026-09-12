@@ -69,8 +69,12 @@ export async function manualConfirm(app: ReturnType<typeof createApp>, paymentId
   return approved.body as { verification: any; payment: any };
 }
 
+/** E-money is created by administrators only, under maker-checker: one admin proposes the credit, a different one approves it with step-up. */
 export async function fund(app: ReturnType<typeof createApp>, userId: string, amount: string, currency = 'USD') {
   const admin = await adminToken(app);
   const res = await request(app).post(`/api/admin/users/${userId}/adjust`).set(admin.auth).send({ direction: 'credit', amount, currency, reason: 'test funding' });
   if (res.status !== 201) throw new Error(`fund failed: ${JSON.stringify(res.body)}`);
+  const checker = await checkerToken(app);
+  const ok = await request(app).post(`/api/admin/verifications/${res.body.verification.id}/approve`).set(checker.auth).send({ pin: checker.pin });
+  if (ok.status !== 200) throw new Error(`fund approve failed: ${JSON.stringify(ok.body)}`);
 }

@@ -8,7 +8,7 @@ import { audit, listAuditLogs } from '../../services/audit';
 import { createUser, findUserById, getUserById, toUser, updateUser, normalizeEmail, normalizePhone, type UserRow, toPublicUser } from '../../services/users';
 import { hashPassword } from '../../lib/password';
 import { listWallets, toWallet, ensureWallet } from '../../services/wallets';
-import { listTransactions, getTransaction, toTransaction, postTransaction, refundTransaction } from '../../services/ledger';
+import { listTransactions, getTransaction, toTransaction, postTransaction, refundTransaction, emoneySupply } from '../../services/ledger';
 import { listCorridors, upsertCorridor, setCorridorStatus, deleteCorridor } from '../../services/corridors';
 import { listPayoutAccounts, createPayoutAccount, updatePayoutAccount, prefundAccount, adjustAccount, listMovements, liquidityOverview, getPayoutAccount } from '../../services/liquidity';
 import { listPayouts, getPayout, getPayoutByTransaction, payoutCase, requeuePayout, requeueWaiting, releasePayout, cancelPayout } from '../../services/payouts';
@@ -53,6 +53,8 @@ function verificationSubject(v: { subjectType: string; paymentId: string }) {
       case 'route_release':
       case 'route_refund':
         return { route: adminRouteView(v.paymentId) };
+      case 'issuance':
+        return { user: toUser(getUserById(v.paymentId)), wallets: listWallets(v.paymentId).map(toWallet) };
       default:
         return { payment: toPaymentView(getPayment(v.paymentId)) };
     }
@@ -196,31 +198,30 @@ adminRouter.patch(
   }),
 );
 
+/**
+ * E-money is created by administrators only, and never by one alone: a credit (or debit) is a PROPOSAL
+ * that a different administrator with the issuance permission approves under step-up in the
+ * verification console. Only then is the balance posted, with issuance authority 'admin'.
+ */
 adminRouter.post(
   '/users/:id/adjust',
-  requirePermission('users'),
+  requirePermission('issuance'),
   wrap(async (req, res) => {
     const body = validate(z.object({ direction: z.enum(['credit', 'debit']), amount: z.string(), currency: z.string().length(3), reason: z.string().min(3).max(300) }), req.body);
     const target = getUserById(String(req.params.id));
+    if (target.is_system) throw badRequest('System accounts cannot be adjusted');
     const cur = getCurrency(body.currency);
     const amount = toMinor(body.amount, cur.decimals);
-    const wallet = ensureWallet(target.id, cur.code);
-    const tx = postTransaction({
-      type: 'admin_adjustment',
-      amount,
-      currency: cur.code,
-      fromWalletId: body.direction === 'credit' ? null : wallet.id,
-      toWalletId: body.direction === 'credit' ? wallet.id : null,
-      senderUserId: body.direction === 'credit' ? null : target.id,
-      receiverUserId: body.direction === 'credit' ? target.id : null,
-      note: body.reason,
-      metadata: { adminId: req.user!.id, direction: body.direction },
-    });
-    audit(req.user!.id, `balance.${body.direction}`, 'user', target.id, { amount, currency: cur.code, reason: body.reason, transactionId: tx.id });
-    notify(target.id, body.direction === 'credit' ? 'Balance credited' : 'Balance debited', `${formatMoney(amount, cur)} was ${body.direction === 'credit' ? 'added to' : 'deducted from'} your wallet: ${body.reason}`, { kind: 'adjustment', transactionId: tx.id });
-    res.status(201).json({ transaction: toTransaction(tx), wallet: toWallet(ensureWallet(target.id, cur.code)) });
+    const verification = proposeVerification(req.user!, target.id, { subjectType: 'issuance', action: 'confirm', note: body.reason, payload: { direction: body.direction, amount, currency: cur.code, reason: body.reason } });
+    audit(req.user!.id, `issuance.${body.direction}.proposed`, 'user', target.id, { amount, currency: cur.code, reason: body.reason, verificationId: verification.id });
+    res.status(201).json({ verification, wallet: toWallet(ensureWallet(target.id, cur.code)) });
   }),
 );
+/** Outstanding e-money per currency, how it was issued, and the immutable issuance register. */
+adminRouter.get('/emoney', requirePermission('reports'), (req, res) => {
+  const { page, pageSize } = parsePagination(req.query, 50);
+  res.json({ supply: emoneySupply(), register: listEvents({ stream: 'issuance', limit: pageSize, page }), pending: listVerifications({ status: 'proposed' }).filter((v) => v.subjectType === 'issuance') });
+});
 
 adminRouter.get('/permissions', (_req, res) => res.json({ items: ADMIN_PERMISSIONS }));
 

@@ -1,6 +1,6 @@
 import { getDb } from '../db';
 import { uuid, now, txReference } from '../lib/ids';
-import { badRequest, conflict, unprocessable } from '../lib/errors';
+import { badRequest, conflict, forbidden, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
 import type { Transaction, TransactionStatus, TransactionType, PublicUser } from '@bitripay/shared';
 import { applyBps } from '@bitripay/shared';
@@ -160,6 +160,52 @@ export interface PostTransactionInput {
    * 'receiver': the sender is debited amount and the receiver gets amount - fee (merchant payments, deposits, agent cash-in).
    */
   feeFrom?: 'sender' | 'receiver';
+  /**
+   * Required whenever money enters circulation (the treasury is the sender). E-money is created only:
+   *  - external_funding: a processor / evidence-confirmed deposit (paymentId required)
+   *  - admin: an explicit administrator issuance approved by a second administrator (verificationId + adminId required)
+   *  - liquidity: treasury prefunding a payout float account (adminId required; the float is a system wallet)
+   *  - programme: an administrator-configured programme such as referral rewards (programme name required)
+   *  - internal_release: money returning to circulation from a platform-held float it was moved into earlier (origin transaction required) – never new money
+   */
+  issuance?: Issuance;
+}
+
+export type IssuanceAuthority = 'external_funding' | 'admin' | 'liquidity' | 'programme' | 'internal_release';
+export interface Issuance {
+  authority: IssuanceAuthority;
+  paymentId?: string | null;
+  verificationId?: string | null;
+  adminId?: string | null;
+  programme?: string | null;
+  reference?: string | null;
+  /** internal_release: the earlier transaction that moved this money out of circulation into a platform-held float (virtual card balance, remittance escrow). */
+  originTransactionId?: string | null;
+}
+
+/** Validate that a creation of e-money is authorised. Users, agents and merchants can never create balance. */
+export function assertIssuanceAuthorised(issuance: Issuance | undefined, type: string): Issuance {
+  if (!issuance) throw forbidden(`E-money cannot be created by a ${type} posting without an issuance authority; only confirmed external funding, administrator issuance, liquidity prefunding or an administrator-configured programme may create balance`, 'issuance_unauthorised');
+  switch (issuance.authority) {
+    case 'external_funding':
+      if (!issuance.paymentId) throw forbidden('External funding issuance needs the confirmed payment id', 'issuance_unauthorised');
+      break;
+    case 'admin':
+      if (!issuance.verificationId || !issuance.adminId) throw forbidden('Administrator issuance requires maker-checker approval (verification id) and the approving administrator', 'issuance_unauthorised');
+      break;
+    case 'liquidity':
+      if (!issuance.adminId) throw forbidden('Liquidity prefunding must be performed by an administrator', 'issuance_unauthorised');
+      break;
+    case 'programme':
+      if (!issuance.programme) throw forbidden('Programme issuance must name the administrator-configured programme', 'issuance_unauthorised');
+      break;
+    case 'internal_release':
+      if (!issuance.originTransactionId) throw forbidden('Internal release must reference the transaction that took the money out of circulation', 'issuance_unauthorised');
+      break;
+    default:
+      throw forbidden('Unknown issuance authority', 'issuance_unauthorised');
+  }
+  return issuance;
 }
 
 function heldAmount(tx: TransactionRow): number {
@@ -194,6 +240,9 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     if (receiveAmount < 0) throw badRequest('Fee exceeds amount', 'invalid_fee');
     const toWallet = input.toWalletId ? getWallet(input.toWalletId) : ensureWallet(treasury.id, receiveCurrency);
     const isSenderSystem = !input.fromWalletId || fromWallet.user_id === treasury.id;
+    // Money entering circulation from the treasury = e-money creation → must be authorised.
+    const creates = isSenderSystem && !!input.toWalletId && toWallet.user_id !== treasury.id;
+    const issuance = creates ? assertIssuanceAuthorised(input.issuance, input.type) : null;
     const totalDebit = feeFrom === 'receiver' ? input.amount : input.amount + fee;
     if (!isSenderSystem && !input.allowNegativeSender && fromWallet.balance < totalDebit) {
       throw unprocessable('Insufficient balance', 'insufficient_funds');
@@ -201,8 +250,8 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     const id = uuid();
     const ts = now();
     db.prepare(
-      `INSERT INTO transactions (id, reference, type, status, amount, fee, currency, receive_amount, receive_currency, sender_user_id, receiver_user_id, sender_wallet_id, receiver_wallet_id, note, metadata, idempotency_key, created_at, completed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO transactions (id, reference, type, status, amount, fee, currency, receive_amount, receive_currency, sender_user_id, receiver_user_id, sender_wallet_id, receiver_wallet_id, note, metadata, idempotency_key, created_at, completed_at, issuance_authority)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       txReference(),
@@ -218,11 +267,13 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
       fromWallet.id,
       toWallet.id,
       input.note ?? null,
-      JSON.stringify({ ...(input.metadata ?? {}), feeFrom }),
+      JSON.stringify({ ...(input.metadata ?? {}), feeFrom, ...(issuance ? { issuance } : {}) }),
       input.idempotencyKey ?? null,
       ts,
       status === 'completed' ? ts : null,
+      issuance?.authority ?? null,
     );
+    if (issuance) recordEvent('issuance', id, `issuance.${issuance.authority}`, issuance.authority === 'admin' || issuance.authority === 'liquidity' ? { type: 'admin', id: issuance.adminId ?? null } : { type: 'system' }, { type: input.type, amount: receiveAmount, currency: receiveCurrency, receiverUserId: input.receiverUserId ?? toWallet.user_id, paymentId: issuance.paymentId ?? null, verificationId: issuance.verificationId ?? null, programme: issuance.programme ?? null, reference: issuance.reference ?? null });
     // Debit sender (held even while pending)
     insertLedgerEntry(id, fromWallet, 'debit', totalDebit);
     if (status === 'completed') {
@@ -338,6 +389,15 @@ export function refundTransaction(id: string, options: { refundFee?: boolean; no
     recordEvent('ledger', tx.id, 'ledger.reversed', { type: 'system' }, { refundTransactionId: refund.id, refundFee: !!options.refundFee });
     return refund;
   })();
+}
+
+/** Outstanding e-money per currency (balances held by non-system users) and how it was issued. */
+export function emoneySupply() {
+  const db = getDb();
+  const outstanding = db.prepare("SELECT w.currency, SUM(w.balance) total, COUNT(*) wallets FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.is_system = 0 GROUP BY w.currency ORDER BY w.currency").all() as { currency: string; total: number; wallets: number }[];
+  const issued = db.prepare("SELECT COALESCE(receive_currency, currency) currency, issuance_authority authority, SUM(COALESCE(receive_amount, amount)) total, COUNT(*) count FROM transactions WHERE issuance_authority IS NOT NULL AND status = 'completed' GROUP BY 1, 2").all() as { currency: string; authority: string; total: number; count: number }[];
+  const floats = db.prepare("SELECT w.currency, SUM(w.balance) total FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.is_system = 1 AND u.tag LIKE 'payout_%' GROUP BY w.currency").all() as { currency: string; total: number }[];
+  return outstanding.map((o) => ({ currency: o.currency, outstanding: o.total, wallets: o.wallets, issued: issued.filter((i) => i.currency === o.currency).map((i) => ({ authority: i.authority, total: i.total, count: i.count })), payoutFloat: floats.find((f) => f.currency === o.currency)?.total ?? 0 }));
 }
 
 export interface ListTransactionsOptions {

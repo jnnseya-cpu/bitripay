@@ -30,6 +30,7 @@ function payRewards(referee: UserRow, trigger: 'registration' | 'first_deposit')
         receiverUserId: current.id,
         note: `Level ${level} referral reward for @${referee.tag}`,
         metadata: { refereeId: referee.id, level },
+        issuance: { authority: 'programme', programme: 'referral_rewards' },
       });
       db.prepare('INSERT INTO referral_rewards (id, referrer_id, referee_id, level, amount, currency, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
         uuid(),

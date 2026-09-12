@@ -5,7 +5,7 @@ import { useStore } from '../lib/store';
 import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Pager, Select, StatusBadge, Table, Tabs, UserCell, fmtDate, useAsync, useDebounce } from '../components/ui';
 import { TRANSACTION_TYPE_LABELS } from '@bitripay/shared';
 
-const PERMS = ['users', 'transactions', 'approvals', 'kyc', 'settings', 'gateways', 'catalogs', 'cms', 'support', 'p2p', 'reports', 'admins'];
+const PERMS = ['users', 'transactions', 'approvals', 'kyc', 'settings', 'gateways', 'catalogs', 'cms', 'support', 'p2p', 'reports', 'admins', 'issuance'];
 
 export function Users() {
   const [params, setParams] = useSearchParams();
@@ -87,7 +87,7 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const doAdjust = async () => {
     try {
       await api.post(`/api/admin/users/${id}/adjust`, adjust);
-      toast('Balance adjusted', 'success');
+      toast('Issuance proposed – a second administrator with the issuance permission must approve it in the verification console', 'success');
       setAdjust({ ...adjust, amount: '', reason: '' });
       detail.reload();
     } catch (err) {

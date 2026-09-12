@@ -156,6 +156,8 @@ export function chargeVirtualCard(card: { number: string; expMonth: number; expY
       note,
       metadata: { ...metadata, method: 'virtual_card', cardId: row.id, cardLast4: row.last4 },
       feeFrom: 'receiver',
+      // The card balance was funded out of the holder's wallet earlier (virtual_card_funding); charging releases that held value, it creates nothing.
+      issuance: { authority: 'internal_release', originTransactionId: (db.prepare("SELECT id FROM transactions WHERE type = 'virtual_card_funding' AND metadata LIKE ? ORDER BY created_at DESC LIMIT 1").get(`%${row.id}%`) as any)?.id ?? row.id, reference: `virtual_card:${row.id}` },
     });
     db.prepare('UPDATE virtual_cards SET balance = balance - ? WHERE id = ?').run(amount, row.id);
     notify(owner.id, 'Card payment', `${formatMoney(amount, getCurrency(currency, false))} was charged to your virtual card •••• ${row.last4} at ${merchant.business_name || merchant.full_name}.`, { kind: 'virtual_card_charge', transactionId: tx.id });

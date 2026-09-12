@@ -455,6 +455,7 @@ export function settlePayment(payment: GatewayPaymentRow, actor: Actor = { type:
         note: `${gateway?.name ?? fresh.gateway} ${fresh.method.replace('_', ' ')} deposit`,
         metadata: { gateway: fresh.gateway, method: fresh.method, providerRef: fresh.provider_ref, paymentId: fresh.id },
         feeFrom: 'receiver',
+        issuance: { authority: 'external_funding', paymentId: fresh.id, reference: fresh.provider_ref },
       });
       updatePayment(fresh.id, { transaction_id: tx.id });
       transitionStage(fresh.id, 'SETTLED', actor, { transactionId: tx.id, credited });
@@ -478,6 +479,7 @@ export function settlePayment(payment: GatewayPaymentRow, actor: Actor = { type:
         receiverUserId: merchant.id,
         note: request.description ?? `Payment via ${fresh.method.replace('_', ' ')}`,
         metadata: { gateway: fresh.gateway, method: fresh.method, providerRef: fresh.provider_ref, paymentId: fresh.id, paymentRequestId: request.id, paymentRequestCode: request.code, payerEmail: fresh.payer_email, payerPhone: fresh.payer_phone, payerName: fresh.payer_name, ...parseJson(request.metadata, {}) },
+        issuance: { authority: 'external_funding', paymentId: fresh.id, reference: fresh.provider_ref },
       });
       updatePayment(fresh.id, { transaction_id: tx.id });
       transitionStage(fresh.id, 'SETTLED', actor, { transactionId: tx.id });

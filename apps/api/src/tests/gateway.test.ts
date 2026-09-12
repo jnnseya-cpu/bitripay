@@ -388,3 +388,41 @@ describe('FX disclosure and route declarations', () => {
     expect(text).not.toContain('pin');
   });
 });
+
+describe('e-money issuance', () => {
+  it('is created only by administrators under maker-checker; users, agents and single admins cannot create balance', async () => {
+    const admin = await adminToken(app);
+    const checker = await checkerToken(app);
+    const u = await registerUser(app);
+    const agent = await registerUser(app, { role: 'agent', businessName: 'Corner Agent' });
+    // No user-facing endpoint creates money: an agent cash-in moves the agent's own float, and fails without it.
+    const noFloat = await request(app).post('/api/agents/me/cash-in').set(agent.auth).send({ customer: u.user.tag, amount: '10', currency: 'USD', pin: '1234' });
+    expect(noFloat.body.error.code).toBe('insufficient_funds');
+    const asUser = await request(app).post(`/api/admin/users/${u.user.id}/adjust`).set(u.auth).send({ direction: 'credit', amount: '10', currency: 'USD', reason: 'gimme' });
+    expect(asUser.status).toBe(403);
+    // A single administrator only proposes; nothing is credited until a different admin approves with step-up.
+    const proposed = await request(app).post(`/api/admin/users/${u.user.id}/adjust`).set(admin.auth).send({ direction: 'credit', amount: '10', currency: 'USD', reason: 'Goodwill credit' });
+    expect(proposed.status).toBe(201);
+    expect(proposed.body.verification.subjectType).toBe('issuance');
+    expect(await balance(u.auth, 'USD')).toBe(0);
+    const self = await request(app).post(`/api/admin/verifications/${proposed.body.verification.id}/approve`).set(admin.auth).send({ pin: admin.pin });
+    expect(self.status).toBe(403);
+    const ok = await request(app).post(`/api/admin/verifications/${proposed.body.verification.id}/approve`).set(checker.auth).send({ pin: checker.pin });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(await balance(u.auth, 'USD')).toBe(1000);
+    // The ledger itself refuses to create balance without an issuance authority.
+    const { postTransaction } = await import('../services/ledger');
+    const { ensureWallet } = await import('../services/wallets');
+    const w = ensureWallet(u.user.id, 'USD');
+    expect(() => postTransaction({ type: 'admin_adjustment', amount: 500, currency: 'USD', toWalletId: w.id, receiverUserId: u.user.id })).toThrow(/issuance authority/);
+    expect(() => postTransaction({ type: 'admin_adjustment', amount: 500, currency: 'USD', toWalletId: w.id, receiverUserId: u.user.id, issuance: { authority: 'admin' } })).toThrow(/maker-checker/);
+    expect(await balance(u.auth, 'USD')).toBe(1000);
+    // The register and supply report show where every unit came from.
+    const report = await request(app).get('/api/admin/emoney').set(admin.auth);
+    expect(report.status).toBe(200);
+    const usd = report.body.supply.find((s: any) => s.currency === 'USD');
+    expect(usd.outstanding).toBeGreaterThan(0);
+    expect(usd.issued.some((i: any) => i.authority === 'admin')).toBe(true);
+    expect(report.body.register.items.some((e: any) => e.event === 'issuance.admin')).toBe(true);
+  });
+});

@@ -109,7 +109,7 @@ export function updatePayoutAccount(id: string, patch: { label?: string; status?
 export function prefundAccount(id: string, amount: number, input: { reference?: string | null; note?: string | null }, admin: UserRow): PayoutAccount {
   const a = getPayoutAccount(id);
   if (!Number.isInteger(amount) || amount <= 0) throw badRequest('Amount must be greater than zero');
-  const tx = postTransaction({ type: 'liquidity_prefund', amount, currency: a.currency, toWalletId: a.walletId, receiverUserId: a.systemUserId, senderUserId: getSystemUser('treasury').id, note: `Prefund ${a.label}${input.reference ? ` · ${input.reference}` : ''}`, metadata: { payoutAccountId: a.id, reference: input.reference ?? null, adminId: admin.id } });
+  const tx = postTransaction({ type: 'liquidity_prefund', amount, currency: a.currency, toWalletId: a.walletId, receiverUserId: a.systemUserId, senderUserId: getSystemUser('treasury').id, note: `Prefund ${a.label}${input.reference ? ` · ${input.reference}` : ''}`, metadata: { payoutAccountId: a.id, reference: input.reference ?? null, adminId: admin.id }, issuance: { authority: 'liquidity', adminId: admin.id, reference: input.reference ?? null } });
   getDb().prepare('INSERT INTO liquidity_movements (id, payout_account_id, kind, amount, currency, transaction_id, reference, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(uuid(), a.id, 'prefund', amount, a.currency, tx.id, input.reference ?? null, input.note ?? null, admin.id, now());
   recordEvent('liquidity', a.id, 'payout_account.prefunded', { type: 'admin', id: admin.id }, { amount, currency: a.currency, reference: input.reference ?? null, transactionId: tx.id });
   return getPayoutAccount(id);
@@ -121,7 +121,7 @@ export function adjustAccount(id: string, delta: number, note: string, admin: Us
   if (!Number.isInteger(delta) || delta === 0) throw badRequest('Delta must be a non-zero integer');
   const treasury = getSystemUser('treasury');
   const tx = delta > 0
-    ? postTransaction({ type: 'liquidity_adjustment', amount: delta, currency: a.currency, toWalletId: a.walletId, receiverUserId: a.systemUserId, senderUserId: treasury.id, note, metadata: { payoutAccountId: a.id, adminId: admin.id } })
+    ? postTransaction({ type: 'liquidity_adjustment', amount: delta, currency: a.currency, toWalletId: a.walletId, receiverUserId: a.systemUserId, senderUserId: treasury.id, note, metadata: { payoutAccountId: a.id, adminId: admin.id }, issuance: { authority: 'liquidity', adminId: admin.id, reference: note } })
     : postTransaction({ type: 'liquidity_adjustment', amount: -delta, currency: a.currency, fromWalletId: a.walletId, toWalletId: null, senderUserId: a.systemUserId, receiverUserId: treasury.id, note, metadata: { payoutAccountId: a.id, adminId: admin.id }, allowNegativeSender: true });
   getDb().prepare('INSERT INTO liquidity_movements (id, payout_account_id, kind, amount, currency, transaction_id, reference, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(uuid(), a.id, 'adjustment', delta, a.currency, tx.id, null, note, admin.id, now());
   recordEvent('liquidity', a.id, 'payout_account.adjusted', { type: 'admin', id: admin.id }, { delta, note, transactionId: tx.id });

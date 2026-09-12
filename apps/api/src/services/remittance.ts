@@ -176,6 +176,8 @@ export function payoutCashPickup(agent: UserRow, pickupCode: string, recipientId
       receiverUserId: agent.id,
       note: `Cash pickup payout ${row.pickup_code}`,
       metadata: { remittanceId: row.id, method: 'cash_pickup' },
+      // Releases the sender's held remittance (completed into the treasury just above) to the agent who paid the cash – not new money.
+      issuance: { authority: 'internal_release', originTransactionId: row.transaction_id, reference: `remittance:${row.id}` },
     });
     db.prepare("UPDATE remittances SET status = 'completed', pickup_agent_id = ?, completed_at = ? WHERE id = ?").run(agent.id, now(), row.id);
     notify(row.sender_user_id, 'Cash picked up', `${recipient.name} collected ${formatMoney(row.target_amount, getCurrency(row.target_currency, false))} at agent ${agent.business_name || agent.full_name}.`, { kind: 'remittance_pickup', remittanceId: row.id });

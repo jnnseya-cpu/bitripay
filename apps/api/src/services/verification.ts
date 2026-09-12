@@ -17,15 +17,44 @@ import { getPayout, getPayoutByTransaction, settlePayout, failPayout } from './p
 import { approveWithdrawal, rejectWithdrawal } from './withdrawals';
 import { releaseRoute, refundRoute, getRouteRow } from './routing';
 import { badRequest } from '../lib/errors';
+import { hasPermission } from '../middleware/permissions';
+import { postTransaction } from './ledger';
+import { ensureWallet } from './wallets';
+import { getCurrency } from './currencies';
+import { notify } from './notifications';
+import { formatMoney } from '@bitripay/shared';
+
+/** The only code path that creates or destroys e-money by administrative decision: after a second administrator approved it. */
+function executeIssuance(userId: string, payload: { direction: 'credit' | 'debit'; amount: number; currency: string; reason: string }, approver: UserRow, proposerId: string, verificationId: string) {
+  const cur = getCurrency(payload.currency);
+  const wallet = ensureWallet(userId, cur.code);
+  const credit = payload.direction === 'credit';
+  const tx = postTransaction({
+    type: 'admin_adjustment',
+    amount: payload.amount,
+    currency: cur.code,
+    fromWalletId: credit ? null : wallet.id,
+    toWalletId: credit ? wallet.id : null,
+    senderUserId: credit ? null : userId,
+    receiverUserId: credit ? userId : null,
+    note: payload.reason,
+    metadata: { direction: payload.direction, proposedBy: proposerId, approvedBy: approver.id, verificationId },
+    issuance: credit ? { authority: 'admin', adminId: approver.id, verificationId, reference: payload.reason } : undefined,
+    allowNegativeSender: !credit,
+  });
+  notify(userId, credit ? 'Balance credited' : 'Balance debited', `${formatMoney(payload.amount, cur)} was ${credit ? 'added to' : 'deducted from'} your wallet: ${payload.reason}`, { kind: 'adjustment', transactionId: tx.id });
+  return tx;
+}
 import { listEvents } from './events';
 
-export type VerificationSubject = 'payment' | 'payout' | 'withdrawal' | 'route_release' | 'route_refund';
+export type VerificationSubject = 'payment' | 'payout' | 'withdrawal' | 'route_release' | 'route_refund' | 'issuance';
 export interface VerificationView {
   id: string;
   /** Id of the payment, payout instruction, withdrawal transaction or route being decided. */
   paymentId: string;
   subjectType: VerificationSubject;
   externalRef: string | null;
+  payload: Record<string, unknown> | null;
   action: 'confirm' | 'reject';
   note: string | null;
   evidenceId: string | null;
@@ -44,7 +73,7 @@ function pub(id: string | null) {
   return u ? toPublicUser(u) : null;
 }
 function toView(r: any): VerificationView {
-  return { id: r.id, paymentId: r.payment_id, subjectType: r.subject_type ?? 'payment', externalRef: r.external_ref ?? null, action: r.action, note: r.note, evidenceId: r.evidence_id, proposedBy: pub(r.proposed_by), proposedAt: r.proposed_at, approvedBy: pub(r.approved_by), approvedAt: r.approved_at, declinedBy: pub(r.declined_by), declinedAt: r.declined_at, declineReason: r.decline_reason, status: r.status };
+  return { id: r.id, paymentId: r.payment_id, subjectType: r.subject_type ?? 'payment', externalRef: r.external_ref ?? null, payload: r.payload ? JSON.parse(r.payload) : null, action: r.action, note: r.note, evidenceId: r.evidence_id, proposedBy: pub(r.proposed_by), proposedAt: r.proposed_at, approvedBy: pub(r.approved_by), approvedAt: r.approved_at, declinedBy: pub(r.declined_by), declinedAt: r.declined_at, declineReason: r.decline_reason, status: r.status };
 }
 
 function actorOf(user: UserRow): Actor {
@@ -62,7 +91,7 @@ export function assertAdminStepUp(user: UserRow, pin: string | undefined, req: {
   }
 }
 
-export function proposeVerification(user: UserRow, paymentId: string, input: { action: 'confirm' | 'reject'; note?: string | null; evidenceId?: string | null; subjectType?: VerificationSubject; externalRef?: string | null }): VerificationView {
+export function proposeVerification(user: UserRow, paymentId: string, input: { action: 'confirm' | 'reject'; note?: string | null; evidenceId?: string | null; subjectType?: VerificationSubject; externalRef?: string | null; payload?: Record<string, unknown> | null }): VerificationView {
   const subjectType: VerificationSubject = input.subjectType ?? 'payment';
   const db = getDb();
   if (subjectType === 'payment') {
@@ -74,6 +103,12 @@ export function proposeVerification(user: UserRow, paymentId: string, input: { a
     if (['SETTLED', 'CANCELLED'].includes(p.stage)) throw conflict(`Payout is ${p.stage.toLowerCase()}`, 'invalid_stage_transition');
     // Administrative settlement requires documentary evidence: the operator / bank reference and what was checked.
     if (input.action === 'confirm' && (!input.externalRef || !input.note || input.note.trim().length < 8)) throw badRequest('Administrative settlement needs the operator/bank transaction reference and a note describing the documentary evidence checked', 'documentary_evidence_required');
+  } else if (subjectType === 'issuance') {
+    // Creating (or destroying) e-money by hand: only administrators holding the issuance permission may propose, and the payload must be complete.
+    if (user.role !== 'admin' || !hasPermission(user as any, 'issuance')) throw forbidden('Only administrators with the issuance permission can create e-money', 'permission_denied');
+    const p = input.payload as any;
+    if (!p || !['credit', 'debit'].includes(p.direction) || !Number.isInteger(p.amount) || p.amount <= 0 || !p.currency || !p.reason) throw badRequest('Issuance payload needs direction, amount, currency and reason', 'validation_error');
+    findUserById(paymentId) ?? (() => { throw badRequest('Target user not found'); })();
   } else {
     getRouteRow(paymentId);
   }
@@ -81,7 +116,7 @@ export function proposeVerification(user: UserRow, paymentId: string, input: { a
   if (open) throw conflict('A decision is already awaiting approval for this item', 'verification_pending');
   if (input.evidenceId) getEvidence(input.evidenceId);
   const id = uuid();
-  db.prepare('INSERT INTO manual_verifications (id, payment_id, action, note, evidence_id, proposed_by, proposed_at, status, subject_type, external_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, paymentId, input.action, input.note ?? null, input.evidenceId ?? null, user.id, now(), 'proposed', subjectType, input.externalRef ?? null);
+  db.prepare('INSERT INTO manual_verifications (id, payment_id, action, note, evidence_id, proposed_by, proposed_at, status, subject_type, external_ref, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, paymentId, input.action, input.note ?? null, input.evidenceId ?? null, user.id, now(), 'proposed', subjectType, input.externalRef ?? null, input.payload ? JSON.stringify(input.payload) : null);
   recordEvent('approval', paymentId, 'verification.proposed', actorOf(user), { verificationId: id, subjectType, action: input.action, note: input.note ?? null, evidenceId: input.evidenceId ?? null, externalRef: input.externalRef ?? null });
   if (subjectType === 'payment' && getPayment(paymentId).stage !== 'VERIFYING') transitionStage(paymentId, 'VERIFYING', actorOf(user), { verificationId: id, action: input.action });
   const controls = getGatewayControls();
@@ -96,6 +131,7 @@ export function approveVerification(user: UserRow, id: string, pin: string | und
   if (!skipChecks) {
     if (getGatewayControls().makerChecker && row.proposed_by === user.id) throw forbidden('Maker-checker: the person who proposed a decision cannot approve it', 'maker_checker');
     if (user.role !== 'admin') throw forbidden('Only administrators can approve manual settlement', 'role_required');
+    if (row.subject_type === 'issuance' && !hasPermission(user as any, 'issuance')) throw forbidden('Approving e-money issuance requires the issuance permission', 'permission_denied');
     assertAdminStepUp(user, pin, req);
   }
   const db = getDb();
@@ -117,6 +153,8 @@ export function approveVerification(user: UserRow, id: string, pin: string | und
     releaseRoute(row.payment_id, actor, id, row.action === 'confirm');
   } else if (subject === 'route_refund') {
     if (row.action === 'confirm') void refundRoute(row.payment_id, actor, row.note || 'Refund approved', id);
+  } else if (subject === 'issuance') {
+    if (row.action === 'confirm') executeIssuance(row.payment_id, JSON.parse(row.payload), user, row.proposed_by, id);
   }
   return getVerification(id);
 }

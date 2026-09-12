@@ -52,7 +52,8 @@ function SettingsForm({ title, keyName, fields, initial, onSaved }: { title: str
 /** Gateway controls: lifecycle/evidence thresholds, FX disclosure policy, fraud & sanctions, reconciliation and the declared route catalogue. */
 export function Controls() {
   const { toast } = useStore();
-  const [tab, setTab] = useState<'controls' | 'sanctions' | 'reconcile' | 'catalog' | 'events'>('controls');
+  const [tab, setTab] = useState<'controls' | 'sanctions' | 'reconcile' | 'catalog' | 'events' | 'emoney'>('controls');
+  const emoney = useAsync(() => (tab === 'emoney' ? api.get<any>('/api/admin/emoney?pageSize=100') : Promise.resolve(null)), [tab]);
   const settings = useAsync(() => api.get<any>('/api/admin/settings'), []);
   const sanctions = useAsync(() => (tab === 'sanctions' ? api.get<any>('/api/admin/sanctions') : Promise.resolve(null)), [tab]);
   const risk = useAsync(() => (tab === 'sanctions' ? api.get<any>('/api/admin/risk-events?pageSize=50') : Promise.resolve(null)), [tab]);
@@ -64,7 +65,7 @@ export function Controls() {
   return (
     <div>
       <PageHeader title="Gateway controls & risk" subtitle="Lifecycle thresholds, evidence policy, FX disclosure, fraud/sanctions controls, ledger reconciliation and the declared route catalogue" />
-      <Tabs tabs={[{ id: 'controls', label: 'Controls' }, { id: 'sanctions', label: 'Sanctions & risk events' }, { id: 'reconcile', label: 'Reconciliation' }, { id: 'catalog', label: 'Route catalogue' }, { id: 'events', label: 'Event log' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <Tabs tabs={[{ id: 'controls', label: 'Controls' }, { id: 'sanctions', label: 'Sanctions & risk events' }, { id: 'reconcile', label: 'Reconciliation' }, { id: 'catalog', label: 'Route catalogue' }, { id: 'events', label: 'Event log' }, { id: 'emoney', label: 'E-money issuance' }]} value={tab} onChange={(v) => setTab(v as any)} />
       {tab === 'controls' && settings.data && (
         <div className="grid cols-3">
           <SettingsForm title="Payment lifecycle & evidence" keyName="gateway" fields={GATEWAY_FIELDS} initial={settings.data.gateway} onSaved={settings.reload} />
@@ -105,6 +106,20 @@ export function Controls() {
           <p className="small muted">Every logical route declares how it is initiated, confirmed and settled, its expected completion, refund path and whether processing is automatic, assisted (a verifier confirms evidence) or manual. External legs always depend on the payer's own bank, operator or a licensed processor.</p>
           <Table head={['Route', 'Processing', 'Initiation', 'Confirmation', 'Settlement', 'Expected', 'Refund']} rows={(catalog.data?.items ?? []).map((r: any) => [<b>{r.source.replace('_', ' ')} → {r.destination.replace('_', ' ')}</b>, <Chip kind={r.processing === 'automatic' ? 'success' : r.processing === 'assisted' ? 'warning' : undefined}>{r.processing}</Chip>, <span className="tiny">{r.funding.initiation}{r.payout.initiation !== r.funding.initiation ? ` → ${r.payout.initiation}` : ''}</span>, <span className="tiny">{r.funding.confirmation}; {r.payout.confirmation}</span>, <span className="tiny">{r.settlementMechanism}</span>, <span className="tiny">{r.expectedCompletion}</span>, <span className="tiny">{r.refundMethod}</span>])} />
         </div>
+      )}
+      {tab === 'emoney' && (
+        <>
+          <Alert kind="info"><b>E-money is created by administrators only.</b> Balance enters circulation solely through confirmed external funding, administrator issuance (proposed by one admin, approved by a different admin with the issuance permission under step-up), liquidity prefunding of payout floats, or an administrator-configured programme. Users, agents, merchants and devices can never create balance; the ledger refuses any posting from the treasury without an issuance authority.</Alert>
+          {(emoney.data?.pending ?? []).length > 0 && <Alert kind="warning">{emoney.data.pending.length} issuance proposal(s) await a second approver in the <a href="/verification">verification console</a>.</Alert>}
+          <div className="card mb">
+            <h4>Outstanding e-money by currency</h4>
+            <Table head={['Currency', 'Outstanding (customer wallets)', 'Wallets', 'Issued by authority', 'Payout float']} rows={(emoney.data?.supply ?? []).map((s: any) => [<b>{s.currency}</b>, s.outstanding, s.wallets, <span className="tiny">{s.issued.map((i: any) => `${i.authority}: ${i.total} (${i.count})`).join(' · ') || '—'}</span>, s.payoutFloat])} empty="No e-money outstanding" />
+          </div>
+          <div className="card">
+            <h4>Issuance register (immutable)</h4>
+            <Table head={['When', 'Authority', 'Type', 'Amount', 'Currency', 'Approved by', 'Reference']} rows={(emoney.data?.register?.items ?? []).map((e: any) => [fmtDate(e.createdAt), <Chip kind={e.details.authority === 'admin' ? 'warning' : 'success'}>{e.event.replace('issuance.', '')}</Chip>, e.details.type, e.details.amount, e.details.currency, e.actor.id ? <span className="mono tiny">{String(e.actor.id).slice(0, 8)}</span> : e.actor.type, <span className="tiny">{e.details.reference ?? e.details.programme ?? e.details.paymentId ?? ''}</span>])} empty="Nothing issued yet" />
+          </div>
+        </>
       )}
       {tab === 'events' && (
         <div className="card">
