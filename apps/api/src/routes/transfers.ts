@@ -8,6 +8,7 @@ import { getCurrency } from '../services/currencies';
 import { toMinor } from '@bitripay/shared';
 import { assertPin } from '../services/auth';
 import { usersById } from '../services/users';
+import { riskContext } from '../services/risk';
 
 export const transfersRouter = Router();
 transfersRouter.use(requireAuth);
@@ -35,7 +36,7 @@ transfersRouter.post(
     const body = validate(schema, req.body);
     assertPin(req.user!, body.pin, req);
     const cur = getCurrency(body.currency);
-    const tx = sendMoney(req.user!, { to: body.to, amount: toMinor(body.amount, cur.decimals), currency: cur.code, note: body.note, idempotencyKey: body.idempotencyKey });
+    const tx = sendMoney(req.user!, { to: body.to, amount: toMinor(body.amount, cur.decimals), currency: cur.code, note: body.note, idempotencyKey: body.idempotencyKey, ...riskContext(req) });
     res.status(201).json({ transaction: toTransaction(tx, req.user!.id, usersById([tx.receiver_user_id!])) });
   }),
 );

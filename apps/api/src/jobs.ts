@@ -26,6 +26,8 @@ import { checkCoverage } from './services/switch/reconciliation';
 import { runSettlementSchedules } from './services/finops/settlement';
 import { sweepDisputeDeadlines } from './services/finops/disputes';
 import { expireHolds } from './services/finops/holds';
+import { runAmlScan, refreshAllSources } from './services/risk/compliance';
+import { runFloatAlerts, runTrustScores } from './services/risk/agentIntel';
 import { probeConnectors } from './services/rails';
 import { registryStatus } from './services/switch/participants';
 import { listConnections } from './services/switch/connections';
@@ -36,6 +38,7 @@ let lastRegistryAlert = 0;
 const dispatcherOwner = `node:${process.pid}:${Math.random().toString(36).slice(2, 8)}`;
 let lastGuardian = 0;
 let lastAgentDay = '';
+let lastRiskDay = '';
 let lastBacklinkCheck = 0;
 import { getEmoneySettings } from './services/settings';
 let lastReconciliationDay = '';
@@ -120,6 +123,18 @@ export function startJobs() {
       const renewed = renewSubscriptions();
       if (renewed.renewed || renewed.expired) console.log(`[jobs] add-on subscriptions: renewed ${renewed.renewed}, expired ${renewed.expired}`);
       const dayKey = new Date().toISOString().slice(0, 10);
+      // Risk and compliance: AML monitor, sanctions list refresh, agent float alerts and trust scores, once a day.
+      if (lastRiskDay !== dayKey && new Date().getUTCHours() >= 3) {
+        lastRiskDay = dayKey;
+        const aml = runAmlScan();
+        if (aml.opened) console.warn(`[compliance] AML monitor opened ${aml.opened} case(s) from ${aml.scanned} active account(s)`);
+        const lists = await refreshAllSources();
+        if (lists.failed.length) console.warn(`[compliance] sanctions refresh failed: ${lists.failed.join('; ')}`);
+        const floats = runFloatAlerts();
+        if (floats.alerted) console.log(`[agents] float alerts sent: ${floats.alerted}`);
+        const trust = runTrustScores();
+        if (trust.scored) console.log(`[agents] trust scores computed for ${trust.scored} agent(s)`);
+      }
       if (new Date().getUTCHours() === 5 && lastAgentDay !== dayKey) {
         lastAgentDay = dayKey;
         const r = await runScheduledAgents();

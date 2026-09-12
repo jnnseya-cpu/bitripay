@@ -462,6 +462,58 @@ API keys gain the scopes `settlements:read`, `settlements:write`, `disputes:read
 routes live under `/api/admin/finops/*` (permissions `settings`, `transactions`, `treasury`, `agents`,
 `reconciliation`, `users`).
 
+### Risk, compliance and agent intelligence
+
+Rule-based controls run for every account, always, and cost the account holder nothing; the intelligence sits in
+one explainable place.
+
+- **Central risk policy** (`risk_policies`): one versioned rule set decides what happens to a movement once the
+  score and flags are known. Rules are evaluated in order (first match wins) and carry an id, so every decision
+  reads "rule FRD-003 of policy v2". Draft → approve (a different administrator) → activate; the default policy
+  encodes the fraud bands **0–30 approve · 31–60 step-up · 61–80 manual review · 81–100 block**, with sanctions
+  and cooling-off blocks ahead of them. `POST /api/admin/risk/policies/simulate` dry-runs any policy.
+- **Fraud scoring** (`fraud_scores`): velocity over 1h / 24h / 7d, deviation from the account's own 30-day
+  amounts, structuring under the tier limit, KYC-limit mismatch, recipient risk (prior adverse scores, open cases),
+  new beneficiary, method risk, unusual hour, new device, geolocation mismatch, PEP match — every factor with its
+  points and detail (`fraud` settings). A step-up decision returns `403 step_up_required` (BP-1010) until the
+  request carries a valid passkey / 2FA step-up token (`x-step-up-token`); a block opens a compliance case.
+- **Compliance cases** (`compliance_cases`): fraud blocks, AML findings, sanctions hits, suspicious destination
+  changes and manual referrals, each with an auto-drafted **suspicious activity report** the officer edits,
+  assignment, escalation, a decision (`NO_ACTION`, `CLEARED`, `SAR_FILED` with the filing reference,
+  `ACCOUNT_RESTRICTED`, `ACCOUNT_CLOSED`) and four-eyes closure. The **AML monitor** runs daily (or on demand):
+  structuring, pass-through / mule patterns, dormant-then-burst, high-risk jurisdictions, politically exposed
+  persons. Cases are deduplicated per pattern, account and day.
+- **Sanctions at commit**: besides the outbound screen, the ledger itself refuses to post money for a listed party
+  (`preCommitHooks` in `postTransaction`, error `sanctions_hit`, BP-5008), whatever the code path. Lists come from
+  named **sources** (OFAC, UN, EU, UK HMT, BCC, a PEP register…) with versions: import rows or CSV (OFAC SDN
+  layout understood), replace-by-version, optional daily URL refresh. PEP entries raise the score; they never
+  block by themselves.
+- **KYC tiers** (`users.kyc_tier`): Tier 1 basic (verified contact, name, country), Tier 2 standard (identity
+  document, selfie with liveness), Tier 3 enhanced (proof of address ≤ 90 days), Tier 4 business (KYB). Limits per
+  tier and per country live in the `kycTiers` setting, are evaluated in the base currency at the live rate and
+  are enforced server-side (BP-5005 / BP-5006, audited); untiered accounts keep the legacy limits, so nothing
+  changes until an account is tiered. **KYB** (`kyb_submissions`): legal name, registration, address, MCC,
+  expected volume, licence, directors (linked directors must hold Tier 2), documents; verification grants Tier 4;
+  merchants above `kybMonthlyVolumeThreshold` cannot open new intents until verified (BP-5007).
+- **Settlement-account change protection** (`destination_changes`): every new bank account, mobile-money number
+  or settlement destination is recorded with the previous value, announced loudly, refused within 24h of a
+  password change (BP-5011), and **cooled off**: payouts above the cooling amount wait 24h or an administrator's
+  approval (BP-5010). The account holder can revoke a change they did not make, which locks the destination and
+  opens a critical case.
+- **Agent intelligence**: **float forecasts** per currency (average daily outflow, runway in days, refill to the
+  target) with daily low-float alerts; a **trust score** (tenure, activity, reliability, follow-through, disputes,
+  verification, float discipline, compliance) with bands new / bronze / silver / gold / platinum; **dynamic
+  commissions** = base + trust-band bonus + liquidity bonus for cash-in where float is short (`agentIntel`
+  setting); **float replenishment requests** fulfilled through the e-money maker-checker; **agent-assisted
+  onboarding** (`POST /api/risk/agents/me/onboard`) opens a Tier 1 account with a temporary PIN in one call and
+  accrues the onboarding commission.
+- **Error catalogue**: every error now also carries `bp` — BP-1xxx authentication, 2xxx validation, 3xxx ledger,
+  4xxx rail, 5xxx compliance, 6xxx intelligence (`lib/bpCodes.ts`).
+
+Account-holder routes live under `/api/risk/*` (verification level, Tier 1 activation, KYB, destination changes,
+agent float / trust / requests / onboarding); the console under `/api/admin/risk/*` (permissions `compliance`,
+`kyc`, `agents`, `issuance`, `settings`).
+
 ### Public site, blog and SEO engine
 
 The marketing surface is **server-rendered by the API** so search engines, social previews and AI answer

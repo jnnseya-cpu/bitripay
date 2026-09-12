@@ -22,6 +22,8 @@ import { executeIssuance, validateIssuanceRequest, clearReserveMovement, type Is
 
 import { listEvents } from './events';
 
+/** Listeners told when a verification is approved or declined (float requests mirror issuance outcomes; avoids import cycles). */
+export const verificationOutcomeHooks: ((id: string, subjectType: string, outcome: 'approved' | 'declined') => void)[] = [];
 export type VerificationSubject = 'payment' | 'payout' | 'withdrawal' | 'route_release' | 'route_refund' | 'issuance' | 'reserve_funding';
 export interface VerificationView {
   id: string;
@@ -141,6 +143,7 @@ export function approveVerification(user: UserRow, id: string, pin: string | und
   } else if (subject === 'reserve_funding') {
     if (row.action === 'confirm') clearReserveMovement(row.payment_id, user, id);
   }
+  for (const h of verificationOutcomeHooks) h(id, subject, 'approved');
   return getVerification(id);
 }
 
@@ -154,6 +157,7 @@ export function declineVerification(user: UserRow, id: string, reason: string): 
     const payment = getPayment(row.payment_id);
     if (payment.stage === 'VERIFYING') transitionStage(payment.id, 'MANUAL_REVIEW', actorOf(user), { verificationId: id, reason });
   }
+  for (const h of verificationOutcomeHooks) h(id, row.subject_type ?? 'payment', 'declined');
   return getVerification(id);
 }
 

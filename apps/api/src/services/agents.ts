@@ -7,13 +7,14 @@ import { calculateFee, enforceLimits, postTransaction, type TransactionRow } fro
 import { ensureWallet, getUserWallet } from './wallets';
 import { findUserByIdentifier, findUserById, toPublicUser, type UserRow } from './users';
 import { notify } from './notifications';
-import { getAppSettings } from './settings';
 import { onDepositCompleted } from './referrals';
 import { getModules } from './modules';
 import { recordCommission } from './finops/commissions';
+import { dynamicCommissionBps } from './risk/agentIntel';
 
-function agentCommissionBps(agent: UserRow) {
-  return agent.agent_commission_bps ?? getAppSettings().agentCommissionBps;
+/** Base commission plus the trust-band bonus and the liquidity bonus where float is short (see risk/agentIntel). */
+function agentCommissionBps(agent: UserRow, kind: 'cash_in' | 'cash_out' | 'other' = 'other') {
+  return dynamicCommissionBps(agent, kind).bps;
 }
 
 export function listAgents(search?: string, country?: string | null) {
@@ -38,7 +39,7 @@ export function agentCashIn(agent: UserRow, input: { customer: string; amount: n
   if (customer.id === agent.id) throw badRequest('You cannot cash in to yourself');
   const cur = getCurrency(input.currency);
   const fee = calculateFee('agent_cash_in', input.amount, cur.code, null, { userId: agent.id });
-  const commission = Math.min(fee, applyBps(input.amount, agentCommissionBps(agent)));
+  const commission = Math.min(fee, applyBps(input.amount, agentCommissionBps(agent, 'cash_in')));
   const agentWallet = getUserWallet(agent.id, cur.code);
   const customerWallet = ensureWallet(customer.id, cur.code);
   const tx = postTransaction({
@@ -114,7 +115,7 @@ export function confirmCashOut(agent: UserRow, code: string): TransactionRow {
     const customer = findUserById(req.user_id)!;
     const cur = getCurrency(req.currency);
     const fee = calculateFee('agent_cash_out', req.amount, cur.code, null, { userId: agent.id });
-    const commission = Math.min(fee, applyBps(req.amount, agentCommissionBps(agent)));
+    const commission = Math.min(fee, applyBps(req.amount, agentCommissionBps(agent, 'cash_out')));
     const customerWallet = getUserWallet(customer.id, cur.code);
     const agentWallet = ensureWallet(agent.id, cur.code);
     const tx = postTransaction({

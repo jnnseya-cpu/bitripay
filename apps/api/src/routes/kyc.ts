@@ -20,6 +20,9 @@ kycRouter.post(
         docFront: z.string().max(4_000_000).optional().nullable(),
         docBack: z.string().max(4_000_000).optional().nullable(),
         selfie: z.string().max(4_000_000).optional().nullable(),
+        proofOfAddress: z.string().max(4_000_000).optional().nullable(),
+        addressDocDate: z.string().max(40).optional().nullable(),
+        liveness: z.boolean().optional().nullable(),
       }),
       req.body,
     );

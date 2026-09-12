@@ -1,6 +1,8 @@
 import { getDb } from '../db';
 import { consumePromoCredit, reserveHooks } from './emoney';
 
+/** Pre-commit guards run inside every posting before any ledger entry is written (sanctions screen registers here). */
+export const preCommitHooks: ((ctx: { input: PostTransactionInput; fromUser: UserRow | null; toUser: UserRow | null }) => void)[] = [];
 /** Listeners notified after a pending transaction settles or reverses (payout webhooks register here; avoids import cycles). */
 export const transactionStatusHooks: ((tx: TransactionRow, outcome: 'completed' | 'rejected' | 'cancelled' | 'failed') => void)[] = [];
 import { getEmoneySettings } from './settings';
@@ -15,6 +17,7 @@ import { applyBps } from '@bitripay/shared';
 import { getFees, getLimits } from './settings';
 import { fromBase, toBase } from './currencies';
 import { resolveFeeRule, type FeeContext } from './finops/fees';
+import { enforceTierLimits } from './risk/kycTiers';
 import { findUserById, getSystemUser, usersById, type UserRow } from './users';
 import { ensureWallet, getWallet, type WalletRow } from './wallets';
 import { recordEvent } from './events';
@@ -93,6 +96,8 @@ export function calculateFee(type: string, amount: number, currency: string, ove
 /** Enforce per-transaction and daily limits (in base currency) for outgoing money movements. */
 export function enforceLimits(user: UserRow, amount: number, currency: string) {
   if (user.is_system) return;
+  // Tiered accounts (KYC tiers 1–4) are limited per tier and country; untiered accounts keep the legacy limits below.
+  if (enforceTierLimits(user, amount, currency)) return;
   const limits = getLimits();
   const tier = user.kyc_status === 'verified' ? limits.verified : limits.unverified;
   const baseAmount = toBase(amount, currency);
@@ -262,6 +267,11 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     const creates = isSenderSystem && !!input.toWalletId && toWallet.user_id !== treasury.id;
     const issuance = creates ? assertIssuanceAuthorised(input.issuance, input.type) : null;
     if (!isSenderSystem && fromWallet.frozen_at) throw forbidden(`This ${fromWallet.currency} balance is frozen: ${fromWallet.frozen_reason ?? 'contact support'}`, 'wallet_frozen');
+    if (preCommitHooks.length) {
+      const fromUser = isSenderSystem ? null : findUserById(fromWallet.user_id) ?? null;
+      const toUser = toWallet.user_id === treasury.id ? null : findUserById(toWallet.user_id) ?? null;
+      for (const h of preCommitHooks) h({ input, fromUser, toUser });
+    }
     // Promotional credit may cover platform fees on completed internal transactions – it never becomes money.
     const promoCover = status === 'completed' && feeFrom === 'sender' && fee > 0 && !isSenderSystem && PROMO_FEE_TYPES.has(input.type) && getEmoneySettings().promoCoversFees ? Math.min(fee, fromWallet.promo_balance ?? 0) : 0;
     const totalDebit = (feeFrom === 'receiver' ? input.amount : input.amount + fee) - promoCover;

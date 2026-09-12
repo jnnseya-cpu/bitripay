@@ -8,6 +8,7 @@ import { getUserWallet, ensureWallet } from './wallets';
 import { findUserByIdentifier, type UserRow } from './users';
 import { notify } from './notifications';
 import { getModules } from './modules';
+import { getDb } from '../db';
 
 export interface TransferInput {
   to: string;
@@ -16,6 +17,10 @@ export interface TransferInput {
   note?: string | null;
   idempotencyKey?: string | null;
   type?: 'transfer' | 'qr_payment' | 'merchant_payment';
+  /** The request carried a valid step-up token (passkey / 2FA); required when the policy asks for step-up. */
+  stepUpVerified?: boolean;
+  deviceHash?: string | null;
+  ipCountry?: string | null;
 }
 
 export function sendMoney(sender: UserRow, input: TransferInput): TransactionRow {
@@ -29,7 +34,8 @@ export function sendMoney(sender: UserRow, input: TransferInput): TransactionRow
   if (type === 'transfer' && !modules.transfers) throw unprocessable('Transfers are currently disabled', 'module_disabled');
   const fee = calculateFee(type, input.amount, currency.code, null, { userId: sender.id });
   enforceLimits(sender, input.amount, currency.code);
-  enforceOutboundRisk({ userId: sender.id, kind: 'transfer', amount: input.amount, currency: currency.code, subjectType: 'transfer', counterparty: { name: recipient.full_name, phone: recipient.phone, email: recipient.email, country: recipient.country } });
+  const firstToRecipient = !getDb().prepare("SELECT 1 FROM transactions WHERE sender_user_id = ? AND receiver_user_id = ? AND status = 'completed' LIMIT 1").get(sender.id, recipient.id);
+  enforceOutboundRisk({ userId: sender.id, kind: 'transfer', amount: input.amount, currency: currency.code, subjectType: 'transfer', counterparty: { name: recipient.full_name, phone: recipient.phone, email: recipient.email, country: recipient.country }, method: 'wallet', recipientUserId: recipient.id, newBeneficiary: firstToRecipient, stepUpVerified: input.stepUpVerified ?? false, deviceHash: input.deviceHash ?? null, ipCountry: input.ipCountry ?? null });
   const fromWallet = getUserWallet(sender.id, currency.code);
   const toWallet = ensureWallet(recipient.id, currency.code);
   const tx = postTransaction({

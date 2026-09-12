@@ -14,7 +14,8 @@ import { config } from '../../config';
 import { PdfDocument } from '../../lib/pdf';
 import { formatMoney } from '@bitripay/shared';
 import { findUserById, getGatewaySettings, type UserRow } from '../users';
-import { getCurrency } from '../currencies';
+import { getCurrency, toBase } from '../currencies';
+import { registerDestinationChange, assertDestinationUsable } from '../risk/accountProtection';
 import { getUserWallet, listWallets } from '../wallets';
 import { requestWithdrawal, type WithdrawalDestination } from '../withdrawals';
 import { recordEvent, type Actor } from '../events';
@@ -83,11 +84,14 @@ export function upsertProfile(user: UserRow, input: { rail?: string; currency: s
   const rail = input.rail ?? 'default';
   const existing = db.prepare('SELECT * FROM settlement_profiles WHERE user_id = ? AND rail = ? AND currency = ?').get(user.id, rail, cur.code) as any;
   if (existing) {
+    const previous = parseJson<Record<string, unknown>>(existing.destination, {});
+    if (input.destination && JSON.stringify(input.destination) !== JSON.stringify(previous) && (input.destination as any).method !== 'wallet') registerDestinationChange(user, { kind: 'settlement_profile', refId: existing.id, previous, next: input.destination as Record<string, unknown> }, { type: user.role === 'admin' ? 'admin' : 'merchant', id: user.id });
     db.prepare('UPDATE settlement_profiles SET schedule = ?, cutoff_hour_utc = ?, destination = ?, min_amount = ?, auto = ?, active = ?, updated_at = ? WHERE id = ?').run(input.schedule, cutoff, JSON.stringify(input.destination ?? parseJson(existing.destination, {})), input.minAmount ?? existing.min_amount, (input.auto ?? !!existing.auto) ? 1 : 0, (input.active ?? !!existing.active) ? 1 : 0, now(), existing.id);
     recordEvent('ledger', existing.id, 'settlement_profile.updated', { type: user.role === 'admin' ? 'admin' : 'merchant', id: user.id }, { schedule: input.schedule, rail, currency: cur.code });
     return toProfile(db.prepare('SELECT * FROM settlement_profiles WHERE id = ?').get(existing.id));
   }
   const id = `sp_${shortCode(12).toLowerCase()}`;
+  if (input.destination && (input.destination as any).method && (input.destination as any).method !== 'wallet') registerDestinationChange(user, { kind: 'settlement_profile', refId: id, previous: null, next: input.destination as Record<string, unknown> }, { type: user.role === 'admin' ? 'admin' : 'merchant', id: user.id });
   db.prepare('INSERT INTO settlement_profiles (id, user_id, rail, currency, schedule, cutoff_hour_utc, destination, min_amount, auto, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, user.id, rail, cur.code, input.schedule, cutoff, JSON.stringify(input.destination ?? {}), input.minAmount ?? 0, (input.auto ?? true) ? 1 : 0, (input.active ?? true) ? 1 : 0, now(), now());
   recordEvent('ledger', id, 'settlement_profile.created', { type: user.role === 'admin' ? 'admin' : 'merchant', id: user.id }, { schedule: input.schedule, rail, currency: cur.code });
   return toProfile(db.prepare('SELECT * FROM settlement_profiles WHERE id = ?').get(id));
@@ -226,6 +230,7 @@ export function payCycle(cycleId: string, actor: Actor, destinationOverride?: Wi
   }
   const wallet = getUserWallet(c.userId, c.currency);
   const payable = Math.min(c.netMinor, Math.max(0, wallet.balance - heldAmount(wallet.id)));
+  if (profile && payable > 0) assertDestinationUsable(user, 'settlement_profile', profile.id, toBase(payable, c.currency));
   if (payable <= 0 || payable < (profile?.minAmount ?? 0)) {
     db.prepare("UPDATE settlement_cycles SET status = 'FAILED', failure = ?, updated_at = ? WHERE id = ?").run(payable <= 0 ? 'nothing available to settle (holds or prior withdrawals)' : `below the minimum of ${profile?.minAmount}`, now(), cycleId);
     return getCycle(null, cycleId);

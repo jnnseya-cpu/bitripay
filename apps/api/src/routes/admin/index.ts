@@ -39,6 +39,7 @@ import { listIntents, intentTimeline } from '../../services/intents';
 import { listRefunds, resolveRefund } from '../../services/gateway';
 import { adminSwitchRouter } from './switch';
 import { adminFinopsRouter } from './finops';
+import { adminRiskRouter } from './risk';
 import { addonReport } from '../../services/assist/addon';
 import { billingReport } from '../../services/assist/billing';
 import { recentUssdSessions, ussdRequest, ussdSessionId } from '../../services/channels/ussd';
@@ -98,6 +99,7 @@ export const adminRouter = Router();
 adminRouter.use(...requireAdmin);
 adminRouter.use('/switch', adminSwitchRouter);
 adminRouter.use('/finops', adminFinopsRouter);
+adminRouter.use('/risk', adminRiskRouter);
 
 // ---------------- Dashboard ----------------
 adminRouter.get('/stats', requirePermission('reports'), (_req, res) => {
@@ -757,7 +759,7 @@ adminRouter.put(
   requirePermission('settings'),
   wrap(async (req, res) => {
     const key = String(req.params.key);
-    const allowed = ['fees', 'limits', 'referral', 'app', 'modules', 'countries', 'smtp', 'sms', 'gateway', 'fx', 'risk', 'compliance'];
+    const allowed = ['fees', 'limits', 'referral', 'app', 'modules', 'countries', 'smtp', 'sms', 'gateway', 'fx', 'risk', 'compliance', 'fraud', 'kycTiers', 'aml', 'agentIntel', 'accountProtection', 'commissions', 'disputes', 'routing', 'webhooks'];
     if (!allowed.includes(key)) throw badRequest('Unknown settings key');
     let value = req.body?.value ?? req.body;
     if (key === 'smtp' && value?.pass === '••••••••') value = { ...value, pass: getSmtpSettings().pass };

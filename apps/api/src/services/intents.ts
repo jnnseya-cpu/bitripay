@@ -27,6 +27,7 @@ import { getGatewaySettings } from './users';
 import { completeCheckoutSessionForIntent } from './gateway';
 import { recordRoutingOutcome, pickConnector, type RouteCandidate } from './rails';
 import { applySplits } from './finops/splits';
+import { assertKybIfRequired } from './risk/kycTiers';
 
 export const INTENT_STATES = ['CREATED', 'REQUIRES_PAYMENT_METHOD', 'ROUTING', 'REQUIRES_CUSTOMER_ACTION', 'PROCESSING', 'AUTHORISED', 'CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED', 'FAILED', 'EXPIRED', 'CANCELLED', 'PARTIALLY_REFUNDED', 'REFUNDED', 'DISPUTED', 'REVERSED', 'UNDER_REVIEW', 'UNKNOWN_PROVIDER_STATE', 'AMBIGUOUS'] as const;
 export type IntentState = (typeof INTENT_STATES)[number];
@@ -272,6 +273,7 @@ export const DEFAULT_RAILS = ['wallet', 'mpesa', 'airtel', 'orange', 'card', 'ba
 /** Create an intent for a merchant (or any account holder: P2P and agent QR use the same object). */
 export function createIntent(merchant: UserRow, input: CreateIntentInput): { row: IntentRow; clientSecret: string } {
   assertMoneyMovementAllowed('intent');
+  assertKybIfRequired(merchant);
   const cur = getCurrency(input.currency);
   if (input.amountMinor != null && (!Number.isInteger(input.amountMinor) || input.amountMinor <= 0)) throw badRequest('Amount must be a positive integer in minor units', 'invalid_amount');
   const caps = countryCapabilities(merchant.country);

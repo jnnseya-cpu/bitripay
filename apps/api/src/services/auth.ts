@@ -123,13 +123,13 @@ export function resetPassword(identifier: string, code: string, newPassword: str
   const row = isEmail ? findUserByEmail(target) : findUserByPhone(target);
   if (!row || !verifyOtp(target, 'reset_password', code)) throw badRequest('Invalid or expired code', 'invalid_otp');
   if (newPassword.length < 8) throw badRequest('Password must be at least 8 characters');
-  updateUser(row.id, { password_hash: hashPassword(newPassword) });
+  updateUser(row.id, { password_hash: hashPassword(newPassword), password_changed_at: new Date().toISOString() } as any);
 }
 
 export function changePassword(row: UserRow, current: string, next: string) {
   if (row.password_hash && !verifyPassword(current, row.password_hash)) throw badRequest('Current password is incorrect', 'invalid_password');
   if (next.length < 8) throw badRequest('Password must be at least 8 characters');
-  updateUser(row.id, { password_hash: hashPassword(next) });
+  updateUser(row.id, { password_hash: hashPassword(next), password_changed_at: new Date().toISOString() } as any);
 }
 
 export function setPin(row: UserRow, pin: string, currentPin?: string) {

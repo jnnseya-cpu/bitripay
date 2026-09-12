@@ -8,6 +8,7 @@ import { assertPin } from '../services/auth';
 import { getCurrency } from '../services/currencies';
 import { toMinor } from '@bitripay/shared';
 import { calculateFee, listTransactions, toTransaction } from '../services/ledger';
+import { riskContext } from '../services/risk';
 
 export const bankAccountsRouter = Router();
 bankAccountsRouter.use(requireAuth);
@@ -56,7 +57,7 @@ withdrawalsRouter.post(
     );
     assertPin(req.user!, body.pin, req);
     const cur = getCurrency(body.currency);
-    const tx = requestWithdrawal(req.user!, { amount: toMinor(body.amount, cur.decimals), currency: cur.code, bankAccountId: body.bankAccountId, destination: body.destination, note: body.note });
+    const tx = requestWithdrawal(req.user!, { amount: toMinor(body.amount, cur.decimals), currency: cur.code, bankAccountId: body.bankAccountId, destination: body.destination, note: body.note, ...riskContext(req) });
     res.status(201).json({ transaction: toTransaction(tx, req.user!.id) });
   }),
 );

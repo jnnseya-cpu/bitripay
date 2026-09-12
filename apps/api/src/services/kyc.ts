@@ -1,6 +1,7 @@
 import { getDb } from '../db';
 import { uuid, now } from '../lib/ids';
-import { conflict, notFound } from '../lib/errors';
+import { badRequest, conflict, notFound } from '../lib/errors';
+import { getKycTierSettings, setTier } from './risk/kycTiers';
 import { updateUser, type UserRow, toPublicUser, findUserById } from './users';
 import { notify } from './notifications';
 
@@ -17,18 +18,26 @@ export function toKyc(r: any, includeDocs = false) {
     note: r.note,
     createdAt: r.created_at,
     reviewedAt: r.reviewed_at,
+    requestedTier: r.requested_tier ?? 2,
+    liveness: !!r.liveness,
+    hasProofOfAddress: !!r.proof_of_address,
+    addressDocDate: r.address_doc_date ?? null,
     ...(includeDocs ? { docFront: r.doc_front, docBack: r.doc_back, selfie: r.selfie } : { hasDocFront: !!r.doc_front, hasDocBack: !!r.doc_back, hasSelfie: !!r.selfie }),
     user: findUserById(r.user_id) ? toPublicUser(findUserById(r.user_id)!) : null,
   };
 }
 
-export function submitKyc(user: UserRow, input: { docType: string; docNumber: string; fullName: string; dob?: string | null; address?: string | null; docFront?: string | null; docBack?: string | null; selfie?: string | null }) {
+export function submitKyc(user: UserRow, input: { docType: string; docNumber: string; fullName: string; dob?: string | null; address?: string | null; docFront?: string | null; docBack?: string | null; selfie?: string | null; proofOfAddress?: string | null; addressDocDate?: string | null; liveness?: boolean | null }) {
   const db = getDb();
   if (user.kyc_status === 'verified') throw conflict('Your identity is already verified');
   const pending = db.prepare("SELECT id FROM kyc_submissions WHERE user_id = ? AND status = 'pending'").get(user.id);
   if (pending) throw conflict('You already have a submission under review', 'kyc_pending');
   const id = uuid();
-  db.prepare('INSERT INTO kyc_submissions (id, user_id, doc_type, doc_number, full_name, dob, address, doc_front, doc_back, selfie, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+  // Tier 3 needs a proof of address no older than the configured maximum; otherwise the submission is a Tier 2 request.
+  const maxAge = getKycTierSettings().addressDocMaxAgeDays;
+  const addressFresh = !!input.proofOfAddress && !!input.addressDocDate && Date.now() - Date.parse(input.addressDocDate) <= maxAge * 86_400_000;
+  if (input.proofOfAddress && !addressFresh) throw badRequest(`The proof of address must be dated within the last ${maxAge} days`, 'address_doc_too_old');
+  db.prepare('INSERT INTO kyc_submissions (id, user_id, doc_type, doc_number, full_name, dob, address, doc_front, doc_back, selfie, status, created_at, proof_of_address, address_doc_date, requested_tier, liveness) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
     id,
     user.id,
     input.docType,
@@ -41,6 +50,10 @@ export function submitKyc(user: UserRow, input: { docType: string; docNumber: st
     input.selfie ?? null,
     'pending',
     now(),
+    input.proofOfAddress ?? null,
+    input.addressDocDate ?? null,
+    addressFresh ? 3 : 2,
+    input.liveness ? 1 : 0,
   );
   updateUser(user.id, { kyc_status: 'pending' });
   return toKyc(db.prepare('SELECT * FROM kyc_submissions WHERE id = ?').get(id));
@@ -73,6 +86,7 @@ export function reviewKyc(id: string, adminId: string, decision: 'verified' | 'r
   if (row.status !== 'pending') throw conflict('Submission already reviewed');
   db.prepare('UPDATE kyc_submissions SET status = ?, note = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?').run(decision, note ?? null, adminId, now(), id);
   updateUser(row.user_id, { kyc_status: decision });
+  if (decision === 'verified') setTier(row.user_id, Math.max((findUserById(row.user_id) as any)?.kyc_tier ?? 0, row.requested_tier ?? 2), { type: 'admin', id: adminId }, `KYC ${id} verified`);
   notify(row.user_id, decision === 'verified' ? 'Identity verified' : 'Verification rejected', decision === 'verified' ? 'Your KYC verification was approved. Higher limits are now active.' : `Your KYC submission was rejected${note ? `: ${note}` : ''}. You can submit again.`, { kind: 'kyc' });
   return toKyc(db.prepare('SELECT * FROM kyc_submissions WHERE id = ?').get(id));
 }

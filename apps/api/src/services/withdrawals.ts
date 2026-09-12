@@ -2,7 +2,7 @@ import { getDb } from '../db';
 import { uuid, now } from '../lib/ids';
 import { badRequest, forbidden, notFound, unprocessable } from '../lib/errors';
 import { formatMoney, type BankAccount } from '@bitripay/shared';
-import { getCurrency } from './currencies';
+import { getCurrency, toBase } from './currencies';
 import { calculateFee, completeTransaction, enforceLimits, postTransaction, reverseTransaction, getTransaction, type TransactionRow } from './ledger';
 import { createPayoutInstruction, getPayoutByTransaction, settlePayout, failPayout } from './payouts';
 import { enforceOutboundRisk } from './risk';
@@ -13,6 +13,8 @@ import { getAppSettings } from './settings';
 import { getModules } from './modules';
 import { getOperator } from './momo';
 import { normalizePhone } from './users';
+import { registerDestinationChange, assertDestinationUsable } from './risk/accountProtection';
+import { findUserById } from './users';
 
 export function toBankAccount(row: any): BankAccount {
   return { id: row.id, bankName: row.bank_name, accountName: row.account_name, accountNumber: row.account_number, currency: row.currency, country: row.country, isDefault: !!row.is_default };
@@ -39,7 +41,10 @@ export function addBankAccount(userId: string, input: { bankName: string; accoun
     count === 0 ? 1 : 0,
     now(),
   );
-  return toBankAccount(db.prepare('SELECT * FROM bank_accounts WHERE id = ?').get(id));
+  const account = toBankAccount(db.prepare('SELECT * FROM bank_accounts WHERE id = ?').get(id));
+  const owner = findUserById(userId);
+  if (owner) registerDestinationChange(owner, { kind: 'bank_account', refId: id, previous: null, next: { bankName: account.bankName, accountNumber: account.accountNumber, currency: account.currency } }, { type: 'user', id: userId });
+  return account;
 }
 
 export function deleteBankAccount(userId: string, id: string) {
@@ -57,7 +62,7 @@ export type WithdrawalDestination =
  * Funds are held until an admin (or an agent with float for that operator) marks the payout as sent –
  * no operator API is required.
  */
-export function requestWithdrawal(user: UserRow, input: { amount: number; currency: string; bankAccountId?: string | null; destination?: WithdrawalDestination; note?: string | null; routeId?: string | null; sourceCurrency?: string | null }): TransactionRow {
+export function requestWithdrawal(user: UserRow, input: { amount: number; currency: string; bankAccountId?: string | null; destination?: WithdrawalDestination; note?: string | null; routeId?: string | null; sourceCurrency?: string | null; stepUpVerified?: boolean; deviceHash?: string | null; ipCountry?: string | null }): TransactionRow {
   if (!getModules().withdrawals) throw unprocessable('Withdrawals are currently disabled', 'module_disabled');
   if (getAppSettings().requireKycForWithdrawals && user.kyc_status !== 'verified') throw forbidden('Complete KYC verification before withdrawing', 'kyc_required');
   const cur = getCurrency(input.currency);
@@ -96,8 +101,9 @@ export function requestWithdrawal(user: UserRow, input: { amount: number; curren
     return now(); // free-form bank details are always a brand-new beneficiary
   })();
   const counterparty = metadata.method === 'mobile_money' ? { name: (metadata as any).recipientName, phone: (metadata as any).phone, country: (metadata as any).operator?.country } : { name: (metadata as any).bankAccount?.accountName, country: (metadata as any).bankAccount?.country };
-  const risk = enforceOutboundRisk({ userId: user.id, kind: 'withdrawal', amount: input.amount, currency: cur.code, subjectType: 'withdrawal', counterparty, beneficiaryCreatedAt });
+  const risk = enforceOutboundRisk({ userId: user.id, kind: 'withdrawal', amount: input.amount, currency: cur.code, subjectType: 'withdrawal', counterparty, beneficiaryCreatedAt, method: metadata.method as string, newBeneficiary: Date.now() - Date.parse(beneficiaryCreatedAt) < 60_000, stepUpVerified: input.stepUpVerified ?? false, deviceHash: input.deviceHash ?? null, ipCountry: input.ipCountry ?? null });
   if (risk.action === 'review') metadata = { ...metadata, riskFlags: risk.flags, riskScore: risk.score };
+  if (metadata.method === 'bank' && 'bankAccountId' in dest && dest.bankAccountId) assertDestinationUsable(user, 'bank_account', dest.bankAccountId, toBase(input.amount, cur.code));
   const wallet = getUserWallet(user.id, cur.code);
   const tx = postTransaction({
     type: 'withdrawal',
