@@ -13,6 +13,7 @@ import { getGateway } from '../../payments';
 import { calculateFee } from '../ledger';
 import { openCase, listCases } from '../switch/reconciliation';
 import { storeEvidence } from '../switch/vault';
+import { publish } from '../bus';
 
 export interface ProcessorLine {
   reference: string;
@@ -45,6 +46,7 @@ export function importProcessorStatement(gatewayId: string, input: { source: 'PR
     for (const l of input.lines) ins.run(`rl_${shortCode(14).toLowerCase()}`, id, l.reference, Number(l.amountMinor), currency, l.status, l.feeMinor != null ? Number(l.feeMinor) : null, l.settlementRef ?? null, l.occurredAt ?? null, JSON.stringify(l));
   })();
   recordEvent('reconciliation', id, 'processor_statement.imported', { type: importerId ? 'admin' : 'system', id: importerId }, { gatewayId, source: input.source, cycleRef: input.cycleRef, lines: input.lines.length, total, proofRef });
+  publish('statement.imported', { importId: id, connectionId, gatewayId, source: input.source, cycleRef: input.cycleRef, lines: input.lines.length }, { aggregateId: id });
   return { id, duplicate: false, lineCount: input.lines.length, controlTotal: total };
 }
 

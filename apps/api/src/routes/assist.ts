@@ -15,6 +15,12 @@ import { billingStatus, acceptConsent, disclosureText } from '../services/assist
 import { getClientIp } from '../lib/http';
 
 export const assistRouter = Router();
+/** Account holders never see a provider, a model, token counts or costs (rule 4); administrators keep the full view. */
+function publicRun<T extends Record<string, any>>(run: T, role: string): T {
+  if (role === 'admin') return run;
+  const { model: _m, provider: _p, tokensIn: _ti, tokensOut: _to, acu: _a, ...rest } = run as any;
+  return rest;
+}
 assistRouter.use(requireAuth);
 
 assistRouter.get('/agents', (req, res) => {
@@ -30,12 +36,12 @@ assistRouter.post(
   wrap(async (req, res) => {
     const body = validate(startSchema, req.body);
     const run = await startRun(req.user!, body.agent, body.input, { context: body.context ?? null, depth: body.depth ?? null, currency: body.currency ?? null, trigger: 'user', wait: req.query.wait === '1' || req.query.wait === 'true' });
-    res.status(202).json({ run });
+    res.status(202).json({ run: publicRun(run, req.user!.role) });
   }),
 );
-assistRouter.get('/runs', (req, res) => res.json({ items: listRuns({ userId: req.user!.id, agentKey: req.query.agent ? String(req.query.agent) : null, limit: Math.min(100, Number(req.query.limit) || 30) }) }));
-assistRouter.get('/runs/:id', (req, res) => res.json({ run: getRun(String(req.params.id), req.user!.id) }));
-assistRouter.post('/runs/:id/cancel', (req, res) => res.json({ run: cancelRun(String(req.params.id), req.user!.id) }));
+assistRouter.get('/runs', (req, res) => res.json({ items: listRuns({ userId: req.user!.id, agentKey: req.query.agent ? String(req.query.agent) : null, limit: Math.min(100, Number(req.query.limit) || 30) }).map((r) => publicRun(r, req.user!.role)) }));
+assistRouter.get('/runs/:id', (req, res) => res.json({ run: publicRun(getRun(String(req.params.id), req.user!.id), req.user!.role) }));
+assistRouter.post('/runs/:id/cancel', (req, res) => res.json({ run: publicRun(cancelRun(String(req.params.id), req.user!.id), req.user!.role) }));
 
 /** Server-sent events: replays persisted steps, then live deltas, messages and the final run. */
 assistRouter.get('/runs/:id/stream', (req, res) => {

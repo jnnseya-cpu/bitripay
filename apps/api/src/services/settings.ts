@@ -325,7 +325,7 @@ const DEFAULT_ASSIST: AssistSettings = {
   paused: [],
   killSwitch: false,
   scheduledSystemAgents: true,
-  billing: { mode: 'per_use', priceCurrency: 'GBP', prices: { standard: 5, deep: 35 }, taxRateBps: 2000, freeRunsPerMonth: 5, freeRunsRequireActivity: true, dailyCapPerUser: 20, platformCapPctOfFees: 15, platformCapFloorMinor: 5_000, deepRoles: ['merchant', 'agent', 'admin'], disclosureVersion: 1, simulateLive: false },
+  billing: { mode: 'per_use', priceCurrency: 'GBP', prices: { standard: 5, deep: 90 }, taxRateBps: 2000, freeRunsPerMonth: 5, freeRunsRequireActivity: true, dailyCapPerUser: 20, platformCapPctOfFees: 15, platformCapFloorMinor: 5_000, deepRoles: ['merchant', 'agent', 'admin'], disclosureVersion: 1, simulateLive: false },
   addon: { enabled: false, priceCurrency: 'GBP', priceMinor: 299, periodDays: 30, freeRuns: 0, autoRenew: true },
 };
 

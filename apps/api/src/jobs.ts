@@ -28,6 +28,11 @@ import { sweepDisputeDeadlines } from './services/finops/disputes';
 import { expireHolds } from './services/finops/holds';
 import { runAmlScan, refreshAllSources } from './services/risk/compliance';
 import { runFloatAlerts, runTrustScores } from './services/risk/agentIntel';
+import { refreshRateCards } from './services/diaspora';
+import { purgeOfflineNonces } from './services/offline';
+import { reconcileMargin } from './services/assist/gateway';
+import { listCases as listReconCases } from './services/switch/reconciliation';
+import { publish, listDomainEvents } from './services/bus';
 import { probeConnectors } from './services/rails';
 import { registryStatus } from './services/switch/participants';
 import { listConnections } from './services/switch/connections';
@@ -39,6 +44,8 @@ const dispatcherOwner = `node:${process.pid}:${Math.random().toString(36).slice(
 let lastGuardian = 0;
 let lastAgentDay = '';
 let lastRiskDay = '';
+let lastRateCardRefresh = 0;
+let lastMarginMonth = '';
 let lastBacklinkCheck = 0;
 import { getEmoneySettings } from './services/settings';
 let lastReconciliationDay = '';
@@ -123,6 +130,12 @@ export function startJobs() {
       const renewed = renewSubscriptions();
       if (renewed.renewed || renewed.expired) console.log(`[jobs] add-on subscriptions: renewed ${renewed.renewed}, expired ${renewed.expired}`);
       const dayKey = new Date().toISOString().slice(0, 10);
+      // Diaspora-Direct rate cards are re-issued under the signed policy before they lapse (four-hour validity).
+      if (Date.now() - lastRateCardRefresh > 30 * 60_000) {
+        lastRateCardRefresh = Date.now();
+        const cards = refreshRateCards();
+        if (cards.issued) console.log(`[diaspora] issued ${cards.issued} rate card(s)`);
+      }
       // Risk and compliance: AML monitor, sanctions list refresh, agent float alerts and trust scores, once a day.
       if (lastRiskDay !== dayKey && new Date().getUTCHours() >= 3) {
         lastRiskDay = dayKey;
@@ -134,6 +147,18 @@ export function startJobs() {
         if (floats.alerted) console.log(`[agents] float alerts sent: ${floats.alerted}`);
         const trust = runTrustScores();
         if (trust.scored) console.log(`[agents] trust scores computed for ${trust.scored} agent(s)`);
+        const purged = purgeOfflineNonces();
+        if (purged) console.log(`[offline] purged ${purged} expired nonce(s)`);
+        // reconciliation cases unmatched after 24h wake the Exception Hunter (once per case)
+        for (const c of listReconCases({ status: 'OPEN', limit: 200 }).data.filter((x) => x.ageHours >= 24)) {
+          if (!listDomainEvents({ type: 'recon.exception_aged', aggregateId: c.id, limit: 1 }).length) publish('recon.exception_aged', { class: c.class, connectionId: c.connectionId, exposure: c.exposure, ageHours: c.ageHours }, { aggregateId: c.id });
+        }
+        const month = dayKey.slice(0, 7);
+        if (lastMarginMonth !== month) {
+          lastMarginMonth = month;
+          const m = reconcileMargin(new Date(Date.now() - 86_400_000 * 2).toISOString().slice(0, 7));
+          if (m.belowFloor) console.error(`[ai] realised gross margin ${(m.margin! * 100).toFixed(1)}% is below the floor`);
+        }
       }
       if (new Date().getUTCHours() === 5 && lastAgentDay !== dayKey) {
         lastAgentDay = dayKey;

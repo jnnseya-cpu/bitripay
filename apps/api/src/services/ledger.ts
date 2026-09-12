@@ -21,6 +21,7 @@ import { enforceTierLimits } from './risk/kycTiers';
 import { findUserById, getSystemUser, usersById, type UserRow } from './users';
 import { ensureWallet, getWallet, type WalletRow } from './wallets';
 import { recordEvent } from './events';
+import { publish } from './bus';
 
 export interface TransactionRow {
   id: string;
@@ -326,6 +327,7 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     recordEvent('ledger', id, `ledger.posted.${status}`, { type: 'system' }, { type: input.type, amount: input.amount, fee, currency: input.currency, debits: balance.d, credits: balance.c, senderUserId: input.senderUserId ?? null, receiverUserId: input.receiverUserId ?? null });
     const posted = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id) as TransactionRow;
     if (issuance?.authority === 'external_funding' && status === 'completed') reserveHooks.externalFunding(posted);
+    publish('transaction.created', { transactionId: id, type: input.type, status, amountMinor: input.amount, currency: input.currency, senderUserId: input.senderUserId ?? null, receiverUserId: input.receiverUserId ?? null }, { aggregateId: id, tenantId: input.receiverUserId ?? input.senderUserId ?? 'platform' });
     return posted;
   })();
 }
@@ -377,6 +379,7 @@ export function completeTransaction(id: string, extraMetadata?: Record<string, u
     // E-money redeemed: a holder's balance left the platform through the treasury (withdrawal / external payout).
     if (toWallet.user_id === getSystemUser('treasury').id && done.sender_user_id && !findUserById(done.sender_user_id)?.is_system) reserveHooks.redemption(done);
     for (const h of transactionStatusHooks) h(done, 'completed');
+    publish('transaction.settled', { transactionId: done.id, type: done.type, amountMinor: done.amount, currency: done.currency, senderUserId: done.sender_user_id, receiverUserId: done.receiver_user_id }, { aggregateId: done.id, tenantId: done.receiver_user_id ?? done.sender_user_id ?? 'platform' });
     return done;
   })();
 }

@@ -33,6 +33,9 @@ import { adminRouter } from './routes/admin';
 import { switchRouter } from './routes/switch';
 import { finopsRouter } from './routes/finops';
 import { riskRouter } from './routes/risk';
+import { intelligenceRouter } from './routes/intelligence';
+import { ensureDefaultBindings } from './services/assist/bindings';
+import './services/assist/meshTools';
 import { ensureDefaultConnections } from './services/switch/connections';
 import { ensureDefaultPolicy } from './services/risk/policy';
 import { ensureMessageCatalogue } from './services/switch/payments';
@@ -64,6 +67,7 @@ export function bootstrap() {
   ensureDefaultConnections();
   ensureMessageCatalogue();
   ensureDefaultPolicy();
+  ensureDefaultBindings();
   if (!config.isProduction) ensureSimulationParticipants();
   seedDefaultCatalogs();
 }
@@ -131,6 +135,8 @@ export function createApp() {
   app.use('/v1', switchRouter);
   app.use('/api/v1', finopsRouter);
   app.use('/v1', finopsRouter);
+  app.use('/api/v1', intelligenceRouter);
+  app.use('/v1', intelligenceRouter);
   app.use('/lite', liteRouter);
   app.use('/v1', v1Router);
   app.use('/api/admin', adminRouter);

@@ -23,6 +23,7 @@ import { emitEvent } from '../webhooks';
 import { notify } from '../notifications';
 import { heldAmount } from './holds';
 import { transactionStatusHooks } from '../ledger';
+import { publish } from '../bus';
 
 export type SettlementSchedule = 'T0' | 'T1' | 'T2' | 'weekly' | 'manual';
 export interface SettlementProfile {
@@ -171,7 +172,10 @@ export function closeCycle(userId: string, currency: string, rail = 'default', o
   })();
   recordEvent('ledger', id, 'settlement_cycle.closed', opts.actor ?? { type: 'system' }, { userId, currency: cur.code, rail, gross, fees, refunded, split, holds, net, items: inRail.length });
   const cycle = getCycle(null, id);
-  if (status === 'CLOSED') emitEvent(userId, 'payment_intent.settled', { settlementCycle: cycle }, { resource: { type: 'settlement_cycle', id } });
+  if (status === 'CLOSED') {
+    emitEvent(userId, 'payment_intent.settled', { settlementCycle: cycle }, { resource: { type: 'settlement_cycle', id } });
+    publish('settlement.cycle_closed', { cycleId: id, merchantId: userId, currency: cur.code, netMinor: net, itemCount: inRail.length }, { aggregateId: id, tenantId: userId });
+  }
   return cycle;
 }
 

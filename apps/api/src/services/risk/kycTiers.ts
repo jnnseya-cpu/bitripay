@@ -14,6 +14,7 @@ import { toBase } from '../currencies';
 import { recordEvent, type Actor } from '../events';
 import { findUserById, updateUser, toPublicUser, type UserRow } from '../users';
 import { notify } from '../notifications';
+import { publish } from '../bus';
 
 export interface TierLimits {
   perTransaction: number;
@@ -98,6 +99,7 @@ export function setTier(userId: string, tier: number, actor: Actor, reason: stri
   const before = (u as any).kyc_tier ?? 0;
   updateUser(userId, { kyc_tier: tier } as any);
   recordEvent('risk', userId, 'kyc.tier_changed', actor, { from: before, to: tier, reason });
+  publish('kyc.tier_changed', { userId, from: before, to: tier, reason }, { aggregateId: userId, tenantId: userId });
   if (before !== tier) notify(userId, tier > before ? 'Verification level upgraded' : 'Verification level changed', `${TIER_LABELS[tier]} is now active on your account.`, { kind: 'kyc', tier });
   return findUserById(userId)!;
 }

@@ -22,10 +22,14 @@ const subscriber = async (overrides: Record<string, unknown> = {}) => {
   return { ...u, paid: 0 };
 };
 const usd = (minor: number) => `${(minor / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+/** Account holders never see provider / model / cost fields (rule 4); the tests read them through the administrator view. */
 const run = async (auth: Record<string, string>, agent: string, input: string, context?: Record<string, unknown>) => {
   const r = await request(app).post('/api/assist/runs?wait=1').set(auth).send({ agent, input, context });
   expect(r.status, JSON.stringify(r.body)).toBe(202);
-  return r.body.run as any;
+  for (const k of ['provider', 'model', 'tokensIn', 'tokensOut', 'acu']) expect(r.body.run[k], `${k} must not reach the account holder`).toBeUndefined();
+  const admin = await adminToken(app);
+  const full = await request(app).get(`/api/admin/agents/runs/${r.body.run.id}`).set(admin.auth);
+  return { ...r.body.run, provider: full.body.run.provider, model: full.body.run.model, acu: full.body.run.acu, tokensIn: full.body.run.tokensIn, tokensOut: full.body.run.tokensOut } as any;
 };
 
 describe('command centres', () => {
@@ -338,7 +342,8 @@ describe('command centres', () => {
     expect(deep.status).toBe(202);
     expect(deep.body.run.billing.tier).toBe('deep');
     expect(deep.body.run.billing.amount).toBe(before.body.billing.prices[0].deep);
-    expect(deep.body.run.model).toBe('claude-opus-5');
+    expect(deep.body.run.model).toBeUndefined(); // rule 4: the merchant never sees the model
+    expect((await request(app).get(`/api/admin/agents/runs/${deep.body.run.id}`).set(admin.auth)).body.run.model).toBe('claude-opus-5');
     const userDeep = await registerUser(app);
     await request(app).post('/api/assist/consent').set(userDeep.auth).send({ version: 1 });
     // an empty wallet cannot ask a paid question, and is told the price

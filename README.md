@@ -583,7 +583,7 @@ silently and the platform can never lose money on them:
 - **Free where it costs nothing.** Lookups the offline planner answers from the account's own records (balances,
   statements, activity, fees, routes) are free even when a model is available. Failed runs are never charged.
 - **Cost-based routing.** Standard questions go to the fast model (default £0.05, tax inclusive); in-depth analyses
-  on the main model (default £0.35) only for the roles allowed to ask (merchants, agents, administrators).
+  on the main model (default £0.90, the lowest price that keeps the 66% gross-margin floor on a 6 000-token run) only for the roles allowed to ask (merchants, agents, administrators).
 - **Charged on completion, only if covered.** The wallet is checked before the run and charged after the answer;
   an account whose balance does not cover the price is told the price and can still use the free lookups.
 - **A small allowance funded by fee income.** Five free standard questions a month for accounts that moved money

@@ -20,6 +20,7 @@ import { proposeVerification, verificationOutcomeHooks } from '../verification';
 import { hashPassword } from '../../lib/password';
 import { recordCommission, getCommissionSettings } from '../finops/commissions';
 import { setTier } from './kycTiers';
+import { publish } from '../bus';
 
 export interface AgentIntelSettings {
   /** Days of average outflow the float should cover; below alertDays the agent (and operations) are alerted. */
@@ -82,6 +83,7 @@ export function runFloatAlerts(): { alerted: number } {
       const key = `float:${a.id}:${f.currency}:${now().slice(0, 10)}`;
       if (db.prepare("SELECT 1 FROM event_log WHERE stream = 'liquidity' AND subject_id = ? LIMIT 1").get(key)) continue;
       recordEvent('liquidity', key, 'agent.float_low', { type: 'system' }, { agentId: a.id, currency: f.currency, balance: f.balanceMinor, runwayDays: f.runwayDays, refill: f.refillRecommendedMinor, status: f.status });
+      publish('agent.float_low', { agentId: a.id, currency: f.currency, balance: f.balanceMinor, runwayDays: f.runwayDays, refill: f.refillRecommendedMinor, status: f.status }, { aggregateId: a.id });
       notify(a.id, f.status === 'critical' ? 'Float critically low' : 'Float running low', `${formatMoney(f.balanceMinor, cur)} covers about ${f.runwayDays} day(s) of cash-in. Refill ${formatMoney(f.refillRecommendedMinor, cur)} to reach your ${getAgentIntelSettings().targetDays}-day target.`, { kind: 'wallet', loud: f.status === 'critical' });
       alerted += 1;
     }

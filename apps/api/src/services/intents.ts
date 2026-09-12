@@ -28,6 +28,7 @@ import { completeCheckoutSessionForIntent } from './gateway';
 import { recordRoutingOutcome, pickConnector, type RouteCandidate } from './rails';
 import { applySplits } from './finops/splits';
 import { assertKybIfRequired } from './risk/kycTiers';
+import { publish } from './bus';
 
 export const INTENT_STATES = ['CREATED', 'REQUIRES_PAYMENT_METHOD', 'ROUTING', 'REQUIRES_CUSTOMER_ACTION', 'PROCESSING', 'AUTHORISED', 'CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED', 'FAILED', 'EXPIRED', 'CANCELLED', 'PARTIALLY_REFUNDED', 'REFUNDED', 'DISPUTED', 'REVERSED', 'UNDER_REVIEW', 'UNKNOWN_PROVIDER_STATE', 'AMBIGUOUS'] as const;
 export type IntentState = (typeof INTENT_STATES)[number];
@@ -378,6 +379,7 @@ export function finishAttempt(attemptId: string, outcome: 'CAPTURED' | 'AUTHORIS
       intent = transitionIntent(r.id, 'AUTHORISED', actor, { attemptId });
     } else if (outcome === 'UNKNOWN') {
       intent = transitionIntent(r.id, r.status === 'PROCESSING' || r.status === 'REQUIRES_CUSTOMER_ACTION' ? 'AMBIGUOUS' : 'UNKNOWN_PROVIDER_STATE', actor, { attemptId, reason: details.error ?? 'provider outcome unknown' });
+      publish('attempt.unknown', { intentId: r.id, attemptId, connector: a.connector, method: a.method_class, amountMinor: r.amount_minor, currency: r.currency, error: details.error ?? null }, { aggregateId: r.id, tenantId: r.merchant_user_id });
       const merchant = findUserById(r.merchant_user_id);
       if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.ambiguous_hold', { paymentIntent: intentView(intent), attemptId }, { resource: { type: 'payment_intent', id: r.id } });
     } else {

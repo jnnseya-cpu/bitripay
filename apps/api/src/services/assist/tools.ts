@@ -477,6 +477,14 @@ export const TOOLS: ToolDef<any>[] = [
 ];
 
 export const TOOL_BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
+/** Additional tool packs (the operations agent mesh) register here at load; names must be unique. */
+export function registerTools(defs: ToolDef<any>[]) {
+  for (const d of defs) {
+    if (TOOL_BY_NAME.has(d.name)) continue;
+    TOOLS.push(d);
+    TOOL_BY_NAME.set(d.name, d);
+  }
+}
 
 /** JSON schema for the model, derived from the zod (v3) schema of each tool: objects, strings, numbers, booleans, enums, records, unions, defaults. */
 export function toolJsonSchema(t: ToolDef): Record<string, unknown> {

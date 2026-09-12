@@ -21,6 +21,7 @@ import { listOperators } from './momo';
 import { getSetting } from './settings';
 import { recordEvent } from './events';
 import { notify } from './notifications';
+import { publish } from './bus';
 
 export interface RoutingSettings {
   circuit: { failureThreshold: number; cooldownSeconds: number; probeIntervalMinutes: number };
@@ -160,6 +161,7 @@ function noteCircuit(connector: string, outcome: 'success' | 'failure'): void {
   const failures = r.consecutive_failures + 1;
   if (r.circuit === 'half_open' || (r.circuit === 'closed' && failures >= s.failureThreshold)) {
     db.prepare("UPDATE connector_state SET circuit = 'open', consecutive_failures = ?, opened_at = ?, half_open_at = NULL, updated_at = ? WHERE connector = ?").run(failures, now(), now(), connector);
+    if (r.circuit !== 'open') publish('connector.degraded', { connector, failures, cooldownSeconds: s.cooldownSeconds }, { aggregateId: connector });
     if (r.circuit !== 'open') {
       recordEvent('route', connector, 'circuit.opened', { type: 'system' }, { failures, cooldownSeconds: s.cooldownSeconds });
       for (const a of db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_system = 0 AND status = 'active'").all() as { id: string }[]) notify(a.id, 'Connector circuit opened', `${connector} failed ${failures} times in a row and is paused for ${s.cooldownSeconds}s. Traffic fails over to the other connectors for the same rail.`, { kind: 'connector', connector });

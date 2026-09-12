@@ -18,6 +18,7 @@ import { emitEvent } from '../webhooks';
 import { notify } from '../notifications';
 import { createHold, releaseHoldsFor } from './holds';
 import { createRefund } from '../gateway';
+import { publish } from '../bus';
 
 export interface DisputeSettings {
   /** Days the merchant has to respond, per rail (product rules; confirm with each scheme). */
@@ -122,6 +123,7 @@ export function openDispute(input: OpenDisputeInput, actor: Actor): DisputeView 
   recordEvent('chargeback', id, 'dispute.opened', actor, { transactionId: tx.id, amount, reasonCode: input.reasonCode, openedBy: input.openedBy, deadline, rail });
   const view = getDispute(null, id);
   emitEvent(merchant.id, 'payment_intent.disputed', { dispute: view }, { resource: { type: 'dispute', id } });
+  publish('dispute.opened', { disputeId: id, merchantId: merchant.id, reasonCode: input.reasonCode, amountMinor: amount, currency: tx.currency, openedBy: input.openedBy }, { aggregateId: id, tenantId: merchant.id });
   notify(merchant.id, 'Payment disputed', `${amount / 100} ${tx.currency}: ${input.reasonCode.replace(/_/g, ' ')}. Respond with evidence before ${deadline.slice(0, 10)}.`, { kind: 'chargeback', disputeId: id });
   return view;
 }

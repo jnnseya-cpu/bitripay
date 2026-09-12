@@ -40,6 +40,17 @@ import { listRefunds, resolveRefund } from '../../services/gateway';
 import { adminSwitchRouter } from './switch';
 import { adminFinopsRouter } from './finops';
 import { adminRiskRouter } from './risk';
+import { adminIntelligenceRouter } from './intelligence';
+import { assertPricingAboveFloor } from '../../services/assist/gateway';
+import { toBase as toBaseMinor } from '../../services/currencies';
+/** Price-currency minor units → US dollars (the base currency is USD-denominated; other bases convert at the platform rate). */
+function priceCurrencyToUsd(code: string): number {
+  try {
+    return toBaseMinor(100, code) / 100;
+  } catch {
+    return 1;
+  }
+}
 import { addonReport } from '../../services/assist/addon';
 import { billingReport } from '../../services/assist/billing';
 import { recentUssdSessions, ussdRequest, ussdSessionId } from '../../services/channels/ussd';
@@ -100,6 +111,7 @@ adminRouter.use(...requireAdmin);
 adminRouter.use('/switch', adminSwitchRouter);
 adminRouter.use('/finops', adminFinopsRouter);
 adminRouter.use('/risk', adminRiskRouter);
+adminRouter.use('/intelligence', adminIntelligenceRouter);
 
 // ---------------- Dashboard ----------------
 adminRouter.get('/stats', requirePermission('reports'), (_req, res) => {
@@ -1105,6 +1117,7 @@ adminRouter.put('/agents/settings', requirePermission('agents'), (req, res) => {
   next.addon.priceMinor = Math.max(0, Math.round(Number(next.addon.priceMinor) || 0));
   next.addon.periodDays = Math.max(1, Math.min(365, Number(next.addon.periodDays) || 30));
   next.addon.freeRuns = Math.max(0, Math.min(1000, Number(next.addon.freeRuns) || 0));
+  if (body.billing?.prices) assertPricingAboveFloor(next.billing.prices, { standard: next.fastModel || next.model, deep: next.model }, priceCurrencyToUsd(next.billing.priceCurrency));
   next.maxStepsPerRun = Math.max(1, Math.min(20, Number(next.maxStepsPerRun) || current.maxStepsPerRun));
   next.maxTokensPerRun = Math.max(1000, Math.min(500_000, Number(next.maxTokensPerRun) || current.maxTokensPerRun));
   setSetting('assist', next);

@@ -17,6 +17,7 @@ import { openCase } from './risk/compliance';
 import { getRiskSettings } from './settings';
 import { toBase } from './currencies';
 import { recordEvent } from './events';
+import { publish } from './bus';
 
 export interface RiskSubject {
   name?: string | null;
@@ -179,7 +180,10 @@ export function enforceOutboundRisk(input: RiskInput): RiskAssessment {
   if (r.action === 'block') {
     const cooling = r.flags.find((f) => f.startsWith('cooling_off'));
     if (cooling) throw forbidden(`This beneficiary was added recently. Larger amounts can be sent once the ${getRiskSettings().coolingOffMinutes}-minute cooling-off period has passed.`, 'cooling_off');
-    if (r.flags.some((f) => f.startsWith('sanctions'))) throw forbidden('This transaction cannot be processed. Please contact support.', 'risk_blocked');
+    if (r.flags.some((f) => f.startsWith('sanctions'))) {
+      publish('sanctions.hit', { userId: input.userId ?? null, kind: input.kind, hits: r.flags.filter((f) => f.startsWith('sanctions')), amountMinor: input.amount, currency: input.currency }, { aggregateId: input.userId ?? input.subjectId ?? null });
+      throw forbidden('This transaction cannot be processed. Please contact support.', 'risk_blocked');
+    }
     if (r.flags.some((f) => f.startsWith('velocity:'))) throw forbidden('Too many transactions in a short period. Please try again later.', 'velocity_limit');
     throw forbidden('This transaction cannot be processed right now. Our team has been notified and will contact you if anything is needed.', 'risk_blocked');
   }
@@ -200,6 +204,7 @@ if (!(globalThis as any)[LEDGER_HOOK]) {
       if (!hits.length) continue;
       // The posting's database transaction rolls back when we throw, so the trail is written once it has unwound.
       queueMicrotask(() => {
+        publish('sanctions.hit', { userId: u.id, kind: input.type, hits, amountMinor: input.amount, currency: input.currency, role }, { aggregateId: u.id });
         recordEvent('risk', u.id, 'ledger.sanctions_refused', { type: 'system' }, { role, type: input.type, amount: input.amount, currency: input.currency, hits });
         openCase({ kind: 'SANCTIONS', userId: u.id, subjectType: 'ledger', subjectId: null, severity: 'critical', title: 'Ledger posting refused: sanctioned party', summary: `${input.type} of ${input.amount} ${input.currency} with ${role} ${u.full_name} refused at commit (${hits.join(', ')}).`, indicators: hits, dedupeKey: `ledger-sanctions:${u.id}:${now().slice(0, 10)}`, sar: true });
       });

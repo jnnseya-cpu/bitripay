@@ -26,6 +26,7 @@ import { getGatewayProductSettings } from './settings';
 import { assertMoneyMovementAllowed } from './guardian';
 import { notify } from './notifications';
 import { formatMoney } from '@bitripay/shared';
+import { publish } from './bus';
 
 const paymentRequired = (message: string, code = 'payment_required') => new AppError(402, code, message);
 
@@ -698,6 +699,7 @@ export function createVerification(merchant: UserRow, input: CreateVerificationI
   if (match?.intentId && status === 'VERIFIED') appendPaymentEvent({ intentId: match.intentId, state: 'EXTERNAL_VERIFIED', source: 'koda', direction: 'internal', amountMinor: match.amount, currency: match.currency, transactionId: match.transactionId, payload: { verificationId: id, confidence } });
   const view = toVerification(db.prepare('SELECT * FROM verifications WHERE id = ?').get(id));
   emitEvent(merchant.id, 'verification.completed', { verification: view }, { resource: { type: 'verification', id } });
+  publish('verification.requested', { verificationId: view.id, merchantId: merchant.id, reference: view.reference, msisdn: view.msisdn, status: view.status }, { aggregateId: view.id, tenantId: merchant.id });
   return view;
 }
 

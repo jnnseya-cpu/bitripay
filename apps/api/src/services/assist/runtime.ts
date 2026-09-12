@@ -23,6 +23,7 @@ import { TOOL_BY_NAME, TOOLS, toolJsonSchema, type ToolContext } from './tools';
 import { decide, usableTools, effectivePolicy } from './policy';
 import { addonStatus } from './addon';
 import { planRun, settleRun, type BillingPlan } from './billing';
+import { routeModels, projectEconomics, type TaskType } from './gateway';
 
 export type RunStatus = 'queued' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'cancelled' | 'budget_exhausted';
 export interface RunView {
@@ -242,6 +243,8 @@ export interface StartOptions {
   triggerRef?: string | null;
   /** Resolve after the run finished (tests, schedules) instead of returning the queued run. */
   wait?: boolean;
+  /** Shadow mode (agent mesh): side-effecting tools are refused; the agent only reads and reports. */
+  readOnly?: boolean;
 }
 
 export async function startRun(user: UserRow, agentKey: string, input: string, opts: StartOptions = {}): Promise<RunView> {
@@ -289,6 +292,7 @@ interface RunState {
   model: string | null;
   proposals: unknown[];
   awaiting: boolean;
+  readOnly?: boolean;
 }
 
 async function execute(runId: string) {
@@ -302,7 +306,7 @@ async function execute(runId: string) {
     return;
   }
   const policy = effectivePolicy(agent.key, user.id);
-  const state: RunState = { id: runId, user, agent, step: 0, maxSteps: Math.min(agent.budget.maxSteps, policy.maxStepsPerRun), tokensIn: 0, tokensOut: 0, model: null, proposals: [], awaiting: false };
+  const state: RunState = { id: runId, user, agent, step: 0, maxSteps: Math.min(agent.budget.maxSteps, policy.maxStepsPerRun), tokensIn: 0, tokensOut: 0, model: null, proposals: [], awaiting: false, readOnly: !!parseJson<any>(row.context, {})?.autonomy && parseJson<any>(row.context, {})?.autonomy === 'shadow' };
   db.prepare("UPDATE agent_runs SET status = 'running', started_at = ? WHERE id = ?").run(now(), runId);
   emit(runId, { type: 'status', status: 'running' });
   const context = parseJson<Record<string, unknown> | null>(row.context, null);
@@ -363,6 +367,11 @@ async function callTool(state: RunState, toolName: string, rawInput: unknown): P
     return action;
   };
   const decision = decide(state.agent.key, state.user, toolName);
+  const toolDef = TOOL_BY_NAME.get(toolName);
+  if (state.readOnly && toolDef?.sideEffect) {
+    const result = { error: 'shadow_mode', reason: 'This binding runs in shadow mode: the agent reports what it would do; nothing is changed or proposed.' };
+    return { result, action: insert('denied', result, 'shadow mode', null, decision.permission ?? null) };
+  }
   if (decision.verdict === 'deny') {
     const result = { error: 'denied', reason: decision.reason };
     return { result, action: insert('denied', result, decision.reason, null, decision.permission ?? null) };
@@ -426,6 +435,10 @@ function accountContext(user: UserRow, agentKey: string) {
 
 function chooseModel(agent: AgentDef, input: string): string {
   const s = getAssistSettings();
+  // the router picks by task type and margin floor; the assist settings remain the fallback
+  const task: TaskType = ['knowledge', 'research', 'koda_core', 'fraud_scorer'].includes(agent.key) || input.length < 40 ? 'classify' : ['analyst', 'recon', 'exception_hunter', 'dispute_arbiter'].includes(agent.key) ? 'summarise' : 'reason';
+  const routed = routeModels(task).find((m) => projectEconomics(m, agent.budget.maxTokens).ok);
+  if (routed) return routed;
   if (['knowledge', 'research'].includes(agent.key) || input.length < 40) return s.fastModel || s.model;
   return s.model;
 }
@@ -536,6 +549,10 @@ export function isLookup(user: UserRow, agent: AgentDef, input: string, context:
 function offlinePlan(state: RunState, input: string, context: Record<string, unknown> | null): { plan: Plan; note?: string } {
   const t = input.toLowerCase();
   const { user, agent } = state;
+  if (agent.plan) {
+    const p = agent.plan(input, context);
+    if (p && p.length) return { plan: p.filter((x) => agent.tools.includes(x.tool)) };
+  }
   const has = (n: string) => agent.tools.includes(n);
   const cur = detectCurrency(input, user);
   const amount = detectAmount(input);
