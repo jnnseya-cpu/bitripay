@@ -24,6 +24,8 @@ import { createBatch, approveBatch, cancelBatch, getBatch, listBatches, batchRea
 import { startRun, getRun, publicRunView } from '../services/assist/runtime';
 import { agentForAlias } from '../services/assist/registry';
 import { getDb } from '../db';
+import { createPlan, listPlans, getPlan, archivePlan, listSubscriptions, getSubscription, recordUsage, cancelSubscription, listInvoices, billingOverview } from '../services/billing';
+import { readinessForLender } from '../services/creditReadiness';
 
 export const v1ExtRouter = Router();
 const merchantOnly = [requireAuth, requireRole('merchant', 'admin')];
@@ -140,3 +142,23 @@ v1ExtRouter.post('/ai/:agent', requireAuth, requireScope('ai:run'), rateLimit({ 
   res.status(b.wait === false ? 202 : 200).json({ run: publicRunView(run, req.user!.role), agent: { key: agent.key, name: agent.name, registry_id: agent.registryId ?? null } });
 }));
 v1ExtRouter.get('/ai/runs/:id', requireAuth, requireScope('ai:run'), (req, res) => res.json({ run: publicRunView(getRun(String(req.params.id), req.user!.id), req.user!.role) }));
+
+// ---------------------------------------------------------------- subscriptions and billing (module 16)
+v1ExtRouter.get('/plans', ...merchantOnly, requireScope('subscriptions:read', 'subscriptions:write'), (req, res) => res.json({ data: listPlans(req.user!.id, req.query.include_archived === 'true') }));
+v1ExtRouter.post('/plans', ...merchantOnly, requireScope('subscriptions:write'), writeLimit, (req, res) => {
+  const b = validate(z.object({ name: z.string().min(2).max(80), description: z.string().max(400).optional().nullable(), currency: z.string().length(3), amount_minor: z.number().int().min(0), interval: z.enum(['day', 'week', 'month', 'year']), interval_count: z.number().int().min(1).max(12).optional().nullable(), trial_days: z.number().int().min(0).max(365).optional().nullable(), tax_bps: z.number().int().min(0).max(5000).optional().nullable(), tax_label: z.string().max(40).optional().nullable(), usage_unit: z.string().max(40).optional().nullable(), usage_price_minor: z.number().int().min(0).optional().nullable(), code: z.string().min(2).max(40).regex(/^[a-z0-9-]+$/).optional().nullable() }), req.body);
+  res.status(201).json({ plan: createPlan(req.user!, { name: b.name, description: b.description ?? null, currency: b.currency, amountMinor: b.amount_minor, interval: b.interval, intervalCount: b.interval_count ?? 1, trialDays: b.trial_days ?? 0, taxBps: b.tax_bps ?? 0, taxLabel: b.tax_label ?? null, usageUnit: b.usage_unit ?? null, usagePriceMinor: b.usage_price_minor ?? 0, code: b.code ?? null }) });
+});
+v1ExtRouter.get('/plans/:id', ...merchantOnly, requireScope('subscriptions:read', 'subscriptions:write'), (req, res) => { const p = getPlan(String(req.params.id)); if (p.merchantId !== req.user!.id) throw notFound('Plan not found', 'plan_not_found'); res.json({ plan: p, checkout_hint: `Customers subscribe with plan code ${p.code} from the app or POST /api/billing/subscriptions` }); });
+v1ExtRouter.post('/plans/:id/archive', ...merchantOnly, requireScope('subscriptions:write'), writeLimit, (req, res) => res.json({ plan: archivePlan(req.user!, String(req.params.id)) }));
+v1ExtRouter.get('/subscriptions', ...merchantOnly, requireScope('subscriptions:read', 'subscriptions:write'), (req, res) => res.json({ data: listSubscriptions({ merchantId: req.user!.id, status: req.query.status ? String(req.query.status) : null, limit: Number(req.query.limit) || 100 }), overview: billingOverview(req.user!.id) }));
+v1ExtRouter.get('/subscriptions/:id', ...merchantOnly, requireScope('subscriptions:read', 'subscriptions:write'), (req, res) => { const s = getSubscription(String(req.params.id)); if (s.merchantId !== req.user!.id) throw notFound('Subscription not found', 'subscription_not_found'); res.json({ subscription: s, invoices: listInvoices({ subscriptionId: s.id }) }); });
+v1ExtRouter.post('/subscriptions/:id/usage', ...merchantOnly, requireScope('subscriptions:write'), writeLimit, (req, res) => {
+  const b = validate(z.object({ quantity: z.number().int().positive(), note: z.string().max(120).optional().nullable() }), req.body);
+  res.json({ subscription: recordUsage(req.user!, String(req.params.id), b.quantity, b.note ?? null) });
+});
+v1ExtRouter.post('/subscriptions/:id/cancel', ...merchantOnly, requireScope('subscriptions:write'), writeLimit, (req, res) => res.json({ subscription: cancelSubscription(req.user!, String(req.params.id), { immediately: !!req.body?.immediately }) }));
+v1ExtRouter.get('/invoices', ...merchantOnly, requireScope('subscriptions:read', 'subscriptions:write'), (req, res) => res.json({ data: listInvoices({ merchantId: req.user!.id, limit: Number(req.query.limit) || 100 }) }));
+
+// ---------------------------------------------------------------- credit readiness for lenders (module 13): consented access only
+v1ExtRouter.get('/credit_readiness/:code', requireAuth, requireScope('credit:read'), rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'v1cr' }), (req, res) => res.json(readinessForLender(String(req.params.code), { id: req.apiKeyId ?? req.user!.id, label: req.user!.business_name || req.user!.full_name })));

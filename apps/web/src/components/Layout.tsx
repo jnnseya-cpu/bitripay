@@ -45,6 +45,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/app/remittance', key: 'nav.remittance', ico: '🌍', module: 'remittance' },
     { to: '/app/exchange', key: 'nav.exchange', ico: '💱', module: 'exchange' },
     { to: '/app/savings', key: 'nav.savings', ico: '🎯' },
+    { to: '/app/fx', key: 'nav.fxTools', ico: '📈', module: 'exchange' },
   ];
   const services: NavItem[] = [
     { to: '/app/cards', key: 'nav.cards', ico: '💳', module: 'virtualCards' },
@@ -52,10 +53,12 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/app/topup', key: 'nav.topup', ico: '📶', module: 'mobileTopup' },
     { to: '/app/gift-cards', key: 'nav.giftCards', ico: '🎁', module: 'giftCards' },
     { to: '/app/p2p', key: 'nav.p2p', ico: '🤝', module: 'p2p' },
+    { to: '/app/subscriptions', key: 'nav.subscriptions', ico: '🔄' },
   ];
   const account: NavItem[] = [
     { to: '/app/transactions', key: 'nav.transactions', ico: '📜' },
     { to: '/app/statements', key: 'nav.statements', ico: '🧾' },
+    { to: '/app/credit', key: 'nav.credit', ico: '📊' },
     { to: '/app/referrals', key: 'nav.referrals', ico: '🎉', module: 'referrals' },
     { to: '/app/support', key: 'nav.support', ico: '💬', module: 'support' },
     { to: '/app/settings', key: 'nav.settings', ico: '⚙️' },

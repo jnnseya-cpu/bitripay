@@ -29,6 +29,9 @@ import { expireHolds } from './services/finops/holds';
 import { runAmlScan, refreshAllSources } from './services/risk/compliance';
 import { runFloatAlerts, runTrustScores } from './services/risk/agentIntel';
 import { refreshRateCards } from './services/diaspora';
+import { checkFxAlerts, runSweepRules, runForwards } from './services/fxTools';
+import { runBilling } from './services/billing';
+import { runReadinessBatch } from './services/creditReadiness';
 import { purgeOfflineNonces } from './services/offline';
 import { reconcileMargin } from './services/assist/gateway';
 import { listCases as listReconCases } from './services/switch/reconciliation';
@@ -45,6 +48,7 @@ let lastGuardian = 0;
 let lastAgentDay = '';
 let lastRiskDay = '';
 let lastRateCardRefresh = 0;
+let lastSweep = 0;
 let lastMarginMonth = '';
 let lastBacklinkCheck = 0;
 import { getEmoneySettings } from './services/settings';
@@ -127,6 +131,16 @@ export function startJobs() {
         const g = runGuardian();
         if (!g.ok) console.error(`[guardian] ${g.findings.length} finding(s)${g.halted ? ' — platform HALTED' : ''}`);
       }
+      // FX engine tools: alerts every minute, sweep rules hourly, forwards daily; merchant billing collects what is due.
+      const fxAlerts = checkFxAlerts();
+      if (fxAlerts.triggered) console.log(`[fx] ${fxAlerts.triggered} rate alert(s) fired`);
+      if (Date.now() - lastSweep > 3600_000) {
+        lastSweep = Date.now();
+        const sw = runSweepRules();
+        if (sw.converted) console.log(`[fx] sweep rules converted on ${sw.converted} account(s)`);
+      }
+      const billing = runBilling();
+      if (billing.collected || billing.failed || billing.ended) console.log(`[billing] collected ${billing.collected}, failed ${billing.failed}, ended ${billing.ended}`);
       const renewed = renewSubscriptions();
       if (renewed.renewed || renewed.expired) console.log(`[jobs] add-on subscriptions: renewed ${renewed.renewed}, expired ${renewed.expired}`);
       const dayKey = new Date().toISOString().slice(0, 10);
@@ -147,6 +161,12 @@ export function startJobs() {
         if (floats.alerted) console.log(`[agents] float alerts sent: ${floats.alerted}`);
         const trust = runTrustScores();
         if (trust.scored) console.log(`[agents] trust scores computed for ${trust.scored} agent(s)`);
+        const fwd = runForwards();
+        if (fwd.settled || fwd.expired) console.log(`[fx] forwards settled ${fwd.settled}, expired ${fwd.expired}`);
+        if (new Date().getUTCDay() === 0) {
+          const cr = runReadinessBatch();
+          console.log(`[credit] readiness computed for ${cr.computed} account(s)`);
+        }
         const purged = purgeOfflineNonces();
         if (purged) console.log(`[offline] purged ${purged} expired nonce(s)`);
         // reconciliation cases unmatched after 24h wake the Exception Hunter (once per case)

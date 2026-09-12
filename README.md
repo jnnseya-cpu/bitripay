@@ -610,6 +610,32 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
   `transfers:read|write`, `remittances:read|write`, `payouts:approve`, `ai:run`. Admin oversight and four-eyes
   approval at `/api/admin/finops/payout-batches`.
 
+### FX engine tools, credit readiness and merchant billing
+
+- **FX alerts, auto-convert and forwards (module 11)** (`services/fxTools.ts`, `/api/fx-tools`, web page **Rates &
+  forwards**): alerts on the reference rate fire once and notify; auto-convert rules convert a share of every receipt
+  or sweep whatever sits above an amount to keep, only at or above the rate floor the account holder set, and never
+  without a rule they created under step-up; forwards lock today's disclosed rate plus a forward margin for a
+  settlement date up to the configured tenor, ring-fence the source amount as a hold, settle at the locked rate
+  whatever the market does (daily job, or early by treasury) and expire with the hold released after the grace
+  period. Platform exposure is capped per forward, per account and in total (`/api/admin/growth/fx`).
+- **Credit readiness (module 13)** (`services/creditReadiness.ts`, `/api/credit`, web page **Credit readiness**): a
+  0–1000 signal from the account's own history — income regularity, spending versus income, savings behaviour,
+  balance stability, account age and KYC tier, bills and commitments, disputes and risk reviews — each factor
+  explained with a tip. Lenders read it only through a consent the account holder grants under step-up (access code,
+  expiry, revocation, every read logged) at `GET /v1/credit_readiness/{code}` with the `credit:read` scope; the
+  response carries the score, band and factors, never transactions, and states that BitriPay does not lend. Weekly
+  batch refresh (the CreditReadiness agent's schedule).
+- **Subscriptions and billing (module 16)** (`services/billing.ts`, `/v1/plans`, `/v1/subscriptions`, `/v1/invoices`,
+  customer side `/api/billing`, web pages **Subscriptions** and the merchant **Plans & billing** tab): plans with
+  day/week/month/year intervals, trials, tax (label and basis points) and metered usage; a customer subscribes under
+  step-up (the mandate), the first period is collected immediately (or after the trial), each invoice is an ordinary
+  merchant payment carrying the invoice number, usage recorded during the period is billed with the next invoice,
+  failed collections retry after 1, 3 and 7 days with the subscription `PAST_DUE` and a notification at each step,
+  then cancel; cancel-at-period-end ends without a charge. Webhook events `subscription.created`,
+  `subscription.cancelled`, `invoice.paid`, `invoice.payment_failed`; recurring-revenue and 30-day collection
+  overview per merchant.
+
 ### Public site, blog and SEO engine
 
 The marketing surface is **server-rendered by the API** so search engines, social previews and AI answer

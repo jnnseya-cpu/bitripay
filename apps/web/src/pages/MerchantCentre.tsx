@@ -12,7 +12,7 @@ import { offlineDevice, offlineQueue } from '../lib/offline';
  */
 export function MerchantCentre() {
   const { user, money, toast, config } = useStore();
-  const [tab, setTab] = useState<'overview' | 'settlement' | 'disputes' | 'fees' | 'payouts' | 'offline'>('overview');
+  const [tab, setTab] = useState<'overview' | 'settlement' | 'disputes' | 'fees' | 'payouts' | 'plans' | 'offline'>('overview');
   const balance = useAsync(() => api.get<any>('/api/v1/balance'), [tab]);
   const calendar = useAsync(() => api.get<any>('/api/v1/settlement_calendar'), [tab]);
   const disputes = useAsync(() => api.get<any>('/api/v1/disputes'), [tab]);
@@ -24,7 +24,7 @@ export function MerchantCentre() {
   return (
     <div>
       <PageHeader title="Command centre" subtitle="What you can spend, what is on its way, what needs your attention" actions={<><Link className="btn" to="/app/merchant/qr">🔳 QR centre</Link><Link className="btn secondary" to="/app/merchant/developer">🧑‍💻 Developer</Link></>} />
-      <Tabs tabs={[{ id: 'overview', label: 'Overview' }, { id: 'settlement', label: 'Settlement' }, { id: 'disputes', label: `Disputes${open.length ? ` (${open.length})` : ''}` }, { id: 'fees', label: 'My fees' }, { id: 'payouts', label: 'Bulk payouts' }, { id: 'offline', label: 'Offline kit' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <Tabs tabs={[{ id: 'overview', label: 'Overview' }, { id: 'settlement', label: 'Settlement' }, { id: 'disputes', label: `Disputes${open.length ? ` (${open.length})` : ''}` }, { id: 'fees', label: 'My fees' }, { id: 'payouts', label: 'Bulk payouts' }, { id: 'plans', label: 'Plans & billing' }, { id: 'offline', label: 'Offline kit' }]} value={tab} onChange={(v) => setTab(v as any)} />
       {tab === 'overview' && (
         <>
           <div className="grid cols-4">
@@ -71,6 +71,7 @@ export function MerchantCentre() {
         </div>
       )}
       {tab === 'payouts' && <BulkPayouts money={money} toast={toast} err={err} currencies={(config?.currencies ?? []).map((c) => c.code)} />}
+      {tab === 'plans' && <Plans money={money} toast={toast} err={err} currencies={(config?.currencies ?? []).map((c) => c.code)} />}
       {tab === 'offline' && <OfflineKit toast={toast} err={err} />}
     </div>
   );
@@ -305,6 +306,64 @@ function BulkPayouts({ money, toast, err, currencies }: { money: (m: number, c: 
         )}
       </div>
       <PinModal open={!!pinFor} onClose={() => setPinFor(null)} onSubmit={approve} loading={busy} title="Approve and pay this batch" summary={b ? `${b.validRows} payments · ${money(b.totalMinor + b.feeMinor, b.currency)} including fees. Rows run in order; a failed row never blocks the next.` : ''} />
+    </div>
+  );
+}
+
+/** Subscription plans and billing: create plans (interval, trial, tax, metered usage), watch subscriptions, invoices and dunning. */
+function Plans({ money, toast, err, currencies }: { money: (m: number, c: string) => string; toast: (m: string, k?: 'success' | 'error' | 'info') => void; err: (e: any) => void; currencies: string[] }) {
+  const plans = useAsync(() => api.get<any>('/api/v1/plans'), []);
+  const subs = useAsync(() => api.get<any>('/api/v1/subscriptions'), []);
+  const [form, setForm] = useState({ name: '', description: '', currency: currencies[0] ?? 'USD', amount: '', interval: 'month', trialDays: '0', taxBps: '0', taxLabel: '', usageUnit: '', usagePrice: '' });
+  const [usage, setUsage] = useState<Record<string, string>>({});
+  const create = () => api.post<any>('/api/v1/plans', { name: form.name, description: form.description || null, currency: form.currency, amount_minor: Math.round(Number(form.amount || '0') * 100), interval: form.interval, trial_days: Number(form.trialDays) || 0, tax_bps: Number(form.taxBps) || 0, tax_label: form.taxLabel || null, usage_unit: form.usageUnit || null, usage_price_minor: Math.round(Number(form.usagePrice || '0') * 100) }).then((r) => { plans.reload(); toast(`Plan created · code ${r.plan.code}`, 'success'); setForm({ ...form, name: '', description: '', amount: '' }); }).catch(err);
+  const record = (id: string) => api.post(`/api/v1/subscriptions/${id}/usage`, { quantity: Number(usage[id] || '0') }).then(() => { subs.reload(); setUsage({ ...usage, [id]: '' }); toast('Usage recorded', 'success'); }).catch(err);
+  const ov = subs.data?.overview;
+  return (
+    <div className="grid cols-2">
+      <div className="card">
+        <h3>New plan</h3>
+        <div className="grid cols-2">
+          <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Home 20 Mbps" /></Field>
+          <Field label="Currency"><Select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>{currencies.map((c) => <option key={c}>{c}</option>)}</Select></Field>
+          <Field label="Price per period"><Input inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="10.00" /></Field>
+          <Field label="Every"><Select value={form.interval} onChange={(e) => setForm({ ...form, interval: e.target.value })}><option value="day">day</option><option value="week">week</option><option value="month">month</option><option value="year">year</option></Select></Field>
+          <Field label="Trial days"><Input inputMode="numeric" value={form.trialDays} onChange={(e) => setForm({ ...form, trialDays: e.target.value })} /></Field>
+          <Field label="Tax (basis points)" hint="1600 = 16%"><Input inputMode="numeric" value={form.taxBps} onChange={(e) => setForm({ ...form, taxBps: e.target.value })} /></Field>
+          <Field label="Tax label"><Input value={form.taxLabel} onChange={(e) => setForm({ ...form, taxLabel: e.target.value })} placeholder="VAT" /></Field>
+          <Field label="Metered unit (optional)"><Input value={form.usageUnit} onChange={(e) => setForm({ ...form, usageUnit: e.target.value })} placeholder="GB" /></Field>
+          <Field label="Price per unit"><Input inputMode="decimal" value={form.usagePrice} onChange={(e) => setForm({ ...form, usagePrice: e.target.value })} placeholder="0.50" /></Field>
+        </div>
+        <Field label="Description"><Textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+        <Button onClick={create} disabled={!form.name || !form.amount}>Create plan</Button>
+        <h4 style={{ marginTop: 16 }}>Plans</h4>
+        {(plans.data?.data ?? []).map((p: any) => (
+          <div key={p.id} className="list-item">
+            <div className="flex1"><div className="main-text">{p.name} <code>{p.code}</code></div><div className="sub-text">{money(p.amountMinor, p.currency)} / {p.interval}{p.taxBps ? ` + ${p.taxBps / 100}% ${p.taxLabel ?? 'tax'}` : ''}{p.usageUnit ? ` · ${money(p.usagePriceMinor, p.currency)} per ${p.usageUnit}` : ''}{p.trialDays ? ` · ${p.trialDays}-day trial` : ''}</div></div>
+            <Button size="sm" variant="ghost" onClick={() => api.post(`/api/v1/plans/${p.id}/archive`, {}).then(() => plans.reload()).catch(err)}>Archive</Button>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        <h3>Subscriptions</h3>
+        {ov && <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>{Object.entries(ov.byStatus).map(([k, v]) => <Chip key={k}>{k} {v as number}</Chip>)}{ov.monthlyRecurring.map((m: any) => <Chip key={m.currency} kind="success">MRR {money(m.minor, m.currency)}</Chip>)}{ov.collected30d.map((c: any) => <Chip key={c.currency}>30d {money(c.minor, c.currency)} · {c.invoices} inv.</Chip>)}</div>}
+        {(subs.data?.data ?? []).length === 0 && <Empty icon="🔄" text="No subscriber yet. Share a plan code." />}
+        {(subs.data?.data ?? []).map((s: any) => (
+          <div key={s.id} className="list-item" style={{ display: 'block' }}>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <div className="main-text">{s.plan.name} · {s.customerId.slice(0, 8)}</div>
+              <StatusBadge status={s.status} />
+            </div>
+            <div className="sub-text">next {new Date(s.nextChargeAt).toLocaleDateString()}{s.usageQty ? ` · ${s.usageQty} ${s.plan.usageUnit} this period` : ''}{s.lastError ? ` · ${s.lastError}` : ''}</div>
+            {s.plan.usageUnit && ['ACTIVE', 'TRIALING', 'PAST_DUE'].includes(s.status) && (
+              <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                <Input inputMode="numeric" style={{ maxWidth: 120 }} value={usage[s.id] ?? ''} onChange={(e) => setUsage({ ...usage, [s.id]: e.target.value })} placeholder={s.plan.usageUnit} />
+                <Button size="sm" variant="secondary" onClick={() => record(s.id)} disabled={!usage[s.id]}>Record usage</Button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

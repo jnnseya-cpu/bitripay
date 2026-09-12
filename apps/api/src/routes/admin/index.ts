@@ -39,6 +39,7 @@ import { listIntents, intentTimeline } from '../../services/intents';
 import { listRefunds, resolveRefund } from '../../services/gateway';
 import { adminSwitchRouter } from './switch';
 import { adminFinopsRouter } from './finops';
+import { adminGrowthRouter } from './growth';
 import { adminRiskRouter } from './risk';
 import { adminIntelligenceRouter } from './intelligence';
 import { assertPricingAboveFloor } from '../../services/assist/gateway';
@@ -110,6 +111,7 @@ export const adminRouter = Router();
 adminRouter.use(...requireAdmin);
 adminRouter.use('/switch', adminSwitchRouter);
 adminRouter.use('/finops', adminFinopsRouter);
+adminRouter.use('/growth', adminGrowthRouter);
 adminRouter.use('/risk', adminRiskRouter);
 adminRouter.use('/intelligence', adminIntelligenceRouter);
 

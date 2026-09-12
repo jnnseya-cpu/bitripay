@@ -39,6 +39,10 @@ export const WEBHOOK_SCHEMA_VERSION = 1;
 /** Event catalogue (published on the developer portal and `GET /v1/webhook_events/types`). */
 export const WEBHOOK_EVENT_TYPES: { type: string; description: string }[] = [
   { type: 'payout_batch.created', description: 'A bulk payout batch was uploaded and validated; it waits for approval.' },
+  { type: 'subscription.created', description: 'A customer subscribed to one of your plans (mandate confirmed).' },
+  { type: 'subscription.cancelled', description: 'A subscription was cancelled by the customer, by you, or after dunning.' },
+  { type: 'invoice.paid', description: 'A subscription invoice was collected from the customer wallet.' },
+  { type: 'invoice.payment_failed', description: 'A collection attempt failed; dunning retries follow (1, 3, 7 days).' },
   { type: 'payout_batch.executed', description: 'A bulk payout batch ran: paid, partial or failed, with per-row outcomes on the batch.' },
   { type: 'payment_intent.created', description: 'An intent was created (API, QR, link, checkout session or USSD).' },
   { type: 'payment_intent.requires_action', description: 'The payer must authorise the payment (PIN, prompt, redirect).' },

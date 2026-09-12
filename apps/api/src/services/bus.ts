@@ -13,6 +13,7 @@ export const DOMAIN_EVENT_TYPES = [
   'wallet.credited', 'wallet.debited', 'income.received', 'kyc.tier_changed', 'agent.float_low', 'settlement.cycle_closed',
   'dispute.opened', 'acu.budget_low', 'attempt.unknown', 'connector.degraded', 'statement.imported', 'recon.exception_aged',
   'verification.requested', 'sanctions.hit', 'merchant.created', 'offline.promise_rejected', 'diaspora.quote_created',
+  'fx.alert_triggered', 'credit.readiness_updated', 'subscription.charged',
 ] as const;
 export type DomainEventType = (typeof DOMAIN_EVENT_TYPES)[number] | (string & {});
 export interface DomainEvent {

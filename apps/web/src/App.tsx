@@ -33,6 +33,9 @@ import { MerchantCentre } from './pages/MerchantCentre';
 import { QrCentre } from './pages/QrCentre';
 import { Developer } from './pages/Developer';
 import { Savings } from './pages/Savings';
+import { FxTools } from './pages/FxTools';
+import { Credit } from './pages/Credit';
+import { Subscriptions } from './pages/Subscriptions';
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { user, loading } = useStore();
@@ -71,6 +74,9 @@ export function App() {
         <Route path="/app/remittance" element={<Protected><Remittance /></Protected>} />
         <Route path="/app/exchange" element={<Protected><Exchange /></Protected>} />
         <Route path="/app/savings" element={<Protected><Savings /></Protected>} />
+        <Route path="/app/fx" element={<Protected><FxTools /></Protected>} />
+        <Route path="/app/credit" element={<Protected><Credit /></Protected>} />
+        <Route path="/app/subscriptions" element={<Protected><Subscriptions /></Protected>} />
         <Route path="/app/cards" element={<Protected><VirtualCards /></Protected>} />
         <Route path="/app/bills" element={<Protected><Bills /></Protected>} />
         <Route path="/app/topup" element={<Protected><Topup /></Protected>} />
