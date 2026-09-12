@@ -324,7 +324,7 @@ Open Graph and Twitter tags plus JSON-LD (`FinancialService` organisation, `WebS
 - **Backlinks** – inbound links are discovered from referrers (search engines and social hosts are
   ignored), partner and outbound links are tracked and re-verified weekly, and an outreach list shows the
   sites your articles cite that do not link back yet. Page views are counted per path, never per person.
-- **AI content agent** – built on the Anthropic SDK (`claude-opus-5` by default, adaptive thinking,
+- **Content agent** – built on the Anthropic SDK (`claude-opus-5` by default, adaptive thinking,
   structured JSON output). It drafts articles from a topic backlog on a weekly cadence or on demand,
   proposes long-tail keywords, audits articles (deterministic on-page checks plus editorial judgement),
   writes platform-native social packs and suggests internal links. Drafts always land in **review**
@@ -339,6 +339,36 @@ Open Graph and Twitter tags plus JSON-LD (`FinancialService` organisation, `WebS
 
 Rankings cannot be promised by any tool; what the engine guarantees is that every technical and
 editorial signal the engines look for is present and consistent.
+
+### Command centres and agents
+
+Every account holder gets a **command centre** (`/app/assist` on the web, *Command centre* on the phone) with a fixed
+set of agents for their role: Chief of Staff, Analyst, Research, Automation, Security and Knowledge for everyone,
+Growth for merchants and cash agents, and Operations, Compliance and System Health for administrators (these three
+also run every morning and report by notification).
+
+- **Tool gateway** (`services/assist/tools.ts`) – agents reach the platform only through typed tools over the existing
+  services (balances, transactions, statements, quotes, routes, rates, profile, knowledge, merchant stats, payout
+  queue, administrative reads). Money-moving capabilities are not tools: a send, top-up, withdrawal or exchange becomes
+  an `actions.propose` card the account holder confirms with PIN or passkey. Three administrative actions (freeze a
+  wallet, run a reconciliation, notify administrators) exist; the first two require a **second administrator** to
+  approve under step-up, exactly like the existing maker-checker.
+- **Policy engine** (`services/assist/policy.ts`) – layered rules (global → agent → account) with deny, require-approval
+  and allow lists plus step and daily-run limits; permissions are the intersection of the agent's tool list, the
+  account's role and, for staff, their admin permissions. Publishing a policy needs step-up and keeps every version.
+- **Run controller** (`services/assist/runtime.ts`) – builds context (identity, balances, memories), runs the model's
+  tool loop through the gateway with the Anthropic SDK (streaming, adaptive thinking), enforces step and token
+  budgets, meters **Agent Compute Units** (1 ACU = one US cent of model spend at the configured list prices) against a
+  monthly allowance per role, persists every step in `agent_runs` / `agent_actions` and the hash-chained event log,
+  and streams progress over server-sent events. With no model key the same tools are driven by a deterministic
+  planner, so every command centre works offline and in tests.
+- **Memories** – only what the account holder explicitly asks to keep; viewable and deletable in the command centre.
+- **Admin → Agents & command centres** – registry with pause/resume, a global kill switch, the approvals inbox,
+  a runs explorer with every tool call, the policy editor, usage and cost, and model settings (permission `agents`).
+
+API: `GET /api/assist/agents`, `POST /api/assist/runs` (`?wait=1` to block), `GET /api/assist/runs/:id/stream` (SSE),
+`GET/PUT /api/assist/instances/:agent`, `GET/POST/DELETE /api/assist/memories`, `GET /api/assist/usage`; administrators
+use `/api/admin/agents/*`. The full design is in `docs/operating-system/` (rendered as `BitriPay-OS.html`).
 
 ### Transaction lifecycle
 

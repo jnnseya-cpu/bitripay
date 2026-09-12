@@ -60,6 +60,7 @@ export function Home() {
           </Pressable>
         ))}
       </View>
+      <Button title="🧭 Command centre · ask your agents" variant="secondary" onPress={() => nav.navigate('Assist')} />
       {user?.role === 'merchant' && <Button title="🏪 Merchant tools · POS & gateway" variant="secondary" onPress={() => nav.navigate('Merchant')} />}
       {user?.role === 'agent' && <Button title="🧑‍💼 Agent tools · cash in / out" variant="secondary" onPress={() => nav.navigate('Agent')} />}
       {user?.kycStatus !== 'verified' && m.kyc !== false && <Pressable onPress={() => nav.navigate('Kyc')}><Chip label={user?.kycStatus === 'pending' ? 'KYC under review' : 'Verify your identity to raise limits →'} kind="warning" /></Pressable>}

@@ -1,8 +1,8 @@
-# BitriPay AI Operating System
+# BitriPay Operating System
 
 **Developer-ready product and architecture document · version 1.0 · September 2026**
 
-This document specifies the transformation of the BitriPay platform, as built in this repository, into an AI Operating System: a governed, self-managing, multi-agent infrastructure layer around a regulated payments core. Nothing that exists today is removed. Every module, workflow, user journey, control and revenue stream already implemented is preserved and named where it is extended.
+This document specifies the transformation of the BitriPay platform, as built in this repository, into an operating system: a governed, self-managing, multi-agent infrastructure layer around a regulated payments core. Nothing that exists today is removed. Every module, workflow, user journey, control and revenue stream already implemented is preserved and named where it is extended.
 
 Conventions: "as built" marks a capability that exists in the repository today; "new" marks a capability specified by this document. Every new capability cites the proven pattern it is modelled on. Where a number is an estimate it is labelled as one. No feature is included that a serious engineering organisation cannot build with today's tooling.
 
@@ -12,7 +12,7 @@ Conventions: "as built" marks a capability that exists in the repository today; 
 
 ### 1.1 What it is
 
-BitriPay AI-OS is a **payments-native operating system for autonomous work**. At its centre sits the regulated money core that exists today: a double-entry, multi-currency ledger; e-money issuance backed 1:1 by safeguarded funds; corridors with prefunded local liquidity; an evidence engine that settles mobile-money payouts on cryptographically signed operator confirmations rather than operator APIs; maker-checker controls and a hash-chained event log. Around that core the OS adds four layers:
+BitriPay OS is a **payments-native operating system for autonomous work**. At its centre sits the regulated money core that exists today: a double-entry, multi-currency ledger; e-money issuance backed 1:1 by safeguarded funds; corridors with prefunded local liquidity; an evidence engine that settles mobile-money payouts on cryptographically signed operator confirmations rather than operator APIs; maker-checker controls and a hash-chained event log. Around that core the OS adds four layers:
 
 1. **Command centres**: every user type (customer, merchant, agent, developer, partner, regulator, administrator) receives a dedicated AI command centre with a fixed set of agents that see only that user's data and act only within that user's permissions.
 2. **An agent workforce**: specialised, permission-scoped agents for executive, product, engineering, quality, security, revenue, customer and compliance functions, orchestrated through a single control plane with budgets, approvals and audit.
@@ -23,7 +23,7 @@ BitriPay AI-OS is a **payments-native operating system for autonomous work**. At
 
 Financial platforms today are built as static software plus people. Operations teams reconcile by hand, compliance teams review alerts one by one, growth teams read dashboards after the fact, engineering teams learn about defects from customers, and the platform's own knowledge lives in the heads of a few staff. Meanwhile the customers who need financial services most, a market trader or a moto-taxi rider, receive the least attention because serving them individually does not scale.
 
-An AI-OS replaces "software plus people" with "software plus governed agents plus people who decide". The agents do the reading, the reconciling, the drafting, the watching and the first-line fixing, continuously; people set policy, approve what policy requires them to approve, and handle what the agents escalate.
+A BitriPay OS replaces "software plus people" with "software plus governed agents plus people who decide". The agents do the reading, the reconciling, the drafting, the watching and the first-line fixing, continuously; people set policy, approve what policy requires them to approve, and handle what the agents escalate.
 
 ### 1.3 Why it is different
 
@@ -46,7 +46,7 @@ Dominance comes from compounding data and distribution, not from any single feat
 
 ### 2.1 What existing platforms do well and where they stop
 
-| Platform class | Examples | Strength | Where they stop | How the AI-OS fills the gap |
+| Platform class | Examples | Strength | Where they stop | How the BitriPay OS fills the gap |
 |---|---|---|---|---|
 | Card-first payment APIs | Stripe, Adyen, Checkout.com | Developer experience, global card acquiring, dispute tooling | No mobile-money last mile without operator APIs; operations remain the customer's problem; no agent network | Evidence engine and payout devices (as built) plus operations agents that run reconciliation, disputes and liquidity |
 | Mobile money operators | M-Pesa, Orange Money, Airtel Money, MTN MoMo | Ubiquity, cash agent networks | Closed ecosystems, weak cross-operator and cross-border interoperability, thin merchant tooling, no AI assistance for agents | Any-to-any routing (as built), agent command centre, merchant POS and gateway |

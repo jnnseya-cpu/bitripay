@@ -1,8 +1,8 @@
 ## 6. Full platform modules
 
-Module-by-module specification. "As built" modules are listed with their existing scope so nothing is lost; "extended" describes what the AI-OS adds.
+Module-by-module specification. "As built" modules are listed with their existing scope so nothing is lost; "extended" describes what the BitriPay OS adds.
 
-| Module | As built | Extended by the AI-OS |
+| Module | As built | Extended by the BitriPay OS |
 |---|---|---|
 | Accounts & identity | Email/phone OTP registration, 2FA (TOTP), transaction PIN, passkeys (WebAuthn), biometric step-up, device registration, KYC submissions and review, loud-alert preference | Organisations, roles as permissions (regulator, developer, partner), device fingerprinting and risk-based authentication (section 13), session risk scoring |
 | Wallets & ledger | Double-entry multi-currency ledger, per-currency balance assertion, escrow holds, fee splits, conversion legs through treasury, promotional credit, wallet freezes, balance classification | Feature store views for agents; ledger projections to the warehouse in near-real time |

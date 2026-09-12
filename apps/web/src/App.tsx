@@ -19,6 +19,7 @@ import { Bills, Topup, GiftCards } from './pages/Services';
 import { P2P } from './pages/P2P';
 import { Transactions, TransactionDetail } from './pages/Transactions';
 import { Statements } from './pages/Statements';
+import { Assist } from './pages/Assist';
 import { ConfirmCurrency } from './pages/ConfirmCurrency';
 import { Referrals } from './pages/Referrals';
 import { Support } from './pages/Support';
@@ -53,6 +54,7 @@ export function App() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/confirm-currency/:token" element={<ConfirmCurrency />} />
         <Route path="/app" element={<Protected><Dashboard /></Protected>} />
+        <Route path="/app/assist" element={<Protected><Assist /></Protected>} />
         <Route path="/app/send" element={<Protected><Send /></Protected>} />
         <Route path="/app/move" element={<Protected><MoveMoney /></Protected>} />
         <Route path="/app/scan" element={<Protected><Scan /></Protected>} />

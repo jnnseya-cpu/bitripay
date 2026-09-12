@@ -23,6 +23,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const main: NavItem[] = [
     { to: '/app', key: 'nav.dashboard', ico: '🏠' },
+    { to: '/app/assist', key: 'nav.assist', ico: '🧭' },
     { to: '/app/scan', key: 'nav.scan', ico: '📷', module: 'qrPayments' },
     { to: '/app/receive', key: 'nav.receive', ico: '🔳', module: 'qrPayments' },
     { to: '/app/send', key: 'nav.send', ico: '📤', module: 'transfers' },

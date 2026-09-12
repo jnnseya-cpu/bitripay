@@ -4,7 +4,7 @@ import { useStore } from '../lib/store';
 import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, Switch, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
 
 /**
- * Blog & SEO console: articles (write, review, publish, schedule), the AI content agent (draft, keywords, audit,
+ * Blog & SEO console: articles (write, review, publish, schedule), the content agent (draft, keywords, audit,
  * social pack), dynamic hyperlink rules, backlinks and outreach, page views, feeds and IndexNow, settings.
  */
 export function Seo() {
@@ -45,9 +45,9 @@ export function Seo() {
 
   return (
     <div>
-      <PageHeader title="Blog & SEO" subtitle="Articles written by editors or drafted by the AI agent, dynamic internal links, backlinks, feeds and structured data. Everything the search engines, social networks and AI answer engines read is rendered on the server." actions={<><Button variant="secondary" onClick={() => setTab('agent')}>✨ Ask the agent</Button><Button onClick={() => openEditor()}>+ New article</Button></>} />
+      <PageHeader title="Blog & SEO" subtitle="Articles written by editors or drafted by the content agent, dynamic internal links, backlinks, feeds and structured data. Everything the search engines, social networks and AI answer engines read is rendered on the server." actions={<><Button variant="secondary" onClick={() => setTab('agent')}>✨ Ask the agent</Button><Button onClick={() => openEditor()}>+ New article</Button></>} />
       {agent && <Alert kind={agent.keyConfigured ? 'success' : 'warning'}>{agent.keyConfigured ? <>Content agent <b>live</b> on {agent.model}. Drafts go to review{agent.autoPublish ? ' and are published automatically' : ' until an editor publishes them'}; {agent.postsPerWeek} article(s) per week from a backlog of {agent.topicsQueued} topic(s).</> : <>Content agent in <b>offline mode</b>: no Anthropic API key configured, so drafts, keyword ideas and audits use built-in templates and checks. Add the key under Settings to switch to the live model ({agent.model}).</>}</Alert>}
-      <Tabs tabs={[{ id: 'posts', label: `Articles (${posts.length})` }, { id: 'agent', label: 'AI content agent' }, { id: 'links', label: 'Dynamic links' }, { id: 'backlinks', label: 'Backlinks & outreach' }, { id: 'settings', label: 'SEO settings' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <Tabs tabs={[{ id: 'posts', label: `Articles (${posts.length})` }, { id: 'agent', label: 'Content agent' }, { id: 'links', label: 'Dynamic links' }, { id: 'backlinks', label: 'Backlinks & outreach' }, { id: 'settings', label: 'SEO settings' }]} value={tab} onChange={(v) => setTab(v as any)} />
 
       {tab === 'posts' && (
         <>
@@ -140,7 +140,7 @@ export function Seo() {
               <Field label="Default description"><Textarea rows={2} value={settings.defaultDescription} onChange={(e) => setSettings({ ...settings, defaultDescription: e.target.value })} /></Field>
               <Field label="Social profiles (sameAs, one URL per line)"><Textarea rows={3} value={(settings.organization?.sameAs ?? []).join('\n')} onChange={(e) => setSettings({ ...settings, organization: { ...settings.organization, sameAs: e.target.value.split('\n').map((x) => x.trim()).filter(Boolean) } })} /></Field>
               <div className="divider" />
-              <h4>AI content agent</h4>
+              <h4>Content agent</h4>
               <div className="grid cols-2">
                 <Field label="Anthropic API key" hint="Stored encrypted. Leave the dots to keep the current key."><Input type="password" value={settings.agent.apiKey} onChange={(e) => setSettings({ ...settings, agent: { ...settings.agent, apiKey: e.target.value } })} /></Field>
                 <Field label="Model"><Select value={settings.agent.model} onChange={(e) => setSettings({ ...settings, agent: { ...settings.agent, model: e.target.value } })}><option value="claude-opus-5">claude-opus-5 (recommended)</option><option value="claude-sonnet-5">claude-sonnet-5</option><option value="claude-haiku-4-5">claude-haiku-4-5</option></Select></Field>

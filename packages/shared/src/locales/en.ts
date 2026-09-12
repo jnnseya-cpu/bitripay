@@ -18,6 +18,7 @@ export const en: Record<string, string> = {
   'nav.statements': 'Statements',
   'nav.referrals': 'Referrals',
   'nav.support': 'Support',
+  'nav.assist': 'Command centre',
   'nav.settings': 'Settings',
   'nav.merchant': 'Merchant tools',
   'nav.agentTools': 'Agent tools',

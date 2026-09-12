@@ -1,5 +1,5 @@
 /**
- * AI content agent for SEO. Uses the Anthropic SDK (Claude) to draft articles, propose keywords, audit pages,
+ * Content agent for SEO. Uses the Anthropic SDK (Claude) to draft articles, propose keywords, audit pages,
  * write social packs and suggest internal links. Every run is logged with tokens and cost; drafts always go to
  * editorial review unless auto-publish is switched on. When no API key is configured (or the API is unreachable)
  * a deterministic template writer produces a clearly labelled fallback draft so the pipeline keeps working.

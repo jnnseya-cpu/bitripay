@@ -27,6 +27,7 @@ export type RootParams = {
   Settings: undefined;
   Security: undefined;
   Statements: undefined;
+  Assist: undefined;
   Kyc: undefined;
   Referrals: undefined;
   Support: undefined;

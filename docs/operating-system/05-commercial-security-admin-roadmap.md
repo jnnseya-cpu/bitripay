@@ -191,11 +191,11 @@ Multi-region active-passive then active-active for read paths, per-region ledger
 
 ## 17. Output format and supporting documents
 
-This document is delivered as a developer-ready set in `docs/ai-os/`, rendered to a single navigable page, and is the source of truth for the AI-OS programme. The following supporting documents are summarised here and expanded in the same directory as the programme proceeds.
+This document is delivered as a developer-ready set in `docs/operating-system/`, rendered to a single navigable page, and is the source of truth for the BitriPay OS programme. The following supporting documents are summarised here and expanded in the same directory as the programme proceeds.
 
 ### 17.1 Product Requirements Document (PRD) summary
 
-- **Goal**: ship the AI-OS layers (command centres, agent workforce, self-managing platform, gateway door, commercial engine) without regressing any as-built capability.
+- **Goal**: ship the BitriPay OS layers (command centres, agent workforce, self-managing platform, gateway door, commercial engine) without regressing any as-built capability.
 - **Users and jobs**: section 3; top jobs per user type are the first three rows of each command centre in section 4.
 - **Functional requirements**: sections 4–8 and 11 (each table row is a requirement with an identifier formed as `§<section>.<row>`).
 - **Non-functional requirements**: availability 99.9% (Beta) → 99.95% (Enterprise); p95 API latency < 300 ms for reads and < 800 ms for money writes; agent first token < 2 s; evidence verification < 60 s from receipt; reserve reconciliation daily and on demand; all money-critical alerts loud within 5 s.
@@ -270,4 +270,4 @@ Before each phase exit, the review checks:
 
 ### Closing note
 
-Everything above is buildable with the platform as it stands and the tooling named. The as-built core supplies the hard parts that most "AI fintech" plans hand-wave: a real ledger, real reserve control, real evidence, real approvals. The AI-OS adds governed agents around them and a commercial engine on top. Build the tool gateway and the policy engine first; every agent after that is configuration, evaluation and prompt work rather than new risk.
+Everything above is buildable with the platform as it stands and the tooling named. The as-built core supplies the hard parts that most "agent fintech" plans hand-wave: a real ledger, real reserve control, real evidence, real approvals. The BitriPay OS adds governed agents around them and a commercial engine on top. Build the tool gateway and the policy engine first; every agent after that is configuration, evaluation and prompt work rather than new risk.

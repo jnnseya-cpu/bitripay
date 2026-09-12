@@ -51,7 +51,7 @@
 
 ### 9.3 Frontend architecture
 
-| Surface | As built | AI-OS extension |
+| Surface | As built | BitriPay OS extension |
 |---|---|---|
 | Customer web (`apps/web`) | React 19, Vite, SSR-rendered marketing/blog/legal pages, cinematic landing, statements, currency-consent flow | Command Centre route (`/assist`) with streaming chat, task cards, approvals inbox, voice input (Web Speech API with server fallback), "explain this" on every transaction |
 | Admin (`apps/admin`) | Treasury, e-money, corridors, users, SEO, approvals, loud alerts | Super Control Centre (section 14): agent registry, policy editor, budget dashboards, incident room, model routing, kill switches |
@@ -323,7 +323,7 @@ event_log (hash chain) ← every table above via outbox
 | GET | `/events`, `/events/:id` [events:read] | Event log for the merchant |
 | POST | `/sandbox/simulate` [sandbox] | Simulate evidence, settlement, dispute, failure |
 
-**New: AI-OS API**
+**New: BitriPay OS API**
 
 | Method | Path | Purpose |
 |---|---|---|
