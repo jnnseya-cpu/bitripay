@@ -34,6 +34,7 @@ import { TOOLS } from '../../services/assist/tools';
 import { getAgentDef } from '../../services/assist/registry';
 import { config } from '../../config';
 import { addonReport } from '../../services/assist/addon';
+import { billingReport } from '../../services/assist/billing';
 import { recentUssdSessions, ussdRequest, ussdSessionId } from '../../services/channels/ussd';
 import { recentSms, smsHandle } from '../../services/channels/sms';
 import { getChannelSettings } from '../../services/settings';
@@ -1047,7 +1048,7 @@ adminRouter.get('/audit-logs', requirePermission('admins'), (req, res) => {
 // ---------------------------------------------------------------------------------------------------------------------
 adminRouter.get('/agents', requirePermission('agents'), (_req, res) => {
   const s = getAssistSettings();
-  res.json({ agents: agentStats(), runtime: runtimeStatus(), policies: listPolicies(), approvals: listApprovals({ status: 'proposed' }), forbidden: FORBIDDEN, addon: addonReport(), tools: TOOLS.map((t) => ({ name: t.name, description: t.description, roles: t.roles, permission: t.permission ?? null, sideEffect: t.sideEffect, requiresApproval: !!t.requiresApproval })), settings: { ...s, apiKey: s.apiKey ? '••••••••' : '' }, usage: getDb().prepare("SELECT day, agent_key, model, SUM(runs) runs, SUM(tokens_in) tokens_in, SUM(tokens_out) tokens_out, SUM(cost_micros) cost_micros, SUM(acu) acu FROM agent_usage WHERE day >= ? GROUP BY day, agent_key, model ORDER BY day DESC").all(new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)) });
+  res.json({ agents: agentStats(), runtime: runtimeStatus(), policies: listPolicies(), approvals: listApprovals({ status: 'proposed' }), forbidden: FORBIDDEN, addon: addonReport(), billing: billingReport(), tools: TOOLS.map((t) => ({ name: t.name, description: t.description, roles: t.roles, permission: t.permission ?? null, sideEffect: t.sideEffect, requiresApproval: !!t.requiresApproval })), settings: { ...s, apiKey: s.apiKey ? '••••••••' : '' }, usage: getDb().prepare("SELECT day, agent_key, model, SUM(runs) runs, SUM(tokens_in) tokens_in, SUM(tokens_out) tokens_out, SUM(cost_micros) cost_micros, SUM(acu) acu FROM agent_usage WHERE day >= ? GROUP BY day, agent_key, model ORDER BY day DESC").all(new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)) });
 });
 adminRouter.post('/agents/:key/pause', requirePermission('agents'), (req, res) => {
   const s = getAssistSettings();
@@ -1081,6 +1082,15 @@ adminRouter.put('/agents/settings', requirePermission('agents'), (req, res) => {
   next.paused = Array.isArray(next.paused) ? next.paused : current.paused;
   next.allowances = { ...current.allowances, ...(body.allowances ?? {}) };
   next.pricing = { ...current.pricing, ...(body.pricing ?? {}) };
+  next.billing = { ...current.billing, ...(body.billing ?? {}), prices: { ...current.billing.prices, ...(body.billing?.prices ?? {}) } };
+  next.billing.prices.standard = Math.max(0, Math.round(Number(next.billing.prices.standard) || 0));
+  next.billing.prices.deep = Math.max(0, Math.round(Number(next.billing.prices.deep) || 0));
+  next.billing.taxRateBps = Math.max(0, Math.min(5000, Math.round(Number(next.billing.taxRateBps) || 0)));
+  next.billing.dailyCapPerUser = Math.max(1, Math.min(1000, Math.round(Number(next.billing.dailyCapPerUser) || 20)));
+  next.billing.platformCapPctOfFees = Math.max(0, Math.min(100, Number(next.billing.platformCapPctOfFees) || 0));
+  next.billing.platformCapFloorMinor = Math.max(0, Math.round(Number(next.billing.platformCapFloorMinor) || 0));
+  next.billing.freeRunsPerMonth = Math.max(0, Math.min(1000, Math.round(Number(next.billing.freeRunsPerMonth) || 0)));
+  if (body.billing && (JSON.stringify(body.billing.prices ?? {}) !== '{}' || body.billing.taxRateBps !== undefined || body.billing.freeRunsPerMonth !== undefined) && body.billing.disclosureVersion === undefined && (JSON.stringify(next.billing.prices) !== JSON.stringify(current.billing.prices) || next.billing.taxRateBps !== current.billing.taxRateBps || next.billing.freeRunsPerMonth !== current.billing.freeRunsPerMonth)) next.billing.disclosureVersion = (current.billing.disclosureVersion || 1) + 1;
   next.addon = { ...current.addon, ...(body.addon ?? {}) };
   next.addon.priceMinor = Math.max(0, Math.round(Number(next.addon.priceMinor) || 0));
   next.addon.periodDays = Math.max(1, Math.min(365, Number(next.addon.periodDays) || 30));

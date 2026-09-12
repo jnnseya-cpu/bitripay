@@ -10,7 +10,7 @@ import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader
 export function Agents() {
   const { toast, can } = useStore();
   const data = useAsync(() => api.get<any>('/api/admin/agents'), []);
-  const [tab, setTab] = useState<'agents' | 'approvals' | 'runs' | 'policies' | 'usage' | 'addon' | 'settings'>('agents');
+  const [tab, setTab] = useState<'agents' | 'approvals' | 'runs' | 'policies' | 'usage' | 'billing' | 'addon' | 'settings'>('agents');
   const ok = (m: string) => { toast(m, 'success'); data.reload(); };
   const err = (e: any) => toast(e.message, 'error');
   const d = data.data;
@@ -21,13 +21,14 @@ export function Agents() {
     <div>
       <PageHeader title="Agents & command centres" subtitle="Every agent reads through typed tools under a policy you publish here. Agents propose; people approve. Nothing here can mint, release, unfreeze or change a corridor." actions={<StepUpButton variant={rt.killSwitch ? 'success' : 'danger'} title={rt.killSwitch ? 'Resume all agents' : 'Pause every agent now'} onConfirm={(pin) => api.post('/api/admin/agents/kill-switch', { on: !rt.killSwitch, pin }).then(() => ok(rt.killSwitch ? 'Agents resumed' : 'All agents paused')).catch(err)}>{rt.killSwitch ? '▶ Resume all agents' : '⏹ Kill switch'}</StepUpButton>} />
       <Alert kind={rt.killSwitch ? 'error' : rt.mode === 'live' ? 'success' : 'warning'}>{rt.killSwitch ? <>Kill switch is <b>on</b>: no agent runs until an administrator resumes them.</> : rt.mode === 'live' ? <>Agents are <b>live</b> on {rt.model} (fast model {rt.fastModel}). {rt.agents} agents, {rt.tools} tools, {pending.length} approval(s) waiting.</> : <>Agents run in <b>offline mode</b>: no model key configured, so answers come from the built-in planner over the same tools. Add a key under Settings to switch to {rt.model}.</>}</Alert>
-      <Tabs tabs={[{ id: 'agents', label: `Agents (${d.agents.length})` }, { id: 'approvals', label: `Approvals (${pending.length})` }, { id: 'runs', label: 'Runs' }, { id: 'policies', label: `Policies (${d.policies.length})` }, { id: 'usage', label: 'Usage & cost' }, { id: 'addon', label: `Add-on (${d.addon?.active ?? 0} active)` }, { id: 'settings', label: 'Settings' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <Tabs tabs={[{ id: 'agents', label: `Agents (${d.agents.length})` }, { id: 'approvals', label: `Approvals (${pending.length})` }, { id: 'runs', label: 'Runs' }, { id: 'policies', label: `Policies (${d.policies.length})` }, { id: 'usage', label: 'Usage & cost' }, { id: 'billing', label: 'Billing & margin' }, { id: 'addon', label: `Flat plan (${d.addon?.active ?? 0} active)` }, { id: 'settings', label: 'Settings' }]} value={tab} onChange={(v) => setTab(v as any)} />
       {tab === 'agents' && <Registry d={d} ok={ok} err={err} />}
       {tab === 'approvals' && <Approvals items={pending} ok={ok} err={err} canApprove={can('approvals')} />}
       {tab === 'runs' && <Runs />}
       {tab === 'policies' && <Policies d={d} ok={ok} err={err} />}
       {tab === 'usage' && <Usage d={d} />}
       {tab === 'addon' && <Addon d={d} />}
+      {tab === 'billing' && <Billing d={d} />}
       {tab === 'settings' && <Settings d={d} ok={ok} err={err} />}
     </div>
   );
@@ -146,12 +147,29 @@ function Usage({ d }: { d: any }) {
   );
 }
 
+function Billing({ d }: { d: any }) {
+  const b = d.billing;
+  const c = b.currency;
+  const f = (minor: number) => `${(minor / 100).toFixed(2)} ${c}`;
+  const capPct = b.cap.cap ? Math.min(100, Math.round((b.cap.spend / b.cap.cap) * 100)) : 100;
+  return (
+    <>
+      <Alert kind={b.cap.degraded ? 'warning' : b.margin >= 0 ? 'success' : 'error'}>{b.cap.degraded ? <>Platform cap reached: model spend {f(b.cap.spend)} of {f(b.cap.cap)} this month. Everyone is answered by the free planner until next month; nothing is charged.</> : <>Month {b.month}: agents earned {f(b.revenue)} ({f(b.tax)} tax), cost {f(b.modelCost)} in model spend, margin <b>{f(b.margin)}</b>. Spend is at {capPct}% of the cap ({f(b.cap.cap)} = max of {b.cap.pctOfFees}% of last month's fees {f(b.cap.lastMonthFees)} and the floor {f(b.cap.floor)}).</>}</Alert>
+      <div className="grid cols-4 mb"><div className="card"><KV k="Revenue (tax incl.)" v={f(b.revenue)} /></div><div className="card"><KV k="Tax to remit" v={f(b.tax)} /></div><div className="card"><KV k="Model cost" v={f(b.modelCost)} /></div><div className="card"><KV k="Margin" v={<span style={{ color: b.margin >= 0 ? 'var(--success, #15803d)' : '#b91c1c' }}>{f(b.margin)}</span>} /></div></div>
+      <div className="grid cols-2">
+        <div className="card"><h4>Runs this month by billing outcome</h4><Table head={['Outcome', 'Runs']} rows={b.runsByReason.map((r: any) => [<span>{r.reason === 'lookup' ? 'free lookup' : r.reason === 'offline' ? 'free (no model)' : r.reason === 'allowance' ? 'free allowance' : r.reason === 'charged' ? 'charged' : r.reason === 'degraded' ? 'free (cap reached)' : r.reason}</span>, r.count])} empty="No runs yet" /><p className="tiny muted">{b.consents} account(s) have accepted the current pricing.</p></div>
+        <div className="card"><h4>Revenue by wallet currency</h4><Table head={['Currency', 'Questions', 'Charged', 'Tax']} rows={b.byCurrency.map((r: any) => [r.currency, r.c, (r.total / 100).toFixed(2), (r.tax / 100).toFixed(2)])} empty="Nothing charged yet" /><p className="tiny muted">Every charge is a ledger posting to the fees account with the tax share in its metadata, so accounting and VAT returns come straight from the ledger.</p></div>
+      </div>
+    </>
+  );
+}
+
 function Addon({ d }: { d: any }) {
   const a = d.addon ?? { active: 0, revenue: [], recent: [] };
   const s = d.settings.addon;
   return (
     <>
-      <Alert kind="info">The command centres are an optional add-on. Account holders who want them pay {s.priceCurrency} {(s.priceMinor / 100).toFixed(2)} per {s.periodDays} days from their wallet (shown in their own currency at the platform rate); everyone else keeps using BitriPay exactly as before. Administrators never pay. Change the price and period under Settings.</Alert>
+      <Alert kind="info">{s.enabled ? <>The flat plan is offered as an alternative to per-question pricing: {s.priceCurrency} {(s.priceMinor / 100).toFixed(2)} per {s.periodDays} days from the wallet, unlimited questions within the caps. Administrators never pay.</> : <>The flat plan is switched off; account holders pay per question. Enable it under Settings to offer it as an alternative.</>}</Alert>
       <div className="grid cols-3 mb"><div className="card"><KV k="Active subscriptions" v={a.active} /></div>{a.revenue.map((r: any) => <div key={r.currency} className="card"><KV k={`Revenue ${r.currency}`} v={`${(r.total / 100).toFixed(2)} (${r.c} payments)`} /></div>)}</div>
       <div className="card"><Table head={['Account', 'Status', 'Price', 'Period', 'Renews', 'Started', 'Expires', 'Renewals']} rows={a.recent.map((r: any) => [<span className="mono tiny">{r.userId}</span>, <Chip kind={r.status === 'active' ? 'success' : undefined}>{r.status}</Chip>, `${(r.amount / 100).toFixed(2)} ${r.currency}`, `${r.periodDays} days`, r.autoRenew ? 'yes' : 'no', fmtDate(r.startedAt), fmtDate(r.expiresAt), r.renewals])} empty="No subscriptions yet" /></div>
     </>
@@ -178,8 +196,17 @@ function Settings({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
           <div className="grid cols-2"><Field label="Max steps per run"><Input type="number" value={s.maxStepsPerRun} onChange={(e) => setS({ ...s, maxStepsPerRun: Number(e.target.value) })} /></Field><Field label="Max tokens per run"><Input type="number" value={s.maxTokensPerRun} onChange={(e) => setS({ ...s, maxTokensPerRun: Number(e.target.value) })} /></Field></div>
         </div>
         <div>
-          <h4>Paid add-on</h4>
-          <Switch on={s.addon.enabled} onChange={(v) => setS({ ...s, addon: { ...s.addon, enabled: v } })} label="Account holders pay to activate the command centres (off = included for everyone)" />
+          <h4>Per-question pricing</h4>
+          <Field label="Mode"><Select value={s.billing.mode} onChange={(e) => setS({ ...s, billing: { ...s.billing, mode: e.target.value } })}><option value="per_use">Pay per question (recommended)</option><option value="included">Included for everyone (platform pays)</option><option value="subscription">Flat plan only</option></Select></Field>
+          <div className="grid cols-3"><Field label={`Question (${s.billing.priceCurrency} minor, tax incl.)`}><Input type="number" value={s.billing.prices.standard} onChange={(e) => setS({ ...s, billing: { ...s.billing, prices: { ...s.billing.prices, standard: Number(e.target.value) } } })} /></Field><Field label="In-depth analysis"><Input type="number" value={s.billing.prices.deep} onChange={(e) => setS({ ...s, billing: { ...s.billing, prices: { ...s.billing.prices, deep: Number(e.target.value) } } })} /></Field><Field label="Price currency"><Input value={s.billing.priceCurrency} onChange={(e) => setS({ ...s, billing: { ...s.billing, priceCurrency: e.target.value.toUpperCase() } })} /></Field></div>
+          <div className="grid cols-3"><Field label="Tax in price (bps)"><Input type="number" value={s.billing.taxRateBps} onChange={(e) => setS({ ...s, billing: { ...s.billing, taxRateBps: Number(e.target.value) } })} /></Field><Field label="Free questions / month"><Input type="number" value={s.billing.freeRunsPerMonth} onChange={(e) => setS({ ...s, billing: { ...s.billing, freeRunsPerMonth: Number(e.target.value) } })} /></Field><Field label="Paid questions / day"><Input type="number" value={s.billing.dailyCapPerUser} onChange={(e) => setS({ ...s, billing: { ...s.billing, dailyCapPerUser: Number(e.target.value) } })} /></Field></div>
+          <Switch on={s.billing.freeRunsRequireActivity} onChange={(v) => setS({ ...s, billing: { ...s.billing, freeRunsRequireActivity: v } })} label="Free questions only in months the account moved money" />
+          <div className="grid cols-2"><Field label="Platform cap: % of last month's fee revenue" hint="Model spend past this share degrades everyone to the free planner."><Input type="number" value={s.billing.platformCapPctOfFees} onChange={(e) => setS({ ...s, billing: { ...s.billing, platformCapPctOfFees: Number(e.target.value) } })} /></Field><Field label="Cap floor (minor units)"><Input type="number" value={s.billing.platformCapFloorMinor} onChange={(e) => setS({ ...s, billing: { ...s.billing, platformCapFloorMinor: Number(e.target.value) } })} /></Field></div>
+          <Field label="Roles that may ask for in-depth (main model) answers"><Input value={(s.billing.deepRoles ?? []).join(', ')} onChange={(e) => setS({ ...s, billing: { ...s.billing, deepRoles: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) } })} /></Field>
+          <Switch on={s.billing.simulateLive} onChange={(v) => setS({ ...s, billing: { ...s.billing, simulateLive: v } })} label="Sandbox: bill and meter as if the model answered (no key needed)" />
+          <p className="tiny muted">Disclosure version {s.billing.disclosureVersion}: changing prices, tax or the free allowance bumps it automatically and every account re-reads the pricing before the next question.</p>
+          <h4>Optional flat plan</h4>
+          <Switch on={s.addon.enabled} onChange={(v) => setS({ ...s, addon: { ...s.addon, enabled: v } })} label="Offer a flat plan (unlimited questions per period) as an alternative" />
           <div className="grid cols-3"><Field label="Price (minor units)"><Input type="number" value={s.addon.priceMinor} onChange={(e) => setS({ ...s, addon: { ...s.addon, priceMinor: Number(e.target.value) } })} /></Field><Field label="Price currency"><Input value={s.addon.priceCurrency} onChange={(e) => setS({ ...s, addon: { ...s.addon, priceCurrency: e.target.value.toUpperCase() } })} /></Field><Field label="Period (days)"><Input type="number" value={s.addon.periodDays} onChange={(e) => setS({ ...s, addon: { ...s.addon, periodDays: Number(e.target.value) } })} /></Field></div>
           <div className="grid cols-2"><Field label="Free runs per month before paying"><Input type="number" value={s.addon.freeRuns} onChange={(e) => setS({ ...s, addon: { ...s.addon, freeRuns: Number(e.target.value) } })} /></Field><div><Switch on={s.addon.autoRenew} onChange={(v) => setS({ ...s, addon: { ...s.addon, autoRenew: v } })} label="Renew automatically by default" /></div></div>
           <h4>Monthly allowance (ACU) per role · 0 = unlimited</h4>

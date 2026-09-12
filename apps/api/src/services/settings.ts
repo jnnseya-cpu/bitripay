@@ -169,6 +169,35 @@ export interface AssistSettings {
    * The command centres are an optional add-on. When enabled, account holders pay a small fee from their wallet to
    * activate them for a period; everyone else keeps using BitriPay exactly as before. Administrators never pay.
    */
+  /**
+   * Per-use metering. Prices are disclosed before first use (consent), shown on every question, charged from the
+   * wallet only when a run completes, and only when the balance covers them. Caps keep model spend inside a share of
+   * fee revenue so the platform can never lose money on agents.
+   */
+  billing: {
+    /** per_use: pay per question (recommended). included: free for everyone. subscription: the flat plan only. */
+    mode: 'per_use' | 'included' | 'subscription';
+    priceCurrency: string;
+    /** Tax-inclusive prices per run tier in the price currency (minor units). free runs cost nothing. */
+    prices: { standard: number; deep: number };
+    /** VAT / digital-services tax included in the price, in basis points (2000 = 20%). */
+    taxRateBps: number;
+    /** Free standard questions per month for accounts that moved money this month. */
+    freeRunsPerMonth: number;
+    freeRunsRequireActivity: boolean;
+    /** Live (model-backed) runs per account per day. */
+    dailyCapPerUser: number;
+    /** Platform model spend this month may not exceed this share of last month's net fee revenue… */
+    platformCapPctOfFees: number;
+    /** …but never below this floor (price currency, minor units) so a young platform still works. */
+    platformCapFloorMinor: number;
+    /** Who may request deep (main-model) runs. */
+    deepRoles: string[];
+    /** Bump when the disclosure text or prices change; account holders re-accept before the next question. */
+    disclosureVersion: number;
+    /** Sandbox: without a model key, bill and meter as if the fast model answered (synthetic tokens). */
+    simulateLive: boolean;
+  };
   addon: {
     enabled: boolean;
     /** Price in the price currency (minor units); shown in each wallet currency at the platform rate. */
@@ -270,7 +299,8 @@ const DEFAULT_ASSIST: AssistSettings = {
   paused: [],
   killSwitch: false,
   scheduledSystemAgents: true,
-  addon: { enabled: true, priceCurrency: 'GBP', priceMinor: 299, periodDays: 30, freeRuns: 0, autoRenew: true },
+  billing: { mode: 'per_use', priceCurrency: 'GBP', prices: { standard: 5, deep: 35 }, taxRateBps: 2000, freeRunsPerMonth: 5, freeRunsRequireActivity: true, dailyCapPerUser: 20, platformCapPctOfFees: 15, platformCapFloorMinor: 5_000, deepRoles: ['merchant', 'agent', 'admin'], disclosureVersion: 1, simulateLive: false },
+  addon: { enabled: false, priceCurrency: 'GBP', priceMinor: 299, periodDays: 30, freeRuns: 0, autoRenew: true },
 };
 
 const DEFAULT_CHANNELS: ChannelSettings = {
@@ -324,7 +354,7 @@ export const getEmoneySettings = () => getSetting<EmoneySettings>('emoney');
 export const getSeoSettings = () => getSetting<SeoSettings>('seo');
 export const getAssistSettings = () => {
   const s = getSetting<AssistSettings>('assist');
-  return { ...s, addon: { ...DEFAULT_ASSIST.addon, ...(s.addon ?? {}) } };
+  return { ...s, addon: { ...DEFAULT_ASSIST.addon, ...(s.addon ?? {}) }, billing: { ...DEFAULT_ASSIST.billing, ...(s.billing ?? {}), prices: { ...DEFAULT_ASSIST.billing.prices, ...(s.billing?.prices ?? {}) } } };
 };
 export const getChannelSettings = () => {
   const s = getSetting<ChannelSettings>('channels');

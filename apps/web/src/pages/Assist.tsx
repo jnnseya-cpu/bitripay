@@ -11,7 +11,7 @@ import { Alert, Button, Chip, Empty, PageHeader, useAsync } from '../components/
  */
 interface AgentCard { key: string; name: string; icon: string; tagline: string; suggestions: string[]; tools: string[]; enabled: boolean; paused: boolean; scheduled: string | null; lastRunAt: string | null; usage: number }
 interface Action { id: string; stepNo: number; tool: string; input: any; result: any; outcome: string; reason: string | null; approvalId: string | null; latencyMs: number }
-interface Run { id: string; agent: string; agentName: string; status: string; input: string; output: string | null; actions: Action[]; proposals: any[]; acu: number; steps: number; provider: string; model: string | null; error: string | null; createdAt: string }
+interface Run { id: string; agent: string; agentName: string; status: string; input: string; output: string | null; actions: Action[]; proposals: any[]; billing?: { tier: string; reason: string; amount: number; currency: string | null; charged: boolean } | null; acu: number; steps: number; provider: string; model: string | null; error: string | null; createdAt: string }
 
 const TOOL_LABELS: Record<string, string> = { 'wallets.balances': 'Read balances', 'transactions.list': 'Read transactions', 'transactions.get': 'Read a transaction', 'statements.build': 'Build statement', 'fees.quote': 'Quote fee', 'routes.quote': 'Quote route', 'routes.list': 'Read routes', 'routes.get': 'Read route', 'rates.list': 'Read rates', 'profile.summary': 'Check account protection', 'notifications.recent': 'Read alerts', 'knowledge.search': 'Search guides', 'actions.propose': 'Prepare action', 'memory.remember': 'Save memory', 'support.tickets': 'Read tickets', 'support.create_ticket': 'Open ticket', 'merchant.stats': 'Read sales', 'merchant.settlements': 'Read settlements', 'merchant.payment_requests': 'Read payment links', 'merchant.webhooks': 'Read webhook log', 'agent.queue': 'Read payout queue', 'agent.stats': 'Read agent activity' };
 const label = (tool: string) => TOOL_LABELS[tool] ?? tool.replace(/^admin\./, 'Admin: ').replace(/[._]/g, ' ');
@@ -51,7 +51,8 @@ async function streamRun(id: string, onEvent: (event: string, data: any) => void
 export function Assist() {
   const { user, toast } = useStore();
   const [params, setParams] = useSearchParams();
-  const data = useAsync(() => api.get<{ agents: AgentCard[]; usage: any; runtime: any; addon: any }>('/api/assist/agents'), []);
+  const data = useAsync(() => api.get<{ agents: AgentCard[]; usage: any; runtime: any; addon: any; billing: any }>('/api/assist/agents'), []);
+  const [deep, setDeep] = useState(false);
   const agents = data.data?.agents ?? [];
   const selectedKey = params.get('agent') || agents[0]?.key || 'chief_of_staff';
   const agent = agents.find((a) => a.key === selectedKey) ?? agents[0];
@@ -74,7 +75,7 @@ export function Assist() {
     if (!agent || !text.trim() || live) return;
     setInput('');
     try {
-      const r = await api.post<{ run: Run }>('/api/assist/runs', { agent: agent.key, input: text });
+      const r = await api.post<{ run: Run }>('/api/assist/runs', { agent: agent.key, input: text, depth: deep ? 'deep' : 'standard' });
       if (['completed', 'failed', 'budget_exhausted'].includes(r.run.status)) {
         setRuns((rs) => [...rs, r.run]);
         return;
@@ -106,11 +107,25 @@ export function Assist() {
   const usage = data.data.usage;
   const mode = data.data.runtime.mode;
   const addon = data.data.addon;
-  if (addon?.required && !addon.active && addon.freeRunsLeft === 0) return <Activate addon={addon} onDone={() => data.reload()} />;
+  const billing = data.data.billing;
+  if (billing?.mode === 'subscription' && addon?.required && !addon.active && addon.freeRunsLeft === 0) return <Activate addon={addon} onDone={() => data.reload()} />;
+  if (billing?.consentRequired) return <Consent billing={billing} onDone={() => data.reload()} />;
+  const price = billing?.prices?.[0];
+  const priceLabel = billing?.mode !== 'per_use' || billing?.subscriptionActive ? '' : deep && price ? ` · ${price.deepFormatted}` : (billing?.freeRunsLeft ?? 0) > 0 ? ' · free' : price ? ` · up to ${price.standardFormatted}` : '';
   return (
     <div>
       <PageHeader title="Command centre" subtitle="Your agents read your account through audited tools, explain what they find and prepare actions you confirm yourself. They never move money." actions={addon?.required && addon.subscription ? <span className="tiny muted">Active until {new Date(addon.subscription.expiresAt).toLocaleDateString()} · {addon.subscription.autoRenew ? <button className="btn ghost sm" onClick={() => api.post('/api/assist/addon/cancel').then(() => { toast('Renewal cancelled. Your agents stay active until the end of the period.', 'success'); data.reload(); })}>Cancel renewal</button> : <button className="btn ghost sm" onClick={() => api.post('/api/assist/addon/auto-renew', { on: true }).then(() => data.reload())}>Turn renewal on</button>}</span> : undefined} />
-      {addon?.required && !addon.active && <Alert kind="warning">You have {addon.freeRunsLeft} free question(s) left this month. <Link to="/app/assist?activate=1">Activate the add-on</Link> to keep your agents.</Alert>}
+      {billing?.mode === 'per_use' && !billing.subscriptionActive && (
+        <div className="row wrap tiny muted mb" style={{ gap: 12 }}>
+          <span>Lookups from your own records are free.</span>
+          {price && <span>Other questions {price.standardFormatted}{billing.canDeep ? `, in-depth ${price.deepFormatted}` : ''}, taken from your wallet after the answer.</span>}
+          {billing.freeRunsPerMonth > 0 && <span>{billing.freeRunsLeft} free question(s) left this month.</span>}
+          <span>{billing.paidToday}/{billing.dailyCap} paid today.</span>
+          {billing.flatPlanAvailable && !billing.subscriptionActive && addon?.prices?.[0] && <Link to="/app/assist?plan=1" onClick={(e) => { e.preventDefault(); setParams({ agent: agent?.key ?? '', plan: '1' }); }}>Flat plan {addon.prices[0].formatted}/{addon.periodDays} days</Link>}
+        </div>
+      )}
+      {billing?.degraded && <Alert kind="info">Paid answers are paused for the rest of the month while the platform stays within its budget. Free lookups still work.</Alert>}
+      {params.get('plan') === '1' && addon && <Activate addon={addon} onDone={() => { setParams({ agent: agent?.key ?? '' }); data.reload(); }} />}
       {mode === 'offline' && <Alert kind="info">Agents are answering from built-in checks right now (no language model connected). Every question still runs through the same tools and audit log.</Alert>}
       <div className="cc-layout">
         <aside className="cc-agents">
@@ -159,7 +174,8 @@ export function Assist() {
                   <div className="row wrap mt-sm">{agent.suggestions.map((s) => <Chip key={s} onClick={() => ask(s)}>{s}</Chip>)}</div>
                   <form className="row mt-sm" onSubmit={(e) => { e.preventDefault(); ask(input); }}>
                     <input className="input" value={input} onChange={(e) => setInput(e.target.value)} placeholder={`Ask ${agent.name}…`} disabled={!agent.enabled || agent.paused || !!live} maxLength={4000} />
-                    <Button disabled={!input.trim() || !!live || !agent.enabled || agent.paused}>Ask</Button>
+                    {billing?.canDeep && billing.mode === 'per_use' && <label className="tiny muted row" style={{ gap: 4, whiteSpace: 'nowrap' }} title="Uses the main model for a longer analysis; priced higher"><input type="checkbox" checked={deep} onChange={(e) => setDeep(e.target.checked)} /> In depth</label>}
+                    <Button disabled={!input.trim() || !!live || !agent.enabled || agent.paused}>Ask{priceLabel}</Button>
                   </form>
                   <div className="tiny muted mt-sm">Answers come from your own data. Money only moves when you confirm an action with your PIN or passkey. Every step is logged.</div>
                 </>
@@ -172,7 +188,47 @@ export function Assist() {
   );
 }
 
-/** The add-on is optional: this card is the only thing a non-subscriber sees here. Everything else in BitriPay is unchanged. */
+/** Pricing disclosure: shown once (and again whenever prices change) before the first paid question. Nothing runs before it is accepted. */
+function Consent({ billing, onDone }: { billing: any; onDone: () => void }) {
+  const { toast } = useStore();
+  const [busy, setBusy] = useState(false);
+  const d = billing.disclosure;
+  const accept = async () => {
+    setBusy(true);
+    try {
+      await api.post('/api/assist/consent', { version: d.version });
+      onDone();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div>
+      <PageHeader title="Command centre" subtitle="Personal agents that read your account, explain your money and prepare actions you confirm yourself. Here is exactly what it costs." />
+      <div className="grid cols-2">
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>How questions are priced</h3>
+          <ul className="small" style={{ paddingLeft: 18, lineHeight: 1.7 }}>{d.lines.map((l: string, i: number) => <li key={i}>{l}</li>)}</ul>
+          <p className="tiny muted">You can read this again any time under the command centre. Not for you? Nothing changes: sending, receiving, cards, agents, statements and everything else keep working exactly as they do today.</p>
+        </div>
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>Prices in your wallet currencies</h3>
+          <table style={{ width: '100%', fontSize: 14 }}><tbody>
+            <tr><td>Lookups from your own records</td><td className="bold" style={{ textAlign: 'right' }}>Free</td></tr>
+            {billing.prices.map((p: any) => <tr key={p.currency}><td>Question ({p.currency})</td><td className="bold" style={{ textAlign: 'right' }}>{p.standardFormatted}</td></tr>)}
+            {billing.canDeep && billing.prices.map((p: any) => <tr key={`d${p.currency}`}><td>In-depth analysis ({p.currency})</td><td className="bold" style={{ textAlign: 'right' }}>{p.deepFormatted}</td></tr>)}
+          </tbody></table>
+          <Button block loading={busy} onClick={accept}>I understand the prices, continue</Button>
+          <Link className="btn ghost" to="/app" style={{ display: 'block', textAlign: 'center', marginTop: 8 }}>Not now</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The flat plan is optional: an alternative to per-question pricing for heavy users. Everything else in BitriPay is unchanged. */
 function Activate({ addon, onDone }: { addon: any; onDone: () => void }) {
   const { toast, refreshWallets } = useStore();
   const [currency, setCurrency] = useState<string>(addon.prices[0]?.currency ?? 'USD');
@@ -194,7 +250,7 @@ function Activate({ addon, onDone }: { addon: any; onDone: () => void }) {
   };
   return (
     <div>
-      <PageHeader title="Command centre" subtitle="An optional add-on: personal agents that read your account, explain your money and prepare actions you confirm yourself." />
+      <PageHeader title="Flat plan" subtitle="Ask as many questions as you like for one fixed price per period, instead of paying per question." />
       <div className="grid cols-2">
         <div className="card">
           <h3 style={{ marginTop: 0 }}>What you get</h3>
@@ -238,7 +294,7 @@ function RunBubble({ run, user }: { run: Run; user: string }) {
     <div className="cc-run">
       <div className="cc-msg me"><span className="tiny muted">{user} · {new Date(run.createdAt).toLocaleString()}</span>{run.input}</div>
       <Steps actions={run.actions} />
-      {run.output && <div className="cc-msg agent"><span className="tiny muted">{run.agentName}{run.model ? ` · ${run.model}` : ''}{run.acu ? ` · ${run.acu} credits` : ''}</span>{run.output}</div>}
+      {run.output && <div className="cc-msg agent"><span className="tiny muted">{run.agentName}{run.billing ? run.billing.charged ? ` · charged ${(run.billing.amount / 100).toFixed(2)} ${run.billing.currency}` : run.billing.reason === 'lookup' || run.billing.reason === 'offline' ? ' · free lookup' : run.billing.reason === 'allowance' ? ' · free (allowance)' : run.billing.reason === 'degraded' ? ' · free (paused answers)' : '' : ''}</span>{run.output}</div>}
       {run.status === 'failed' && <div className="cc-msg agent"><Alert kind="error">{run.error ?? 'Something went wrong.'}</Alert></div>}
       {run.status === 'budget_exhausted' && <div className="cc-msg agent"><Alert kind="warning">Your monthly agent credit is used up. It resets next month.</Alert></div>}
       {run.status === 'awaiting_approval' && <div className="cc-msg agent"><Alert kind="warning">An action is queued for a second administrator to approve. You will be notified.</Alert></div>}

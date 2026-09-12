@@ -23,6 +23,7 @@ export function Assist() {
   const [mode, setMode] = useState<'offline' | 'live'>('offline');
   const [usage, setUsage] = useState<any>(null);
   const [addon, setAddon] = useState<any>(null);
+  const [billing, setBilling] = useState<any>(null);
   const [pinOpen, setPinOpen] = useState(false);
   const [activating, setActivating] = useState(false);
   const [agent, setAgent] = useState<AgentCard | null>(null);
@@ -33,7 +34,7 @@ export function Assist() {
   const scroll = useRef<ScrollView>(null);
 
   useEffect(() => {
-    api.get<{ agents: AgentCard[]; runtime: any; usage: any; addon: any }>('/api/assist/agents').then((r) => { setAgents(r.agents); setMode(r.runtime.mode); setUsage(r.usage); setAddon(r.addon); setAgent((a) => a ?? r.agents[0] ?? null); }).catch((e) => setError(e.message));
+    api.get<{ agents: AgentCard[]; runtime: any; usage: any; addon: any; billing: any }>('/api/assist/agents').then((r) => { setAgents(r.agents); setMode(r.runtime.mode); setUsage(r.usage); setAddon(r.addon); setBilling(r.billing); setAgent((a) => a ?? r.agents[0] ?? null); }).catch((e) => setError(e.message));
   }, []);
   useEffect(() => {
     if (!agent) return;
@@ -86,7 +87,27 @@ export function Assist() {
       setActivating(false);
     }
   };
-  if (addon?.required && !addon.active && addon.freeRunsLeft === 0) {
+  if (billing?.consentRequired) {
+    const d = billing.disclosure;
+    const p = billing.prices[0];
+    return (
+      <Screen title="Command centre">
+        {error && <Alert kind="error" text={error} />}
+        <Card>
+          <T bold size={18}>How questions are priced</T>
+          {d.lines.map((l: string, i: number) => <T key={i} size={14}>• {l}</T>)}
+        </Card>
+        <Card>
+          <Row between><T>Lookups from your records</T><T bold>Free</T></Row>
+          <Row between><T>Question ({p?.currency})</T><T bold>{p?.standardFormatted}</T></Row>
+          {billing.canDeep && <Row between><T>In-depth analysis</T><T bold>{p?.deepFormatted}</T></Row>}
+          <Button title="I understand the prices, continue" loading={activating} onPress={async () => { setActivating(true); try { const r = await api.post<{ billing: any }>('/api/assist/consent', { version: d.version }); setBilling(r.billing); } catch (e: any) { setError(e.message); } finally { setActivating(false); } }} />
+          <T muted size={12}>Not for you? Nothing changes: everything else in BitriPay keeps working exactly as today.</T>
+        </Card>
+      </Screen>
+    );
+  }
+  if (billing?.mode === 'subscription' && addon?.required && !addon.active && addon.freeRunsLeft === 0) {
     const price = addon.prices[0];
     return (
       <Screen title="Command centre">
@@ -113,7 +134,7 @@ export function Assist() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {agents.map((a) => <Chip key={a.key} label={`${a.icon} ${a.name}${a.paused ? ' (paused)' : !a.enabled ? ' (off)' : ''}`} selected={agent?.key === a.key} onPress={() => setAgent(a)} />)}
         </ScrollView>
-        {agent && <T muted size={12}>{agent.tagline}{usage && !usage.unlimited ? ` · ${usage.acuUsed}/${usage.allowance} credits used this month` : ''}</T>}
+        {agent && <T muted size={12}>{agent.tagline}{billing?.mode === 'per_use' && !billing.subscriptionActive && billing.prices[0] ? ` · lookups free · questions ${billing.prices[0].standardFormatted}${billing.freeRunsLeft ? ` · ${billing.freeRunsLeft} free left` : ''}` : usage && !usage.unlimited ? ` · ${usage.acuUsed}/${usage.allowance} credits used this month` : ''}</T>}
         <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={{ gap: 10, paddingBottom: 8 }}>
           {runs.length === 0 && !busy && <Empty icon={agent?.icon ?? '🧭'} text={`Ask ${agent?.name ?? 'an agent'} about your account. It reads your data, explains it and prepares actions you confirm yourself.`} />}
           {[...runs, ...(busy ? [busy] : [])].map((r) => (
@@ -135,7 +156,7 @@ export function Assist() {
         {agent && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{agent.suggestions.map((s) => <Chip key={s} label={s} onPress={() => ask(s)} />)}</ScrollView>}
         <Row>
           <View style={{ flex: 1 }}><Input value={input} onChangeText={setInput} placeholder={agent ? `Ask ${agent.name}…` : 'Ask…'} editable={!busy && !!agent && agent.enabled && !agent.paused} onSubmitEditing={() => ask(input)} returnKeyType="send" /></View>
-          <Button title="Ask" onPress={() => ask(input)} disabled={!input.trim() || !!busy || !agent} loading={!!busy} />
+          <Button title={billing?.mode === 'per_use' && !billing.subscriptionActive && billing.prices[0] && !billing.freeRunsLeft ? `Ask · up to ${billing.prices[0].standardFormatted}` : 'Ask'} onPress={() => ask(input)} disabled={!input.trim() || !!busy || !agent} loading={!!busy} />
         </Row>
         <T muted size={11}>Money only moves when you confirm with your PIN or biometrics. {user?.role === 'admin' ? 'Administrative actions need a second administrator.' : ''}</T>
       </View>

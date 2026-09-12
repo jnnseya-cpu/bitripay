@@ -13,13 +13,13 @@ beforeAll(() => {
   app = setupApp();
 });
 
-/** A regular account holder who paid for the add-on (funded, then activated from the USD wallet under PIN). */
+/** A regular account holder who funded a wallet and accepted the per-question pricing (nothing is paid up front). */
 const subscriber = async (overrides: Record<string, unknown> = {}) => {
   const u = await registerUser(app, overrides);
   await fund(app, u.user.id, '10.00', 'USD');
-  const a = await request(app).post('/api/assist/addon/activate').set(u.auth).send({ currency: 'USD', pin: '1234' });
-  if (a.status !== 201) throw new Error(`activate failed: ${JSON.stringify(a.body)}`);
-  return { ...u, paid: a.body.subscription.amount as number };
+  const c = await request(app).post('/api/assist/consent').set(u.auth).send({ version: 1 });
+  if (c.status !== 201) throw new Error(`consent failed: ${JSON.stringify(c.body)}`);
+  return { ...u, paid: 0 };
 };
 const usd = (minor: number) => `${(minor / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
 const run = async (auth: Record<string, string>, agent: string, input: string, context?: Record<string, unknown>) => {
@@ -29,14 +29,16 @@ const run = async (auth: Record<string, string>, agent: string, input: string, c
 };
 
 describe('command centres', () => {
-  it('is a paid add-on: nothing changes for account holders who do not activate it, activation is a normal ledger posting, and renewal can be cancelled', async () => {
+  it('offers an optional flat plan: nothing changes for account holders who do not activate it, activation is a normal ledger posting, and renewal can be cancelled', async () => {
+    const admin0 = await adminToken(app);
+    await request(app).put('/api/admin/agents/settings').set(admin0.auth).send({ addon: { enabled: true }, billing: { mode: 'subscription' } });
     const u = await registerUser(app);
     await fund(app, u.user.id, '5.00', 'USD');
     const before = await request(app).get('/api/assist/agents').set(u.auth);
     expect(before.body.addon.required).toBe(true);
     expect(before.body.addon.active).toBe(false);
     expect(before.body.addon.prices.find((p: any) => p.currency === 'USD').amount).toBeGreaterThan(0);
-    const blocked = await request(app).post('/api/assist/runs?wait=1').set(u.auth).send({ agent: 'chief_of_staff', input: 'What is my balance?' });
+    const blocked = await request(app).post('/api/assist/runs?wait=1').set(u.auth).send({ agent: 'chief_of_staff', input: 'What should I know today?' });
     expect(blocked.status).toBe(402);
     expect(blocked.body.error.code).toBe('addon_required');
     // everything else keeps working exactly as before
@@ -65,7 +67,7 @@ describe('command centres', () => {
     expect(renewSubscriptions()).toEqual({ renewed: 0, expired: 1 });
     const lapsed = await request(app).get('/api/assist/agents').set(u.auth);
     expect(lapsed.body.addon.active).toBe(false);
-    const again = await request(app).post('/api/assist/runs').set(u.auth).send({ agent: 'chief_of_staff', input: 'hello' });
+    const again = await request(app).post('/api/assist/runs').set(u.auth).send({ agent: 'chief_of_staff', input: 'What should I know today?' });
     expect(again.status).toBe(402);
     // auto-renewing subscriptions are charged again from the wallet
     const r = await registerUser(app);
@@ -82,6 +84,7 @@ describe('command centres', () => {
     expect(a.body.addon.required).toBe(false);
     const report = await request(app).get('/api/admin/agents').set(admin.auth);
     expect(report.body.addon.revenue.find((x: any) => x.currency === 'USD').c).toBeGreaterThanOrEqual(3);
+    await request(app).put('/api/admin/agents/settings').set(admin.auth).send({ addon: { enabled: false }, billing: { mode: 'per_use' } });
   });
 
   it('lists the agents each role can use, with tools filtered by role and permission', async () => {
@@ -268,5 +271,100 @@ describe('command centres', () => {
     expect(s.body).toContain('event: done');
     const c = await request(app).post(`/api/assist/runs/${r.id}/cancel`).set(u.auth);
     expect(c.body.run.status).toBe('completed');
+  });
+
+  it('meters questions per use: disclosed prices and consent, free lookups, a free allowance for active accounts, wallet charges on completion, daily and platform caps, and a margin report', async () => {
+    const admin = await adminToken(app);
+    await request(app).put('/api/admin/agents/settings').set(admin.auth).send({ addon: { enabled: false }, billing: { mode: 'per_use', simulateLive: true, freeRunsPerMonth: 2, dailyCapPerUser: 3, platformCapPctOfFees: 15, platformCapFloorMinor: 5_000, disclosureVersion: 1 } });
+    const u = await registerUser(app);
+    const friend = await registerUser(app);
+    await fund(app, u.user.id, '10.00', 'USD');
+    // consent first: nothing runs before the price is shown and accepted
+    const before = await request(app).get('/api/assist/agents').set(u.auth);
+    expect(before.body.billing.mode).toBe('per_use');
+    expect(before.body.billing.consentRequired).toBe(true);
+    expect(before.body.billing.prices[0].currency).toBe('USD');
+    expect(before.body.billing.prices[0].standard).toBeGreaterThan(0);
+    expect(before.body.billing.disclosure.lines.join(' ')).toContain('taken from your wallet only after the answer');
+    const blocked = await request(app).post('/api/assist/runs?wait=1').set(u.auth).send({ agent: 'research', input: 'How is my balance protected?' });
+    expect(blocked.status).toBe(402);
+    expect(blocked.body.error.code).toBe('consent_required');
+    const stale = await request(app).post('/api/assist/consent').set(u.auth).send({ version: 99 });
+    expect(stale.status).toBe(409);
+    const consent = await request(app).post('/api/assist/consent').set(u.auth).send({ version: 1 });
+    expect(consent.status).toBe(201);
+    expect(consent.body.billing.consentRequired).toBe(false);
+    // lookups from the account's own records are free even though a (simulated) model is available
+    const lookup = await run(u.auth, 'analyst', 'What is my balance?');
+    expect(lookup.billing.tier).toBe('free');
+    expect(lookup.billing.reason).toBe('lookup');
+    expect(lookup.provider).toBe('offline');
+    // no free allowance until the account moved money this month
+    expect((await request(app).get('/api/assist/billing').set(u.auth)).body.billing.freeRunsLeft).toBe(0);
+    await request(app).post('/api/transfers').set(u.auth).send({ pin: '1234', to: `@${friend.user.tag}`, amount: '1.00', currency: 'USD' });
+    expect((await request(app).get('/api/assist/billing').set(u.auth)).body.billing.freeRunsLeft).toBe(2);
+    const q1 = await run(u.auth, 'research', 'How is my balance protected?');
+    expect(q1.billing.reason).toBe('allowance');
+    expect(q1.billing.amount).toBe(0);
+    expect(q1.provider).toBe('simulated');
+    expect(q1.model).toBe('claude-sonnet-5');
+    expect(q1.acu).toBeGreaterThan(0);
+    const q2 = await run(u.auth, 'research', 'What documents do I need for KYC?');
+    expect(q2.billing.reason).toBe('allowance');
+    // the third question is charged from the wallet on completion, tax share recorded, visible on the statement
+    const walletBefore = (await request(app).get('/api/wallets').set(u.auth)).body.items.find((w: any) => w.currency === 'USD').balance;
+    const q3 = await run(u.auth, 'research', 'What does it cost to send money to Kinshasa?');
+    expect(q3.billing.reason).toBe('charged');
+    expect(q3.billing.charged).toBe(true);
+    expect(q3.billing.currency).toBe('USD');
+    expect(q3.billing.amount).toBe(before.body.billing.prices[0].standard);
+    expect(q3.billing.tax).toBeGreaterThan(0);
+    const walletAfter = (await request(app).get('/api/wallets').set(u.auth)).body.items.find((w: any) => w.currency === 'USD').balance;
+    expect(walletBefore - walletAfter).toBe(q3.billing.amount);
+    const tx = await request(app).get(`/api/wallets/transactions/${q3.billing.transactionId}`).set(u.auth);
+    expect(tx.body.transaction.type).toBe('agent_usage');
+    expect(tx.body.transaction.note).toBe('Agent question · Research');
+    // daily cap on paid questions; free lookups keep working
+    const capped = await request(app).post('/api/assist/runs?wait=1').set(u.auth).send({ agent: 'research', input: 'What is a corridor?' });
+    expect(capped.status).toBe(429);
+    expect(capped.body.error.code).toBe('daily_cap');
+    const stillFree = await run(u.auth, 'analyst', 'What is my balance?');
+    expect(stillFree.billing.reason).toBe('lookup');
+    // deep runs are priced higher and only for the roles allowed
+    const m = await registerUser(app, { role: 'merchant', businessName: 'Kiosk' });
+    await fund(app, m.user.id, '10.00', 'USD');
+    await request(app).post('/api/assist/consent').set(m.auth).send({ version: 1 });
+    const deep = await request(app).post('/api/assist/runs?wait=1').set(m.auth).send({ agent: 'growth', input: 'How can I get more customers to pay by QR?', depth: 'deep' });
+    expect(deep.status).toBe(202);
+    expect(deep.body.run.billing.tier).toBe('deep');
+    expect(deep.body.run.billing.amount).toBe(before.body.billing.prices[0].deep);
+    expect(deep.body.run.model).toBe('claude-opus-5');
+    const userDeep = await registerUser(app);
+    await request(app).post('/api/assist/consent').set(userDeep.auth).send({ version: 1 });
+    // an empty wallet cannot ask a paid question, and is told the price
+    const broke = await request(app).post('/api/assist/runs?wait=1').set(userDeep.auth).send({ agent: 'research', input: 'How is my balance protected?', depth: 'deep' });
+    expect(broke.status).toBe(402);
+    expect(broke.body.error.code).toBe('insufficient_balance');
+    expect(broke.body.error.message).toContain('costs');
+    // the platform cap: once model spend reaches the share of fee revenue, everyone degrades to the free planner
+    await request(app).put('/api/admin/agents/settings').set(admin.auth).send({ billing: { platformCapPctOfFees: 0, platformCapFloorMinor: 0 } });
+    const degraded = await run(m.auth, 'research', 'How is my balance protected?');
+    expect(degraded.billing.reason).toBe('degraded');
+    expect(degraded.billing.amount).toBe(0);
+    expect(degraded.provider).toBe('offline');
+    // margin report for the control centre
+    const report = await request(app).get('/api/admin/agents').set(admin.auth);
+    const b = report.body.billing;
+    expect(b.revenue).toBeGreaterThan(0);
+    expect(b.tax).toBeGreaterThan(0);
+    expect(b.modelCost).toBeGreaterThan(0);
+    expect(b.margin).toBe(b.netRevenue - b.modelCost);
+    expect(b.cap.degraded).toBe(true);
+    expect(b.runsByReason.map((r: any) => r.reason)).toEqual(expect.arrayContaining(['lookup', 'allowance', 'charged', 'degraded']));
+    // changing a price bumps the disclosure version so everyone re-reads it
+    const bump = await request(app).put('/api/admin/agents/settings').set(admin.auth).send({ billing: { prices: { standard: 6 } } });
+    expect(bump.body.settings.billing.disclosureVersion).toBe(2);
+    expect((await request(app).get('/api/assist/billing').set(u.auth)).body.billing.consentRequired).toBe(true);
+    await request(app).put('/api/admin/agents/settings').set(admin.auth).send({ billing: { simulateLive: false, freeRunsPerMonth: 5, dailyCapPerUser: 20, platformCapPctOfFees: 15, platformCapFloorMinor: 5_000, prices: { standard: 5 }, disclosureVersion: 1 } });
   });
 });

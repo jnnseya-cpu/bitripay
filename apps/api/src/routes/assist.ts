@@ -11,23 +11,25 @@ import { rateLimit } from '../middleware/rateLimit';
 import { agentsAvailable, startRun, listRuns, getRun, cancelRun, subscribe, getInstance, setInstance, listMemories, addMemory, deleteMemory, usageSummary, runtimeStatus, listApprovals } from '../services/assist/runtime';
 import { toolCatalogue } from '../services/assist/tools';
 import { addonStatus, activateAddon, cancelAddon, setAutoRenew } from '../services/assist/addon';
+import { billingStatus, acceptConsent, disclosureText } from '../services/assist/billing';
+import { getClientIp } from '../lib/http';
 
 export const assistRouter = Router();
 assistRouter.use(requireAuth);
 
 assistRouter.get('/agents', (req, res) => {
   const status = runtimeStatus();
-  res.json({ agents: agentsAvailable(req.user!), usage: usageSummary(req.user!), addon: addonStatus(req.user!), runtime: { mode: status.mode, enabled: status.enabled, model: status.model } });
+  res.json({ agents: agentsAvailable(req.user!), usage: usageSummary(req.user!), addon: addonStatus(req.user!), billing: billingStatus(req.user!), runtime: { mode: status.mode, enabled: status.enabled, model: status.model } });
 });
 assistRouter.get('/tools', (req, res) => res.json({ tools: toolCatalogue(req.user!.role, (p) => hasPermission(req.user as any, p)) }));
 
-const startSchema = z.object({ agent: z.string().min(2).max(40), input: z.string().min(1).max(4000), context: z.record(z.string(), z.unknown()).optional().nullable() });
+const startSchema = z.object({ agent: z.string().min(2).max(40), input: z.string().min(1).max(4000), context: z.record(z.string(), z.unknown()).optional().nullable(), depth: z.enum(['standard', 'deep']).optional().nullable(), currency: z.string().length(3).optional().nullable() });
 assistRouter.post(
   '/runs',
   rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'assist' }),
   wrap(async (req, res) => {
     const body = validate(startSchema, req.body);
-    const run = await startRun(req.user!, body.agent, body.input, { context: body.context ?? null, trigger: 'user', wait: req.query.wait === '1' || req.query.wait === 'true' });
+    const run = await startRun(req.user!, body.agent, body.input, { context: body.context ?? null, depth: body.depth ?? null, currency: body.currency ?? null, trigger: 'user', wait: req.query.wait === '1' || req.query.wait === 'true' });
     res.status(202).json({ run });
   }),
 );
@@ -82,6 +84,11 @@ assistRouter.post('/memories', (req, res) => {
 assistRouter.delete('/memories/:id', (req, res) => res.json({ deleted: deleteMemory(req.user!.id, String(req.params.id)) }));
 assistRouter.delete('/memories', (req, res) => res.json({ deleted: deleteMemory(req.user!.id) }));
 
+assistRouter.get('/billing', (req, res) => res.json({ billing: billingStatus(req.user!), disclosure: disclosureText(req.user!) }));
+assistRouter.post('/consent', (req, res) => {
+  const body = validate(z.object({ version: z.number().int() }), req.body);
+  res.status(201).json({ consent: acceptConsent(req.user!, body.version, getClientIp(req)), billing: billingStatus(req.user!) });
+});
 assistRouter.get('/addon', (req, res) => res.json({ addon: addonStatus(req.user!) }));
 assistRouter.post('/addon/activate', rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'addon' }), (req, res) => {
   const body = validate(z.object({ currency: z.string().length(3), pin: z.string().optional(), autoRenew: z.boolean().optional() }), req.body);

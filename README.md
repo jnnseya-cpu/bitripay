@@ -366,14 +366,30 @@ also run every morning and report by notification).
 - **Admin → Agents & command centres** – registry with pause/resume, a global kill switch, the approvals inbox,
   a runs explorer with every tool call, the policy editor, usage and cost, and model settings (permission `agents`).
 
-**Paid add-on, off by default for everyone.** The command centres cost a small fee (default £2.99 per 30 days,
-shown in the account holder's own currency at the platform rate) paid from the wallet as a normal `subscription`
-ledger posting to the fees account. Account holders who do not activate it see only the activation card; sending,
-receiving, cards, agents, statements and every other feature work exactly as before. Renewal is automatic unless
-cancelled; lapsed subscriptions simply stop the agents. Administrators never pay. Price, period, free trial runs and
-renewal default live under Admin → Agents → Settings; subscriptions and revenue under the Add-on tab.
+**Per-question pricing, lawful and self-funding.** The agents are available to everyone; nothing is taken
+silently and the platform can never lose money on them:
 
-API: `GET /api/assist/agents`, `POST /api/assist/addon/activate` (`currency`, `pin`), `POST /api/assist/addon/cancel`, `POST /api/assist/runs` (`?wait=1` to block), `GET /api/assist/runs/:id/stream` (SSE),
+- **Disclosed once, shown always.** Before the first paid question the account holder reads the prices and accepts
+  (versioned consent in `agent_consents`; any price change bumps the version and everyone re-reads it). The Ask
+  button shows the price of the question; every charge appears in transactions and statements as
+  `Agent question · <agent>`, a normal `agent_usage` ledger posting to the fees account with the tax share in its
+  metadata.
+- **Free where it costs nothing.** Lookups the offline planner answers from the account's own records (balances,
+  statements, activity, fees, routes) are free even when a model is available. Failed runs are never charged.
+- **Cost-based routing.** Standard questions go to the fast model (default £0.05, tax inclusive); in-depth analyses
+  on the main model (default £0.35) only for the roles allowed to ask (merchants, agents, administrators).
+- **Charged on completion, only if covered.** The wallet is checked before the run and charged after the answer;
+  an account whose balance does not cover the price is told the price and can still use the free lookups.
+- **A small allowance funded by fee income.** Five free standard questions a month for accounts that moved money
+  that month (configurable); inactive accounts get none, so it cannot be farmed.
+- **Caps that degrade instead of spending.** Per-run token budget, per-account daily cap on paid questions, and a
+  platform-wide monthly cap on model spend set as a share of last month's net fee revenue (default 15%, with a
+  floor). Past the cap every run falls back to the free planner and the console shows it.
+- **Margin report.** Admin → Agents → Billing & margin shows revenue, tax to remit, model cost, margin, cap usage
+  and runs by billing outcome; the optional flat plan (unlimited questions per period) remains available under
+  Settings for heavy users. Administrators never pay.
+
+API: `GET /api/assist/agents` (includes `billing`), `GET /api/assist/billing`, `POST /api/assist/consent`, `POST /api/assist/runs` (`depth`, `currency`; errors `consent_required`, `insufficient_balance`, `daily_cap`), `POST /api/assist/addon/activate` (flat plan) (`?wait=1` to block), `GET /api/assist/runs/:id/stream` (SSE),
 `GET/PUT /api/assist/instances/:agent`, `GET/POST/DELETE /api/assist/memories`, `GET /api/assist/usage`; administrators
 use `/api/admin/agents/*`. The full design is in `docs/operating-system/` (rendered as `BitriPay-OS.html`).
 

@@ -21,7 +21,8 @@ import { notify } from '../notifications';
 import { AGENTS, agentsForRole, getAgentDef, type AgentDef } from './registry';
 import { TOOL_BY_NAME, TOOLS, toolJsonSchema, type ToolContext } from './tools';
 import { decide, usableTools, effectivePolicy } from './policy';
-import { assertAddon, addonStatus } from './addon';
+import { addonStatus } from './addon';
+import { planRun, settleRun, type BillingPlan } from './billing';
 
 export type RunStatus = 'queued' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'cancelled' | 'budget_exhausted';
 export interface RunView {
@@ -37,6 +38,7 @@ export interface RunView {
   output: string | null;
   actions: ActionView[];
   proposals: unknown[];
+  billing: BillingPlan | null;
   model: string | null;
   provider: string;
   tokensIn: number;
@@ -91,7 +93,7 @@ const toAction = (r: any): ActionView => ({ id: r.id, stepNo: r.step_no, tool: r
 function toRun(r: any, withActions = true): RunView {
   const actions = withActions ? (getDb().prepare('SELECT * FROM agent_actions WHERE run_id = ? ORDER BY step_no').all(r.id) as any[]).map(toAction) : [];
   const proposals = actions.filter((a) => a.tool === 'actions.propose' && a.outcome === 'executed').map((a) => (a.result as any)?.action).filter(Boolean);
-  return { id: r.id, agent: r.agent_key, agentName: getAgentDef(r.agent_key)?.name ?? r.agent_key, userId: r.user_id, trigger: r.trigger_type, triggerRef: r.trigger_ref, status: r.status, input: r.input, context: parseJson(r.context, null), output: r.output, actions, proposals, model: r.model, provider: r.provider, tokensIn: r.tokens_in, tokensOut: r.tokens_out, acu: r.acu, steps: r.steps, errorCode: r.error_code, error: r.error, startedAt: r.started_at, finishedAt: r.finished_at, createdAt: r.created_at };
+  return { id: r.id, agent: r.agent_key, agentName: getAgentDef(r.agent_key)?.name ?? r.agent_key, userId: r.user_id, trigger: r.trigger_type, triggerRef: r.trigger_ref, status: r.status, input: r.input, context: parseJson(r.context, null), output: r.output, actions, proposals, billing: parseJson<BillingPlan | null>(r.billing, null), model: r.model, provider: r.provider, tokensIn: r.tokens_in, tokensOut: r.tokens_out, acu: r.acu, steps: r.steps, errorCode: r.error_code, error: r.error, startedAt: r.started_at, finishedAt: r.finished_at, createdAt: r.created_at };
 }
 const pub = (id: string | null) => {
   const u = id ? findUserById(id) : null;
@@ -232,6 +234,10 @@ export function cancelRun(id: string, userId?: string | null): RunView {
 
 export interface StartOptions {
   context?: Record<string, unknown> | null;
+  /** deep = main model, priced higher, for roles allowed to ask for it. */
+  depth?: 'standard' | 'deep' | null;
+  /** Wallet to charge when the question is paid. */
+  currency?: string | null;
   trigger?: 'user' | 'schedule' | 'event' | 'admin';
   triggerRef?: string | null;
   /** Resolve after the run finished (tests, schedules) instead of returning the queued run. */
@@ -245,7 +251,6 @@ export async function startRun(user: UserRow, agentKey: string, input: string, o
   const agent = getAgentDef(agentKey);
   if (!agent || !agent.roles.includes(user.role)) throw notFound('That agent is not available for your account', 'agent_not_found');
   if (s.paused.includes(agentKey)) throw new AppError(503, 'agent_paused', `${agent.name} is paused by the administrators.`);
-  if (opts.trigger !== 'schedule') assertAddon(user);
   if (!getInstance(user.id, agentKey).enabled) throw badRequest(`You switched ${agent.name} off. Enable it in the command centre settings.`, 'agent_disabled');
   const text = input.trim();
   if (text.length < 2) throw badRequest('Say what you need in a few words.', 'input_required');
@@ -260,9 +265,14 @@ export async function startRun(user: UserRow, agentKey: string, input: string, o
     getDb().prepare("INSERT INTO agent_runs (id, agent_key, user_id, trigger_type, trigger_ref, status, input, context, provider, error_code, error, finished_at, created_at) VALUES (?, ?, ?, ?, ?, 'budget_exhausted', ?, ?, 'none', 'budget_exhausted', ?, ?, ?)").run(id, agentKey, user.id, opts.trigger ?? 'user', opts.triggerRef ?? null, text, opts.context ? JSON.stringify(opts.context) : null, `Monthly allowance of ${usage.allowance} ACU used up.`, now(), now());
     return getRun(id);
   }
+  // Price the run before it starts: free lookups, allowance, subscription, or a disclosed per-question price the
+  // wallet can cover. Throws consent_required / insufficient_balance / daily_cap so nothing is ever taken silently.
+  const liveAvailable = !!modelApiKey() || s.billing.simulateLive;
+  const lookup = isLookup(user, agent, text, opts.context ?? null);
+  const plan = planRun({ user, agentKey, input: text, depth: opts.depth ?? null, liveAvailable, lookup, trigger: opts.trigger ?? 'user', preferredCurrency: opts.currency ?? null });
   const id = uuid();
-  getDb().prepare("INSERT INTO agent_runs (id, agent_key, user_id, trigger_type, trigger_ref, status, input, context, provider, created_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, 'offline', ?)").run(id, agentKey, user.id, opts.trigger ?? 'user', opts.triggerRef ?? null, text, opts.context ? JSON.stringify(opts.context) : null, now());
-  recordEvent('admin', id, 'agent.run.started', { type: user.role === 'admin' ? 'admin' : 'user', id: user.id }, { agent: agentKey, trigger: opts.trigger ?? 'user' });
+  getDb().prepare("INSERT INTO agent_runs (id, agent_key, user_id, trigger_type, trigger_ref, status, input, context, provider, billing, created_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, 'offline', ?, ?)").run(id, agentKey, user.id, opts.trigger ?? 'user', opts.triggerRef ?? null, text, opts.context ? JSON.stringify(opts.context) : null, JSON.stringify(plan), now());
+  recordEvent('admin', id, 'agent.run.started', { type: user.role === 'admin' ? 'admin' : 'user', id: user.id }, { agent: agentKey, trigger: opts.trigger ?? 'user', tier: plan.tier, priced: plan.amount });
   const p = execute(id).catch((e) => console.error('[assist] run failed', e));
   if (opts.wait) await p;
   return getRun(id);
@@ -298,12 +308,21 @@ async function execute(runId: string) {
   const context = parseJson<Record<string, unknown> | null>(row.context, null);
   const key = modelApiKey();
   const s = getAssistSettings();
+  const plan = parseJson<BillingPlan | null>(row.billing, null);
   let output = '';
   let provider = 'offline';
   try {
-    if (key && s.enabled) {
+    if (plan && plan.tier !== 'free' && key && s.enabled) {
       provider = 'anthropic';
+      state.model = plan.model;
       output = await liveLoop(state, key, row.input, context);
+    } else if (plan && plan.tier !== 'free' && s.billing.simulateLive) {
+      // sandbox: the offline planner answers but the run is metered and billed as if the planned model had
+      provider = 'simulated';
+      state.model = plan.model;
+      output = await offlineLoop(state, row.input, context);
+      state.tokensIn += plan.tier === 'deep' ? 12_000 : 3_000;
+      state.tokensOut += plan.tier === 'deep' ? 800 : 300;
     } else {
       output = await offlineLoop(state, row.input, context);
     }
@@ -312,6 +331,7 @@ async function execute(runId: string) {
     recordUsage(user.id, agent.key, state.model ?? 'offline', state.tokensIn, state.tokensOut, costMicros, acu);
     const status: RunStatus = state.awaiting ? 'awaiting_approval' : 'completed';
     db.prepare('UPDATE agent_runs SET status = ?, output = ?, model = ?, provider = ?, tokens_in = ?, tokens_out = ?, cost_micros = ?, acu = ?, steps = ?, finished_at = ? WHERE id = ?').run(status, output, state.model, provider, state.tokensIn, state.tokensOut, costMicros, acu, state.step, state.awaiting ? null : now(), runId);
+    settleRun(runId);
     if (row.trigger_type === 'schedule' || state.awaiting) notify(user.id, state.awaiting ? `${agent.name} needs an approval` : `${agent.name} report`, output.slice(0, 180), { kind: 'agent', runId, agent: agent.key });
   } catch (e: any) {
     if (isCancelled(runId)) return;
@@ -319,6 +339,7 @@ async function execute(runId: string) {
     const { costMicros, acu } = state.model ? meter(state.model, state.tokensIn, state.tokensOut) : { costMicros: 0, acu: 0 };
     if (state.model) recordUsage(user.id, agent.key, state.model, state.tokensIn, state.tokensOut, costMicros, acu);
     db.prepare("UPDATE agent_runs SET status = 'failed', error_code = ?, error = ?, model = ?, provider = ?, tokens_in = ?, tokens_out = ?, cost_micros = ?, acu = ?, steps = ?, finished_at = ? WHERE id = ?").run(code, String(e?.message ?? e).slice(0, 500), state.model, provider, state.tokensIn, state.tokensOut, costMicros, acu, state.step, now(), runId);
+    settleRun(runId); // records "not charged: run failed"
   }
   const view = getRun(runId);
   recordEvent('admin', runId, `agent.run.${view.status}`, { type: 'system' }, { agent: agent.key, steps: view.steps, acu: view.acu, provider });
@@ -412,7 +433,7 @@ function chooseModel(agent: AgentDef, input: string): string {
 async function liveLoop(state: RunState, apiKey: string, input: string, context: Record<string, unknown> | null): Promise<string> {
   const s = getAssistSettings();
   const client = new Anthropic({ apiKey, maxRetries: 2, timeout: 120_000 });
-  const model = chooseModel(state.agent, input);
+  const model = state.model ?? chooseModel(state.agent, input);
   state.model = model;
   const { tools: allowed } = usableTools(state.agent.key, state.user);
   const tools = allowed.map((n) => TOOL_BY_NAME.get(n)!).map((t) => ({ name: t.name, description: t.description, input_schema: toolJsonSchema(t) as any }));
@@ -500,6 +521,16 @@ function periodFor(text: string): { from: string; to: string } {
   if (/today/.test(t)) return { from: iso(d), to: iso(d) };
   if (/year/.test(t)) return { from: `${d.getUTCFullYear()}-01-01`, to: iso(d) };
   return { from: `${iso(d).slice(0, 7)}-01`, to: iso(d) };
+}
+
+/** Read-only tools the offline planner answers from the account's own records: never charged, even with a model available. */
+const LOOKUP_TOOLS = new Set(['wallets.balances', 'transactions.list', 'transactions.get', 'statements.build', 'routes.list', 'routes.get', 'rates.list', 'fees.quote', 'profile.summary', 'notifications.recent', 'memory.remember', 'support.tickets', 'merchant.stats', 'merchant.settlements', 'merchant.payment_requests', 'merchant.webhooks', 'agent.queue', 'agent.stats']);
+export function isLookup(user: UserRow, agent: AgentDef, input: string, context: Record<string, unknown> | null): boolean {
+  const probe: RunState = { id: 'probe', user, agent, step: 0, maxSteps: 8, tokensIn: 0, tokensOut: 0, model: null, proposals: [], awaiting: false };
+  const { plan, note } = offlinePlan(probe, input, context);
+  if (note === 'memories') return true;
+  if (!plan.length) return false;
+  return plan.every((p) => LOOKUP_TOOLS.has(p.tool));
 }
 
 function offlinePlan(state: RunState, input: string, context: Record<string, unknown> | null): { plan: Plan; note?: string } {
