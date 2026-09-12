@@ -19,6 +19,8 @@ import { P2P, Trade } from './src/screens/P2P';
 import { Activity, TxDetail, Settings, Security, Kyc, Referrals, Support, Statements } from './src/screens/Account';
 import { Assist } from './src/screens/Assist';
 import { Merchant, MerchantGateway, Agent } from './src/screens/Business';
+import { Offline } from './src/screens/Offline';
+import { Savings } from './src/screens/Savings';
 import type { RootParams } from './src/navigation';
 
 const Stack = createNativeStackNavigator<RootParams>();
@@ -124,6 +126,8 @@ function Root() {
             <Stack.Screen name="Merchant" component={Merchant} />
             <Stack.Screen name="MerchantGateway" component={MerchantGateway} />
             <Stack.Screen name="Agent" component={Agent} />
+            <Stack.Screen name="Offline" component={Offline} />
+            <Stack.Screen name="Savings" component={Savings} />
           </>
         )}
       </Stack.Navigator>

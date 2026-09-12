@@ -5,6 +5,7 @@ import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Screen, Card, Button, Input, Alert, T, KV, Qr, Avatar, PinSheet, AmountInput, Row, Status, Tabs, Empty, useAsync, Chip, Sheet } from '../components/ui';
 import { Scanner } from '../components/Scanner';
+import { offlineQueue } from '../lib/offline';
 import { Header } from '../components/Header';
 import { useNav, type ScreenProps } from '../navigation';
 import { decodeQr, toMinor, type PaymentRequest, type PublicUser, type Transaction } from '@bitripay/shared';
@@ -54,6 +55,8 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
     const data = params.data ?? (params.code ? `${config?.webUrl}/pay/${params.code}` : '');
     if (!data) return;
     if (!decodeQr(data)) return setError(t('scan.hint') + ' – invalid code');
+    const offline = offlineQueue.decodeOffline(data);
+    if (offline) setOfflineCode({ ...offline, payload: data });
     api.post<Resolved>('/api/qr/resolve', { data }).then((r) => {
       setResolved(r);
       if (r.kind === 'payment_request') {
@@ -66,8 +69,23 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
         if (r.currency) setCur(r.currency);
         if (r.note) setNote(r.note);
       }
-    }).catch((e) => setError(e.message));
+    }).catch((e) => { if (!offline) setError(e.message); else setError(null); });
   }, [params.data, params.code]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [offlineCode, setOfflineCode] = useState<null | { payload: string; merchantCode: string; merchantName: string; amount: string; currency: string; nonce: string; expiresAt: number | null; reference: string | null }>(null);
+  const payOffline = async () => {
+    if (!offlineCode || !user) return;
+    setLoading(true);
+    try {
+      const merchantId = (resolved as any)?.merchant?.id ?? (resolved as any)?.user?.id ?? null;
+      const item = await offlineQueue.promiseFor(offlineCode.payload, user.id, merchantId ?? offlineCode.merchantCode, currency(offlineCode.currency).decimals);
+      toast(`Queued ${money(item.amountMinor, item.currency)} for ${item.merchantName}; it settles when you are back online`, 'success');
+      nav.replace('Offline');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
   const target = resolved ? (resolved.kind === 'payment_request' ? resolved.merchant : resolved.user) : null;
   const isPr = resolved?.kind === 'payment_request';
   const pr = isPr ? (resolved as any).paymentRequest as PaymentRequest : null;
@@ -105,6 +123,20 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
   };
 
   if (error) return <Screen><Header title="Pay" /><Alert kind="error" text={error} /><Button title={t('common.back')} variant="secondary" onPress={() => nav.goBack()} /></Screen>;
+  if (!resolved && offlineCode) {
+    return (
+      <Screen>
+        <Header title="Pay offline" />
+        <Card>
+          <T bold size={18}>{offlineCode.merchantName}</T>
+          <T muted>@{offlineCode.merchantCode}{offlineCode.reference ? ` · ${offlineCode.reference}` : ''}</T>
+          <View style={{ alignItems: 'center', paddingVertical: 8 }}><T bold size={34}>{offlineCode.amount} {offlineCode.currency}</T></View>
+          <Alert kind="info" text="No network right now. This payment is signed on your phone and settles in order when you are back online; if it cannot settle, nothing leaves your balance." />
+          <Button title="Confirm offline payment" loading={loading} onPress={payOffline} />
+        </Card>
+      </Screen>
+    );
+  }
   if (!resolved || !target) return <Screen><Header title="Pay" /><T muted>{t('common.loading')}</T></Screen>;
   if (resolved.kind === 'agent') {
     return (

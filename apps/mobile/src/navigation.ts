@@ -35,6 +35,8 @@ export type RootParams = {
   Merchant: undefined;
   MerchantGateway: undefined;
   Agent: undefined;
+  Offline: undefined;
+  Savings: undefined;
 };
 
 export type Nav = NativeStackNavigationProp<RootParams>;

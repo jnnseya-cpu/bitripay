@@ -658,6 +658,17 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
   `top_up` or `billing`. Subscription collection draws a wallet shortfall under a billing mandate before it charges;
   an amount over the limits fails the invoice into dunning. Web page **Linked banks** (`/app/banks`).
 
+### Mobile: offline payments and savings
+
+- **Offline-native on the phone** (`apps/mobile/src/lib/offline.ts`, screen **Offline payments**): an Ed25519 subkey
+  generated on the device (tweetnacl, secret half in the secure store, only the public half registered as SPKI),
+  a monotonic counter, prefetched merchant nonces, merchant-side signed offline BitriQR codes without network, and a
+  payer-side queue of promises signed on the phone (SHA-256 hash and canonical string identical to the API's). The
+  scan flow recognises an offline code when the resolver is unreachable and queues the payment; the queue syncs in
+  order when the network returns and shows per-promise outcomes and restored balances.
+- **Savings & goals** screen: goals with progress, set aside / release, the anchor share and round-ups, and the
+  live-within-means monitor with its plan.
+
 ### Public site, blog and SEO engine
 
 The marketing surface is **server-rendered by the API** so search engines, social previews and AI answer
