@@ -29,7 +29,7 @@ function renderMarkdown(md: string) {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div>
-      <nav className="landing-nav"><Link to="/" className="brand" style={{ color: 'inherit', padding: 0 }}><span className="brand-logo">B</span>BitriPay</Link><Link to="/app" className="btn secondary">Open app</Link></nav>
+      <nav className="landing-nav"><Link to="/" className="brand" style={{ color: 'inherit', padding: 0 }}><img className="brand-img swap" src="/brand/logo.svg" alt="BitriPay" width={140} height={34} /></Link><Link to="/app" className="btn secondary">Open app</Link></nav>
       <div className="content" style={{ maxWidth: 800 }}>{children}</div>
     </div>
   );

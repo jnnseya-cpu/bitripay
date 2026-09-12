@@ -1,10 +1,11 @@
 /* Landing + footer: self-contained tokens (prefixed lp-) so the marketing surface has its own visual world. */
-.lp{--lp-paper:#f3f4f1;--lp-paper-2:#ffffff;--lp-ink:#101418;--lp-ink-2:#4b5560;--lp-line:#dfe3df;--lp-forest:#0b6e4f;--lp-forest-2:#0a5a41;--lp-cobalt:#1f4fd8;--lp-amber:#f5b31c;--lp-night:#0a0d12;--lp-display:'Bricolage Grotesque',ui-sans-serif,system-ui,sans-serif;--lp-body:'Source Sans 3',ui-sans-serif,system-ui,sans-serif;--lp-mono:'JetBrains Mono',ui-monospace,Menlo,monospace;background:var(--lp-paper);color:var(--lp-ink);font-family:var(--lp-body);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
-[data-theme='dark'] .lp{--lp-paper:#0f1216;--lp-paper-2:#161a20;--lp-ink:#eceae4;--lp-ink-2:#a3aab3;--lp-line:#272c34;--lp-forest:#3fbf92;--lp-forest-2:#2ea57b;--lp-cobalt:#7aa2ff}
+.lp{--lp-paper:#f6f6fb;--lp-paper-2:#ffffff;--lp-ink:#161832;--lp-ink-2:#4e5170;--lp-line:#e2e2ef;--lp-forest:#12A34B;--lp-forest-2:#0E8A3E;--lp-cobalt:#2E2A7B;--lp-amber:#F49D1F;--lp-night:#151537;--lp-display:'Bricolage Grotesque',ui-sans-serif,system-ui,sans-serif;--lp-body:'Source Sans 3',ui-sans-serif,system-ui,sans-serif;--lp-mono:'JetBrains Mono',ui-monospace,Menlo,monospace;background:var(--lp-paper);color:var(--lp-ink);font-family:var(--lp-body);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+[data-theme='dark'] .lp{--lp-paper:#0f0f22;--lp-paper-2:#17173a;--lp-ink:#ecebf7;--lp-ink-2:#a6a8c4;--lp-line:#2b2b5c;--lp-forest:#3ac47a;--lp-forest-2:#2fae69;--lp-cobalt:#9c96ee}
 .lp *{box-sizing:border-box}.lp a{color:inherit}
 .lp-wrap{max-width:1180px;margin:0 auto;padding-inline:clamp(16px,4vw,44px)}
 .lp-brand{font-family:var(--lp-display);font-weight:700;font-size:20px;display:inline-flex;align-items:center;gap:10px;letter-spacing:-.01em;text-decoration:none}
 .lp-brand i{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--lp-forest),var(--lp-cobalt));display:inline-block}
+.lp-brand img{height:34px;width:auto;display:block}.lp-nav .lp-brand img{height:30px}
 .lp-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(12px);background:color-mix(in srgb,var(--lp-night) 78%,transparent);color:#fff;border-bottom:1px solid rgba(255,255,255,.08)}
 .lp-nav .lp-wrap{display:flex;align-items:center;gap:22px;min-height:64px}
 .lp-nav nav{margin-left:auto;display:flex;gap:20px;align-items:center;font-size:15px}.lp-nav nav a{text-decoration:none;opacity:.85}.lp-nav nav a:hover{opacity:1}

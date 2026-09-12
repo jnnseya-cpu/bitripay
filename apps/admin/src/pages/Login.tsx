@@ -32,7 +32,7 @@ export function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="brand" style={{ justifyContent: 'center' }}><span className="brand-logo">B</span>BitriPay Admin</div>
+        <div className="brand" style={{ justifyContent: 'center' }}><img className="brand-img lg swap" src="/brand/logo.svg" alt="BitriPay" width={214} height={52} /> <span className="chip primary">Admin</span></div>
         <form className="card" onSubmit={submit}>
           <h2 className="center">Sign in</h2>
           {error && <Alert kind="error">{error}</Alert>}

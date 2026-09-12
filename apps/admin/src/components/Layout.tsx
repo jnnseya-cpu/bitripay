@@ -32,7 +32,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className="app-shell">
       {open && <div className="backdrop" onClick={() => setOpen(false)} />}
       <aside className={`sidebar ${open ? 'open' : ''}`}>
-        <Link to="/" className="brand" style={{ color: 'inherit' }}><span className="brand-logo">B</span>BitriPay <span className="chip primary">Admin</span></Link>
+        <Link to="/" className="brand" style={{ color: 'inherit' }}><img className="brand-img swap" src="/brand/logo.svg" alt="BitriPay" width={120} height={30} style={{ height: 30 }} /> <span className="chip primary">Admin</span></Link>
         {NAV.map((s) => (
           <div key={s.section}>
             <div className="nav-section">{s.section}</div>

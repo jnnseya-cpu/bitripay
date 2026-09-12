@@ -141,7 +141,7 @@ export function Landing() {
     <div className="lp">
       <header className="lp-nav">
         <div className="lp-wrap">
-          <Link to="/" className="lp-brand" style={{ color: '#fff' }}><i />{site?.siteName || 'BitriPay'}</Link>
+          <Link to="/" className="lp-brand" style={{ color: '#fff' }} aria-label={site?.siteName || 'BitriPay'}><img src="/brand/logo-white.svg" alt={site?.siteName || 'BitriPay'} width={124} height={30} /></Link>
           <nav>
             <a href="/blog" className="hide-sm">Blog</a>
             <a href="/about" className="hide-sm">About</a>

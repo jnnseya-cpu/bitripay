@@ -62,9 +62,8 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className="app-shell">
       {open && <div className="backdrop" onClick={() => setOpen(false)} />}
       <aside className={`sidebar ${open ? 'open' : ''}`}>
-        <Link to="/app" className="brand" style={{ color: 'inherit' }}>
-          <span className="brand-logo">B</span>
-          BitriPay
+        <Link to="/app" className="brand" style={{ color: 'inherit' }} aria-label="BitriPay">
+          <img className="brand-img swap" src="/brand/logo.svg" alt="BitriPay" width={140} height={34} />
         </Link>
         {renderItems(main)}
         {(user?.role === 'merchant' || user?.role === 'admin') && has('merchantGateway') && (

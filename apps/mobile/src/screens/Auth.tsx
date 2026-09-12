@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dimensions, ScrollView, Text, View, Pressable } from 'react-native';
+import { Dimensions, Image, ScrollView, Text, View, Pressable } from 'react-native';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Screen, Card, Button, Input, Select, Alert, T, Tabs, useTheme } from '../components/ui';
@@ -18,6 +18,7 @@ export function Onboarding() {
   const width = Dimensions.get('window').width;
   return (
     <Screen scroll={false} padded={false}>
+      <Image source={require('../../assets/logo-white.png')} style={{ width: 170, height: 70, alignSelf: 'center', marginTop: 48 }} resizeMode="contain" accessibilityLabel="BitriPay" />
       <View style={{ flex: 1, backgroundColor: s.color, justifyContent: 'flex-end' }}>
         <View style={{ alignItems: 'center', justifyContent: 'center', flex: 1 }}>
           <View style={{ width: width * 0.5, height: width * 0.5, borderRadius: width * 0.25, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 72 }}>{['📷', '💱', '💳', '🌍', '🎁'][idx % 5]}</Text></View>
@@ -68,6 +69,7 @@ export function Login() {
   };
   return (
     <Screen title={t('auth.signIn')}>
+      <Image source={require('../../assets/logo.png')} style={{ width: 210, height: 87, alignSelf: 'center', marginBottom: 6 }} resizeMode="contain" accessibilityLabel="BitriPay" />
       <Card>
         {!mfa && <Tabs tabs={[{ id: 'password', label: t('auth.password') }, { id: 'otp', label: t('auth.otpLogin') }]} value={mode} onChange={(m) => { setMode(m as any); setOtpSent(null); }} />}
         {error && <Alert kind="error" text={error} />}

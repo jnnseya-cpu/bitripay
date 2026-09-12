@@ -258,6 +258,26 @@ npm test          # shared unit tests + API integration suite (vitest)
 npm run typecheck # TypeScript across api, web and admin
 ```
 
+## Brand
+
+The system, product and brand name is **BitriPay**. The brand kit lives in `apps/api/public/brand/` and is served at
+`/brand/*` by the API (proxied by the web and admin apps):
+
+| File | Use |
+|---|---|
+| `logo.svg` | Indigo wordmark with the blue dots and the green/orange chevron, for light backgrounds |
+| `logo-white.svg` | White wordmark for dark backgrounds (landing header, splash) |
+| `mark.svg`, `favicon.svg` | The chevron and dots on an indigo tile: favicons, app icon |
+
+Colours are exported once from `packages/shared/src/brand.ts` (`BRAND`) and mirrored in every theme: indigo
+`#2E2A7B` (primary), dots `#1A8ED8 → #1F5EAE`, green `#12A34B` (success), orange `#F49D1F` (warning/accent), ink
+`#161832`, paper `#F6F6FB`. Mobile PNGs (`apps/mobile/assets/icon.png`, `adaptive-icon.png`, `splash.png`,
+`logo.png`, `logo-white.png`) are rendered from the SVGs.
+
+The wordmark in the repository is a vector recreation of the original artwork. To use the original file exactly,
+drop it in as `apps/api/public/brand/logo.svg` (or set Admin → Web, SEO & app settings → logo URL to a hosted
+image) and re-render the mobile PNGs; nothing else needs to change.
+
 ## Configuration
 
 All configuration lives in `apps/api/.env` (see `.env.example`). Everything except secrets can also

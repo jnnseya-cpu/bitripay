@@ -22,8 +22,8 @@ export interface Meta {
 }
 
 const CSS = `
-:root{--bg:#f7f6f2;--paper:#ffffff;--ink:#12161c;--muted:#5d6570;--line:#e4e1d8;--accent:#0b6e4f;--accent-2:#1f4fd8;--amber:#e3a008;--display:'Bricolage Grotesque',ui-sans-serif,system-ui,sans-serif;--body:'Source Sans 3',ui-sans-serif,system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1216;--paper:#161a20;--ink:#eceae4;--muted:#a0a6ae;--line:#2a2f37;--accent:#3fbf92;--accent-2:#7aa2ff;--amber:#f0b429}}
+:root{--bg:#f6f6fb;--paper:#ffffff;--ink:#161832;--muted:#5b5e7e;--line:#e2e2ef;--accent:#2E2A7B;--accent-2:#12A34B;--amber:#F49D1F;--display:'Bricolage Grotesque',ui-sans-serif,system-ui,sans-serif;--body:'Source Sans 3',ui-sans-serif,system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#0f0f22;--paper:#17173a;--ink:#ecebf7;--muted:#a6a8c4;--line:#2b2b5c;--accent:#9c96ee;--accent-2:#3ac47a;--amber:#f5b04a}}
 *{box-sizing:border-box}html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
 a{color:var(--accent-2)}a:hover{text-decoration-thickness:2px}
@@ -31,7 +31,7 @@ a{color:var(--accent-2)}a:hover{text-decoration-thickness:2px}
 header.top{border-bottom:1px solid var(--line);background:var(--paper)}
 header.top .wrap{display:flex;align-items:center;gap:24px;min-height:64px}
 .brand{font-family:var(--display);font-weight:700;font-size:20px;color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:10px;letter-spacing:-.01em}
-.brand i{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:inline-block}
+.brand i{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:inline-block}.brand img{height:34px;width:auto;display:block}@media (prefers-color-scheme:dark){.brand img{filter:brightness(0) invert(1)}}
 nav.main{display:flex;gap:18px;margin-left:auto;font-size:15px}nav.main a{color:var(--ink);text-decoration:none;font-weight:500}nav.main a:hover{color:var(--accent-2)}
 nav.main .cta{background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px}
 @media (max-width:640px){nav.main a:not(.cta){display:none}}
@@ -130,11 +130,11 @@ ${seo.languages.map((l) => `<link rel="alternate" hreflang="${l}" href="${escape
 <script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>
 </head>
 <body>
-<header class="top"><div class="wrap"><a class="brand" href="/"><i></i>${escapeHtml(seo.siteName)}</a><nav class="main"><a href="/blog">Blog</a><a href="/about">About</a><a href="/legal/fees">Fees</a><a href="/login">Sign in</a><a class="cta" href="/register">Open an account</a></nav></div></header>
+<header class="top"><div class="wrap"><a class="brand" href="/" aria-label="${escapeHtml(seo.siteName)}"><img src="/brand/logo.svg" alt="${escapeHtml(seo.siteName)}" width="140" height="34"></a><nav class="main"><a href="/blog">Blog</a><a href="/about">About</a><a href="/legal/fees">Fees</a><a href="/login">Sign in</a><a class="cta" href="/register">Open an account</a></nav></div></header>
 <main><div class="wrap">${body}</div></main>
 <footer class="site"><div class="wrap">
 <div class="cols">
-<div><a class="brand" href="/"><i></i>${escapeHtml(seo.siteName)}</a><p style="color:var(--muted);margin-top:12px;max-width:40ch">Money that works for everyone: the mother selling food at the market, the moto-taxi rider paid by his passengers, the shop on the corner and the family sending money home.</p>${site?.contactEmail ? `<p><a href="mailto:${escapeHtml(site.contactEmail)}">${escapeHtml(site.contactEmail)}</a></p>` : ''}</div>
+<div><a class="brand" href="/" aria-label="${escapeHtml(seo.siteName)}"><img src="/brand/logo.svg" alt="${escapeHtml(seo.siteName)}" width="140" height="34"></a><p style="color:var(--muted);margin-top:12px;max-width:40ch">Money that works for everyone: the mother selling food at the market, the moto-taxi rider paid by his passengers, the shop on the corner and the family sending money home.</p>${site?.contactEmail ? `<p><a href="mailto:${escapeHtml(site.contactEmail)}">${escapeHtml(site.contactEmail)}</a></p>` : ''}</div>
 <div><h4>Product</h4><ul>${FOOTER_LINKS.product.map((l) => `<li><a href="${l.href}">${l.label}</a></li>`).join('')}</ul></div>
 <div><h4>Company</h4><ul>${FOOTER_LINKS.company.map((l) => `<li><a href="${l.href}">${l.label}</a></li>`).join('')}</ul></div>
 <div><h4>Legal</h4><ul>${FOOTER_LINKS.legal.map((l) => `<li><a href="${l.href}">${l.label}</a></li>`).join('')}</ul></div>

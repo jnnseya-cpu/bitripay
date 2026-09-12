@@ -14,7 +14,7 @@ function AuthShell({ title, children, footer }: { title: string; children: React
     <div className="auth-page">
       <div className="auth-card">
         <Link to="/" className="brand" style={{ color: 'inherit', justifyContent: 'center' }}>
-          <span className="brand-logo">B</span>BitriPay
+          <img className="brand-img lg swap" src="/brand/logo.svg" alt="BitriPay" width={214} height={52} />
         </Link>
         <div className="card">
           <h2 className="center">{title}</h2>

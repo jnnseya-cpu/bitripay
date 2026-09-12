@@ -1,3 +1,4 @@
+import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import { config } from './config';
@@ -76,6 +77,8 @@ export function createApp() {
   app.use(express.urlencoded({ extended: true }));
   app.use(idempotency);
 
+  // Brand assets (logo, mark, favicon) served from apps/api/public/brand and proxied by the web and admin apps.
+  app.use('/brand', express.static(path.join(__dirname, '..', 'public', 'brand'), { maxAge: '7d', immutable: false }));
   app.use('/api', publicRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/account', accountRouter);

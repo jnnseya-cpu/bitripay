@@ -43,7 +43,7 @@ export function SiteFooter() {
     <footer className="lp-footer">
       <div className="lp-wrap lp-footer-grid">
         <div className="lp-footer-brand">
-          <div className="lp-brand"><i /> {site?.siteName || 'BitriPay'}</div>
+          <div className="lp-brand"><img src="/brand/logo.svg" alt={site?.siteName || 'BitriPay'} width={140} height={34} /></div>
           <p>Money that works for everyone: the mother selling food at the market, the moto-taxi rider paid by his passengers, the shop on the corner and the family sending money home.</p>
           {site?.contactEmail && <a href={`mailto:${site.contactEmail}`}>{site.contactEmail}</a>}
           <div className="lp-footer-social">

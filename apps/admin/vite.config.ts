@@ -6,6 +6,7 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
+      '/brand': { target: process.env.VITE_API_PROXY || 'http://localhost:4000', changeOrigin: true },
       '/api': { target: process.env.VITE_API_PROXY || 'http://localhost:4000', changeOrigin: true },
       '/v1': { target: process.env.VITE_API_PROXY || 'http://localhost:4000', changeOrigin: true },
     },

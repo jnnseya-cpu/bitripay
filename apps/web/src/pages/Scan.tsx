@@ -180,7 +180,7 @@ export function QrLanding() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <Link to="/app" className="brand" style={{ color: 'inherit', justifyContent: 'center' }}><span className="brand-logo">B</span>BitriPay</Link>
+        <Link to="/app" className="brand" style={{ color: 'inherit', justifyContent: 'center' }}><img className="brand-img swap" src="/brand/logo.svg" alt="BitriPay" width={140} height={34} /></Link>
         <PayTarget resolved={resolved} onBack={() => nav('/app')} />
       </div>
     </div>
