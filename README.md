@@ -187,6 +187,26 @@ Scan the Expo QR code with Expo Go, or build with EAS (`eas build`). Camera scan
 unlock, push notifications and deep links (`bitripay://`, `https://pay.bitripay.app/pay/CODE`) are
 configured in `app.json`.
 
+### Run the Android payout device / SMS forwarder
+
+`apps/payout-device` is the app for the phone that holds a merchant or agent SIM: it enrols with a
+device-generated Ed25519 key, polls its payout queue with signed requests, dials the operator USSD
+menu, and signs and forwards every operator confirmation SMS the instant it arrives (a native
+`SMS_RECEIVED` receiver, `modules/sms-receiver`). Its protocol is unit-tested in Node against the
+API's own verifier.
+
+```bash
+cd apps/payout-device
+npm install
+npm test                                   # protocol interop + forwarder tests
+npx expo prebuild --platform android       # applies the sms-receiver config plugin
+npx expo run:android                       # needs Android SDK 34+ / JDK 17, or use EAS
+```
+
+The native module was not compiled in this repository's build container (no Android SDK); see
+`apps/payout-device/README.md` for permissions, distribution (managed / enterprise, not the public
+Play store) and operating notes.
+
 ### Tests
 
 Browser smoke tests (`scripts/e2e-*.mjs`, Playwright) cover the web and admin apps, including
@@ -248,6 +268,30 @@ Events: `payment.completed`, `payment_request.created`.
 
 Mutating requests accept an `Idempotency-Key` header: a repeat with the same key and body replays the
 stored response (`Idempotent-Replayed: true`); a repeat with a different body is refused (422).
+
+### Going live: processors, rates and corridor arrangements
+
+Everything ships in **sandbox** and stays there until an administrator deliberately completes the
+go-live checklist (`GET /api/admin/go-live`, Admin → Gateway controls → *Go-live checklist*):
+
+- **Processor onboarding** – Stripe, Paystack and Flutterwave credentials are health-checked against
+  the processor (`POST /api/admin/gateways/:id/test`), their mode (test / live) is derived from the
+  keys, live keys are hidden while the platform is in sandbox mode, 3-D Secure is configurable per
+  gateway (Stripe `automatic` / `any`; hosted checkouts apply it themselves), webhook URLs and
+  signing secrets are part of the checklist, and disputes / refunds arrive as webhook events.
+- **Live rate providers** – Frankfurter (ECB) and open.er-api need no key; exchangerate.host,
+  Open Exchange Rates and Fixer take an encrypted API key. Every refresh writes a versioned snapshot
+  (`rate_snapshots`), failures alert administrators, staleness is reported by
+  `GET /api/admin/currencies/rate-status`, and `POST /api/admin/currencies/import` loads a signed-off
+  rate sheet where the provider is unreachable. Bundled `test_rates_v1` rates are labelled as such
+  and never guaranteed.
+- **Corridor regulatory arrangements** – each corridor records its regulator, licence type and
+  number, safeguarding account, AML programme reference, licence expiry, plus data-protection, FX
+  approval, consumer-disclosure and agent-supervision references. A corridor cannot be marked live
+  until the mandatory items, a tested processor and an active prefunded payout account exist; expired
+  licences suspend the corridor automatically and notify administrators.
+- Switching `compliance.mode` to `live` is refused while any blocking checklist item is open and
+  always requires a fresh step-up.
 
 ### Signed SMS evidence (no operator API)
 
@@ -313,8 +357,9 @@ The data layer is plain SQL through a thin adapter, so migrating to PostgreSQL i
 - Biometric templates are never collected or stored; WebAuthn credentials hold only public keys.
 - No CVV is ever stored for external cards; BitriPay-issued virtual cards keep their own CVV encrypted.
 - Live exchange-rate refresh needs outbound access to the rate provider (blocked inside some
-  development sandboxes); without it the platform labels rates as administrator-approved and disables
-  guaranteed quotes rather than presenting them as live.
+  development sandboxes); without it the platform labels rates as bundled test rates or
+  administrator-imported, disables guaranteed quotes and keeps the go-live checklist blocking rather
+  than presenting them as live.
 
 ## License
 

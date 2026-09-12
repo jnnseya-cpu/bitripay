@@ -1,0 +1,8 @@
+{
+  "name": "bitripay-sms-receiver",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Expo native module: receives operator SMS on the payout SIM and reports SIM identity",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

@@ -52,7 +52,8 @@ function SettingsForm({ title, keyName, fields, initial, onSaved }: { title: str
 /** Gateway controls: lifecycle/evidence thresholds, FX disclosure policy, fraud & sanctions, reconciliation and the declared route catalogue. */
 export function Controls() {
   const { toast } = useStore();
-  const [tab, setTab] = useState<'controls' | 'sanctions' | 'reconcile' | 'catalog' | 'events' | 'emoney'>('controls');
+  const [tab, setTab] = useState<'golive' | 'controls' | 'sanctions' | 'reconcile' | 'catalog' | 'events' | 'emoney'>('golive');
+  const golive = useAsync(() => (tab === 'golive' ? api.get<any>('/api/admin/go-live') : Promise.resolve(null)), [tab]);
   const emoney = useAsync(() => (tab === 'emoney' ? api.get<any>('/api/admin/emoney?pageSize=100') : Promise.resolve(null)), [tab]);
   const settings = useAsync(() => api.get<any>('/api/admin/settings'), []);
   const sanctions = useAsync(() => (tab === 'sanctions' ? api.get<any>('/api/admin/sanctions') : Promise.resolve(null)), [tab]);
@@ -65,7 +66,14 @@ export function Controls() {
   return (
     <div>
       <PageHeader title="Gateway controls & risk" subtitle="Lifecycle thresholds, evidence policy, FX disclosure, fraud/sanctions controls, ledger reconciliation and the declared route catalogue" />
-      <Tabs tabs={[{ id: 'controls', label: 'Controls' }, { id: 'sanctions', label: 'Sanctions & risk events' }, { id: 'reconcile', label: 'Reconciliation' }, { id: 'catalog', label: 'Route catalogue' }, { id: 'events', label: 'Event log' }, { id: 'emoney', label: 'E-money issuance' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <Tabs tabs={[{ id: 'golive', label: 'Go-live checklist' }, { id: 'controls', label: 'Controls' }, { id: 'sanctions', label: 'Sanctions & risk events' }, { id: 'reconcile', label: 'Reconciliation' }, { id: 'catalog', label: 'Route catalogue' }, { id: 'events', label: 'Event log' }, { id: 'emoney', label: 'E-money issuance' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      {tab === 'golive' && golive.data && (
+        <div className="card">
+          {golive.data.readyForLive ? <Alert kind="success">All blocking items are complete. Switching to live mode (Controls → Compliance mode) will be accepted; it requires your step-up PIN.</Alert> : <Alert kind="warning"><b>Platform is in {golive.data.mode} mode.</b> Live customer funds cannot be accepted until every blocking item below is complete. The switch to live is refused by the API while any blocking item is open.</Alert>}
+          <Table head={['', 'Requirement', 'Status', 'What to do']} rows={golive.data.items.map((i: any) => [i.ok ? <Chip kind="success">ok</Chip> : <Chip kind={i.blocking ? 'danger' : 'warning'}>{i.blocking ? 'blocking' : 'recommended'}</Chip>, <b>{i.label}</b>, <span className="tiny">{i.detail}</span>, <span className="tiny muted">{i.ok ? '' : i.fix ?? ''}</span>])} />
+          <div className="row mt"><Button variant="secondary" onClick={golive.reload}>Re-check</Button></div>
+        </div>
+      )}
       {tab === 'controls' && settings.data && (
         <div className="grid cols-3">
           <SettingsForm title="Payment lifecycle & evidence" keyName="gateway" fields={GATEWAY_FIELDS} initial={settings.data.gateway} onSaved={settings.reload} />
