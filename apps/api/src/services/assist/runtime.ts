@@ -21,6 +21,7 @@ import { notify } from '../notifications';
 import { AGENTS, agentsForRole, getAgentDef, type AgentDef } from './registry';
 import { TOOL_BY_NAME, TOOLS, toolJsonSchema, type ToolContext } from './tools';
 import { decide, usableTools, effectivePolicy } from './policy';
+import { assertAddon, addonStatus } from './addon';
 
 export type RunStatus = 'queued' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'cancelled' | 'budget_exhausted';
 export interface RunView {
@@ -190,6 +191,7 @@ export function deleteMemory(userId: string, id?: string) {
 
 export function agentsAvailable(user: UserRow) {
   const s = getAssistSettings();
+  void addonStatus;
   const usage = usageSummary(user);
   return agentsForRole(user.role).map((a) => {
     const inst = getInstance(user.id, a.key);
@@ -243,6 +245,7 @@ export async function startRun(user: UserRow, agentKey: string, input: string, o
   const agent = getAgentDef(agentKey);
   if (!agent || !agent.roles.includes(user.role)) throw notFound('That agent is not available for your account', 'agent_not_found');
   if (s.paused.includes(agentKey)) throw new AppError(503, 'agent_paused', `${agent.name} is paused by the administrators.`);
+  if (opts.trigger !== 'schedule') assertAddon(user);
   if (!getInstance(user.id, agentKey).enabled) throw badRequest(`You switched ${agent.name} off. Enable it in the command centre settings.`, 'agent_disabled');
   const text = input.trim();
   if (text.length < 2) throw badRequest('Say what you need in a few words.', 'input_required');

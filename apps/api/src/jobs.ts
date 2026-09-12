@@ -15,6 +15,7 @@ import { publishScheduled } from './services/blog';
 import { runContentSchedule } from './services/seoAgent';
 import { pingIndexNow, verifyBacklinks } from './services/seo';
 import { runScheduledAgents, expireApprovals } from './services/assist/runtime';
+import { renewSubscriptions } from './services/assist/addon';
 let lastAgentDay = '';
 let lastBacklinkCheck = 0;
 import { getEmoneySettings } from './services/settings';
@@ -48,6 +49,8 @@ export function startJobs() {
       }
       // Command centres: expire stale approvals; run the system agents once a day at 05:00 UTC for administrators.
       expireApprovals();
+      const renewed = renewSubscriptions();
+      if (renewed.renewed || renewed.expired) console.log(`[jobs] add-on subscriptions: renewed ${renewed.renewed}, expired ${renewed.expired}`);
       const dayKey = new Date().toISOString().slice(0, 10);
       if (new Date().getUTCHours() === 5 && lastAgentDay !== dayKey) {
         lastAgentDay = dayKey;

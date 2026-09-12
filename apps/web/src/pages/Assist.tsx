@@ -51,7 +51,7 @@ async function streamRun(id: string, onEvent: (event: string, data: any) => void
 export function Assist() {
   const { user, toast } = useStore();
   const [params, setParams] = useSearchParams();
-  const data = useAsync(() => api.get<{ agents: AgentCard[]; usage: any; runtime: any }>('/api/assist/agents'), []);
+  const data = useAsync(() => api.get<{ agents: AgentCard[]; usage: any; runtime: any; addon: any }>('/api/assist/agents'), []);
   const agents = data.data?.agents ?? [];
   const selectedKey = params.get('agent') || agents[0]?.key || 'chief_of_staff';
   const agent = agents.find((a) => a.key === selectedKey) ?? agents[0];
@@ -105,9 +105,12 @@ export function Assist() {
   if (!data.data) return <div className="loading-page"><span className="spinner" /></div>;
   const usage = data.data.usage;
   const mode = data.data.runtime.mode;
+  const addon = data.data.addon;
+  if (addon?.required && !addon.active && addon.freeRunsLeft === 0) return <Activate addon={addon} onDone={() => data.reload()} />;
   return (
     <div>
-      <PageHeader title="Command centre" subtitle="Your agents read your account through audited tools, explain what they find and prepare actions you confirm yourself. They never move money." />
+      <PageHeader title="Command centre" subtitle="Your agents read your account through audited tools, explain what they find and prepare actions you confirm yourself. They never move money." actions={addon?.required && addon.subscription ? <span className="tiny muted">Active until {new Date(addon.subscription.expiresAt).toLocaleDateString()} · {addon.subscription.autoRenew ? <button className="btn ghost sm" onClick={() => api.post('/api/assist/addon/cancel').then(() => { toast('Renewal cancelled. Your agents stay active until the end of the period.', 'success'); data.reload(); })}>Cancel renewal</button> : <button className="btn ghost sm" onClick={() => api.post('/api/assist/addon/auto-renew', { on: true }).then(() => data.reload())}>Turn renewal on</button>}</span> : undefined} />
+      {addon?.required && !addon.active && <Alert kind="warning">You have {addon.freeRunsLeft} free question(s) left this month. <Link to="/app/assist?activate=1">Activate the add-on</Link> to keep your agents.</Alert>}
       {mode === 'offline' && <Alert kind="info">Agents are answering from built-in checks right now (no language model connected). Every question still runs through the same tools and audit log.</Alert>}
       <div className="cc-layout">
         <aside className="cc-agents">
@@ -164,6 +167,54 @@ export function Assist() {
             </>
           )}
         </section>
+      </div>
+    </div>
+  );
+}
+
+/** The add-on is optional: this card is the only thing a non-subscriber sees here. Everything else in BitriPay is unchanged. */
+function Activate({ addon, onDone }: { addon: any; onDone: () => void }) {
+  const { toast, refreshWallets } = useStore();
+  const [currency, setCurrency] = useState<string>(addon.prices[0]?.currency ?? 'USD');
+  const [pin, setPin] = useState('');
+  const [busy, setBusy] = useState(false);
+  const price = addon.prices.find((p: any) => p.currency === currency) ?? addon.prices[0];
+  const activate = async () => {
+    setBusy(true);
+    try {
+      await api.post('/api/assist/addon/activate', { currency, pin });
+      toast('Command centre activated', 'success');
+      refreshWallets();
+      onDone();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div>
+      <PageHeader title="Command centre" subtitle="An optional add-on: personal agents that read your account, explain your money and prepare actions you confirm yourself." />
+      <div className="grid cols-2">
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>What you get</h3>
+          <ul className="small" style={{ paddingLeft: 18, lineHeight: 1.7 }}>
+            <li><b>Chief of Staff</b>: a daily briefing of what matters on your account.</li>
+            <li><b>Analyst</b>: why a fee was charged, what you spent, a statement in one question.</li>
+            <li><b>Research, Automation, Security, Knowledge</b>: answers from BitriPay's guides, prepared repeat payments, safety checks and preferences it remembers.</li>
+            <li>Every step is logged. Agents never move money: you confirm each action with your PIN or passkey.</li>
+          </ul>
+          <p className="tiny muted">Not for you? Nothing changes. Sending, receiving, cards, agents, statements and everything else keep working exactly as they do today.</p>
+        </div>
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>{price?.formatted} <span className="small muted">for {addon.periodDays} days</span></h3>
+          <p className="small muted">Paid from your wallet now.{addon.autoRenewDefault ? ' Renews automatically; cancel any time.' : ''}</p>
+          {addon.prices.length > 1 && <div className="row wrap mb">{addon.prices.map((p: any) => <Chip key={p.currency} selected={p.currency === currency} onClick={() => setCurrency(p.currency)}>{p.formatted}</Chip>)}</div>}
+          <label className="small">Your transaction PIN</label>
+          <input className="input" type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••" />
+          <Button block loading={busy} disabled={pin.length < 4} onClick={activate} >Activate for {price?.formatted}</Button>
+          <p className="tiny muted mt-sm">Low balance? <Link to="/app/add-money">Add money</Link> first.</p>
+        </div>
       </div>
     </div>
   );

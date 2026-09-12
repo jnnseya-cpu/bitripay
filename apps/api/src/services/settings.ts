@@ -165,6 +165,49 @@ export interface AssistSettings {
   killSwitch: boolean;
   /** Run the scheduled system agents (operations, compliance, system health) for administrators each morning. */
   scheduledSystemAgents: boolean;
+  /**
+   * The command centres are an optional add-on. When enabled, account holders pay a small fee from their wallet to
+   * activate them for a period; everyone else keeps using BitriPay exactly as before. Administrators never pay.
+   */
+  addon: {
+    enabled: boolean;
+    /** Price in the price currency (minor units); shown in each wallet currency at the platform rate. */
+    priceCurrency: string;
+    priceMinor: number;
+    periodDays: number;
+    /** Free runs per month before activation is required (0 = none). */
+    freeRuns: number;
+    /** Renew automatically from the wallet while the account holder has not cancelled. */
+    autoRenew: boolean;
+  };
+}
+
+export interface ChannelSettings {
+  ussd: {
+    enabled: boolean;
+    /** Short code shown in help text, e.g. *384*247#. */
+    serviceCode: string;
+    /** africastalking: form fields sessionId/phoneNumber/text and CON/END replies; generic: JSON in, JSON out. */
+    provider: 'africastalking' | 'generic';
+    /** Ceiling per USSD transaction, in the price/base currency minor units, converted per wallet currency. */
+    maxPerTransaction: number;
+    maxPerTransactionCurrency: string;
+    sessionTtlMinutes: number;
+    /** Shared secret the aggregator must send as X-Channel-Secret (or ?secret=) when set. */
+    secret: string;
+    allowRegistration: boolean;
+  };
+  sms: {
+    enabled: boolean;
+    /** Shared secret for the inbound webhook when set. */
+    secret: string;
+    /** Reply format for synchronous webhooks: plain text, TwiML (Twilio) or JSON. */
+    replyFormat: 'plain' | 'twiml' | 'json';
+    maxPerTransaction: number;
+    maxPerTransactionCurrency: string;
+    allowRegistration: boolean;
+  };
+  lite: { enabled: boolean };
 }
 
 export interface SeoSettings {
@@ -227,10 +270,18 @@ const DEFAULT_ASSIST: AssistSettings = {
   paused: [],
   killSwitch: false,
   scheduledSystemAgents: true,
+  addon: { enabled: true, priceCurrency: 'GBP', priceMinor: 299, periodDays: 30, freeRuns: 0, autoRenew: true },
+};
+
+const DEFAULT_CHANNELS: ChannelSettings = {
+  ussd: { enabled: true, serviceCode: '*384*247#', provider: 'africastalking', maxPerTransaction: 20_000, maxPerTransactionCurrency: 'GBP', sessionTtlMinutes: 5, secret: '', allowRegistration: true },
+  sms: { enabled: true, secret: '', replyFormat: 'plain', maxPerTransaction: 10_000, maxPerTransactionCurrency: 'GBP', allowRegistration: true },
+  lite: { enabled: true },
 };
 
 const DEFAULTS: Record<string, unknown> = {
   assist: DEFAULT_ASSIST,
+  channels: DEFAULT_CHANNELS,
   seo: DEFAULT_SEO,
   emoney: DEFAULT_EMONEY,
   compliance: DEFAULT_COMPLIANCE,
@@ -271,6 +322,13 @@ export const getRiskSettings = () => getSetting<RiskSettings>('risk');
 export const getComplianceSettings = () => getSetting<ComplianceSettings>('compliance');
 export const getEmoneySettings = () => getSetting<EmoneySettings>('emoney');
 export const getSeoSettings = () => getSetting<SeoSettings>('seo');
-export const getAssistSettings = () => getSetting<AssistSettings>('assist');
+export const getAssistSettings = () => {
+  const s = getSetting<AssistSettings>('assist');
+  return { ...s, addon: { ...DEFAULT_ASSIST.addon, ...(s.addon ?? {}) } };
+};
+export const getChannelSettings = () => {
+  const s = getSetting<ChannelSettings>('channels');
+  return { ussd: { ...DEFAULT_CHANNELS.ussd, ...(s.ussd ?? {}) }, sms: { ...DEFAULT_CHANNELS.sms, ...(s.sms ?? {}) }, lite: { ...DEFAULT_CHANNELS.lite, ...(s.lite ?? {}) } };
+};
 /** Site settings without importing the CMS module (used by the SEO renderer). */
 export const getSiteSettingsSafe = () => getSetting<any>('site', null) as { siteName?: string; logoUrl?: string | null; contactEmail?: string; social?: Record<string, string>; appUrls?: Record<string, string> } | null;

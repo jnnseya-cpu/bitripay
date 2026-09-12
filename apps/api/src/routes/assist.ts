@@ -10,13 +10,14 @@ import { hasPermission } from '../middleware/permissions';
 import { rateLimit } from '../middleware/rateLimit';
 import { agentsAvailable, startRun, listRuns, getRun, cancelRun, subscribe, getInstance, setInstance, listMemories, addMemory, deleteMemory, usageSummary, runtimeStatus, listApprovals } from '../services/assist/runtime';
 import { toolCatalogue } from '../services/assist/tools';
+import { addonStatus, activateAddon, cancelAddon, setAutoRenew } from '../services/assist/addon';
 
 export const assistRouter = Router();
 assistRouter.use(requireAuth);
 
 assistRouter.get('/agents', (req, res) => {
   const status = runtimeStatus();
-  res.json({ agents: agentsAvailable(req.user!), usage: usageSummary(req.user!), runtime: { mode: status.mode, enabled: status.enabled, model: status.model } });
+  res.json({ agents: agentsAvailable(req.user!), usage: usageSummary(req.user!), addon: addonStatus(req.user!), runtime: { mode: status.mode, enabled: status.enabled, model: status.model } });
 });
 assistRouter.get('/tools', (req, res) => res.json({ tools: toolCatalogue(req.user!.role, (p) => hasPermission(req.user as any, p)) }));
 
@@ -81,4 +82,14 @@ assistRouter.post('/memories', (req, res) => {
 assistRouter.delete('/memories/:id', (req, res) => res.json({ deleted: deleteMemory(req.user!.id, String(req.params.id)) }));
 assistRouter.delete('/memories', (req, res) => res.json({ deleted: deleteMemory(req.user!.id) }));
 
+assistRouter.get('/addon', (req, res) => res.json({ addon: addonStatus(req.user!) }));
+assistRouter.post('/addon/activate', rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'addon' }), (req, res) => {
+  const body = validate(z.object({ currency: z.string().length(3), pin: z.string().optional(), autoRenew: z.boolean().optional() }), req.body);
+  res.status(201).json({ subscription: activateAddon(req.user!, body.currency, body.pin, req, body.autoRenew), addon: addonStatus(req.user!) });
+});
+assistRouter.post('/addon/cancel', (req, res) => res.json({ subscription: cancelAddon(req.user!), addon: addonStatus(req.user!) }));
+assistRouter.post('/addon/auto-renew', (req, res) => {
+  const body = validate(z.object({ on: z.boolean() }), req.body);
+  res.json({ subscription: setAutoRenew(req.user!, body.on), addon: addonStatus(req.user!) });
+});
 assistRouter.get('/usage', (req, res) => res.json({ usage: usageSummary(req.user!) }));

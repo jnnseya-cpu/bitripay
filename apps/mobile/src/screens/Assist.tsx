@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Screen, Card, Button, Input, Alert, T, Row, Chip, useTheme, Empty } from '../components/ui';
+import { Screen, Card, Button, Input, Alert, T, Row, Chip, useTheme, Empty, PinSheet } from '../components/ui';
 import { useNav } from '../navigation';
 
 /**
@@ -22,6 +22,9 @@ export function Assist() {
   const [agents, setAgents] = useState<AgentCard[]>([]);
   const [mode, setMode] = useState<'offline' | 'live'>('offline');
   const [usage, setUsage] = useState<any>(null);
+  const [addon, setAddon] = useState<any>(null);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [agent, setAgent] = useState<AgentCard | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [input, setInput] = useState('');
@@ -30,7 +33,7 @@ export function Assist() {
   const scroll = useRef<ScrollView>(null);
 
   useEffect(() => {
-    api.get<{ agents: AgentCard[]; runtime: any; usage: any }>('/api/assist/agents').then((r) => { setAgents(r.agents); setMode(r.runtime.mode); setUsage(r.usage); setAgent((a) => a ?? r.agents[0] ?? null); }).catch((e) => setError(e.message));
+    api.get<{ agents: AgentCard[]; runtime: any; usage: any; addon: any }>('/api/assist/agents').then((r) => { setAgents(r.agents); setMode(r.runtime.mode); setUsage(r.usage); setAddon(r.addon); setAgent((a) => a ?? r.agents[0] ?? null); }).catch((e) => setError(e.message));
   }, []);
   useEffect(() => {
     if (!agent) return;
@@ -71,6 +74,37 @@ export function Assist() {
     nav.navigate(screen as any, Object.keys(params).length ? params : undefined);
   };
 
+  const activate = async (pin: string) => {
+    setActivating(true);
+    try {
+      const r = await api.post<{ addon: any }>('/api/assist/addon/activate', { currency: addon.prices[0]?.currency ?? 'USD', pin });
+      setAddon(r.addon);
+      setPinOpen(false);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setActivating(false);
+    }
+  };
+  if (addon?.required && !addon.active && addon.freeRunsLeft === 0) {
+    const price = addon.prices[0];
+    return (
+      <Screen title="Command centre">
+        {error && <Alert kind="error" text={error} />}
+        <Card>
+          <T bold size={18}>An optional add-on</T>
+          <T muted>Personal agents that read your account, explain your money and prepare actions you confirm yourself. Every step is logged; agents never move money.</T>
+        </Card>
+        <Card>
+          <T bold size={22}>{price?.formatted} <T muted size={14}>for {addon.periodDays} days</T></T>
+          <T muted size={13}>Paid from your wallet now.{addon.autoRenewDefault ? ' Renews automatically; cancel any time.' : ''}</T>
+          <Button title={`Activate for ${price?.formatted ?? ''}`} onPress={() => setPinOpen(true)} loading={activating} />
+          <T muted size={12}>Not for you? Nothing changes: sending, receiving, cards, agents and statements keep working exactly as today.</T>
+        </Card>
+        <PinSheet open={pinOpen} onClose={() => setPinOpen(false)} onSubmit={activate} loading={activating} title="Activate the command centre" summary={`${price?.formatted ?? ''} from your ${price?.currency ?? ''} wallet`} />
+      </Screen>
+    );
+  }
   return (
     <Screen title="Command centre" scroll={false}>
       <View style={{ flex: 1, gap: 10 }}>

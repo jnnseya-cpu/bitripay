@@ -366,9 +366,36 @@ also run every morning and report by notification).
 - **Admin → Agents & command centres** – registry with pause/resume, a global kill switch, the approvals inbox,
   a runs explorer with every tool call, the policy editor, usage and cost, and model settings (permission `agents`).
 
-API: `GET /api/assist/agents`, `POST /api/assist/runs` (`?wait=1` to block), `GET /api/assist/runs/:id/stream` (SSE),
+**Paid add-on, off by default for everyone.** The command centres cost a small fee (default £2.99 per 30 days,
+shown in the account holder's own currency at the platform rate) paid from the wallet as a normal `subscription`
+ledger posting to the fees account. Account holders who do not activate it see only the activation card; sending,
+receiving, cards, agents, statements and every other feature work exactly as before. Renewal is automatic unless
+cancelled; lapsed subscriptions simply stop the agents. Administrators never pay. Price, period, free trial runs and
+renewal default live under Admin → Agents → Settings; subscriptions and revenue under the Add-on tab.
+
+API: `GET /api/assist/agents`, `POST /api/assist/addon/activate` (`currency`, `pin`), `POST /api/assist/addon/cancel`, `POST /api/assist/runs` (`?wait=1` to block), `GET /api/assist/runs/:id/stream` (SSE),
 `GET/PUT /api/assist/instances/:agent`, `GET/POST/DELETE /api/assist/memories`, `GET /api/assist/usage`; administrators
 use `/api/admin/agents/*`. The full design is in `docs/operating-system/` (rendered as `BitriPay-OS.html`).
+
+### USSD, SMS commands and BitriPay Lite (no smartphone, no data)
+
+BitriPay works from any phone, including feature phones and browsers on 2G:
+
+- **USSD** (`POST /api/ussd`) – a menu on any phone: register with a name and PIN, balance, send money, my code,
+  cash-out code for an agent (agents confirm codes from their own phone), pay a merchant, mini statement, language
+  (English, French, Swahili) and help. Accepts Africa's Talking form fields (`sessionId`, `phoneNumber`, `text` with
+  the full `1*2*…` path) and replies `CON …` / `END …`, or generic JSON (`{sessionId, phone, input}` one step at a
+  time, path kept in `ussd_sessions`) with `?format=json`. Every action uses the same services, limits and PIN checks
+  as the app, plus a per-channel ceiling per transaction.
+- **SMS commands** (`POST /api/sms/inbound`) – `BAL PIN`, `SEND amount [CUR] @code PIN`, `PAY amount @merchant PIN`,
+  `CASH amount @agent PIN`, `STMT PIN`, `CODE`, `REG name PIN`, `HELP`. Accepts Twilio (`From`/`Body`, replies TwiML),
+  Africa's Talking (`from`/`text`) or generic field names, replies synchronously in plain text, TwiML or JSON, and
+  also sends the reply through the configured SMS provider.
+- **BitriPay Lite** (`/lite`) – server-rendered pages with no JavaScript, fonts or images (a few KB each): sign in with
+  phone + PIN or email + password, balances, send, receive code, cash-out code, history and statements (HTML, CSV,
+  PDF), registration. Sessions are opaque revocable cookies.
+- **Admin → USSD, SMS & Lite** – aggregator format, ceilings, webhook secrets (`X-Channel-Secret`), a phone simulator
+  that drives the real menu, recent sessions and the SMS log.
 
 ### Transaction lifecycle
 

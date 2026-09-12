@@ -10,7 +10,7 @@ import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader
 export function Agents() {
   const { toast, can } = useStore();
   const data = useAsync(() => api.get<any>('/api/admin/agents'), []);
-  const [tab, setTab] = useState<'agents' | 'approvals' | 'runs' | 'policies' | 'usage' | 'settings'>('agents');
+  const [tab, setTab] = useState<'agents' | 'approvals' | 'runs' | 'policies' | 'usage' | 'addon' | 'settings'>('agents');
   const ok = (m: string) => { toast(m, 'success'); data.reload(); };
   const err = (e: any) => toast(e.message, 'error');
   const d = data.data;
@@ -21,12 +21,13 @@ export function Agents() {
     <div>
       <PageHeader title="Agents & command centres" subtitle="Every agent reads through typed tools under a policy you publish here. Agents propose; people approve. Nothing here can mint, release, unfreeze or change a corridor." actions={<StepUpButton variant={rt.killSwitch ? 'success' : 'danger'} title={rt.killSwitch ? 'Resume all agents' : 'Pause every agent now'} onConfirm={(pin) => api.post('/api/admin/agents/kill-switch', { on: !rt.killSwitch, pin }).then(() => ok(rt.killSwitch ? 'Agents resumed' : 'All agents paused')).catch(err)}>{rt.killSwitch ? '▶ Resume all agents' : '⏹ Kill switch'}</StepUpButton>} />
       <Alert kind={rt.killSwitch ? 'error' : rt.mode === 'live' ? 'success' : 'warning'}>{rt.killSwitch ? <>Kill switch is <b>on</b>: no agent runs until an administrator resumes them.</> : rt.mode === 'live' ? <>Agents are <b>live</b> on {rt.model} (fast model {rt.fastModel}). {rt.agents} agents, {rt.tools} tools, {pending.length} approval(s) waiting.</> : <>Agents run in <b>offline mode</b>: no model key configured, so answers come from the built-in planner over the same tools. Add a key under Settings to switch to {rt.model}.</>}</Alert>
-      <Tabs tabs={[{ id: 'agents', label: `Agents (${d.agents.length})` }, { id: 'approvals', label: `Approvals (${pending.length})` }, { id: 'runs', label: 'Runs' }, { id: 'policies', label: `Policies (${d.policies.length})` }, { id: 'usage', label: 'Usage & cost' }, { id: 'settings', label: 'Settings' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <Tabs tabs={[{ id: 'agents', label: `Agents (${d.agents.length})` }, { id: 'approvals', label: `Approvals (${pending.length})` }, { id: 'runs', label: 'Runs' }, { id: 'policies', label: `Policies (${d.policies.length})` }, { id: 'usage', label: 'Usage & cost' }, { id: 'addon', label: `Add-on (${d.addon?.active ?? 0} active)` }, { id: 'settings', label: 'Settings' }]} value={tab} onChange={(v) => setTab(v as any)} />
       {tab === 'agents' && <Registry d={d} ok={ok} err={err} />}
       {tab === 'approvals' && <Approvals items={pending} ok={ok} err={err} canApprove={can('approvals')} />}
       {tab === 'runs' && <Runs />}
       {tab === 'policies' && <Policies d={d} ok={ok} err={err} />}
       {tab === 'usage' && <Usage d={d} />}
+      {tab === 'addon' && <Addon d={d} />}
       {tab === 'settings' && <Settings d={d} ok={ok} err={err} />}
     </div>
   );
@@ -145,6 +146,18 @@ function Usage({ d }: { d: any }) {
   );
 }
 
+function Addon({ d }: { d: any }) {
+  const a = d.addon ?? { active: 0, revenue: [], recent: [] };
+  const s = d.settings.addon;
+  return (
+    <>
+      <Alert kind="info">The command centres are an optional add-on. Account holders who want them pay {s.priceCurrency} {(s.priceMinor / 100).toFixed(2)} per {s.periodDays} days from their wallet (shown in their own currency at the platform rate); everyone else keeps using BitriPay exactly as before. Administrators never pay. Change the price and period under Settings.</Alert>
+      <div className="grid cols-3 mb"><div className="card"><KV k="Active subscriptions" v={a.active} /></div>{a.revenue.map((r: any) => <div key={r.currency} className="card"><KV k={`Revenue ${r.currency}`} v={`${(r.total / 100).toFixed(2)} (${r.c} payments)`} /></div>)}</div>
+      <div className="card"><Table head={['Account', 'Status', 'Price', 'Period', 'Renews', 'Started', 'Expires', 'Renewals']} rows={a.recent.map((r: any) => [<span className="mono tiny">{r.userId}</span>, <Chip kind={r.status === 'active' ? 'success' : undefined}>{r.status}</Chip>, `${(r.amount / 100).toFixed(2)} ${r.currency}`, `${r.periodDays} days`, r.autoRenew ? 'yes' : 'no', fmtDate(r.startedAt), fmtDate(r.expiresAt), r.renewals])} empty="No subscriptions yet" /></div>
+    </>
+  );
+}
+
 function Settings({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: any) => void }) {
   const [s, setS] = useState<any>(() => JSON.parse(JSON.stringify(d.settings)));
   const [pricing, setPricing] = useState(JSON.stringify(d.settings.pricing, null, 1));
@@ -165,6 +178,10 @@ function Settings({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
           <div className="grid cols-2"><Field label="Max steps per run"><Input type="number" value={s.maxStepsPerRun} onChange={(e) => setS({ ...s, maxStepsPerRun: Number(e.target.value) })} /></Field><Field label="Max tokens per run"><Input type="number" value={s.maxTokensPerRun} onChange={(e) => setS({ ...s, maxTokensPerRun: Number(e.target.value) })} /></Field></div>
         </div>
         <div>
+          <h4>Paid add-on</h4>
+          <Switch on={s.addon.enabled} onChange={(v) => setS({ ...s, addon: { ...s.addon, enabled: v } })} label="Account holders pay to activate the command centres (off = included for everyone)" />
+          <div className="grid cols-3"><Field label="Price (minor units)"><Input type="number" value={s.addon.priceMinor} onChange={(e) => setS({ ...s, addon: { ...s.addon, priceMinor: Number(e.target.value) } })} /></Field><Field label="Price currency"><Input value={s.addon.priceCurrency} onChange={(e) => setS({ ...s, addon: { ...s.addon, priceCurrency: e.target.value.toUpperCase() } })} /></Field><Field label="Period (days)"><Input type="number" value={s.addon.periodDays} onChange={(e) => setS({ ...s, addon: { ...s.addon, periodDays: Number(e.target.value) } })} /></Field></div>
+          <div className="grid cols-2"><Field label="Free runs per month before paying"><Input type="number" value={s.addon.freeRuns} onChange={(e) => setS({ ...s, addon: { ...s.addon, freeRuns: Number(e.target.value) } })} /></Field><div><Switch on={s.addon.autoRenew} onChange={(v) => setS({ ...s, addon: { ...s.addon, autoRenew: v } })} label="Renew automatically by default" /></div></div>
           <h4>Monthly allowance (ACU) per role · 0 = unlimited</h4>
           <div className="grid cols-2">{['user', 'merchant', 'agent', 'admin'].map((r) => <Field key={r} label={r}><Input type="number" value={s.allowances[r] ?? 0} onChange={(e) => setS({ ...s, allowances: { ...s.allowances, [r]: Number(e.target.value) } })} /></Field>)}</div>
           <Field label="List prices (USD per million tokens) by model" hint="Edit to follow the provider's price list; ACU metering uses these."><Textarea rows={8} value={pricing} onChange={(e) => setPricing(e.target.value)} /></Field>

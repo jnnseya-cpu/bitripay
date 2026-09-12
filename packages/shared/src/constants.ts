@@ -28,6 +28,7 @@ export const TRANSACTION_TYPES = [
   'emoney_burn',
   'distribution',
   'promo_credit',
+  'subscription',
 ] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
@@ -87,4 +88,5 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   emoney_burn: 'E-money Redeemed',
   distribution: 'Distribution',
   promo_credit: 'Promotional Credit',
+  subscription: 'Subscription',
 };

@@ -32,6 +32,11 @@ import { agentStats, runtimeStatus, listRuns as listAgentRuns, getRun, cancelRun
 import { listPolicies, publishPolicy, FORBIDDEN } from '../../services/assist/policy';
 import { TOOLS } from '../../services/assist/tools';
 import { getAgentDef } from '../../services/assist/registry';
+import { config } from '../../config';
+import { addonReport } from '../../services/assist/addon';
+import { recentUssdSessions, ussdRequest, ussdSessionId } from '../../services/channels/ussd';
+import { recentSms, smsHandle } from '../../services/channels/sms';
+import { getChannelSettings } from '../../services/settings';
 import { draftArticle, keywordIdeas, auditPost, socialPack, listRuns, agentStatus, outreachCandidates } from '../../services/seoAgent';
 import { getSeoSettings, getAssistSettings } from '../../services/settings';
 import { buildStatement, statementCsv, statementPdf, listStatements } from '../../services/statements';
@@ -1042,7 +1047,7 @@ adminRouter.get('/audit-logs', requirePermission('admins'), (req, res) => {
 // ---------------------------------------------------------------------------------------------------------------------
 adminRouter.get('/agents', requirePermission('agents'), (_req, res) => {
   const s = getAssistSettings();
-  res.json({ agents: agentStats(), runtime: runtimeStatus(), policies: listPolicies(), approvals: listApprovals({ status: 'proposed' }), forbidden: FORBIDDEN, tools: TOOLS.map((t) => ({ name: t.name, description: t.description, roles: t.roles, permission: t.permission ?? null, sideEffect: t.sideEffect, requiresApproval: !!t.requiresApproval })), settings: { ...s, apiKey: s.apiKey ? '••••••••' : '' }, usage: getDb().prepare("SELECT day, agent_key, model, SUM(runs) runs, SUM(tokens_in) tokens_in, SUM(tokens_out) tokens_out, SUM(cost_micros) cost_micros, SUM(acu) acu FROM agent_usage WHERE day >= ? GROUP BY day, agent_key, model ORDER BY day DESC").all(new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)) });
+  res.json({ agents: agentStats(), runtime: runtimeStatus(), policies: listPolicies(), approvals: listApprovals({ status: 'proposed' }), forbidden: FORBIDDEN, addon: addonReport(), tools: TOOLS.map((t) => ({ name: t.name, description: t.description, roles: t.roles, permission: t.permission ?? null, sideEffect: t.sideEffect, requiresApproval: !!t.requiresApproval })), settings: { ...s, apiKey: s.apiKey ? '••••••••' : '' }, usage: getDb().prepare("SELECT day, agent_key, model, SUM(runs) runs, SUM(tokens_in) tokens_in, SUM(tokens_out) tokens_out, SUM(cost_micros) cost_micros, SUM(acu) acu FROM agent_usage WHERE day >= ? GROUP BY day, agent_key, model ORDER BY day DESC").all(new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)) });
 });
 adminRouter.post('/agents/:key/pause', requirePermission('agents'), (req, res) => {
   const s = getAssistSettings();
@@ -1076,6 +1081,10 @@ adminRouter.put('/agents/settings', requirePermission('agents'), (req, res) => {
   next.paused = Array.isArray(next.paused) ? next.paused : current.paused;
   next.allowances = { ...current.allowances, ...(body.allowances ?? {}) };
   next.pricing = { ...current.pricing, ...(body.pricing ?? {}) };
+  next.addon = { ...current.addon, ...(body.addon ?? {}) };
+  next.addon.priceMinor = Math.max(0, Math.round(Number(next.addon.priceMinor) || 0));
+  next.addon.periodDays = Math.max(1, Math.min(365, Number(next.addon.periodDays) || 30));
+  next.addon.freeRuns = Math.max(0, Math.min(1000, Number(next.addon.freeRuns) || 0));
   next.maxStepsPerRun = Math.max(1, Math.min(20, Number(next.maxStepsPerRun) || current.maxStepsPerRun));
   next.maxTokensPerRun = Math.max(1000, Math.min(500_000, Number(next.maxTokensPerRun) || current.maxTokensPerRun));
   setSetting('assist', next);
@@ -1127,3 +1136,31 @@ adminRouter.post(
     res.json({ approval, run: getRun(approval.runId) });
   }),
 );
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Feature-phone channels: USSD, SMS and Lite settings, recent traffic and a simulator for administrators
+// ---------------------------------------------------------------------------------------------------------------------
+adminRouter.get('/channels', requirePermission('settings'), (_req, res) => {
+  const s = getChannelSettings();
+  res.json({ settings: { ...s, ussd: { ...s.ussd, secret: s.ussd.secret ? '••••••••' : '' }, sms: { ...s.sms, secret: s.sms.secret ? '••••••••' : '' } }, ussdSessions: recentUssdSessions(30), sms: recentSms(40), liteUrl: `${config.apiUrl}/lite` });
+});
+adminRouter.put('/channels/settings', requirePermission('settings'), (req, res) => {
+  const current = getChannelSettings();
+  const body = req.body ?? {};
+  const keep = (given: unknown, cur: string) => (given === undefined || given === '••••••••' ? cur : String(given ?? ''));
+  const next = { ussd: { ...current.ussd, ...(body.ussd ?? {}), secret: keep(body.ussd?.secret, current.ussd.secret) }, sms: { ...current.sms, ...(body.sms ?? {}), secret: keep(body.sms?.secret, current.sms.secret) }, lite: { ...current.lite, ...(body.lite ?? {}) } };
+  setSetting('channels', next);
+  audit(req.user!.id, 'channels.settings.update', 'settings', 'channels', { keys: Object.keys(body) });
+  res.json({ settings: { ...next, ussd: { ...next.ussd, secret: next.ussd.secret ? '••••••••' : '' }, sms: { ...next.sms, secret: next.sms.secret ? '••••••••' : '' } } });
+});
+/** Simulator: drive the real USSD menu for any phone number without an aggregator. */
+adminRouter.post('/channels/ussd/simulate', requirePermission('settings'), (req, res) => {
+  const body = validate(z.object({ sessionId: z.string().optional(), phone: z.string().min(6), input: z.string().default('') }), req.body);
+  const sessionId = body.sessionId || ussdSessionId();
+  const reply = ussdRequest({ sessionId, phone: body.phone, text: body.input, provider: 'simulator', fullPath: false });
+  res.json({ sessionId, ...reply });
+});
+adminRouter.post('/channels/sms/simulate', requirePermission('settings'), (req, res) => {
+  const body = validate(z.object({ phone: z.string().min(6), text: z.string().min(1) }), req.body);
+  res.json({ reply: smsHandle(body.phone, body.text) });
+});

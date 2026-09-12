@@ -13,6 +13,15 @@ beforeAll(() => {
   app = setupApp();
 });
 
+/** A regular account holder who paid for the add-on (funded, then activated from the USD wallet under PIN). */
+const subscriber = async (overrides: Record<string, unknown> = {}) => {
+  const u = await registerUser(app, overrides);
+  await fund(app, u.user.id, '10.00', 'USD');
+  const a = await request(app).post('/api/assist/addon/activate').set(u.auth).send({ currency: 'USD', pin: '1234' });
+  if (a.status !== 201) throw new Error(`activate failed: ${JSON.stringify(a.body)}`);
+  return { ...u, paid: a.body.subscription.amount as number };
+};
+const usd = (minor: number) => `${(minor / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
 const run = async (auth: Record<string, string>, agent: string, input: string, context?: Record<string, unknown>) => {
   const r = await request(app).post('/api/assist/runs?wait=1').set(auth).send({ agent, input, context });
   expect(r.status, JSON.stringify(r.body)).toBe(202);
@@ -20,6 +29,61 @@ const run = async (auth: Record<string, string>, agent: string, input: string, c
 };
 
 describe('command centres', () => {
+  it('is a paid add-on: nothing changes for account holders who do not activate it, activation is a normal ledger posting, and renewal can be cancelled', async () => {
+    const u = await registerUser(app);
+    await fund(app, u.user.id, '5.00', 'USD');
+    const before = await request(app).get('/api/assist/agents').set(u.auth);
+    expect(before.body.addon.required).toBe(true);
+    expect(before.body.addon.active).toBe(false);
+    expect(before.body.addon.prices.find((p: any) => p.currency === 'USD').amount).toBeGreaterThan(0);
+    const blocked = await request(app).post('/api/assist/runs?wait=1').set(u.auth).send({ agent: 'chief_of_staff', input: 'What is my balance?' });
+    expect(blocked.status).toBe(402);
+    expect(blocked.body.error.code).toBe('addon_required');
+    // everything else keeps working exactly as before
+    const w = await request(app).get('/api/wallets').set(u.auth);
+    expect(w.body.items.find((x: any) => x.currency === 'USD').balance).toBe(500);
+    // wrong PIN, then activation from the USD wallet
+    const bad = await request(app).post('/api/assist/addon/activate').set(u.auth).send({ currency: 'USD', pin: '0000' });
+    expect(bad.status).toBe(403);
+    const ok = await request(app).post('/api/assist/addon/activate').set(u.auth).send({ currency: 'USD', pin: '1234' });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+    expect(ok.body.subscription.status).toBe('active');
+    expect(ok.body.addon.active).toBe(true);
+    const after = await request(app).get('/api/wallets').set(u.auth);
+    expect(after.body.items.find((x: any) => x.currency === 'USD').balance).toBe(500 - ok.body.subscription.amount);
+    const tx = await request(app).get('/api/wallets/transactions').set(u.auth);
+    expect(tx.body.items[0].type).toBe('subscription');
+    const now = await run(u.auth, 'chief_of_staff', 'What is my balance?');
+    expect(now.status).toBe('completed');
+    // cancelling stops renewal but keeps the paid period
+    const cancel = await request(app).post('/api/assist/addon/cancel').set(u.auth);
+    expect(cancel.body.subscription.autoRenew).toBe(false);
+    expect(cancel.body.addon.active).toBe(true);
+    // when the period ends without renewal the add-on lapses and the account is untouched
+    getDb().prepare("UPDATE agent_subscriptions SET expires_at = '2020-01-01T00:00:00.000Z' WHERE user_id = ?").run(u.user.id);
+    const { renewSubscriptions } = await import('../services/assist/addon');
+    expect(renewSubscriptions()).toEqual({ renewed: 0, expired: 1 });
+    const lapsed = await request(app).get('/api/assist/agents').set(u.auth);
+    expect(lapsed.body.addon.active).toBe(false);
+    const again = await request(app).post('/api/assist/runs').set(u.auth).send({ agent: 'chief_of_staff', input: 'hello' });
+    expect(again.status).toBe(402);
+    // auto-renewing subscriptions are charged again from the wallet
+    const r = await registerUser(app);
+    await fund(app, r.user.id, '10.00', 'USD');
+    await request(app).post('/api/assist/addon/activate').set(r.auth).send({ currency: 'USD', pin: '1234', autoRenew: true });
+    getDb().prepare("UPDATE agent_subscriptions SET expires_at = '2020-01-01T00:00:00.000Z' WHERE user_id = ?").run(r.user.id);
+    expect(renewSubscriptions()).toEqual({ renewed: 1, expired: 0 });
+    const renewed = await request(app).get('/api/assist/agents').set(r.auth);
+    expect(renewed.body.addon.active).toBe(true);
+    expect(renewed.body.addon.subscription.renewals).toBe(1);
+    // administrators never pay; the console reports subscriptions and revenue
+    const admin = await adminToken(app);
+    const a = await request(app).get('/api/assist/agents').set(admin.auth);
+    expect(a.body.addon.required).toBe(false);
+    const report = await request(app).get('/api/admin/agents').set(admin.auth);
+    expect(report.body.addon.revenue.find((x: any) => x.currency === 'USD').c).toBeGreaterThanOrEqual(3);
+  });
+
   it('lists the agents each role can use, with tools filtered by role and permission', async () => {
     const u = await registerUser(app);
     const m = await registerUser(app, { role: 'merchant', businessName: 'Mama Chantal Foods' });
@@ -46,12 +110,12 @@ describe('command centres', () => {
   });
 
   it('answers a balance question by reading the ledger through the tool gateway and logs every step', async () => {
-    const u = await registerUser(app);
+    const u = await subscriber();
     await fund(app, u.user.id, '120.00', 'USD');
     const r = await run(u.auth, 'chief_of_staff', 'What is my balance?');
     expect(r.status).toBe('completed');
     expect(r.provider).toBe('offline');
-    expect(r.output).toContain('120.00 USD');
+    expect(r.output).toContain(usd(13_000 - u.paid)); // 10.00 funded − add-on + 120.00
     expect(r.actions.map((a: any) => a.tool)).toContain('wallets.balances');
     expect(r.actions.every((a: any) => a.outcome === 'executed')).toBe(true);
     expect(r.acu).toBe(0);
@@ -63,7 +127,7 @@ describe('command centres', () => {
   });
 
   it('explains spending and builds a statement from the same data the statements module uses', async () => {
-    const u = await registerUser(app);
+    const u = await subscriber();
     const b = await registerUser(app);
     await fund(app, u.user.id, '100.00', 'USD');
     await request(app).post('/api/transfers').set(u.auth).send({ pin: '1234', to: `@${b.user.tag}`, amount: '30.00', currency: 'USD', note: 'School fees' });
@@ -78,7 +142,7 @@ describe('command centres', () => {
   });
 
   it('never moves money: a send request becomes a proposal the account holder confirms in the app', async () => {
-    const u = await registerUser(app);
+    const u = await subscriber();
     const b = await registerUser(app);
     await fund(app, u.user.id, '80.00', 'USD');
     const r = await run(u.auth, 'automation', `Send 25 USD to @${b.user.tag} for rent`);
@@ -89,11 +153,11 @@ describe('command centres', () => {
     expect(r.proposals[0].link).toContain(`to=%40${b.user.tag}`);
     expect(r.output).toContain('nothing has been sent');
     const w = await request(app).get('/api/wallets').set(u.auth);
-    expect(w.body.items.find((x: any) => x.currency === 'USD').balance).toBe(8_000);
+    expect(w.body.items.find((x: any) => x.currency === 'USD').balance).toBe(9_000 - u.paid);
   });
 
   it('keeps memories the account holder asks for, refuses secrets, and lets them delete everything', async () => {
-    const u = await registerUser(app);
+    const u = await subscriber();
     const r = await run(u.auth, 'knowledge', 'Remember that I prefer receipts on WhatsApp');
     expect(r.actions[0].tool).toBe('memory.remember');
     expect(r.output).toContain('WhatsApp');
@@ -108,7 +172,7 @@ describe('command centres', () => {
   });
 
   it('denies capabilities that are not tools, tools outside the role, and tools removed by a published policy', async () => {
-    const u = await registerUser(app);
+    const u = await subscriber();
     const admin = await adminToken(app);
     const me = await request(app).get('/api/auth/me').set(u.auth);
     expect(decide('chief_of_staff', me.body.user, 'emoney.issue').verdict).toBe('deny');
@@ -165,7 +229,7 @@ describe('command centres', () => {
 
   it('lets administrators pause an agent, trip the kill switch and cap allowances; users see their usage', async () => {
     const admin = await adminToken(app);
-    const u = await registerUser(app);
+    const u = await subscriber();
     const paused = await request(app).post('/api/admin/agents/research/pause').set(admin.auth);
     expect(paused.body.paused).toContain('research');
     const refused = await request(app).post('/api/assist/runs?wait=1').set(u.auth).send({ agent: 'research', input: 'How is my balance protected?' });
@@ -194,7 +258,7 @@ describe('command centres', () => {
   });
 
   it('streams a finished run over server-sent events and cancels a run cleanly', async () => {
-    const u = await registerUser(app);
+    const u = await subscriber();
     const r = await run(u.auth, 'security', 'Is my account secure?');
     expect(r.actions[0].tool).toBe('profile.summary');
     const s = await request(app).get(`/api/assist/runs/${r.id}/stream`).set(u.auth).buffer(true).parse((res, cb) => { let d = ''; res.on('data', (c) => (d += c)); res.on('end', () => cb(null, d)); });
