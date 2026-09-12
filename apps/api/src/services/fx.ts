@@ -19,7 +19,7 @@ export interface FxDisclosure {
   /** Effective customer rate after markup. */
   rate: number;
   markupBps: number;
-  /** 'frankfurter' / 'open_er_api' (live) or 'administrator-approved' (manual). */
+  /** 'frankfurter' / 'open_er_api' (live), 'administrator-approved' (manual) or 'test_rates_vN' (bundled sandbox rates). */
   provider: string;
   providerLabel: string;
   rateTimestamp: string | null;
@@ -42,13 +42,14 @@ export function fxDisclosure(from: string, to: string, userId?: string | null, p
   const rate = midRate * (1 - markupBps / 10000);
   // The rate for a pair is only as fresh as the older of the two legs.
   const legs = [f, t].filter((c) => !c.isBase);
-  const manual = legs.some((c) => c.rateSource === 'manual');
+  const manual = legs.some((c) => c.rateSource === 'manual' || c.rateSource.startsWith('test_rates'));
+  const testRates = legs.some((c) => c.rateSource.startsWith('test_rates'));
   const timestamps = legs.map((c) => c.rateUpdatedAt).filter(Boolean) as string[];
   const oldest = timestamps.length ? timestamps.map((x) => new Date(x).getTime()).reduce((a, b) => Math.min(a, b)) : null;
   const tooOld = oldest !== null && Date.now() - oldest > fx.maxRateAgeHours * 3600_000;
   const stale = manual || tooOld;
-  const provider = manual ? 'administrator-approved' : legs[0]?.rateSource ?? 'manual';
-  const providerLabel = manual ? 'Administrator-approved rate (not a live market rate)' : tooOld ? `Live rate from ${provider} (stale)` : `Live rate from ${provider}`;
+  const provider = testRates ? legs.find((c) => c.rateSource.startsWith('test_rates'))!.rateSource : manual ? 'administrator-approved' : legs[0]?.rateSource ?? 'manual';
+  const providerLabel = testRates ? `Versioned test rates (${provider}) – NOT live market rates` : manual ? 'Administrator-approved rate (not a live market rate)' : tooOld ? `Live rate from ${provider} (stale)` : `Live rate from ${provider}`;
   const guaranteed = !stale && fx.guaranteedQuotes;
   const expiresAt = guaranteed ? new Date(Date.now() + fx.quoteTtlSeconds * 1000).toISOString() : null;
   let quoteId: string | null = null;

@@ -26,6 +26,9 @@ function mapRow(r: any): CurrencyRow {
   };
 }
 
+/** Bundled approximate rates are versioned test rates – never presented as live. */
+export const TEST_RATES_VERSION = 'test_rates_v1';
+
 /** Seed every ISO 4217 currency; only the default set is enabled until an admin turns more on. */
 export function ensureDefaultCurrencies() {
   const db = getDb();
@@ -41,7 +44,7 @@ export function ensureDefaultCurrencies() {
       const isBase = !hasBase && c.code === base;
       const enabled = isBase || DEFAULT_CURRENCY_CODES.includes(c.code);
       const order = DEFAULT_CURRENCY_CODES.indexOf(c.code);
-      insert.run(c.code, c.name, c.symbol, c.decimals, isBase ? 1 : c.rateToBase, enabled ? 1 : 0, isBase ? 1 : 0, 'manual', now(), order >= 0 ? order : 1000);
+      insert.run(c.code, c.name, c.symbol, c.decimals, isBase ? 1 : c.rateToBase, enabled ? 1 : 0, isBase ? 1 : 0, TEST_RATES_VERSION, now(), order >= 0 ? order : 1000);
     });
   })();
 }
@@ -105,7 +108,10 @@ export function upsertCurrency(input: { code: string; name: string; symbol: stri
     `INSERT INTO currencies (code, name, symbol, decimals, rate_to_base, enabled, is_base, rate_source, rate_updated_at, sort_order)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)
      ON CONFLICT(code) DO UPDATE SET name = excluded.name, symbol = excluded.symbol, decimals = excluded.decimals,
-       rate_to_base = excluded.rate_to_base, enabled = excluded.enabled, rate_source = 'manual', rate_updated_at = excluded.rate_updated_at, sort_order = excluded.sort_order`,
+       rate_to_base = excluded.rate_to_base, enabled = excluded.enabled,
+       rate_source = CASE WHEN currencies.rate_to_base = excluded.rate_to_base THEN currencies.rate_source ELSE 'manual' END,
+       rate_updated_at = CASE WHEN currencies.rate_to_base = excluded.rate_to_base THEN currencies.rate_updated_at ELSE excluded.rate_updated_at END,
+       sort_order = excluded.sort_order`,
   ).run(input.code.toUpperCase(), input.name, input.symbol, input.decimals, isBase ? 1 : input.rateToBase, input.enabled ? 1 : 0, isBase ? 1 : 0, now(), input.sortOrder ?? 0);
   return getCurrency(input.code, false);
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
-import { setupApp, registerUser, adminToken, fund, manualConfirm } from './helpers';
+import { setupApp, registerUser, adminToken, fund, manualConfirm, decideWithdrawal } from './helpers';
 
 let app: ReturnType<typeof setupApp>;
 beforeAll(() => {
@@ -251,13 +251,27 @@ describe('withdrawals, agents, remittance', () => {
     let wallets = await request(app).get('/api/wallets').set(a.auth);
     expect(wallets.body.items[0].balance).toBe(10000 - 4000 - 140); // 1.00 fixed + 1%
     const admin = await adminToken(app);
-    const rej = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/reject`).set(admin.auth).send({ reason: 'bad account', pin: admin.pin });
-    expect(rej.body.transaction.status).toBe('rejected');
+    // A single administrator cannot decide a payout: the reject is a proposal until a second admin approves it.
+    const alone = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/reject`).set(admin.auth).send({ reason: 'bad account' });
+    expect(alone.status).toBe(200);
+    expect(alone.body.transaction.status).toBe('pending');
+    const wait = await request(app).get('/api/wallets').set(a.auth);
+    expect(wait.body.items[0].balance).toBe(10000 - 4000 - 140);
+    const self = await request(app).post(`/api/admin/verifications/${alone.body.verification.id}/approve`).set(admin.auth).send({ pin: admin.pin });
+    expect(self.status).toBe(403);
+    const checker = await (await import('./helpers')).checkerToken(app);
+    const rej = await request(app).post(`/api/admin/verifications/${alone.body.verification.id}/approve`).set(checker.auth).send({ pin: checker.pin });
+    expect(rej.status, JSON.stringify(rej.body)).toBe(200);
+    const rejTx = await request(app).get(`/api/wallets/transactions/${w.body.transaction.id}`).set(a.auth);
+    expect(rejTx.body.transaction.status).toBe('rejected');
     wallets = await request(app).get('/api/wallets').set(a.auth);
     expect(wallets.body.items[0].balance).toBe(10000);
     const w2 = await request(app).post('/api/withdrawals').set(a.auth).send({ amount: '10.00', currency: 'USD', bankAccountId: bank.body.bankAccount.id, pin: '1234' });
-    const ok = await request(app).post(`/api/admin/withdrawals/${w2.body.transaction.id}/approve`).set(admin.auth).send({ payoutReference: 'BANK-1', pin: admin.pin });
-    expect(ok.body.transaction.status).toBe('completed');
+    const ok = await decideWithdrawal(app, w2.body.transaction.id, 'approve', 'BANK-1');
+    const okTx = await request(app).get(`/api/wallets/transactions/${w2.body.transaction.id}`).set(a.auth);
+    expect(okTx.body.transaction.status).toBe('completed');
+    expect(okTx.body.transaction.metadata.payoutReference).toBeTruthy();
+    void ok;
   });
 
   it('agent cash-in and cash-out with commission', async () => {

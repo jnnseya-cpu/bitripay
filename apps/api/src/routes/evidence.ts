@@ -41,7 +41,7 @@ evidenceRouter.get('/devices', (req, res) => res.json({ items: listDevices(req.u
 evidenceRouter.post(
   '/devices',
   wrap(async (req, res) => {
-    const body = validate(z.object({ name: z.string().min(2).max(80), publicKey: z.string().min(32).max(2000), operatorIds: z.array(z.string()).max(50).optional().nullable() }), req.body);
+    const body = validate(z.object({ name: z.string().min(2).max(80), publicKey: z.string().min(32).max(2000), operatorIds: z.array(z.string()).max(50).optional().nullable(), kind: z.enum(['collection', 'payout']).optional().nullable(), simMsisdn: z.string().max(30).optional().nullable(), simIccid: z.string().max(30).optional().nullable(), agentUserId: z.string().optional().nullable(), payoutAccountId: z.string().optional().nullable() }), req.body);
     res.status(201).json({ device: registerDevice(req.user!, body, req.user!.id) });
   }),
 );

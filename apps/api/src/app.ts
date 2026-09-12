@@ -26,6 +26,7 @@ import { adminRouter } from './routes/admin';
 import { passkeysRouter, passkeyAuthRouter } from './routes/passkeys';
 import { routingRouter } from './routes/routing';
 import { evidenceRouter } from './routes/evidence';
+import { payoutsRouter } from './routes/payouts';
 import { idempotency } from './middleware/idempotency';
 import { ensureParseTemplates } from './services/evidence';
 import { ensureMomoOperators } from './services/momo';
@@ -76,6 +77,7 @@ export function createApp() {
   app.use('/api/auth/passkey', passkeyAuthRouter);
   app.use('/api/money', routingRouter);
   app.use('/api/evidence', evidenceRouter);
+  app.use('/api/payouts', payoutsRouter);
   app.use('/api/wallets', walletsRouter);
   app.use('/api/transfers', transfersRouter);
   app.use('/api/qr', qrRouter);

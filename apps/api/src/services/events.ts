@@ -14,7 +14,7 @@ export interface Actor {
   type: ActorType;
   id?: string | null;
 }
-export type EventStream = 'payment' | 'auth' | 'evidence' | 'approval' | 'ledger' | 'admin' | 'risk' | 'route';
+export type EventStream = 'payment' | 'auth' | 'evidence' | 'approval' | 'ledger' | 'admin' | 'risk' | 'route' | 'payout' | 'liquidity' | 'corridor' | 'chargeback';
 
 export interface EventRow {
   seq: number;

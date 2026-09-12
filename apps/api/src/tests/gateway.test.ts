@@ -236,10 +236,19 @@ describe('maker-checker and administrative step-up', () => {
     await fund(app, rich.user.id, '100.00');
     const bank = await request(app).post('/api/bank-accounts').set(rich.auth).send({ bankName: 'Bank', accountName: 'Rich Person', accountNumber: '99887766', currency: 'USD', pin: '1234' });
     const w = await request(app).post('/api/withdrawals').set(rich.auth).send({ amount: '10', currency: 'USD', bankAccountId: bank.body.bankAccount.id, pin: '1234' });
-    const noPin = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/approve`).set(admin.auth).send({});
+    // Documentary evidence is mandatory for an administrative settlement proposal …
+    const noRef = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/approve`).set(admin.auth).send({});
+    expect(noRef.status).toBe(400);
+    const wProposed = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/approve`).set(admin.auth).send({ payoutReference: 'BANK-77', note: 'Bank statement line 12 checked' });
+    expect(wProposed.status).toBe(200);
+    expect(wProposed.body.transaction.status).toBe('pending');
+    // … and the checker needs a fresh step-up.
+    const noPin = await request(app).post(`/api/admin/verifications/${wProposed.body.verification.id}/approve`).set(checker.auth).send({});
     expect(noPin.status).toBe(403);
-    const withPin = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/approve`).set(admin.auth).send({ pin: admin.pin, payoutReference: 'BANK-77' });
-    expect(withPin.body.transaction.status).toBe('completed');
+    const withPin = await request(app).post(`/api/admin/verifications/${wProposed.body.verification.id}/approve`).set(checker.auth).send({ pin: checker.pin });
+    expect(withPin.status).toBe(200);
+    const done = await request(app).get(`/api/wallets/transactions/${w.body.transaction.id}`).set(rich.auth);
+    expect(done.body.transaction.status).toBe('completed');
   });
 });
 
@@ -325,7 +334,9 @@ describe('FX disclosure and route declarations', () => {
     expect(q.body.fx.midRate).toBeGreaterThan(0);
     expect(q.body.fx.rate).toBeLessThan(q.body.fx.midRate);
     expect(q.body.fx.markupBps).toBe(100);
-    expect(q.body.fx.provider).toBe('administrator-approved');
+    // Bundled rates are versioned test rates and are labelled as non-live; they are never guaranteed.
+    expect(q.body.fx.provider).toMatch(/^test_rates_v\d+$/);
+    expect(q.body.fx.providerLabel).toContain('NOT live');
     expect(q.body.fx.guaranteed).toBe(false);
     expect(q.body.fx.stale).toBe(true);
     expect(q.body.estimatedReceive).toBeGreaterThan(0);

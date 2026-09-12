@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
-import { setupApp, registerUser, adminToken, fund, manualConfirm } from './helpers';
+import { setupApp, registerUser, adminToken, fund, manualConfirm, decideWithdrawal } from './helpers';
 import { signToken } from '../lib/jwt';
 
 let app: ReturnType<typeof setupApp>;
@@ -67,8 +67,11 @@ describe('direct mobile money rail (no operator API)', () => {
     const admin = await adminToken(app);
     const list = await request(app).get('/api/admin/withdrawals?status=pending').set(admin.auth);
     expect(list.body.items.some((t: any) => t.id === w.body.transaction.id)).toBe(true);
-    const ok = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/approve`).set(admin.auth).send({ payoutReference: 'MPESA-QX1', pin: admin.pin });
-    expect(ok.body.transaction.status).toBe('completed');
+    // The payout is routed to a payout instruction; with no prefunded M-Pesa float it waits on liquidity and can still be settled manually under maker-checker.
+    expect(w.body.transaction.metadata.payoutStage).toBe('LIQUIDITY_UNAVAILABLE');
+    await decideWithdrawal(app, w.body.transaction.id, 'approve', 'MPESA-QX1');
+    const done = await request(app).get(`/api/wallets/transactions/${w.body.transaction.id}`).set(u.auth);
+    expect(done.body.transaction.status).toBe('completed');
   });
 });
 

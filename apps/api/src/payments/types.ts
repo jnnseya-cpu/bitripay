@@ -87,8 +87,15 @@ export interface VerifyResult {
 
 export interface WebhookEvent {
   providerRef: string;
-  status: 'succeeded' | 'failed' | 'pending';
+  status: 'succeeded' | 'failed' | 'pending' | 'disputed' | 'refunded';
+  reason?: string | null;
   raw?: unknown;
+}
+
+export interface RefundResult {
+  status: 'succeeded' | 'pending' | 'manual';
+  providerRef?: string | null;
+  message?: string;
 }
 
 export interface GatewayProvider {
@@ -101,4 +108,6 @@ export interface GatewayProvider {
   verify(payment: GatewayPaymentRow, credentials: Record<string, string>): Promise<VerifyResult>;
   /** Parse + authenticate an incoming webhook, returning status updates for provider refs. */
   parseWebhook?(req: Request, credentials: Record<string, string>): Promise<WebhookEvent[]>;
+  /** Refund (part of) a settled charge back to the original instrument. Providers without an API return status 'manual'. */
+  refund?(payment: GatewayPaymentRow, amountMinor: number, reason: string, credentials: Record<string, string>): Promise<RefundResult>;
 }

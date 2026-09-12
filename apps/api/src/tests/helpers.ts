@@ -46,6 +46,18 @@ export async function checkerToken(app: ReturnType<typeof createApp>) {
   return { token: res.body.token as string, auth, pin: CHECKER_PIN, user: res.body.user as any };
 }
 
+/** Administrative payout decision (maker-checker): admin proposes with documentary evidence, checker approves under PIN step-up. */
+export async function decideWithdrawal(app: ReturnType<typeof createApp>, txId: string, outcome: 'approve' | 'reject', ref = 'OPREF-12345') {
+  const admin = await adminToken(app);
+  const checker = await checkerToken(app);
+  const proposed = await request(app).post(`/api/admin/withdrawals/${txId}/${outcome}`).set(admin.auth).send(outcome === 'approve' ? { payoutReference: ref, note: 'Operator statement line checked by treasury' } : { reason: 'bad account' });
+  if (proposed.status !== 200) throw new Error(`propose failed: ${JSON.stringify(proposed.body)}`);
+  const approved = await request(app).post(`/api/admin/verifications/${proposed.body.verification.id}/approve`).set(checker.auth).send({ pin: checker.pin });
+  if (approved.status !== 200) throw new Error(`approve failed: ${JSON.stringify(approved.body)}`);
+  const tx = await request(app).get(`/api/admin/transactions/${txId}`).set(admin.auth);
+  return { verification: approved.body.verification, transaction: tx.body.transaction ?? null };
+}
+
 /** Maker-checker manual confirmation of an external payment: the admin proposes, the checker approves under PIN step-up. */
 export async function manualConfirm(app: ReturnType<typeof createApp>, paymentId: string) {
   const admin = await adminToken(app);

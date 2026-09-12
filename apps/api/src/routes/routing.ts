@@ -5,7 +5,10 @@ import { requireAuth } from '../middleware/auth';
 import { assertPin } from '../services/auth';
 import { getCurrency } from '../services/currencies';
 import { toMinor } from '@bitripay/shared';
-import { createRoute, getRoute, listRoutes, previewDestination, quoteRoute, refreshRoute, retryRoute } from '../services/routing';
+import { createRoute, getRoute, listRoutes, previewDestination, quoteRoute, refreshRoute, retryRoute, cancelRoute, routeReceipt } from '../services/routing';
+import { listCorridors } from '../services/corridors';
+import { getComplianceSettings } from '../services/settings';
+import { ROUTE_STAGE_LABELS } from '../services/routeLifecycle';
 import { listOperators } from '../services/momo';
 import { routeCatalog, describeRoute } from '../services/railCatalog';
 
@@ -38,6 +41,8 @@ routingRouter.get('/catalog', (req, res) => {
   const cur = getCurrency(String(req.query.currency || 'USD'));
   res.json({ currency: cur.code, items: routeCatalog({ currency: cur.code, country: req.user!.country }) });
 });
+/** Supported corridors and their authorisation status – nothing is hidden about what is sandbox-only. */
+routingRouter.get('/corridors', (_req, res) => res.json({ compliance: { mode: getComplianceSettings().mode }, items: listCorridors().filter((c) => c.enabled).map((c) => ({ id: c.id, sourceCurrency: c.sourceCurrency, destCountry: c.destCountry, destCurrency: c.destCurrency, operatorId: c.operatorId, rail: c.rail, status: c.status, estimatedPayoutMinutes: c.estimatedPayoutMinutes })), stages: ROUTE_STAGE_LABELS }));
 routingRouter.get('/operators', (req, res) => res.json({ items: listOperators({ country: req.query.country ? String(req.query.country) : null, currency: req.query.currency ? String(req.query.currency) : null }) }));
 
 routingRouter.post(
@@ -54,16 +59,26 @@ routingRouter.post(
 routingRouter.post(
   '/',
   wrap(async (req, res) => {
-    const body = validate(z.object({ source: sourceSchema, destination: destinationSchema, amount: z.string(), currency: z.string().length(3), targetCurrency: z.string().length(3).optional().nullable(), note: z.string().max(200).optional().nullable(), quoteId: z.string().optional().nullable(), pin: z.string().optional() }), req.body);
+    const body = validate(z.object({ source: sourceSchema, destination: destinationSchema, amount: z.string(), currency: z.string().length(3), targetCurrency: z.string().length(3).optional().nullable(), note: z.string().max(200).optional().nullable(), quoteId: z.string().optional().nullable(), sourceOfFunds: z.string().max(200).optional().nullable(), pin: z.string().optional() }), req.body);
     // Every route is a payment: wallet-funded routes need biometrics/PIN now; externally funded ones carry the same proof into the intent.
     if (body.source.method === 'wallet') assertPin(req.user!, body.pin, req);
     const cur = getCurrency(body.currency);
-    const route = await createRoute(req.user!, { source: body.source, destination: body.destination, amount: toMinor(body.amount, cur.decimals), currency: cur.code, targetCurrency: body.targetCurrency?.toUpperCase() ?? null, note: body.note, quoteId: body.quoteId }, { pin: body.pin, req });
+    const route = await createRoute(req.user!, { source: body.source, destination: body.destination, amount: toMinor(body.amount, cur.decimals), currency: cur.code, targetCurrency: body.targetCurrency?.toUpperCase() ?? null, note: body.note, quoteId: body.quoteId, sourceOfFunds: body.sourceOfFunds }, { pin: body.pin, req });
     res.status(201).json({ route });
   }),
 );
 
 routingRouter.get('/', (req, res) => res.json({ items: listRoutes(req.user!.id) }));
+routingRouter.get('/:id/receipt', (req, res) => res.json(routeReceipt(req.user!.id, String(req.params.id))));
+/** Cancel before the local payout is executed (funds return; card funding is refunded through the processor where possible). */
+routingRouter.post(
+  '/:id/cancel',
+  wrap(async (req, res) => {
+    const body = validate(z.object({ reason: z.string().max(200).optional().nullable(), pin: z.string().optional() }), req.body ?? {});
+    assertPin(req.user!, body.pin, req);
+    res.json({ route: await cancelRoute(req.user!, String(req.params.id), body.reason ?? undefined) });
+  }),
+);
 routingRouter.get('/:id', wrap(async (req, res) => res.json({ route: await refreshRoute(req.user!.id, String(req.params.id)) })));
 routingRouter.post(
   '/:id/retry',

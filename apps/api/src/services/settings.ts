@@ -111,7 +111,24 @@ export interface RiskSettings {
 }
 const DEFAULT_RISK: RiskSettings = { maxTxPerHour: 20, maxTxPerDay: 100, coolingOffMinutes: 60, coolingOffAmount: 50_000, reviewScore: 60, blockScore: 90 };
 
+export interface ComplianceSettings {
+  /** 'sandbox': only the sandbox processor / test rails may fund transfers – no live customer funds. 'live': real processors allowed on corridors marked live. */
+  mode: 'sandbox' | 'live';
+  /** Card-funded payouts wait this long before a payout account may execute them (chargeback exposure), unless the risk engine clears them. */
+  cardPayoutHoldMinutes: number;
+  /** Card-funded transfers at/above this base-currency amount (minor units) go to manual review before payout. */
+  cardReviewAmount: number;
+  /** Senders must declare source of funds at/above this base-currency amount (minor units). */
+  sourceOfFundsThreshold: number;
+  /** Payout devices/agents may not pay the same recipient more than this many times per day. */
+  maxPayoutsPerRecipientPerDay: number;
+  /** Minutes a claimed payout may stay in progress before it is released back to the queue. */
+  payoutClaimMinutes: number;
+}
+const DEFAULT_COMPLIANCE: ComplianceSettings = { mode: 'sandbox', cardPayoutHoldMinutes: 0, cardReviewAmount: 100_000, sourceOfFundsThreshold: 500_000, maxPayoutsPerRecipientPerDay: 5, payoutClaimMinutes: 30 };
+
 const DEFAULTS: Record<string, unknown> = {
+  compliance: DEFAULT_COMPLIANCE,
   fees: DEFAULT_FEES,
   limits: DEFAULT_LIMITS,
   referral: DEFAULT_REFERRAL,
@@ -146,3 +163,4 @@ export const getAppSettings = () => getSetting<AppSettings>('app');
 export const getGatewayControls = () => getSetting<GatewayControls>('gateway');
 export const getFxSettings = () => getSetting<FxSettings>('fx');
 export const getRiskSettings = () => getSetting<RiskSettings>('risk');
+export const getComplianceSettings = () => getSetting<ComplianceSettings>('compliance');

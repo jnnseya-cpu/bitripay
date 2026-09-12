@@ -57,6 +57,11 @@ export const stripeProvider: GatewayProvider = {
       raw: intent,
     };
   },
+  async refund(payment, amountMinor, reason, credentials) {
+    const stripe = client(credentials);
+    const r = await stripe.refunds.create({ payment_intent: payment.provider_ref!, amount: amountMinor, reason: 'requested_by_customer', metadata: { reason } });
+    return { status: r.status === 'succeeded' ? 'succeeded' : 'pending', providerRef: r.id };
+  },
   async verify(payment: GatewayPaymentRow, credentials): Promise<VerifyResult> {
     if (!payment.provider_ref) return { status: 'pending' };
     const stripe = client(credentials);
@@ -87,6 +92,9 @@ export const stripeProvider: GatewayProvider = {
     const intent = event.data.object as Stripe.PaymentIntent;
     if (event.type === 'payment_intent.succeeded') return [{ providerRef: intent.id, status: 'succeeded', raw: event }];
     if (event.type === 'payment_intent.payment_failed' || event.type === 'payment_intent.canceled') return [{ providerRef: intent.id, status: 'failed', raw: event }];
+    // Chargebacks: a dispute on the charge freezes / reverses the transfer it funded.
+    if (event.type === 'charge.dispute.created') return [{ providerRef: String((event.data.object as any).payment_intent ?? ''), status: 'disputed', reason: (event.data.object as any).reason ?? 'dispute', raw: event }];
+    if (event.type === 'charge.refunded') return [{ providerRef: String((event.data.object as any).payment_intent ?? ''), status: 'refunded', raw: event }];
     return [];
   },
 };

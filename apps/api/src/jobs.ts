@@ -4,6 +4,7 @@ import { getAppSettings } from './services/settings';
 import { refreshRatesFromProvider } from './services/currencies';
 import { runAutoSettlements } from './services/merchant';
 import { expireStalePayments } from './services/payments';
+import { expirePayouts } from './services/payouts';
 import { config } from './config';
 
 let lastRateRefresh = 0;
@@ -19,6 +20,8 @@ export function startJobs() {
       db.prepare("UPDATE cash_requests SET status = 'expired' WHERE status = 'pending' AND expires_at < ?").run(now());
       const expired = expireStalePayments();
       if (expired) console.log(`[jobs] expired ${expired} unconfirmed payment intents`);
+      const p = expirePayouts();
+      if (p.released || p.expired) console.log(`[jobs] payouts: released ${p.released} stale claims, expired ${p.expired}`);
       db.prepare("DELETE FROM idempotency_keys WHERE created_at < ?").run(new Date(Date.now() - 24 * 3600_000).toISOString());
       db.prepare("DELETE FROM evidence_nonces WHERE created_at < ?").run(new Date(Date.now() - 7 * 86_400_000).toISOString());
       const app = getAppSettings();

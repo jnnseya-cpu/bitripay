@@ -1,6 +1,6 @@
 import { detectCardBrand, luhnCheck, isExpiryValid } from '@bitripay/shared';
 import { shortCode } from '../lib/ids';
-import type { GatewayProvider, InitiateContext, InitiateResult, VerifyResult, GatewayPaymentRow } from './types';
+import type { GatewayProvider, InitiateContext, InitiateResult, VerifyResult, GatewayPaymentRow, RefundResult } from './types';
 
 /**
  * Sandbox gateway – simulates cards, mobile money and bank transfers without any external service.
@@ -53,6 +53,9 @@ export const sandboxProvider: GatewayProvider = {
         instructions: { 'Bank name': 'Sandbox Bank', 'Account name': 'BitriPay Collections', 'Account number': '0001234567', Reference: providerRef },
       },
     };
+  },
+  async refund(payment: GatewayPaymentRow, amountMinor: number): Promise<RefundResult> {
+    return { status: 'succeeded', providerRef: `sbx_refund_${shortCode(10)}`, message: `Sandbox refund of ${amountMinor} to ${payment.provider_ref}` };
   },
   async verify(payment: GatewayPaymentRow): Promise<VerifyResult> {
     if (payment.status === 'succeeded') return { status: 'succeeded' };

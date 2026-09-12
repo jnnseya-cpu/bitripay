@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
 import { config } from '../config';
 import { listCurrencies, getBaseCurrency } from '../services/currencies';
-import { getAppSettings, getFees, getLimits, getReferralSettings } from '../services/settings';
+import { getAppSettings, getFees, getLimits, getReferralSettings, getSetting } from '../services/settings';
 import { getModules } from '../services/modules';
 import { getSiteSettings, listPages, getPage, submitContact, subscribeNewsletter, listLanguages, getTranslationOverrides } from '../services/cms';
 import { listGateways, isGatewayReady, getGatewayCredentials } from '../payments';
@@ -34,6 +34,8 @@ publicRouter.get('/config', (_req, res) => {
       passkeys: true,
       directMobileMoney: true,
       signedSmsEvidence: true,
+      complianceMode: getSetting('compliance', { mode: 'sandbox' }).mode,
+      corridors: true,
       makerChecker: true,
       idempotencyKeys: true,
     },

@@ -11,6 +11,12 @@ import { hashPassword } from './lib/password';
 import { sendMoney } from './services/transfers';
 import { createPaymentRequest } from './services/paymentRequests';
 import { upgradeToMerchant } from './services/merchant';
+import { upsertCorridor, listCorridors } from './services/corridors';
+import { createPayoutAccount, listPayoutAccounts, prefundAccount } from './services/liquidity';
+import { registerDevice, listDevices } from './services/evidence';
+import { generateKeyPairSync } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 bootstrap();
 const db = getDb();
@@ -43,6 +49,33 @@ if ((db.prepare("SELECT COUNT(*) c FROM transactions WHERE type = 'transfer'").g
   createPaymentRequest(shop, { kind: 'qr', amount: 750, currency: 'USD', description: 'Counter 1' });
   createPaymentRequest(alice, { kind: 'request', amount: 3000, currency: 'USD', description: 'Your share of dinner', payer: 'bob' });
   console.log('seeded demo transactions and payment requests');
+}
+// ---- Corridors, prefunded payout accounts and a demo payout device (sandbox only)
+const admin = findUserByEmail(process.env.ADMIN_EMAIL || 'admin@bitripay.local')!;
+const drcAgent = demoUser('agent.kinshasa@example.com', 'Kinshasa Payout Point', 'agent', 'kinagent', { phone: '+243810000001', country: 'CD', business: 'Kinshasa Payout Point' });
+if (listCorridors().length === 0) {
+  upsertCorridor({ sourceCountry: 'GB', sourceCurrency: 'GBP', destCountry: 'CD', destCurrency: 'CDF', operatorId: 'orange_cd', rail: 'mobile_money', status: 'sandbox', estimatedPayoutMinutes: 30, notes: 'Demo corridor: UK card → Orange Money DRC. Sandbox only until authorised.' });
+  upsertCorridor({ sourceCountry: 'GB', sourceCurrency: 'GBP', destCountry: 'SN', destCurrency: 'XOF', operatorId: 'orange_sn', rail: 'mobile_money', status: 'sandbox', estimatedPayoutMinutes: 30 });
+  upsertCorridor({ sourceCountry: 'GB', sourceCurrency: 'GBP', destCountry: 'KE', destCurrency: 'KES', operatorId: 'mpesa_ke', rail: 'mobile_money', status: 'sandbox', estimatedPayoutMinutes: 15 });
+  upsertCorridor({ sourceCurrency: '*', destCountry: 'CD', destCurrency: 'CDF', operatorId: 'airtel_cd', rail: 'mobile_money', status: 'sandbox', estimatedPayoutMinutes: 30 });
+  console.log('seeded demo corridors (all sandbox)');
+}
+if (listPayoutAccounts().length === 0) {
+  const orange = createPayoutAccount({ rail: 'mobile_money', operatorId: 'orange_cd', country: 'CD', currency: 'CDF', label: 'Orange Money DRC – merchant SIM 1', msisdn: '+243890000100', simIccid: '8924300000000000100', agentUserId: drcAgent.id, dailyLimit: 0, perTxLimit: 0 }, { type: 'system' });
+  prefundAccount(orange.id, 5_000_000_00, { reference: 'SEED-PREFUND-CDF', note: 'Demo prefunding' }, admin);
+  const mpesa = createPayoutAccount({ rail: 'mobile_money', operatorId: 'mpesa_ke', country: 'KE', currency: 'KES', label: 'M-Pesa Kenya – merchant SIM', msisdn: '+254700000100', simIccid: '8925400000000000100' }, { type: 'system' });
+  prefundAccount(mpesa.id, 500_000_00, { reference: 'SEED-PREFUND-KES', note: 'Demo prefunding' }, admin);
+  const senegal = createPayoutAccount({ rail: 'mobile_money', operatorId: 'orange_sn', country: 'SN', currency: 'XOF', label: 'Orange Money Senegal – merchant SIM', msisdn: '+221770000100' }, { type: 'system' });
+  prefundAccount(senegal.id, 2_000_000, { reference: 'SEED-PREFUND-XOF', note: 'Demo prefunding' }, admin);
+  if (!listDevices().some((d) => d.kind === 'payout')) {
+    // Demo payout device: the private key is written to apps/api/data/demo-payout-device.json for the smoke test / a forwarder simulator. Never ship this.
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    const device = registerDevice(admin, { name: 'Demo Android payout device (Kinshasa)', publicKey: publicKey.export({ type: 'spki', format: 'pem' }).toString(), operatorIds: ['orange_cd'], kind: 'payout', simMsisdn: '+243890000100', simIccid: '8924300000000000100', agentUserId: drcAgent.id, payoutAccountId: orange.id }, admin.id);
+    const out = path.join(path.dirname(process.env.DATABASE_PATH || './data/bitripay.db'), 'demo-payout-device.json');
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, JSON.stringify({ deviceId: device.id, payoutAccountId: orange.id, simIdentity: '+243890000100', privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString() }, null, 2));
+    console.log(`seeded prefunded payout accounts (CDF, KES, XOF) and a demo payout device – key in ${out}`);
+  }
 }
 console.log(`admin login: see ADMIN_EMAIL / ADMIN_PASSWORD in .env (default admin@bitripay.local / Admin123!)`);
 console.log(`agent: ${agent.email}  merchant: ${shop.email}`);

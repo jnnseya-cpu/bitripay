@@ -21,6 +21,9 @@ export const TRANSACTION_TYPES = [
   'referral_reward',
   'admin_adjustment',
   'refund',
+  'payout',
+  'liquidity_prefund',
+  'liquidity_adjustment',
 ] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
@@ -73,4 +76,7 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   referral_reward: 'Referral Reward',
   admin_adjustment: 'Admin Adjustment',
   refund: 'Refund',
+  payout: 'Payout (external)',
+  liquidity_prefund: 'Liquidity Prefund',
+  liquidity_adjustment: 'Liquidity Adjustment',
 };

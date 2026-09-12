@@ -18,13 +18,16 @@ import { onDepositCompleted } from './referrals';
 import { saveCardFromToken } from './cards';
 import { getModules } from './modules';
 import { getOperator, listOperators } from './momo';
-import { continueRouteAfterFunding, type RouteDestination } from './routing';
+import { continueRouteAfterFunding, recallRouteFunds, type RouteDestination } from './routing';
 import { getGatewayControls } from './settings';
 import { recordEvent, type Actor } from './events';
 import { STAGE_LABELS, TERMINAL_STAGES, advanceThrough, transitionStage, type PaymentStage } from './lifecycle';
 import { assertPin } from './auth';
 import { verifyStepUpToken } from './webauthn';
 import { assessRisk } from './risk';
+import { PROVIDERS as PROVIDER_MAP } from '../payments';
+import { tryTransitionRoute } from './routeLifecycle';
+import { cancelPayout } from './payouts';
 
 export interface InitiatePaymentInput {
   purpose: 'deposit' | 'checkout';
@@ -524,12 +527,144 @@ export async function handleGatewayWebhook(gatewayId: string, req: Request): Pro
   let handled = 0;
   for (const ev of events) {
     const payment = getDb().prepare('SELECT * FROM gateway_payments WHERE gateway = ? AND provider_ref = ?').get(gateway.id, ev.providerRef) as GatewayPaymentRow | undefined;
-    if (!payment || TERMINAL_STAGES.includes(payment.stage as PaymentStage)) continue;
+    if (!payment || (TERMINAL_STAGES.includes(payment.stage as PaymentStage) && !(payment.stage === 'SETTLED' && (ev.status === 'disputed' || ev.status === 'refunded')))) continue;
     recordEvent('evidence', payment.id, 'processor.webhook', { type: 'processor', id: gateway.id }, { status: ev.status, raw: summarizeRaw(ev.raw) });
+    if (ev.status === 'disputed') {
+      if (payment.stage === 'SETTLED') openChargeback(payment.id, { reason: ev.reason ?? 'processor dispute', providerRef: ev.providerRef, actor: { type: 'processor', id: gateway.id } });
+      handled += 1;
+      continue;
+    }
+    if (ev.status === 'refunded') {
+      if (payment.stage === 'SETTLED') reverseFunding(payment, { type: 'processor', id: gateway.id }, 'refunded at processor', 'refund');
+      handled += 1;
+      continue;
+    }
     applyProcessorResult(payment, { status: ev.status, raw: ev.raw }, { type: 'processor', id: gateway.id });
     handled += 1;
   }
   return { handled };
+}
+
+export interface ChargebackView {
+  id: string;
+  paymentId: string;
+  routeId: string | null;
+  providerRef: string | null;
+  amount: number;
+  currency: string;
+  reason: string | null;
+  status: 'open' | 'won' | 'lost' | 'reversed_before_payout';
+  payoutStateAtOpen: string | null;
+  reversalTransactionId: string | null;
+  openedBy: string | null;
+  openedAt: string;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  note: string | null;
+}
+function toChargeback(r: any): ChargebackView {
+  return { id: r.id, paymentId: r.payment_id, routeId: r.route_id, providerRef: r.provider_ref, amount: r.amount, currency: r.currency, reason: r.reason, status: r.status, payoutStateAtOpen: r.payout_state_at_open, reversalTransactionId: r.reversal_transaction_id, openedBy: r.opened_by, openedAt: r.opened_at, resolvedBy: r.resolved_by, resolvedAt: r.resolved_at, note: r.note };
+}
+export function listChargebacks(status?: string | null): ChargebackView[] {
+  const rows = status ? getDb().prepare('SELECT * FROM chargebacks WHERE status = ? ORDER BY opened_at DESC').all(status) : getDb().prepare('SELECT * FROM chargebacks ORDER BY opened_at DESC LIMIT 200').all();
+  return (rows as any[]).map(toChargeback);
+}
+
+/** Post the reversal of a settled funding (chargeback lost / refund): customer wallet → treasury, negative balances allowed (the customer owes). */
+function reverseFunding(payment: GatewayPaymentRow, actor: Actor, reason: string, kind: 'chargeback' | 'refund', amount?: number | null) {
+  const cur = getCurrency(payment.currency, false);
+  const wallet = payment.user_id ? ensureWallet(payment.user_id, cur.code) : null;
+  const tx = postTransaction({
+    type: 'refund',
+    amount: amount ?? payment.amount - payment.fee,
+    currency: cur.code,
+    fromWalletId: wallet?.id ?? null,
+    toWalletId: null,
+    senderUserId: payment.user_id ?? null,
+    note: `${kind === 'chargeback' ? 'Chargeback' : 'Refund'} of ${payment.provider_ref ?? payment.id}: ${reason}`,
+    metadata: { paymentId: payment.id, kind, reason },
+    allowNegativeSender: true,
+  });
+  mergeMeta(payment.id, { reversalTransactionId: tx.id, reversalKind: kind, reversalReason: reason });
+  transitionStage(payment.id, 'REVERSED', actor, { transactionId: tx.id, kind, reason });
+  return tx;
+}
+
+/**
+ * A processor dispute (or an administrator opening one) freezes the transfer the payment funded.
+ * If the payout has not left the platform yet it is cancelled and the funding reversed immediately;
+ * if the recipient was already paid, the case stays open until the dispute is won or lost.
+ */
+export function openChargeback(paymentId: string, input: { reason?: string | null; providerRef?: string | null; actor: Actor }): ChargebackView {
+  const db = getDb();
+  return db.transaction(() => {
+    const payment = getPayment(paymentId);
+    if (payment.stage !== 'SETTLED' && payment.stage !== 'DISPUTED') throw conflict(`Payment is ${payment.stage.toLowerCase()} – only settled payments can be disputed`, 'invalid_stage_transition');
+    const existing = db.prepare("SELECT * FROM chargebacks WHERE payment_id = ? AND status = 'open'").get(paymentId) as any;
+    if (existing) return toChargeback(existing);
+    const route = db.prepare('SELECT * FROM money_routes WHERE payment_id = ?').get(paymentId) as any;
+    const payout = route?.payout_id ? (db.prepare('SELECT * FROM payout_instructions WHERE id = ?').get(route.payout_id) as any) : null;
+    const id = uuid();
+    transitionStage(payment.id, 'DISPUTED', input.actor, { reason: input.reason ?? null, providerRef: input.providerRef ?? null });
+    let status: ChargebackView['status'] = 'open';
+    let reversalTx: string | null = null;
+    const payoutState = payout?.stage ?? (route ? route.stage : null);
+    const notPaidOut = !route || ['CREATED', 'QUOTED', 'FUNDING_PENDING', 'FUNDS_CONFIRMED', 'PAYOUT_QUEUED', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED'].includes(route.stage);
+    if (route) tryTransitionRoute(route.id, 'DISPUTED', input.actor, { paymentId, reason: input.reason ?? null });
+    if (notPaidOut) {
+      if (route) recallRouteFunds(route.id, input.actor, 'Funding disputed (chargeback)');
+      else if (payout && ['QUEUED', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED', 'MISMATCHED', 'DUPLICATE'].includes(payout.stage)) cancelPayout(payout.id, input.actor, 'Funding disputed (chargeback)');
+      const tx = reverseFunding(payment, input.actor, input.reason ?? 'chargeback', 'chargeback');
+      reversalTx = tx.id;
+      status = 'reversed_before_payout';
+      if (route) tryTransitionRoute(route.id, 'REVERSED', input.actor, { paymentId, chargebackId: id });
+    }
+    db.prepare('INSERT INTO chargebacks (id, payment_id, route_id, provider_ref, amount, currency, reason, status, payout_state_at_open, reversal_transaction_id, opened_by, opened_at, resolved_by, resolved_at, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)').run(id, payment.id, route?.id ?? null, input.providerRef ?? payment.provider_ref, payment.amount, payment.currency, input.reason ?? null, status, payoutState, reversalTx, input.actor.id ?? null, now());
+    recordEvent('chargeback', id, 'chargeback.opened', input.actor, { paymentId, routeId: route?.id ?? null, status, payoutState, reason: input.reason ?? null });
+    if (payment.user_id) notify(payment.user_id, 'Payment disputed', status === 'reversed_before_payout' ? 'Your card payment was disputed; the transfer was cancelled and reversed.' : 'Your card payment was disputed. The transfer is under review.', { kind: 'chargeback', paymentId });
+    return toChargeback(db.prepare('SELECT * FROM chargebacks WHERE id = ?').get(id));
+  })();
+}
+
+/** Resolve an open chargeback: won → the transfer stands; lost → funding reversed (the customer owes the amount if it was already paid out). */
+export function resolveChargeback(id: string, outcome: 'won' | 'lost', admin: UserRow, note?: string | null): ChargebackView {
+  const db = getDb();
+  return db.transaction(() => {
+    const cb = db.prepare('SELECT * FROM chargebacks WHERE id = ?').get(id) as any;
+    if (!cb) throw notFound('Chargeback not found');
+    if (cb.status !== 'open') throw conflict(`Chargeback is already ${cb.status}`, 'invalid_status');
+    const payment = getPayment(cb.payment_id);
+    const actor: Actor = { type: 'admin', id: admin.id };
+    let reversalTx: string | null = null;
+    if (outcome === 'won') {
+      transitionStage(payment.id, 'SETTLED', actor, { chargebackId: id, outcome });
+      if (cb.route_id) tryTransitionRoute(cb.route_id, 'SETTLED', actor, { chargebackId: id, outcome });
+    } else {
+      reversalTx = reverseFunding(payment, actor, note ?? 'chargeback lost', 'chargeback').id;
+      if (cb.route_id) tryTransitionRoute(cb.route_id, 'REVERSED', actor, { chargebackId: id, outcome });
+    }
+    db.prepare('UPDATE chargebacks SET status = ?, resolved_by = ?, resolved_at = ?, note = ?, reversal_transaction_id = COALESCE(?, reversal_transaction_id) WHERE id = ?').run(outcome, admin.id, now(), note ?? null, reversalTx, id);
+    recordEvent('chargeback', id, `chargeback.${outcome}`, actor, { paymentId: payment.id, note: note ?? null, reversalTransactionId: reversalTx });
+    return toChargeback(db.prepare('SELECT * FROM chargebacks WHERE id = ?').get(id));
+  })();
+}
+
+/**
+ * Refund a settled funding payment through its processor (card) – sandbox refunds succeed; processors
+ * without a refund API return 'manual' and the funds stay in the wallet for treasury to refund by hand.
+ */
+export async function refundPayment(paymentId: string, amount: number, reason: string, actor: Actor): Promise<{ payment: PaymentView; result: import('../payments/types').RefundResult; transactionId: string | null }> {
+  const payment = getPayment(paymentId);
+  if (payment.stage !== 'SETTLED') throw conflict(`Payment is ${payment.stage.toLowerCase()} – only settled payments can be refunded`, 'invalid_stage_transition');
+  if (!Number.isInteger(amount) || amount <= 0 || amount > payment.amount) throw badRequest('Invalid refund amount');
+  const gateway = getGateway(payment.gateway)!;
+  const provider = PROVIDER_MAP[gateway.provider];
+  const result = provider.refund ? await provider.refund(payment, amount, reason, getGatewayCredentials(gateway.id)) : { status: 'manual' as const, message: `${gateway.name} has no refund API – refund manually and record it` };
+  recordEvent('payment', payment.id, 'payment.refund_requested', actor, { amount, reason, result: result.status, providerRef: result.providerRef ?? null });
+  if (result.status === 'manual') return { payment: toPaymentView(payment), result, transactionId: null };
+  const tx = reverseFunding(payment, actor, reason, 'refund', amount);
+  mergeMeta(payment.id, { refund: { amount, providerRef: result.providerRef ?? null, status: result.status, reason } });
+  return { payment: toPaymentView(getPayment(payment.id)), result, transactionId: tx.id };
 }
 
 export function findPaymentByReference(reference: string): GatewayPaymentRow | undefined {
