@@ -45,6 +45,19 @@ export function merchantSigningKey(merchantUserId: string): SigningKey {
   return toKey(db.prepare('SELECT * FROM signing_keys WHERE key_id = ?').get(keyId));
 }
 
+/** The platform's own key (scope PLATFORM): signs webhook deliveries and platform-issued receipts. Rotated yearly with a 7-day overlap. */
+export const PLATFORM_KEY_DAYS = 365;
+export function platformSigningKey(): SigningKey {
+  const db = getDb();
+  const current = db.prepare("SELECT * FROM signing_keys WHERE party_type = 'platform' AND scope = 'PLATFORM' AND revoked_at IS NULL AND not_after > ? ORDER BY not_after DESC LIMIT 1").get(now()) as any;
+  if (current && new Date(current.not_after).getTime() - Date.now() > ROTATE_BEFORE_DAYS * 86400_000) return toKey(current);
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const keyId = newKeyId();
+  const notAfter = new Date(Date.now() + PLATFORM_KEY_DAYS * 86400_000).toISOString();
+  db.prepare('INSERT INTO signing_keys (key_id, party_type, party_id, scope, public_key, private_key_enc, not_before, not_after, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(keyId, 'platform', 'platform', 'PLATFORM', publicKey.export({ type: 'spki', format: 'der' }).toString('base64'), encrypt(privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64')), now(), notAfter, now());
+  return toKey(db.prepare('SELECT * FROM signing_keys WHERE key_id = ?').get(keyId));
+}
+
 /** Register a device-held offline subkey (public half only). */
 export function registerDeviceKey(deviceId: string, publicKeySpkiB64: string, hours = DEVICE_KEY_HOURS): SigningKey {
   try {

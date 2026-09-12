@@ -96,8 +96,9 @@ function railsFor(input: string[] | undefined, merchant: UserRow): bitriqr.Rail[
   return wanted.filter((r) => r in bitriqr.RAILS && (r !== 'bitcoin' || caps.bitcoin) && (r !== 'wallet' || caps.wallet));
 }
 
-export function createStaticQr(merchant: UserRow, input: { locationId?: string | null; terminalId?: string | null; rails?: string[]; currency: string; purposeCode?: string | null; reference?: string | null; kind?: QrKind; sign?: boolean; assetRef?: string | null; corridorFlag?: string | null }): QrView {
+export function createStaticQr(merchant: UserRow, input: { locationId?: string | null; terminalId?: string | null; rails?: string[]; currency: string; purposeCode?: string | null; reference?: string | null; kind?: QrKind; sign?: boolean; assetRef?: string | null; corridorFlag?: string | null; /** Fixed amount for reusable payment links (payer cannot change it). */ amount?: number | null }): QrView {
   const cur = getCurrency(input.currency);
+  if (input.amount != null && (!Number.isInteger(input.amount) || input.amount <= 0)) throw badRequest('Amount must be a positive integer in minor units', 'invalid_amount');
   const location = input.locationId ? getLocation(merchant.id, input.locationId) : null;
   const rails = railsFor(input.rails, merchant);
   const key = input.sign === false ? null : merchantSigningKey(merchant.id);
@@ -105,7 +106,7 @@ export function createStaticQr(merchant: UserRow, input: { locationId?: string |
   const payload = key ? (bitriqr.encodeSigned(f, (p) => signWithKey(key.keyId, p)) as string) : bitriqr.encodeUnsigned(f);
   const id = `qr_${shortCode(14).toLowerCase()}`;
   const code = shortCode(8);
-  getDb().prepare('INSERT INTO qr_codes (id, code, merchant_user_id, location_id, terminal_id, mode, kind, payload, uri, rails_mask, key_id, amount, currency, purpose_code, reference, status, asset_ref, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)').run(id, code, merchant.id, location?.id ?? null, input.terminalId ?? null, 'STATIC', input.kind ?? 'merchant', payload, `${config.webUrl}/q/${code}`, bitriqr.railsToMask(rails), key?.keyId ?? null, cur.code, input.purposeCode ?? null, input.reference ?? null, 'active', input.assetRef ?? null, now(), now());
+  getDb().prepare('INSERT INTO qr_codes (id, code, merchant_user_id, location_id, terminal_id, mode, kind, payload, uri, rails_mask, key_id, amount, currency, purpose_code, reference, status, asset_ref, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, code, merchant.id, location?.id ?? null, input.terminalId ?? null, 'STATIC', input.kind ?? 'merchant', payload, `${config.webUrl}/q/${code}`, bitriqr.railsToMask(rails), key?.keyId ?? null, input.amount ?? null, cur.code, input.purposeCode ?? null, input.reference ?? null, 'active', input.assetRef ?? null, now(), now());
   recordEvent('payment', id, 'qr.created', { type: 'merchant', id: merchant.id }, { mode: 'STATIC', signed: !!key, locationId: location?.id ?? null });
   return getQr(id);
 }
@@ -257,7 +258,7 @@ export async function resolveScan(content: string, ctx: { payer?: UserRow | null
   if (merchantUser.status !== 'active') return invalid(['merchant_suspended'], qr);
   scanLog(qr?.id ?? null, null, 'resolved', trust, ctx);
   const caps = countryCapabilities(merchantUser.country);
-  return { kind: 'static', trust, reasons: [], merchant: merchantIdentity(merchantUser.id, qr?.locationId ?? null), intent: null, qr, amount: null, currency: qr?.currency ?? decoded?.currency ?? null, purposeCode: qr?.purposeCode ?? decoded?.purposeCode ?? null, reference: qr?.reference ?? decoded?.billRef ?? null, methods: null, disclosures: caps.requiredDisclosures, expiresAt: null, checkoutUrl: null };
+  return { kind: 'static', trust, reasons: [], merchant: merchantIdentity(merchantUser.id, qr?.locationId ?? null), intent: null, qr, amount: qr?.amount ?? null, currency: qr?.currency ?? decoded?.currency ?? null, purposeCode: qr?.purposeCode ?? decoded?.purposeCode ?? null, reference: qr?.reference ?? decoded?.billRef ?? null, methods: null, disclosures: caps.requiredDisclosures, expiresAt: null, checkoutUrl: null };
 }
 
 /** A payer scanned a static code and entered an amount: create the intent for it (source 'qr'). */
@@ -265,6 +266,7 @@ export function intentFromStaticQr(qrId: string, amountMinor: number, payer: Use
   const qr = getQr(qrId);
   if (qr.status !== 'active') throw conflict('This QR code is no longer active', 'qr_revoked');
   if (qr.mode !== 'STATIC') throw badRequest('Only static codes take a payer-entered amount', 'not_static');
+  if (qr.amount != null && amountMinor !== qr.amount) throw badRequest('This code carries a fixed amount', 'fixed_amount');
   const merchant = findUserById(qr.merchantId);
   if (!merchant) throw notFound('Merchant not found', 'merchant_not_found');
   const { row } = createIntent(merchant, { amountMinor, currency: qr.currency, rails: qr.rails, purposeCode: qr.purposeCode, reference: qr.reference, description: extra.description ?? null, source: 'qr', qrId: qr.id, locationId: qr.locationId, terminalId: qr.terminalId, customerUserId: payer?.id ?? null, customerCountry: payer?.country ?? null, expiresInMinutes: 15, ...extra });

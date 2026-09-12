@@ -41,7 +41,7 @@ function admins() {
   return getDb().prepare("SELECT id FROM users WHERE role = 'admin' AND is_system = 0 AND status = 'active'").all() as { id: string }[];
 }
 /** Money movement gate: intents and attempts call this first. */
-export function assertMoneyMovementAllowed(kind: 'intent' | 'attempt' | 'offline' = 'intent') {
+export function assertMoneyMovementAllowed(kind: 'intent' | 'attempt' | 'offline' | 'refund' | 'payout' = 'intent') {
   const s = getOperatingState();
   if (s.mode === 'halted') throw new AppError(503, 'guardian_halt', 'Payments are paused while the ledger is being verified. Nothing has been lost; please try again shortly.');
   if (s.mode === 'degraded' && kind === 'offline' && s.freezeOffline) throw new AppError(503, 'degraded_mode', 'Offline acceptance is paused during degraded operation.');

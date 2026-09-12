@@ -18,6 +18,8 @@ import { runScheduledAgents, expireApprovals } from './services/assist/runtime';
 import { renewSubscriptions } from './services/assist/addon';
 import { expireIntents } from './services/intents';
 import { runGuardian } from './services/guardian';
+import { processDueDeliveries } from './services/webhooks';
+import { syncCheckoutSessions } from './services/gateway';
 let lastGuardian = 0;
 let lastAgentDay = '';
 let lastBacklinkCheck = 0;
@@ -54,6 +56,11 @@ export function startJobs() {
       expireApprovals();
       const expiredIntents = expireIntents();
       if (expiredIntents) console.log(`[jobs] expired ${expiredIntents} payment intent(s)`);
+      const cs = syncCheckoutSessions();
+      if (cs.completed || cs.expired) console.log(`[jobs] checkout sessions: completed ${cs.completed}, expired ${cs.expired}`);
+      // Webhook retries survive restarts: deliveries whose retry time has passed are attempted here.
+      const delivered = await processDueDeliveries();
+      if (delivered) console.log(`[jobs] retried ${delivered} webhook deliver${delivered === 1 ? 'y' : 'ies'}`);
       if (Date.now() - lastGuardian > 3600_000) {
         lastGuardian = Date.now();
         const g = runGuardian();

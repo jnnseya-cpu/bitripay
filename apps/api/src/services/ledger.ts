@@ -1,5 +1,8 @@
 import { getDb } from '../db';
 import { consumePromoCredit, reserveHooks } from './emoney';
+
+/** Listeners notified after a pending transaction settles or reverses (payout webhooks register here; avoids import cycles). */
+export const transactionStatusHooks: ((tx: TransactionRow, outcome: 'completed' | 'rejected' | 'cancelled' | 'failed') => void)[] = [];
 import { getEmoneySettings } from './settings';
 
 /** Internal transaction types whose platform fee may be covered by promotional credit. */
@@ -32,6 +35,8 @@ export interface TransactionRow {
   note: string | null;
   metadata: string;
   idempotency_key: string | null;
+  /** Payment intent the transaction settled (gateway payments). */
+  intent_id?: string | null;
   created_at: string;
   completed_at: string | null;
 }
@@ -353,6 +358,7 @@ export function completeTransaction(id: string, extraMetadata?: Record<string, u
     const done = getTransaction(tx.id)!;
     // E-money redeemed: a holder's balance left the platform through the treasury (withdrawal / external payout).
     if (toWallet.user_id === getSystemUser('treasury').id && done.sender_user_id && !findUserById(done.sender_user_id)?.is_system) reserveHooks.redemption(done);
+    for (const h of transactionStatusHooks) h(done, 'completed');
     return done;
   })();
 }
@@ -372,7 +378,9 @@ export function reverseTransaction(id: string, status: 'rejected' | 'cancelled' 
     db.prepare('UPDATE transactions SET status = ?, completed_at = ?, metadata = ? WHERE id = ?').run(status, now(), JSON.stringify(metadata), tx.id);
     const balance = assertLedgerBalanced(tx.id);
     recordEvent('ledger', tx.id, `ledger.${status}`, { type: 'system' }, { reason: reason ?? null, debits: balance.d, credits: balance.c });
-    return getTransaction(tx.id)!;
+    const done = getTransaction(tx.id)!;
+    for (const h of transactionStatusHooks) h(done, status);
+    return done;
   })();
 }
 

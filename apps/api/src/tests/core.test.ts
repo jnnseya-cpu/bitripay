@@ -227,7 +227,7 @@ describe('deposits & checkout via sandbox gateway', () => {
   it('exposes the merchant v1 API with API keys and webhooks config', async () => {
     const merchant = await registerUser(app, { role: 'merchant', businessName: 'API Shop' });
     const key = await request(app).post('/api/merchant/api-keys').set(merchant.auth).send({ label: 'woo' });
-    expect(key.body.apiKey.secret).toMatch(/^bp_live_/);
+    expect(key.body.apiKey.secret).toMatch(/^sk_live_/); // legacy bp_ keys keep authenticating; new keys use the sk_/rk_/pk_ prefixes
     const v1 = await request(app).post('/v1/payment-requests').set('Authorization', `Bearer ${key.body.apiKey.secret}`).send({ amount: '9.99', currency: 'USD', description: 'Woo order', metadata: { orderId: 55 } });
     expect(v1.status).toBe(201);
     expect(v1.body.checkoutUrl).toContain('/pay/');

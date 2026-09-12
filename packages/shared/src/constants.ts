@@ -30,6 +30,7 @@ export const TRANSACTION_TYPES = [
   'promo_credit',
   'subscription',
   'agent_usage',
+  'verification',
 ] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
@@ -91,4 +92,5 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   promo_credit: 'Promotional Credit',
   subscription: 'Subscription',
   agent_usage: 'Agent question',
+  verification: 'Payment verification',
 };

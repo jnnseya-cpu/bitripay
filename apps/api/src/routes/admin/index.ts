@@ -36,6 +36,7 @@ import { config } from '../../config';
 import { runGuardian, listGuardianChecks, getOperatingState, setOperatingMode } from '../../services/guardian';
 import { countryCapabilities, listCountryCapabilities, setCountryCapabilities, PURPOSE_CODES } from '../../services/capabilities';
 import { listIntents, intentTimeline } from '../../services/intents';
+import { listRefunds, resolveRefund } from '../../services/gateway';
 import { addonReport } from '../../services/assist/addon';
 import { billingReport } from '../../services/assist/billing';
 import { recentUssdSessions, ussdRequest, ussdSessionId } from '../../services/channels/ussd';
@@ -1208,3 +1209,12 @@ adminRouter.put('/capabilities/:country', requirePermission('settings'), (req, r
 });
 adminRouter.get('/intents', requirePermission('transactions'), (req, res) => res.json({ items: listIntents({ merchantUserId: req.query.merchant ? String(req.query.merchant) : null, status: req.query.status ? String(req.query.status) : null, limit: Math.min(200, Number(req.query.limit) || 50) }) }));
 adminRouter.get('/intents/:id', requirePermission('transactions'), (req, res) => res.json(intentTimeline(String(req.params.id))));
+
+// Refund objects: MANUAL / PENDING processor refunds are confirmed or refused by operations once the processor reports.
+adminRouter.get('/refunds', requirePermission('transactions'), (req, res) => res.json({ items: listRefunds({ merchantUserId: req.query.merchant ? String(req.query.merchant) : null, status: req.query.status ? String(req.query.status) : null, limit: Math.min(200, Number(req.query.limit) || 50) }) }));
+adminRouter.post('/refunds/:id/resolve', requirePermission('treasury'), wrap(async (req, res) => {
+  const body = validate(z.object({ outcome: z.enum(['succeeded', 'failed']), note: z.string().max(300).optional().nullable() }), req.body);
+  const refund = await resolveRefund(String(req.params.id), body.outcome, req.user!, body.note ?? null);
+  audit(req.user!.id, 'refund.resolve', 'refund', refund.id, { outcome: body.outcome, note: body.note ?? null });
+  res.json({ refund });
+}));

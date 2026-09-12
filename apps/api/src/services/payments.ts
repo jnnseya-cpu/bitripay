@@ -22,6 +22,7 @@ import { continueRouteAfterFunding, recallRouteFunds, type RouteDestination } fr
 import { getGatewayControls } from './settings';
 import { recordEvent, type Actor } from './events';
 import { STAGE_LABELS, TERMINAL_STAGES, advanceThrough, transitionStage, type PaymentStage } from './lifecycle';
+import { startAttempt, reconcileOpenAttempt } from './intents';
 import { assertPin } from './auth';
 import { verifyStepUpToken } from './webauthn';
 import { assessRisk } from './risk';
@@ -241,6 +242,11 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
     .run(id, gateway.id, input.method, input.purpose, user?.id ?? null, request?.id ?? null, amount, cur.code, fee, expiresAt, input.email ?? user?.email ?? null, input.phone ?? user?.phone ?? null, input.name ?? user?.full_name ?? null, input.savedCardId ?? null, JSON.stringify({ operatorId: input.operatorId ?? null, route: input.route ?? null, routeId: input.routeId ?? null, intentInput }), ts, ts);
   const actor = actorFor(user);
   recordEvent('payment', id, 'payment.created', actor, { purpose: input.purpose, method: input.method, gateway: gateway.id, amount, currency: cur.code, fee, operatorId: input.operatorId ?? null });
+  // Gateway intents: every external execution is a Payment Attempt on the intent (one in flight at a time).
+  if (request?.intent_id) {
+    reconcileOpenAttempt(request.intent_id);
+    startAttempt(request.intent_id, { methodClass: input.method, connector: gateway.id, operatorId: input.operatorId ?? null, gatewayPaymentId: id }, actor);
+  }
   transitionStage(id, 'AUTHENTICATION_REQUIRED', { type: 'system' });
 
   const authn = resolveAuthentication(user, auth, gateway.provider, input.method);
@@ -387,8 +393,14 @@ function applyProcessorResult(payment: GatewayPaymentRow, result: VerifyResult, 
     mergeMeta(payment.id, { failureReason: result.failureReason ?? 'Payment failed' });
     transitionStage(payment.id, 'REJECTED', actor, { reason: result.failureReason ?? 'Payment failed' });
     if (payment.user_id) notify(payment.user_id, 'Payment failed', result.failureReason ?? 'Your payment could not be completed.', { kind: 'payment_failed', paymentId: payment.id });
+  } else if (result.status === 'unknown') {
+    // The provider cannot say whether money moved: park for a human, never retry blindly (the intent goes AMBIGUOUS).
+    if (!['INSTRUCTION_ISSUED', 'PAYMENT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING'].includes(payment.stage)) return;
+    mergeMeta(payment.id, { failureReason: result.failureReason ?? 'Provider outcome unknown', providerOutcome: 'unknown' });
+    transitionStage(payment.id, 'MANUAL_REVIEW', actor, { reason: 'provider_outcome_unknown', detail: result.failureReason ?? null });
   }
 }
+
 
 function summarizeRaw(raw: unknown) {
   if (!raw) return null;
@@ -659,14 +671,21 @@ export function resolveChargeback(id: string, outcome: 'won' | 'lost', admin: Us
  * Refund a settled funding payment through its processor (card) – sandbox refunds succeed; processors
  * without a refund API return 'manual' and the funds stay in the wallet for treasury to refund by hand.
  */
-export async function refundPayment(paymentId: string, amount: number, reason: string, actor: Actor): Promise<{ payment: PaymentView; result: import('../payments/types').RefundResult; transactionId: string | null }> {
-  const payment = getPayment(paymentId);
+/** Ask the processor to return `amount` to the payer's instrument. No ledger effect; callers post the balanced entries. */
+export async function providerRefund(payment: GatewayPaymentRow, amount: number, reason: string, actor: Actor): Promise<import('../payments/types').RefundResult> {
   if (payment.stage !== 'SETTLED') throw conflict(`Payment is ${payment.stage.toLowerCase()} – only settled payments can be refunded`, 'invalid_stage_transition');
   if (!Number.isInteger(amount) || amount <= 0 || amount > payment.amount) throw badRequest('Invalid refund amount');
   const gateway = getGateway(payment.gateway)!;
   const provider = PROVIDER_MAP[gateway.provider];
   const result = provider.refund ? await provider.refund(payment, amount, reason, getGatewayCredentials(gateway.id)) : { status: 'manual' as const, message: `${gateway.name} has no refund API – refund manually and record it` };
   recordEvent('payment', payment.id, 'payment.refund_requested', actor, { amount, reason, result: result.status, providerRef: result.providerRef ?? null });
+  return result;
+}
+
+/** Refund a deposit: the processor returns the money and the payer's wallet funding is reversed. */
+export async function refundPayment(paymentId: string, amount: number, reason: string, actor: Actor): Promise<{ payment: PaymentView; result: import('../payments/types').RefundResult; transactionId: string | null }> {
+  const payment = getPayment(paymentId);
+  const result = await providerRefund(payment, amount, reason, actor);
   if (result.status === 'manual') return { payment: toPaymentView(payment), result, transactionId: null };
   const tx = reverseFunding(payment, actor, reason, 'refund', amount);
   mergeMeta(payment.id, { refund: { amount, providerRef: result.providerRef ?? null, status: result.status, reason } });

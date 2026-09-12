@@ -211,6 +211,32 @@ export interface AssistSettings {
   };
 }
 
+export interface WebhookSettings {
+  /** Seconds to wait before each retry; the number of entries is the number of retries (default: 10s, 30s, 2m, 10m, 30m, then every 2h for 24h). */
+  retryScheduleSeconds: number[];
+  /** ±jitter applied to every delay so retries from many endpoints spread out. */
+  jitterPct: number;
+  /** Consecutive failed deliveries after which an endpoint is disabled and the merchant notified. */
+  disableAfterConsecutiveFailures: number;
+  /** Signature timestamp tolerance for receivers (documented; enforced by the receiver). */
+  toleranceSeconds: number;
+  /** Delivery timeout. */
+  timeoutMs: number;
+  /** Allow http:// and private/loopback destinations (development only; production always refuses them). */
+  allowInsecureTargets: boolean;
+  /** Bytes of the endpoint's response kept for the delivery log. */
+  responseBodyBytes: number;
+}
+
+export interface GatewayProductSettings {
+  /** Scan-to-Verify (KODA): free lookups per merchant per calendar month, then a per-lookup price charged to the merchant wallet. */
+  koda: { freePerMonth: number; priceMinor: number; priceCurrency: string; windowHours: number };
+  checkout: { defaultMinutes: number; maxMinutes: number };
+  links: { defaultDays: number };
+  /** Allow `POST /v1/sandbox/simulate` (never in production with live keys). */
+  sandboxSimulation: boolean;
+}
+
 export interface ChannelSettings {
   ussd: {
     enabled: boolean;
@@ -309,7 +335,26 @@ const DEFAULT_CHANNELS: ChannelSettings = {
   lite: { enabled: true },
 };
 
+const DEFAULT_GATEWAY_PRODUCTS: GatewayProductSettings = {
+  koda: { freePerMonth: 30, priceMinor: 25, priceCurrency: 'USD', windowHours: 72 },
+  checkout: { defaultMinutes: 30, maxMinutes: 1440 },
+  links: { defaultDays: 7 },
+  sandboxSimulation: true,
+};
+
+const DEFAULT_WEBHOOKS: WebhookSettings = {
+  retryScheduleSeconds: [10, 30, 120, 600, 1800, 7200, 7200, 7200, 7200, 7200, 7200, 7200, 7200, 7200, 7200, 7200, 7200],
+  jitterPct: 10,
+  disableAfterConsecutiveFailures: 50,
+  toleranceSeconds: 300,
+  timeoutMs: 10_000,
+  allowInsecureTargets: false,
+  responseBodyBytes: 2048,
+};
+
 const DEFAULTS: Record<string, unknown> = {
+  webhooks: DEFAULT_WEBHOOKS,
+  gateway_products: DEFAULT_GATEWAY_PRODUCTS,
   assist: DEFAULT_ASSIST,
   channels: DEFAULT_CHANNELS,
   seo: DEFAULT_SEO,
@@ -356,6 +401,11 @@ export const getAssistSettings = () => {
   const s = getSetting<AssistSettings>('assist');
   return { ...s, addon: { ...DEFAULT_ASSIST.addon, ...(s.addon ?? {}) }, billing: { ...DEFAULT_ASSIST.billing, ...(s.billing ?? {}), prices: { ...DEFAULT_ASSIST.billing.prices, ...(s.billing?.prices ?? {}) } } };
 };
+export const getGatewayProductSettings = (): GatewayProductSettings => {
+  const s = getSetting<Partial<GatewayProductSettings>>('gateway_products');
+  return { ...DEFAULT_GATEWAY_PRODUCTS, ...s, koda: { ...DEFAULT_GATEWAY_PRODUCTS.koda, ...(s.koda ?? {}) }, checkout: { ...DEFAULT_GATEWAY_PRODUCTS.checkout, ...(s.checkout ?? {}) }, links: { ...DEFAULT_GATEWAY_PRODUCTS.links, ...(s.links ?? {}) } };
+};
+export const getWebhookSettings = (): WebhookSettings => ({ ...DEFAULT_WEBHOOKS, ...getSetting<Partial<WebhookSettings>>('webhooks') });
 export const getChannelSettings = () => {
   const s = getSetting<ChannelSettings>('channels');
   return { ussd: { ...DEFAULT_CHANNELS.ussd, ...(s.ussd ?? {}) }, sms: { ...DEFAULT_CHANNELS.sms, ...(s.sms ?? {}) }, lite: { ...DEFAULT_CHANNELS.lite, ...(s.lite ?? {}) } };

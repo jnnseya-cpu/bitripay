@@ -49,6 +49,7 @@ export function App() {
         <Route path="/pay/:code" element={<Checkout />} />
         <Route path="/checkout/:code" element={<Checkout />} />
         <Route path="/q" element={<QrLanding />} />
+        <Route path="/q/:code" element={<QrLanding />} />
         <Route path="/u/:tag" element={<QrLanding />} />
         <Route path="/pages/:slug" element={<StaticPage />} />
         <Route path="/contact" element={<Contact />} />

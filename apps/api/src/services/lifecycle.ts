@@ -9,6 +9,7 @@ import { getDb } from '../db';
 import { now } from '../lib/ids';
 import { conflict } from '../lib/errors';
 import { recordEvent, type Actor } from './events';
+import { onGatewayPaymentStage } from './intents';
 
 export const PAYMENT_STAGES = ['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED', 'PAYMENT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'CONFIRMED', 'SETTLED', 'EXPIRED', 'REJECTED', 'MISMATCHED', 'DUPLICATE', 'DISPUTED', 'REVERSED', 'MANUAL_REVIEW'] as const;
 export type PaymentStage = (typeof PAYMENT_STAGES)[number];
@@ -87,7 +88,7 @@ export function currentStage(paymentId: string): PaymentStage {
  */
 export function transitionStage(paymentId: string, to: PaymentStage, actor: Actor, details: Record<string, unknown> = {}): boolean {
   const db = getDb();
-  return db.transaction(() => {
+  const moved = db.transaction(() => {
     const from = currentStage(paymentId);
     if (from === to) return false;
     if (!canTransition(from, to)) throw conflict(`Payment cannot move from ${from} to ${to}`, 'invalid_stage_transition');
@@ -95,6 +96,9 @@ export function transitionStage(paymentId: string, to: PaymentStage, actor: Acto
     recordEvent('payment', paymentId, `payment.${to.toLowerCase()}`, actor, { from, to, ...details });
     return true;
   })();
+  // Mirror the outcome onto the payment attempt / intent (gateway payments created for an intent).
+  if (moved) onGatewayPaymentStage(paymentId, to, actor, details);
+  return moved;
 }
 
 /** Walk through several stages in order (e.g. a processor confirmation compresses EVIDENCE_RECEIVED → VERIFYING → CONFIRMED). */

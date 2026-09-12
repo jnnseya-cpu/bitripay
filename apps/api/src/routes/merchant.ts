@@ -50,8 +50,8 @@ merchantRouter.get('/api-keys', (req, res) => res.json({ items: listApiKeys(req.
 merchantRouter.post(
   '/api-keys',
   wrap(async (req, res) => {
-    const body = validate(z.object({ label: z.string().max(60).default('API key'), mode: z.enum(['live', 'test']).default('live') }), req.body);
-    res.status(201).json({ apiKey: createApiKey(req.user!, body.label, body.mode) });
+    const body = validate(z.object({ label: z.string().max(60).default('API key'), mode: z.enum(['live', 'test']).default('live'), kind: z.enum(['secret', 'publishable', 'restricted']).default('secret'), scopes: z.array(z.string()).optional(), ipAllowlist: z.array(z.string().max(45)).max(20).optional().nullable() }), req.body);
+    res.status(201).json({ apiKey: createApiKey(req.user!, body.label, body.mode, { kind: body.kind, scopes: body.scopes, ipAllowlist: body.ipAllowlist ?? null }) });
   }),
 );
 merchantRouter.delete('/api-keys/:id', (req, res) => {

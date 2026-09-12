@@ -49,11 +49,13 @@ qrRouter.post(
   optionalAuth,
   wrap(async (req, res) => {
     const body = validate(z.object({ data: z.string().min(1).max(2000) }), req.body);
-    const payload = decodeQr(body.data);
+    // Short codes and `/q/<code>` links (reusable payment links, printed stickers) resolve through the registry too.
+    const shortCode = body.data.match(/(?:^|\/q\/)([A-Za-z0-9]{6,12})\/?(?:[?#].*)?$/)?.[1] ?? null;
+    const payload = decodeQr(body.data) ?? (shortCode ? { type: 'bq' as const, id: shortCode } : null);
     if (!payload) throw badRequest('This is not a BitriPay QR code', 'invalid_qr');
     if (payload.type === 'pi' || payload.type === 'bq') {
       // BitriQR (EMVCo) or intent URI: verified through the key registry; intents are paid as payment requests.
-      const r = await resolveScan(body.data, { payer: req.user ?? null, ip: getClientIp(req), channel: 'app', country: req.user?.country ?? null });
+      const r = await resolveScan(shortCode && !decodeQr(body.data) ? shortCode : body.data, { payer: req.user ?? null, ip: getClientIp(req), channel: 'app', country: req.user?.country ?? null });
       if (r.kind === 'invalid') throw badRequest(`This QR code cannot be used: ${r.reasons.join(', ')}`, 'invalid_qr');
       if (r.kind === 'intent' && r.intent?.paymentRequestCode) {
         const row = getPaymentRequestByCode(r.intent.paymentRequestCode);
@@ -62,7 +64,7 @@ qrRouter.post(
       }
       const merchant = findUserByTag(r.merchant!.tag);
       if (!merchant) throw notFound('Merchant not found', 'user_not_found');
-      return res.json({ kind: 'bitriqr', payload, user: { ...toPublicUser(merchant), verified: r.merchant?.verified ?? false, location: r.merchant?.location ?? null }, qrId: r.qr?.id ?? null, amount: null, currency: r.currency, note: r.reference ?? null, purposeCode: r.purposeCode, trust: r.trust, disclosures: r.disclosures });
+      return res.json({ kind: 'bitriqr', payload, user: { ...toPublicUser(merchant), verified: r.merchant?.verified ?? false, location: r.merchant?.location ?? null }, qrId: r.qr?.id ?? null, amount: r.amount != null && r.currency ? String(r.amount / 10 ** getCurrency(r.currency, false).decimals) : null, currency: r.currency, note: r.reference ?? null, purposeCode: r.purposeCode, trust: r.trust, disclosures: r.disclosures });
     }
     if (payload.type === 'pr') {
       const row = getPaymentRequestByCode(payload.id);

@@ -296,7 +296,8 @@ be changed at runtime in the admin panel and is stored in the database:
 ## API overview
 
 All money amounts are integers in minor units (cents). Authentication: `Authorization: Bearer <JWT>`
-for apps, `Authorization: Bearer bp_live_…` (merchant API key) for the v1 API.
+for apps, `Authorization: Bearer sk_live_…` (merchant API key: `sk_` secret, `rk_` restricted to listed scopes,
+`pk_` publishable/read-only; legacy `bp_` keys keep working) for the v1 API.
 
 | Area | Endpoints |
 | --- | --- |
@@ -320,10 +321,53 @@ for apps, `Authorization: Bearer bp_live_…` (merchant API key) for the v1 API.
 | Admin | `/api/admin/*` (stats, users, transactions, withdrawals, payments, remittances, kyc, settings, currencies, gateways, billers, operators, gift-products, pages, languages, translations, support, p2p, reports, audit-logs, …) |
 | Verification | `GET /api/admin/verifications`, `GET /api/admin/payments/:id/case`, `POST /api/admin/payments/:id/confirm|reject` (propose), `POST /api/admin/verifications/:id/approve|decline` (second admin, step-up), `POST /api/admin/payments/:id/evidence`, `GET /api/admin/evidence`, `/evidence/devices`, `/evidence/templates`, `GET /api/admin/events` (hash chain), `GET /api/admin/reconcile`, `/sanctions`, `/risk-events`, `/route-catalog`, settings keys `gateway`, `fx`, `risk` |
 
-Webhooks to merchants are signed with a timestamp for replay protection:
-`X-BitriPay-Signature: t=<unix seconds>,v1=<HMAC-SHA256("<t>.<rawBody>", webhookSecret)>` plus
-`X-BitriPay-Delivery-Id`. Reject deliveries older than 5 minutes and process each delivery id once.
-Events: `payment.completed`, `payment_request.created`.
+### Gateway API v1 (BitriQR, intents, checkout, refunds, verifications, payouts, webhooks)
+
+Mounted at `/api/v1` and `/v1`. Every object is built on a **payment intent** (`pi_…`) with the canonical state
+machine (`CREATED → REQUIRES_PAYMENT_METHOD → … → CAPTURED → SETTLEMENT_PENDING → SETTLED`, plus `AMBIGUOUS`,
+`UNDER_REVIEW`, `PARTIALLY_REFUNDED`, `REFUNDED`, …), one **attempt** per rail execution (never two in flight) and the
+payment **event store**. A success screen is never proof: only a ledger posting, a verified processor callback or
+verified evidence moves an intent.
+
+| Object | Endpoints |
+| --- | --- |
+| Payment intents | `POST/GET /v1/payment_intents`, `GET /v1/payment_intents/:id` (+ `/timeline`, `/methods`, `/refundable`), `POST …/:id/cancel`, `…/:id/qr` (signed dynamic BitriQR, TTL ≤ 300 s), `…/:id/pay/wallet` (payer) |
+| QR codes | `POST/GET /v1/qr_codes` (static, signed, optional fixed amount), `GET /v1/qr_codes/analytics`, `POST …/:id/revoke`, `POST /v1/qr/:id/intent` (a fresh intent per scan), `POST /v1/resolve` / `GET /v1/resolve/:ref` (trust: verified / basic / invalid), `GET /v1/keys` (ed25519 registry with ETag) |
+| Checkout sessions | `POST /v1/checkout_sessions` (`line_items` or `amount_minor`, `success_url`, `cancel_url`, 5 min – 24 h), `GET /v1/checkout_sessions[/:id]`, `POST …/:id/expire`; `url` is the hosted checkout page; `checkout.session.completed` fires on capture |
+| Payment links | `POST /v1/payment_links` (single-use = 7-day intent; `reusable: true` = static code, optional fixed amount, one intent per open), `GET /v1/payment_links[/:id]`, `POST …/:id/deactivate` |
+| Refunds | `POST /v1/refunds` (`payment_intent` or `transaction`, optional `amount_minor`), `GET /v1/refunds[/:id]`. Reservations are atomic: succeeded + pending + manual refunds can never exceed the principal; wallet-paid refunds post merchant → payer, processor-paid refunds ask the processor and post merchant → treasury; `MANUAL`/`PENDING` ones are resolved by operations (`POST /api/admin/refunds/:id/resolve`) |
+| Scan-to-Verify (KODA) | `POST /v1/verifications` (`reference`, or `msisdn` + `amount_minor`, `window_hours`) → `VERIFIED / PENDING / NOT_FOUND / AMBIGUOUS / MISMATCH` with confidence and reasons; 30 free per month then per-lookup pricing from the merchant balance (`GET /v1/verifications/quota`); a verification never marks anything paid |
+| Payouts | `POST /v1/payouts` (bank account id, free-form bank details or mobile money), `GET /v1/payouts[/:id]`; runs through the withdrawal workflow (maker-checker, agent float) and emits `payout.created / completed / failed` |
+| Balance | `GET /v1/balance` → per currency `balance`, `available`, `pending`, `reserved`, `settlement_pending`, `disputed`, `frozen` |
+| Webhooks | `POST/GET/PATCH/DELETE /v1/webhook_endpoints[/:id]` (event subscriptions, `*` and `payment_intent.*` wildcards), `POST …/:id/rotate`, `…/:id/ping`, `GET …/:id/deliveries`, `GET /v1/events[/:id]`, `POST /v1/events/:id/replay`, `GET /v1/webhook_deliveries`, `POST /v1/webhook_deliveries/:id/replay`, `GET /v1/webhook_events/types` |
+| API keys | `GET/POST/DELETE /v1/api_keys` (session only – a key can never mint a key), `GET /v1/api_keys/scopes` |
+| Sandbox | `GET /v1/sandbox` (magic numbers), `POST /v1/sandbox/simulate` (`payment_intent`, `outcome: succeed / fail / ambiguous / timeout_then_succeed / provider_unavailable`) – drives the real attempt machine through the sandbox processor |
+
+Sandbox magic MSISDNs: `+243000000404` wallet not found (retryable failure, intent back to
+`REQUIRES_PAYMENT_METHOD`), `+243000000408` provider outcome unknown (payment parked in `MANUAL_REVIEW`, intent
+`AMBIGUOUS`, `payment_intent.ambiguous_hold`), `+243000000500` timeout then success (pending 6 s), `+243000000503`
+provider unavailable, any number ending `0000` customer rejected. Test cards: last four `0002` declined, `9995`
+insufficient funds, `0069` expired, `0127` incorrect CVC.
+
+Webhook deliveries carry two signatures and are at-least-once:
+
+- `BitriPay-Signature: t=<unix seconds>,v1=<HMAC-SHA256("<t>.<rawBody>", endpoint secret)>` (also sent as
+  `X-BitriPay-Signature` for existing integrations) – reject timestamps older than 5 minutes.
+- `BitriPay-Signature-Ed25519: keyId=<platform key>,t=<unix>,sig=<base64 ed25519("<t>\n<deliveryId>\n<url>\n<sha256(body)>")>`
+  – the public key is published at `GET /v1/keys/:keyId` (scope `PLATFORM`) and rotated with an overlap.
+- Headers `BitriPay-Event`, `BitriPay-Event-Id`, `BitriPay-Delivery-Id`, `BitriPay-Attempt`. Deduplicate on the
+  event id; ignore older `state_version`s. Envelope: `{ id, type, api_version, schema_version, created,
+  occurred_at, emitted_at, resource, state_version, livemode, data }` (`event`/`createdAt` kept as legacy aliases).
+- Retries are persisted (they survive restarts): 10 s, 30 s, 2 min, 10 min, 30 min, then every 2 h for 24 h with
+  jitter; only 2xx is an acknowledgement; redirects are not followed; an endpoint that fails 50 deliveries in a row is
+  disabled and the merchant notified; exhausted deliveries are dead-lettered and replayable from the developer
+  console. Destinations are checked against SSRF (https only, no private or reserved addresses, DNS checked per
+  connection). Settings key `webhooks`.
+
+Event catalogue: `payment_intent.created / requires_action / processing / succeeded / settled / failed / cancelled /
+expired / ambiguous_hold / disputed`, `refund.created / updated / succeeded / failed`, `checkout.session.completed /
+expired`, `verification.completed`, `payout.created / completed / failed`, `reconciliation.exception`, `ping`, plus the
+legacy `payment.completed` and `payment_request.created`.
 
 Mutating requests accept an `Idempotency-Key` header: a repeat with the same key and body replays the
 stored response (`Idempotent-Replayed: true`); a repeat with a different body is refused (422).

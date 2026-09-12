@@ -12,7 +12,7 @@ type Resolved =
   | { kind: 'payment_request'; paymentRequest: PaymentRequest; merchant: PublicUser & { brandColor: string; verified?: boolean; location?: { name: string; city: string | null } | null }; methods: string[]; trust?: Trust; intent?: { id: string; status: string; purposeCode: string | null; reference: string | null } }
   | { kind: 'user' | 'merchant' | 'agent'; user: PublicUser; amount: string | null; currency: string | null; note: string | null }
   /** A static BitriQR sticker: the payer enters the amount, an intent is created for the code, then paid. */
-  | { kind: 'bitriqr'; user: PublicUser & { verified?: boolean; location?: { name: string; city: string | null } | null }; qrId: string | null; amount: null; currency: string | null; note: string | null; purposeCode: string | null; trust: Trust };
+  | { kind: 'bitriqr'; user: PublicUser & { verified?: boolean; location?: { name: string; city: string | null } | null }; qrId: string | null; /** Set for reusable payment links with a fixed amount. */ amount: string | null; currency: string | null; note: string | null; purposeCode: string | null; trust: Trust };
 
 export function Scan() {
   const t = useT();
@@ -172,14 +172,14 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
 /** Landing for scanned links (/q?…, /u/:tag): sends signed-in users to pay, guests to login/checkout. */
 export function QrLanding() {
   const [params] = useSearchParams();
-  const { tag } = useParams();
+  const { tag, code } = useParams();
   const { user, loading } = useStore();
   const nav = useNavigate();
   const [resolved, setResolved] = useState<Resolved | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (loading) return;
-    const payload = tag ? { type: 'u' as const, id: tag } : decodeQr(window.location.href);
+    const payload = tag ? { type: 'u' as const, id: tag } : code ? { type: 'bq' as const, id: code } : decodeQr(window.location.href);
     if (!payload) {
       setError('Invalid QR link');
       return;
@@ -192,8 +192,8 @@ export function QrLanding() {
       nav(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`, { replace: true });
       return;
     }
-    api.post<Resolved>('/api/qr/resolve', { data: window.location.href }).then(setResolved).catch((e) => setError(e.message));
-  }, [loading, user, tag, nav, params]);
+    api.post<Resolved>('/api/qr/resolve', { data: code ?? window.location.href }).then(setResolved).catch((e) => setError(e.message));
+  }, [loading, user, tag, code, nav, params]);
   if (error) return <div className="auth-page"><div className="card"><Alert kind="error">{error}</Alert><Link to="/">Home</Link></div></div>;
   if (!resolved) return <Loading />;
   return (

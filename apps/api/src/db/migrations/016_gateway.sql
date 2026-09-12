@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS verifications (
   payment_id TEXT,
   intent_id TEXT,
   reasons TEXT NOT NULL DEFAULT '[]',
+  match TEXT,
   charged INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );

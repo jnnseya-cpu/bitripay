@@ -79,7 +79,8 @@ export interface InitiateResult {
 }
 
 export interface VerifyResult {
-  status: 'pending' | 'succeeded' | 'failed';
+  /** `unknown`: the provider could not say whether money moved (timeout, contradictory answer). The payment is parked for review, never retried blindly. */
+  status: 'pending' | 'succeeded' | 'failed' | 'unknown';
   failureReason?: string;
   raw?: unknown;
   savedCard?: InitiateResult['savedCard'];

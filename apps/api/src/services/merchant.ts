@@ -9,23 +9,61 @@ import { getAppSettings } from './settings';
 import { listWallets } from './wallets';
 import { getModules } from './modules';
 
-export function toApiKey(r: any): ApiKey {
-  return { id: r.id, label: r.label, prefix: r.prefix, createdAt: r.created_at, lastUsedAt: r.last_used_at };
+export function toApiKey(r: any): ApiKey & { mode: string; kind: string; scopes: string[] } {
+  let scopes: string[] = ['*'];
+  try {
+    scopes = JSON.parse(r.scopes || '["*"]');
+  } catch {
+    scopes = ['*'];
+  }
+  return { id: r.id, label: r.label, prefix: r.prefix, createdAt: r.created_at, lastUsedAt: r.last_used_at, mode: r.mode, kind: r.kind ?? 'secret', scopes };
 }
 
 export function listApiKeys(userId: string): ApiKey[] {
   return getDb().prepare('SELECT * FROM api_keys WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC').all(userId).map(toApiKey);
 }
 
-export function createApiKey(user: UserRow, label: string, mode: 'live' | 'test' = 'live'): ApiKey & { secret: string } {
+export const API_KEY_SCOPES = [
+  'payment_intents:read',
+  'payment_intents:write',
+  'checkout_sessions:write',
+  'payment_links:write',
+  'qr_codes:read',
+  'qr_codes:write',
+  'refunds:read',
+  'refunds:write',
+  'verifications:write',
+  'payouts:read',
+  'payouts:write',
+  'balance:read',
+  'webhooks:manage',
+  'events:read',
+] as const;
+export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
+export type ApiKeyKind = 'secret' | 'publishable' | 'restricted';
+
+/**
+ * Create an API key. `secret` keys (sk_) carry every scope; `restricted` keys (rk_) carry only the scopes listed;
+ * `publishable` keys (pk_) identify the merchant from a browser or app and can only read public intent state and
+ * create client-side payment method attempts. Legacy `bp_` keys keep working as secret keys.
+ */
+export function createApiKey(user: UserRow, label: string, mode: 'live' | 'test' = 'live', options: { kind?: ApiKeyKind; scopes?: string[]; ipAllowlist?: string[] | null } = {}): ApiKey & { secret: string; kind: ApiKeyKind; scopes: string[]; mode: string } {
   if (!getModules().merchantGateway) throw unprocessable('The merchant gateway is currently disabled', 'module_disabled');
   const count = (getDb().prepare('SELECT COUNT(*) c FROM api_keys WHERE user_id = ? AND revoked_at IS NULL').get(user.id) as any).c;
   if (count >= 10) throw conflict('You can have at most 10 active API keys');
-  const secret = `bp_${mode}_${secretToken(24)}`;
+  const kind = options.kind ?? 'secret';
+  let scopes: string[] = ['*'];
+  if (kind === 'restricted') {
+    scopes = [...new Set(options.scopes ?? [])];
+    if (!scopes.length) throw badRequest('Restricted keys need at least one scope', 'scopes_required');
+    for (const sc of scopes) if (!(API_KEY_SCOPES as readonly string[]).includes(sc)) throw badRequest(`Unknown scope "${sc}"`, 'unknown_scope');
+  } else if (kind === 'publishable') scopes = ['payment_intents:read'];
+  const prefixKind = kind === 'secret' ? 'sk' : kind === 'publishable' ? 'pk' : 'rk';
+  const secret = `${prefixKind}_${mode}_${secretToken(24)}`;
   const id = uuid();
   const prefix = secret.slice(0, 12) + '…' + secret.slice(-4);
-  getDb().prepare('INSERT INTO api_keys (id, user_id, label, prefix, key_hash, mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, user.id, label.trim() || 'API key', prefix, sha256(secret), mode, now());
-  return { ...toApiKey(getDb().prepare('SELECT * FROM api_keys WHERE id = ?').get(id)), secret };
+  getDb().prepare('INSERT INTO api_keys (id, user_id, label, prefix, key_hash, mode, kind, scopes, ip_allowlist, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, user.id, label.trim() || 'API key', prefix, sha256(secret), mode, kind, JSON.stringify(scopes), options.ipAllowlist?.length ? JSON.stringify(options.ipAllowlist) : null, now());
+  return { ...toApiKey(getDb().prepare('SELECT * FROM api_keys WHERE id = ?').get(id)), secret, kind, scopes, mode };
 }
 
 export function revokeApiKey(userId: string, id: string) {

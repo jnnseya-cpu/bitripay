@@ -24,6 +24,7 @@ import { assertMoneyMovementAllowed } from './guardian';
 import { notify } from './notifications';
 import { dispatchWebhook } from './webhooks';
 import { getGatewaySettings } from './users';
+import { completeCheckoutSessionForIntent } from './gateway';
 
 export const INTENT_STATES = ['CREATED', 'REQUIRES_PAYMENT_METHOD', 'ROUTING', 'REQUIRES_CUSTOMER_ACTION', 'PROCESSING', 'AUTHORISED', 'CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED', 'FAILED', 'EXPIRED', 'CANCELLED', 'PARTIALLY_REFUNDED', 'REFUNDED', 'DISPUTED', 'REVERSED', 'UNDER_REVIEW', 'UNKNOWN_PROVIDER_STATE', 'AMBIGUOUS'] as const;
 export type IntentState = (typeof INTENT_STATES)[number];
@@ -360,13 +361,14 @@ export function finishAttempt(attemptId: string, outcome: 'CAPTURED' | 'AUTHORIS
         intent = transitionIntent(r.id, 'SETTLEMENT_PENDING', { type: 'system' }, { attemptId });
       }
       const merchant = findUserById(r.merchant_user_id);
-      if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.succeeded', { paymentIntent: intentView(getIntentRow(r.id)) });
+      if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.succeeded', { paymentIntent: intentView(getIntentRow(r.id)) }, { resource: { type: 'payment_intent', id: r.id } });
+      completeCheckoutSessionForIntent(r.id);
     } else if (outcome === 'AUTHORISED') {
       intent = transitionIntent(r.id, 'AUTHORISED', actor, { attemptId });
     } else if (outcome === 'UNKNOWN') {
       intent = transitionIntent(r.id, r.status === 'PROCESSING' || r.status === 'REQUIRES_CUSTOMER_ACTION' ? 'AMBIGUOUS' : 'UNKNOWN_PROVIDER_STATE', actor, { attemptId, reason: details.error ?? 'provider outcome unknown' });
       const merchant = findUserById(r.merchant_user_id);
-      if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.ambiguous_hold', { paymentIntent: intentView(intent), attemptId });
+      if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.ambiguous_hold', { paymentIntent: intentView(intent), attemptId }, { resource: { type: 'payment_intent', id: r.id } });
     } else {
       // FAILED / ABANDONED: retryable failures return the intent to method selection (recovery), others close it
       const retryable = outcome === 'ABANDONED' || (details.failureCategory ? RETRYABLE_FAILURES.has(details.failureCategory) : false);
@@ -375,7 +377,7 @@ export function finishAttempt(attemptId: string, outcome: 'CAPTURED' | 'AUTHORIS
       else {
         intent = transitionIntent(r.id, expired ? 'EXPIRED' : 'FAILED', actor, { attemptId, failureCategory: details.failureCategory ?? null, error: details.error ?? null });
         const merchant = findUserById(r.merchant_user_id);
-        if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.failed', { paymentIntent: intentView(intent), attemptId, failureCategory: details.failureCategory ?? null });
+        if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.failed', { paymentIntent: intentView(intent), attemptId, failureCategory: details.failureCategory ?? null }, { resource: { type: 'payment_intent', id: r.id } });
       }
     }
     recordEvent('payment', r.id, `attempt.${outcome.toLowerCase()}`, actor, { attemptId, failureCategory: details.failureCategory ?? null, providerRef: details.providerRef ?? null });
@@ -395,6 +397,59 @@ export function onRequestPaid(request: PaymentRequestRow, transactionId: string,
     attempt = { id: startAttempt(r.id, { methodClass, gatewayPaymentId: gatewayPaymentId ?? null }, actor).id };
   }
   finishAttempt(attempt.id, 'CAPTURED', { transactionId, gatewayPaymentId: gatewayPaymentId ?? null, source: methodClass === 'wallet' ? 'ledger' : 'processor' }, actor);
+}
+
+/**
+ * Before a new execution starts: if the open attempt's gateway payment already ended (expired, rejected, abandoned
+ * before authentication) resolve it so the one-in-flight rule does not block a legitimate retry.
+ */
+export function reconcileOpenAttempt(intentId: string): void {
+  const db = getDb();
+  const open = db.prepare("SELECT * FROM payment_attempts WHERE intent_id = ? AND status IN ('CREATED', 'PROCESSING', 'AUTHORISED') ORDER BY seq DESC LIMIT 1").get(intentId) as any;
+  if (!open?.gateway_payment_id) return;
+  const gp = db.prepare('SELECT id, stage FROM gateway_payments WHERE id = ?').get(open.gateway_payment_id) as { id: string; stage: string } | undefined;
+  if (!gp) return;
+  if (gp.stage === 'CREATED' || gp.stage === 'AUTHENTICATION_REQUIRED') {
+    // the customer never authenticated: nothing was sent to a provider, so the attempt is abandoned and the stale payment expires
+    db.prepare("UPDATE gateway_payments SET stage = 'EXPIRED', status = 'failed', updated_at = ? WHERE id = ?").run(now(), gp.id);
+    recordEvent('payment', gp.id, 'payment.expired', { type: 'system' }, { from: gp.stage, to: 'EXPIRED', reason: 'superseded_by_new_attempt' });
+    finishAttempt(open.id, 'ABANDONED', { failureCategory: 'customer_abandoned', error: 'superseded by a new attempt', gatewayPaymentId: gp.id, source: 'system' }, { type: 'system' });
+  } else if (gp.stage === 'EXPIRED' || gp.stage === 'REJECTED') {
+    finishAttempt(open.id, 'FAILED', { failureCategory: gp.stage === 'EXPIRED' ? 'timeout_before_send' : 'declined', gatewayPaymentId: gp.id, source: 'system' }, { type: 'system' });
+  }
+}
+
+/**
+ * Mirror a gateway payment stage change onto its attempt. Settlement is handled by onRequestPaid (the ledger posting is
+ * the authoritative event); here we translate rejections, expiries and review states.
+ */
+export function onGatewayPaymentStage(gatewayPaymentId: string, stage: string, actor: Actor, details: Record<string, unknown> = {}): void {
+  const a = getDb().prepare("SELECT * FROM payment_attempts WHERE gateway_payment_id = ? AND status IN ('CREATED', 'PROCESSING', 'AUTHORISED', 'UNKNOWN')").get(gatewayPaymentId) as any;
+  if (!a) return;
+  const reason = typeof details.reason === 'string' ? details.reason : null;
+  if (stage === 'REJECTED') {
+    finishAttempt(a.id, 'FAILED', { failureCategory: categoriseFailure(reason), error: reason, gatewayPaymentId, source: actor.type }, actor);
+  } else if (stage === 'EXPIRED') {
+    finishAttempt(a.id, 'FAILED', { failureCategory: 'timeout_before_send', error: reason ?? 'no confirmation before expiry', gatewayPaymentId, source: 'system' }, actor);
+  } else if (stage === 'MANUAL_REVIEW' || stage === 'MISMATCHED' || stage === 'DUPLICATE') {
+    if (a.status !== 'UNKNOWN') finishAttempt(a.id, 'UNKNOWN', { error: reason ?? stage.toLowerCase(), gatewayPaymentId, source: actor.type }, actor);
+  } else if (stage === 'DISPUTED') {
+    const r = getIntentRow(a.intent_id);
+    if (TRANSITIONS[r.status]?.includes('DISPUTED')) transitionIntent(r.id, 'DISPUTED', actor, { gatewayPaymentId, reason });
+  }
+}
+
+/** Map a provider failure message to a canonical failure category (drives recovery: retryable or not). */
+export function categoriseFailure(reason: string | null | undefined): string {
+  const r = (reason ?? '').toLowerCase();
+  if (/not found|unknown wallet|invalid (msisdn|number|phone)/.test(r)) return 'invalid_msisdn';
+  if (/insufficient/.test(r)) return 'insufficient_funds';
+  if (/unavailable|timeout|timed out|unreachable/.test(r)) return 'provider_unavailable';
+  if (/limit/.test(r)) return 'limit_exceeded';
+  if (/fraud|risk/.test(r)) return 'fraud_block';
+  if (/sanction|compliance/.test(r)) return 'compliance_block';
+  if (/expired|no confirmation/.test(r)) return 'timeout_before_send';
+  return 'declined';
 }
 
 export function cancelIntent(id: string, actor: Actor, reason?: string | null): IntentRow {
