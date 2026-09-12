@@ -166,7 +166,7 @@ export function payWithWallet(payer: UserRow, code: string, amount?: number | nu
     const currency = getCurrency(row.currency);
     const requester = findUserById(row.requester_user_id)!;
     const type = requester.role === 'merchant' ? 'merchant_payment' : row.kind === 'request' ? 'money_request' : 'qr_payment';
-    const fee = type === 'money_request' ? calculateFee('transfer', finalAmount, currency.code) : calculateFee(type, finalAmount, currency.code);
+    const fee = type === 'money_request' ? calculateFee('transfer', finalAmount, currency.code, null, { userId: payer.id }) : calculateFee(type, finalAmount, currency.code, null, { userId: requester.id });
     enforceLimits(payer, finalAmount, currency.code);
     const fromWallet = getUserWallet(payer.id, currency.code);
     const toWallet = ensureWallet(requester.id, currency.code);

@@ -10,6 +10,7 @@ import { notify } from './notifications';
 import { getAppSettings } from './settings';
 import { onDepositCompleted } from './referrals';
 import { getModules } from './modules';
+import { recordCommission } from './finops/commissions';
 
 function agentCommissionBps(agent: UserRow) {
   return agent.agent_commission_bps ?? getAppSettings().agentCommissionBps;
@@ -36,7 +37,7 @@ export function agentCashIn(agent: UserRow, input: { customer: string; amount: n
   if (!customer || customer.is_system) throw notFound('Customer not found', 'recipient_not_found');
   if (customer.id === agent.id) throw badRequest('You cannot cash in to yourself');
   const cur = getCurrency(input.currency);
-  const fee = calculateFee('agent_cash_in', input.amount, cur.code);
+  const fee = calculateFee('agent_cash_in', input.amount, cur.code, null, { userId: agent.id });
   const commission = Math.min(fee, applyBps(input.amount, agentCommissionBps(agent)));
   const agentWallet = getUserWallet(agent.id, cur.code);
   const customerWallet = ensureWallet(customer.id, cur.code);
@@ -55,6 +56,7 @@ export function agentCashIn(agent: UserRow, input: { customer: string; amount: n
     metadata: { agentId: agent.id, commission, method: 'agent' },
     feeSplits: [{ walletId: agentWallet.id, amount: commission }],
   });
+  if (commission > 0) recordCommission({ agentUserId: agent.id, transactionId: tx.id, kind: 'cash_in', amountMinor: commission, currency: cur.code, metadata: { customerId: customer.id, amount: input.amount, fee } });
   notify(customer.id, 'Cash-in received', `${formatMoney(input.amount - fee, cur)} was added to your wallet by agent ${agent.business_name || agent.full_name}.`, { kind: 'agent_cash_in', transactionId: tx.id });
   onDepositCompleted(customer.id);
   return tx;
@@ -66,7 +68,7 @@ export function createCashOutRequest(customer: UserRow, input: { agent: string; 
   const agent = findUserByIdentifier(input.agent);
   if (!agent || agent.role !== 'agent') throw notFound('Agent not found', 'agent_not_found');
   const cur = getCurrency(input.currency);
-  const fee = calculateFee('agent_cash_out', input.amount, cur.code);
+  const fee = calculateFee('agent_cash_out', input.amount, cur.code, null, { userId: agent.id });
   enforceLimits(customer, input.amount, cur.code);
   const wallet = getUserWallet(customer.id, cur.code);
   if (wallet.balance < input.amount + fee) throw unprocessable('Insufficient balance', 'insufficient_funds');
@@ -111,7 +113,7 @@ export function confirmCashOut(agent: UserRow, code: string): TransactionRow {
     }
     const customer = findUserById(req.user_id)!;
     const cur = getCurrency(req.currency);
-    const fee = calculateFee('agent_cash_out', req.amount, cur.code);
+    const fee = calculateFee('agent_cash_out', req.amount, cur.code, null, { userId: agent.id });
     const commission = Math.min(fee, applyBps(req.amount, agentCommissionBps(agent)));
     const customerWallet = getUserWallet(customer.id, cur.code);
     const agentWallet = ensureWallet(agent.id, cur.code);
@@ -129,6 +131,7 @@ export function confirmCashOut(agent: UserRow, code: string): TransactionRow {
       feeSplits: [{ walletId: agentWallet.id, amount: commission }],
     });
     db.prepare("UPDATE cash_requests SET status = 'completed', transaction_id = ? WHERE id = ?").run(tx.id, req.id);
+    if (commission > 0) recordCommission({ agentUserId: agent.id, transactionId: tx.id, kind: 'cash_out', amountMinor: commission, currency: cur.code, metadata: { customerId: customer.id, amount: req.amount, fee, cashRequestId: req.id } });
     notify(customer.id, 'Cash-out completed', `${formatMoney(req.amount, cur)} was paid out in cash by agent ${agent.business_name || agent.full_name}.`, { kind: 'agent_cash_out', transactionId: tx.id });
     return tx;
   })();

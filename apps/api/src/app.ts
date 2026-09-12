@@ -31,6 +31,7 @@ import { p2pRouter } from './routes/p2p';
 import { merchantRouter, v1Router } from './routes/merchant';
 import { adminRouter } from './routes/admin';
 import { switchRouter } from './routes/switch';
+import { finopsRouter } from './routes/finops';
 import { ensureDefaultConnections } from './services/switch/connections';
 import { ensureMessageCatalogue } from './services/switch/payments';
 import { ensureSimulationParticipants } from './services/switch/participants';
@@ -124,6 +125,8 @@ export function createApp() {
   app.use('/v1', gatewayV1Router);
   app.use('/api/v1', switchRouter);
   app.use('/v1', switchRouter);
+  app.use('/api/v1', finopsRouter);
+  app.use('/v1', finopsRouter);
   app.use('/lite', liteRouter);
   app.use('/v1', v1Router);
   app.use('/api/admin', adminRouter);

@@ -27,7 +27,7 @@ export function sendMoney(sender: UserRow, input: TransferInput): TransactionRow
   const type = input.type ?? (recipient.role === 'merchant' ? 'merchant_payment' : 'transfer');
   const modules = getModules();
   if (type === 'transfer' && !modules.transfers) throw unprocessable('Transfers are currently disabled', 'module_disabled');
-  const fee = calculateFee(type, input.amount, currency.code);
+  const fee = calculateFee(type, input.amount, currency.code, null, { userId: sender.id });
   enforceLimits(sender, input.amount, currency.code);
   enforceOutboundRisk({ userId: sender.id, kind: 'transfer', amount: input.amount, currency: currency.code, subjectType: 'transfer', counterparty: { name: recipient.full_name, phone: recipient.phone, email: recipient.email, country: recipient.country } });
   const fromWallet = getUserWallet(sender.id, currency.code);

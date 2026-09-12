@@ -14,6 +14,7 @@ import type { Transaction, TransactionStatus, TransactionType, PublicUser } from
 import { applyBps } from '@bitripay/shared';
 import { getFees, getLimits } from './settings';
 import { fromBase, toBase } from './currencies';
+import { resolveFeeRule, type FeeContext } from './finops/fees';
 import { findUserById, getSystemUser, usersById, type UserRow } from './users';
 import { ensureWallet, getWallet, type WalletRow } from './wallets';
 import { recordEvent } from './events';
@@ -72,14 +73,21 @@ export function toTransaction(row: TransactionRow, viewerId?: string, users?: Ma
   };
 }
 
-/** Compute the platform fee for a transaction type and amount (minor units of `currency`). */
-export function calculateFee(type: string, amount: number, currency: string, overrideBps?: number | null): number {
-  const fees = getFees();
-  const cfg = fees[type];
-  if (!cfg) return 0;
-  const bps = overrideBps ?? cfg.bps;
-  const fixed = cfg.fixed ? fromBase(cfg.fixed, currency) : 0;
-  return Math.max(0, Math.round(fixed + applyBps(amount, bps)));
+/**
+ * Compute the platform fee for a transaction type and amount (minor units of `currency`). The rule comes from the
+ * versioned fee schedules (merchant > tier > country > platform) and falls back to the flat `fees` setting; `ctx`
+ * identifies whose schedule applies. Fixed parts, floors and caps are stored in base currency and converted here.
+ */
+export function calculateFee(type: string, amount: number, currency: string, overrideBps?: number | null, ctx: FeeContext = {}): number {
+  const resolved = resolveFeeRule(type, ctx);
+  if (!resolved) return 0;
+  const rule = resolved.rule;
+  const bps = overrideBps ?? rule.bps;
+  const fixed = rule.fixed ? fromBase(rule.fixed, currency) : 0;
+  let fee = Math.round(fixed + applyBps(amount, bps));
+  if (rule.min) fee = Math.max(fee, fromBase(rule.min, currency));
+  if (rule.max) fee = Math.min(fee, fromBase(rule.max, currency));
+  return Math.max(0, fee);
 }
 
 /** Enforce per-transaction and daily limits (in base currency) for outgoing money movements. */

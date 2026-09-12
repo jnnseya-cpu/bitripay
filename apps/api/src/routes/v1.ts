@@ -25,6 +25,8 @@ import { getDb } from '../db';
 import { createCheckoutSession, getCheckoutSession, listCheckoutSessions, expireCheckoutSession, createPaymentLink, getPaymentLink, listPaymentLinks, deactivatePaymentLink, createRefund, getRefund, listRefunds, refundableAmount, createVerification, getVerification, listVerifications, verificationQuota, createPayout, getPayout, listPayouts, simulateOutcome, sandboxCatalogue, SIMULATION_OUTCOMES } from '../services/gateway';
 import { createEndpoint, getEndpoint, listEndpoints, updateEndpoint, deleteEndpoint, rotateEndpointSecret, pingEndpoint, listEvents, getEvent, listDeliveries, replayDelivery, replayEvent, deliveryStats, WEBHOOK_EVENT_TYPES, WEBHOOK_API_VERSION } from '../services/webhooks';
 import { listApiKeys, createApiKey, revokeApiKey, API_KEY_SCOPES } from '../services/merchant';
+import { heldByKind } from '../services/finops/holds';
+import { validateSplits } from '../services/finops/splits';
 
 export const v1Router = Router();
 const merchantOnly = [requireAuth, requireRole('merchant', 'admin')];
@@ -51,6 +53,8 @@ const intentSchema = z.object({
   cancel_url: z.string().url().optional().nullable(),
   qr: z.boolean().optional(),
   qr_ttl_seconds: z.number().int().min(30).max(3600).optional(),
+  /** Marketplace / cooperative splits: paid from the merchant wallet when the intent is captured. */
+  splits: z.array(z.object({ recipient: z.string().min(1).max(80), bps: z.number().int().min(0).max(10_000).optional().nullable(), fixed_minor: z.number().int().min(0).optional().nullable(), label: z.string().max(80).optional().nullable() })).max(10).optional(),
 });
 
 function toInput(b: z.output<typeof intentSchema>, idemKey: string | null, source: CreateIntentInput['source']): CreateIntentInput {
@@ -68,6 +72,7 @@ function publicIntent(view: ReturnType<typeof intentView>, clientSecret?: string
 v1Router.post('/payment_intents', ...merchantOnly, requireScope('payment_intents:write'), writeLimit, wrap(async (req, res) => {
   const body = validate(intentSchema, req.body);
   const idem = (req.headers['idempotency-key'] as string | undefined) ?? null;
+  if (body.splits?.length) body.metadata = { ...(body.metadata ?? {}), splits: validateSplits(body.splits.map((s) => ({ recipient: s.recipient, bps: s.bps ?? null, fixedMinor: s.fixed_minor ?? null, label: s.label ?? null })), req.user!.id) };
   const { row, clientSecret } = createIntent(req.user!, toInput(body, idem, 'api'));
   let view = intentView(row);
   if ((body.qr ?? true) && row.amount_minor && !row.qr_id) {
@@ -208,9 +213,13 @@ v1Router.get('/balance', ...merchantOnly, requireScope('balance:read'), (req, re
     const pending = (db.prepare("SELECT COALESCE(SUM(amount_minor), 0) s FROM payment_intents WHERE merchant_user_id = ? AND currency = ? AND status IN ('PROCESSING', 'AUTHORISED', 'AMBIGUOUS', 'UNKNOWN_PROVIDER_STATE', 'REQUIRES_CUSTOMER_ACTION')").get(uid, w.currency) as any).s as number;
     const reserved = (db.prepare("SELECT COALESCE(SUM(amount), 0) s FROM cash_requests WHERE user_id = ? AND currency = ? AND status = 'pending' AND expires_at > ?").get(uid, w.currency, new Date().toISOString()) as any).s as number;
     const settlementPending = (db.prepare("SELECT COALESCE(SUM(amount_minor), 0) s FROM payment_intents WHERE merchant_user_id = ? AND currency = ? AND status = 'SETTLEMENT_PENDING'").get(uid, w.currency) as any).s as number;
-    const disputed = (db.prepare("SELECT COALESCE(SUM(t.amount), 0) s FROM chargebacks c JOIN gateway_payments p ON p.id = c.payment_id JOIN transactions t ON t.id = p.transaction_id WHERE p.user_id = ? AND t.currency = ? AND c.status = 'open'").get(uid, w.currency) as any)?.s ?? 0;
+    // chargebacks that were not turned into a dispute object (legacy rows) plus holds of every kind
+    const legacyDisputed = (db.prepare("SELECT COALESCE(SUM(t.amount), 0) s FROM chargebacks c JOIN gateway_payments p ON p.id = c.payment_id JOIN transactions t ON t.id = p.transaction_id WHERE p.user_id = ? AND t.currency = ? AND c.status = 'open' AND NOT EXISTS (SELECT 1 FROM disputes d WHERE d.chargeback_id = c.id)").get(uid, w.currency) as any)?.s ?? 0;
+    const holds = heldByKind(w.id);
+    const held = Object.values(holds).reduce((s, v) => s + v, 0);
+    const disputed = legacyDisputed + (holds.dispute ?? 0);
     const frozen = w.frozen_at ? w.balance : 0;
-    return { currency: w.currency, balance: w.balance, available: Math.max(0, frozen ? 0 : w.balance - reserved - disputed), pending, reserved, settlement_pending: settlementPending, disputed, frozen, classification: wallets.find((x) => x.currency === w.currency)?.classification ?? null };
+    return { currency: w.currency, balance: w.balance, available: Math.max(0, frozen ? 0 : w.balance - reserved - legacyDisputed - held), pending, reserved, settlement_pending: settlementPending, disputed, held, holds, frozen, classification: wallets.find((x) => x.currency === w.currency)?.classification ?? null };
   });
   res.json({ wallets, data });
 });

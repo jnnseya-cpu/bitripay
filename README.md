@@ -418,6 +418,50 @@ Simulator scenarios are selected by the payer `account_token` suffix (`tok_ok`, 
 `tok_contradict`, `tok_badsig`, `tok_refund_unknown`). The acceptance matrix T01–T32 of the dossier runs in
 `src/tests/switch.test.ts`. Settings keys: `switch`, `routing`.
 
+### Financial operations: fees, commissions, settlement, disputes, holds, splits, processor reconciliation
+
+Everything money-related that used to be a flat setting or an implicit rule is now an object with a history.
+
+- **Versioned fee schedules** (`fee_schedules`): scopes `platform`, `country`, `tier`, `merchant`; rules per fee
+  type carry `fixed`, `bps` and optional `min` / `max` (base-currency minor units). Draft → approve (a different
+  administrator) → activate (retires the previous active version of the same scope) → retire. `calculateFee`
+  resolves merchant > tier > country > platform > the flat `fees` setting, so nothing changes for a platform with no
+  schedules; `GET /api/admin/finops/fees/effective?user=…&type=…` explains which rule applies and why; a merchant
+  reads its own with `GET /api/v1/fee_schedule`. Fee tiers are set per user (`PUT /api/admin/finops/fees/tier/:userId`).
+- **Commission ledger** (`commission_entries`): every agent commission (cash-in, cash-out, and the other kinds the
+  network pays) is recorded with its period and the platform's share (`commissions.platformShareBps`); finance sees
+  the network's cost (`/api/admin/finops/commissions/overview`) and each agent has a statement.
+- **Holds** (`holds`): money that stays in the wallet but is neither available nor settleable — dispute, rolling
+  reserve, risk review, settlement in preparation, compliance — with a reason, an optional expiry and a release
+  audit. `GET /api/v1/balance` now reports `held`, `holds` by kind and `disputed` next to `available`,
+  `pending`, `reserved`, `settlement_pending` and `frozen`.
+- **Disputes as objects** (`disputes`): opened by a customer, the merchant (`POST /api/v1/disputes`), a processor
+  chargeback (an open chargeback on money that reached a wallet becomes a dispute automatically), an institution or
+  an administrator. Opening places a hold and marks the intent `DISPUTED`; the response deadline comes from the
+  product rules per rail (`disputes.responseDays`), never from the case; evidence from both sides is append-only;
+  `WON` releases the hold, `LOST` refunds through the refund object; unanswered disputes are swept at the deadline.
+  Merchants respond at `POST /api/v1/disputes/:id/respond`; administrators decide at `/api/admin/finops/disputes/:id/decide`.
+- **Split payments**: an intent can declare up to ten recipients (`splits: [{ recipient, bps | fixed_minor, label }]`,
+  validated at creation). On capture the merchant wallet pays each share as a `distribution` transaction, so the
+  shares can never exceed what the merchant received; failed shares are retried from the console or the API.
+- **Settlement engine** (`settlement_profiles`, `settlement_cycles`, `settlement_items`): a profile per rail and
+  currency (`T0` / `T1` / `T2` / `weekly` / `manual`, cut-off hour, destination, minimum, auto). A cycle closes at
+  the cut-off with the collections since the previous close, net of fees, refunds, split shares and holds, and is
+  hashed; **obligations** are the closed cycles not yet paid; statements are numbered and available as JSON, CSV
+  and PDF. Paying a cycle to a bank or mobile-money destination goes through the existing withdrawal workflow with
+  its maker-checker controls, and the withdrawal's outcome is mirrored back onto the cycle. The scheduler runs
+  cut-offs hourly and pays cycles when they fall due.
+- **Processor reconciliation and the operations workbench**: processor and bank statements are imported per gateway
+  (`POST /api/admin/finops/reconciliation/processors/:gatewayId/statements`, checksum deduplicated, control total
+  checked, stored as evidence) and matched three ways — statement line ↔ gateway payment ↔ ledger transaction —
+  opening the same reconciliation case classes as the switch (`EXTERNAL_ONLY`, `LOCAL_ONLY`, `AMOUNT_MISMATCH`,
+  `STATUS_CONFLICT`, `FEES_MISMATCH`, `DUPLICATE_EXTERNAL`, `SETTLEMENT_NOT_OBSERVED`). The workbench
+  (`GET /api/admin/finops/reconciliation/workbench`) lists every rail's open exceptions with exposure and age.
+
+API keys gain the scopes `settlements:read`, `settlements:write`, `disputes:read`, `disputes:write`. The console
+routes live under `/api/admin/finops/*` (permissions `settings`, `transactions`, `treasury`, `agents`,
+`reconciliation`, `users`).
+
 ### Public site, blog and SEO engine
 
 The marketing surface is **server-rendered by the API** so search engines, social previews and AI answer

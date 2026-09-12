@@ -26,6 +26,7 @@ import { dispatchWebhook } from './webhooks';
 import { getGatewaySettings } from './users';
 import { completeCheckoutSessionForIntent } from './gateway';
 import { recordRoutingOutcome, pickConnector, type RouteCandidate } from './rails';
+import { applySplits } from './finops/splits';
 
 export const INTENT_STATES = ['CREATED', 'REQUIRES_PAYMENT_METHOD', 'ROUTING', 'REQUIRES_CUSTOMER_ACTION', 'PROCESSING', 'AUTHORISED', 'CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED', 'FAILED', 'EXPIRED', 'CANCELLED', 'PARTIALLY_REFUNDED', 'REFUNDED', 'DISPUTED', 'REVERSED', 'UNDER_REVIEW', 'UNKNOWN_PROVIDER_STATE', 'AMBIGUOUS'] as const;
 export type IntentState = (typeof INTENT_STATES)[number];
@@ -364,6 +365,13 @@ export function finishAttempt(attemptId: string, outcome: 'CAPTURED' | 'AUTHORIS
       const merchant = findUserById(r.merchant_user_id);
       if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.succeeded', { paymentIntent: intentView(getIntentRow(r.id)) }, { resource: { type: 'payment_intent', id: r.id } });
       completeCheckoutSessionForIntent(r.id);
+      // Marketplace / cooperative splits declared on the intent: paid from the merchant wallet as distribution transactions.
+      try {
+        const shares = applySplits(r.id);
+        if (shares.some((s) => s.status === 'FAILED')) console.warn(`[intents] ${r.id}: ${shares.filter((s) => s.status === 'FAILED').length} split share(s) failed`);
+      } catch (err) {
+        console.error(`[intents] split payout failed for ${r.id}: ${(err as Error).message}`);
+      }
     } else if (outcome === 'AUTHORISED') {
       intent = transitionIntent(r.id, 'AUTHORISED', actor, { attemptId });
     } else if (outcome === 'UNKNOWN') {

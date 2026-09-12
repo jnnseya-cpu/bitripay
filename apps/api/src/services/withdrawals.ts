@@ -84,7 +84,7 @@ export function requestWithdrawal(user: UserRow, input: { amount: number; curren
   } else {
     throw badRequest('Choose a payout destination');
   }
-  const fee = calculateFee('withdrawal', input.amount, cur.code);
+  const fee = calculateFee('withdrawal', input.amount, cur.code, null, { userId: user.id });
   enforceLimits(user, input.amount, cur.code);
   // New beneficiaries cool off: a bank account added minutes ago, or a mobile money number never paid before.
   const beneficiaryCreatedAt = (() => {

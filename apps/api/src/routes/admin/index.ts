@@ -38,6 +38,7 @@ import { countryCapabilities, listCountryCapabilities, setCountryCapabilities, P
 import { listIntents, intentTimeline } from '../../services/intents';
 import { listRefunds, resolveRefund } from '../../services/gateway';
 import { adminSwitchRouter } from './switch';
+import { adminFinopsRouter } from './finops';
 import { addonReport } from '../../services/assist/addon';
 import { billingReport } from '../../services/assist/billing';
 import { recentUssdSessions, ussdRequest, ussdSessionId } from '../../services/channels/ussd';
@@ -96,6 +97,7 @@ const complianceSchema = z.object({ regulator: z.string().max(200).optional().nu
 export const adminRouter = Router();
 adminRouter.use(...requireAdmin);
 adminRouter.use('/switch', adminSwitchRouter);
+adminRouter.use('/finops', adminFinopsRouter);
 
 // ---------------- Dashboard ----------------
 adminRouter.get('/stats', requirePermission('reports'), (_req, res) => {

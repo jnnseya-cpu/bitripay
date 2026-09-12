@@ -82,7 +82,7 @@ export function fundVirtualCard(user: UserRow, id: string, amount: number): Virt
   return db.transaction(() => {
     const row = getCardRow(user.id, id);
     if (row.status !== 'active') throw conflict('Card is not active', 'card_inactive');
-    const fee = calculateFee('virtual_card_funding', amount, row.currency);
+    const fee = calculateFee('virtual_card_funding', amount, row.currency, null, { userId: user.id });
     const wallet = getUserWallet(user.id, row.currency);
     const treasury = ensureWallet(getSystemUser('treasury').id, row.currency);
     postTransaction({
@@ -141,7 +141,7 @@ export function chargeVirtualCard(card: { number: string; expMonth: number; expY
     if (row.currency !== currency) throw badRequest(`Card declined: this card is denominated in ${row.currency}`, 'card_declined');
     if (row.balance < amount) throw unprocessable('Card declined: insufficient balance', 'insufficient_funds');
     const owner = findUserById(row.user_id)!;
-    const fee = calculateFee('merchant_payment', amount, currency);
+    const fee = calculateFee('merchant_payment', amount, currency, null, { userId: merchant.id });
     const treasury = ensureWallet(getSystemUser('treasury').id, currency);
     const merchantWallet = ensureWallet(merchant.id, currency);
     const tx = postTransaction({

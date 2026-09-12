@@ -23,10 +23,14 @@ import { syncCheckoutSessions } from './services/gateway';
 import { dispatchOutbox, recoverUncertainEmissions, expirePayments as expireSwitchPayments } from './services/switch/payments';
 import { certificateAlerts } from './services/switch/connections';
 import { checkCoverage } from './services/switch/reconciliation';
+import { runSettlementSchedules } from './services/finops/settlement';
+import { sweepDisputeDeadlines } from './services/finops/disputes';
+import { expireHolds } from './services/finops/holds';
 import { probeConnectors } from './services/rails';
 import { registryStatus } from './services/switch/participants';
 import { listConnections } from './services/switch/connections';
 let lastCertificateCheck = 0;
+let lastSettlementRun = 0;
 let lastCoverageDay = '';
 let lastRegistryAlert = 0;
 const dispatcherOwner = `node:${process.pid}:${Math.random().toString(36).slice(2, 8)}`;
@@ -95,6 +99,16 @@ export function startJobs() {
         const cov = checkCoverage();
         if (cov.missing.length) console.warn(`[reconciliation] missing reports: ${cov.missing.join(', ')}`);
       }
+      // Financial operations: settlement cut-offs and due payouts (hourly), dispute deadlines and expiring holds.
+      if (Date.now() - lastSettlementRun > 3600_000) {
+        lastSettlementRun = Date.now();
+        const st = runSettlementSchedules();
+        if (st.closed || st.paid) console.log(`[finops] settlement cycles: closed ${st.closed}, paid ${st.paid}, skipped ${st.skipped}`);
+      }
+      const swept = sweepDisputeDeadlines();
+      if (swept) console.warn(`[finops] ${swept} dispute(s) passed their response deadline`);
+      const releasedHolds = expireHolds();
+      if (releasedHolds) console.log(`[finops] released ${releasedHolds} expired hold(s)`);
       // Webhook retries survive restarts: deliveries whose retry time has passed are attempted here.
       const delivered = await processDueDeliveries();
       if (delivered) console.log(`[jobs] retried ${delivered} webhook deliver${delivered === 1 ? 'y' : 'ies'}`);

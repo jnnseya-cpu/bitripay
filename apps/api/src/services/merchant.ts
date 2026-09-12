@@ -46,6 +46,10 @@ export const API_KEY_SCOPES = [
   'qr:create',
   'reconciliation:read',
   'bindings:manage',
+  'settlements:read',
+  'settlements:write',
+  'disputes:read',
+  'disputes:write',
 ] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 export type ApiKeyKind = 'secret' | 'publishable' | 'restricted';

@@ -1,7 +1,7 @@
 import type { Request } from 'express';
 import { getDb } from '../db';
 import { uuid, now } from '../lib/ids';
-import { badRequest, conflict, notFound, unprocessable } from '../lib/errors';
+import { AppError, badRequest, conflict, notFound, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
 import { config } from '../config';
 import { formatMoney } from '@bitripay/shared';
@@ -30,6 +30,7 @@ import { assessRisk } from './risk';
 import { PROVIDERS as PROVIDER_MAP } from '../payments';
 import { tryTransitionRoute } from './routeLifecycle';
 import { cancelPayout } from './payouts';
+import { openDispute } from './finops/disputes';
 
 export interface InitiatePaymentInput {
   purpose: 'deposit' | 'checkout';
@@ -654,6 +655,15 @@ export function openChargeback(paymentId: string, input: { reason?: string | nul
     }
     db.prepare('INSERT INTO chargebacks (id, payment_id, route_id, provider_ref, amount, currency, reason, status, payout_state_at_open, reversal_transaction_id, opened_by, opened_at, resolved_by, resolved_at, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)').run(id, payment.id, route?.id ?? null, input.providerRef ?? payment.provider_ref, payment.amount, payment.currency, input.reason ?? null, status, payoutState, reversalTx, input.actor.id ?? null, now());
     recordEvent('chargeback', id, 'chargeback.opened', input.actor, { paymentId, routeId: route?.id ?? null, status, payoutState, reason: input.reason ?? null });
+    // A chargeback on money that reached a merchant becomes a dispute object (deadline, evidence, hold, decision).
+    if (status === 'open' && payment.transaction_id) {
+      try {
+        const d = openDispute({ transactionId: payment.transaction_id, gatewayPaymentId: payment.id, chargebackId: id, openedBy: 'processor', reasonCode: 'unauthorised', reason: input.reason ?? 'Chargeback received from the processor', responsibleInstitution: payment.gateway ?? null }, input.actor);
+        db.prepare('UPDATE chargebacks SET note = ? WHERE id = ?').run(`dispute:${d.id}`, id);
+      } catch (err) {
+        if (!(err instanceof AppError && (err.code === 'not_disputable' || err.code === 'dispute_exists'))) throw err;
+      }
+    }
     if (payment.user_id) notify(payment.user_id, 'Payment disputed', status === 'reversed_before_payout' ? 'Your card payment was disputed; the transfer was cancelled and reversed.' : 'Your card payment was disputed. The transfer is under review.', { kind: 'chargeback', paymentId });
     return toChargeback(db.prepare('SELECT * FROM chargebacks WHERE id = ?').get(id));
   })();

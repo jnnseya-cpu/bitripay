@@ -33,7 +33,7 @@ withdrawalsRouter.get('/operators', (req, res) => res.json({ items: listOperator
 withdrawalsRouter.get('/fee', (req, res) => {
   const cur = getCurrency(String(req.query.currency || 'USD'));
   const amount = toMinor(String(req.query.amount || '0'), cur.decimals);
-  res.json({ amount, fee: calculateFee('withdrawal', amount, cur.code), currency: cur.code });
+  res.json({ amount, fee: calculateFee('withdrawal', amount, cur.code, null, { userId: req.user!.id }), currency: cur.code });
 });
 withdrawalsRouter.post(
   '/',

@@ -51,7 +51,7 @@ export function payBill(user: UserRow, input: { billerId: string; accountNumber:
   if (biller.min_amount && input.amount < biller.min_amount) throw badRequest(`Minimum amount is ${formatMoney(biller.min_amount, getCurrency(biller.currency))}`);
   if (biller.max_amount && input.amount > biller.max_amount) throw badRequest(`Maximum amount is ${formatMoney(biller.max_amount, getCurrency(biller.currency))}`);
   const cur = getCurrency(biller.currency);
-  const fee = calculateFee('bill_payment', input.amount, cur.code) + applyBps(input.amount, biller.fee_bps);
+  const fee = calculateFee('bill_payment', input.amount, cur.code, null, { userId: user.id }) + applyBps(input.amount, biller.fee_bps);
   enforceLimits(user, input.amount, cur.code);
   const wallet = getUserWallet(user.id, cur.code);
   const treasury = ensureWallet(getSystemUser('treasury').id, cur.code);
@@ -128,7 +128,7 @@ export function mobileTopup(user: UserRow, input: { operatorId: string; phone: s
   if (op.min_amount && input.amount < op.min_amount) throw badRequest(`Minimum top-up is ${formatMoney(op.min_amount, cur)}`);
   if (op.max_amount && input.amount > op.max_amount) throw badRequest(`Maximum top-up is ${formatMoney(op.max_amount, cur)}`);
   if (!/^\+?\d{7,15}$/.test(input.phone.replace(/[\s-]/g, ''))) throw badRequest('Enter a valid phone number');
-  const fee = calculateFee('mobile_topup', input.amount, cur.code);
+  const fee = calculateFee('mobile_topup', input.amount, cur.code, null, { userId: user.id });
   enforceLimits(user, input.amount, cur.code);
   const wallet = getUserWallet(user.id, cur.code);
   const treasury = ensureWallet(getSystemUser('treasury').id, cur.code);
@@ -195,7 +195,7 @@ export function buyGiftCard(user: UserRow, input: { productId: string; amount: n
   const denominations = parseJson<number[]>(product.denominations, []);
   if (denominations.length && !denominations.includes(input.amount)) throw badRequest('Choose one of the available denominations');
   const cur = getCurrency(product.currency);
-  const fee = calculateFee('gift_card', input.amount, cur.code);
+  const fee = calculateFee('gift_card', input.amount, cur.code, null, { userId: user.id });
   enforceLimits(user, input.amount, cur.code);
   const wallet = getUserWallet(user.id, cur.code);
   const treasury = ensureWallet(getSystemUser('treasury').id, cur.code);

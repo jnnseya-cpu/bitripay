@@ -25,7 +25,8 @@ transfersRouter.get('/fee', (req, res) => {
   const cur = getCurrency(String(req.query.currency || ''));
   const amount = toMinor(String(req.query.amount || '0'), cur.decimals);
   const type = String(req.query.type || 'transfer');
-  res.json({ amount, fee: calculateFee(type, amount, cur.code), total: amount + calculateFee(type, amount, cur.code), currency: cur.code });
+  const fee = calculateFee(type, amount, cur.code, null, { userId: req.user!.id });
+  res.json({ amount, fee, total: amount + fee, currency: cur.code });
 });
 
 transfersRouter.post(
