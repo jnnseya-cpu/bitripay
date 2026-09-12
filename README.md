@@ -202,6 +202,13 @@ in `0002` are declined, mobile-money prompts auto-approve after a few seconds, a
 confirmed in Admin → Approvals. Without SMTP/SMS configured, OTP codes are printed to the API console
 and returned as `devCode` (never in production).
 
+### Landing page
+
+`apps/web/src/pages/Landing.tsx` is the public home page: a canvas-drawn cinematic hero with real
+product screenshots in a device frame, the three people the product is designed around, the money
+lifecycle, product pillars, the safeguarding rule, merchant and agent sections, an FAQ (also emitted as
+JSON-LD) and the latest articles. Its styles are self-contained in `landing.css`.
+
 ### Run the mobile app
 
 ```bash
@@ -300,6 +307,38 @@ Events: `payment.completed`, `payment_request.created`.
 
 Mutating requests accept an `Idempotency-Key` header: a repeat with the same key and body replays the
 stored response (`Idempotent-Replayed: true`); a repeat with a different body is refused (422).
+
+### Public site, blog and SEO engine
+
+The marketing surface is **server-rendered by the API** so search engines, social previews and AI answer
+engines (GPTBot, ClaudeBot, PerplexityBot are explicitly allowed in `robots.txt`) receive complete HTML:
+`/blog`, `/blog/:slug`, `/legal/:slug`, `/about`, `/contact`, `/sitemap.xml` (with hreflang),
+`/feed.xml`, `/robots.txt`, `/llms.txt` and `/llms-full.txt`. In development Vite proxies these paths
+to the API; in production the web container's nginx does the same. Every page carries canonical,
+Open Graph and Twitter tags plus JSON-LD (`FinancialService` organisation, `WebSite` with
+`SearchAction`, `Article`, `FAQPage`, `BreadcrumbList`, `Blog`, `AboutPage`).
+
+- **Dynamic hyperlinks** – keyword → URL rules (Admin → Blog & SEO → Dynamic links) are applied at render
+  time to articles and policy pages, and every published article's target keywords automatically link to
+  it from other articles. Links are never inserted inside headings, code or existing links.
+- **Backlinks** – inbound links are discovered from referrers (search engines and social hosts are
+  ignored), partner and outbound links are tracked and re-verified weekly, and an outreach list shows the
+  sites your articles cite that do not link back yet. Page views are counted per path, never per person.
+- **AI content agent** – built on the Anthropic SDK (`claude-opus-5` by default, adaptive thinking,
+  structured JSON output). It drafts articles from a topic backlog on a weekly cadence or on demand,
+  proposes long-tail keywords, audits articles (deterministic on-page checks plus editorial judgement),
+  writes platform-native social packs and suggests internal links. Drafts always land in **review**
+  unless auto-publish is switched on; without an API key the agent runs in a clearly labelled offline
+  mode with template drafts and automated checks, so the pipeline still works. Every run is logged with
+  model and token usage.
+- **IndexNow** – set a key in SEO settings; it is published at `/<key>.txt` and Bing/Yandex/Seznam/Naver
+  are pinged on every publish.
+- **Policies** – privacy, terms, cookies, acceptable use, AML/KYC, safeguarding, refunds, complaints,
+  accessibility, fees, security, regulatory information and the agent & merchant agreement ship as real
+  texts (Admin → Pages to edit), together with the *About us* page and a site-wide footer.
+
+Rankings cannot be promised by any tool; what the engine guarantees is that every technical and
+editorial signal the engines look for is present and consistent.
 
 ### Transaction lifecycle
 

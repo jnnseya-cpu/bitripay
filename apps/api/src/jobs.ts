@@ -11,6 +11,10 @@ import { notify } from './services/notifications';
 import { getFxSettings } from './services/settings';
 import { config } from './config';
 import { reconcileReserves, expirePromoCredits } from './services/emoney';
+import { publishScheduled } from './services/blog';
+import { runContentSchedule } from './services/seoAgent';
+import { pingIndexNow, verifyBacklinks } from './services/seo';
+let lastBacklinkCheck = 0;
 import { getEmoneySettings } from './services/settings';
 let lastReconciliationDay = '';
 
@@ -33,6 +37,20 @@ export function startJobs() {
       if (lic.suspended.length) {
         console.warn(`[jobs] suspended corridors with expired licences: ${lic.suspended.join(', ')}`);
         for (const a of db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_system = 0 AND status = 'active'").all() as { id: string }[]) notify(a.id, 'Corridor suspended', `${lic.suspended.length} corridor(s) were suspended because the licence expired.`, { kind: 'corridor' });
+      }
+      // Blog: publish scheduled articles and let the content agent work through its backlog; re-verify backlinks weekly.
+      const published = publishScheduled();
+      if (published.length) {
+        console.log(`[jobs] published ${published.length} scheduled article(s)`);
+        void pingIndexNow(published);
+      }
+      if (new Date().getUTCHours() === 6 && new Date().getUTCMinutes() < 2) {
+        const c = await runContentSchedule();
+        if (c.drafted) console.log('[jobs] content agent drafted a new article');
+      }
+      if (Date.now() - lastBacklinkCheck > 7 * 86_400_000) {
+        lastBacklinkCheck = Date.now();
+        void verifyBacklinks().then((r) => console.log(`[jobs] backlinks: checked ${r.checked}, lost ${r.lost}`));
       }
       // Daily safeguarding reconciliation (1:1 reserve-to-liability); breaches suspend issuance automatically.
       const day = new Date().toISOString().slice(0, 10);

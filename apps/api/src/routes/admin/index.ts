@@ -26,6 +26,10 @@ import { listKyc, getKyc, reviewKyc } from '../../services/kyc';
 import { settleRemittance, toRemittance } from '../../services/remittance';
 import { getCurrency, listCurrencies, upsertCurrency, refreshRatesFromProvider, importRates, listRateSnapshots, getRateStatus, rateFreshness, RATE_PROVIDERS } from '../../services/currencies';
 import { goLiveChecklist } from '../../services/goLive';
+import { listPosts, getPost, createPost, updatePost, deletePost, renderPost } from '../../services/blog';
+import { listLinkRules, upsertLinkRule, deleteLinkRule, listBacklinks, upsertBacklink, deleteBacklink, verifyBacklinks, pingIndexNow, pageviewSummary } from '../../services/seo';
+import { draftArticle, keywordIdeas, auditPost, socialPack, listRuns, agentStatus, outreachCandidates } from '../../services/seoAgent';
+import { getSeoSettings } from '../../services/settings';
 import { buildStatement, statementCsv, statementPdf, listStatements } from '../../services/statements';
 import { emoneyOverview, listProgrammes, getProgramme, upsertProgramme, setProgrammeStatus, listReserveMovements, recordReserveMovement, reverseReserveMovement, listPools, getPool, createPool, allocate, reconcileReserves, listReconciliations, freezeWallet, listPromoCredits } from '../../services/emoney';
 import { testGateway } from '../../payments';
@@ -336,6 +340,79 @@ adminRouter.get('/users/:id/statements', requirePermission('users'), (req, res) 
 adminRouter.get('/users/:id/promo', requirePermission('users'), (req, res) => res.json({ items: listPromoCredits(String(req.params.id)) }));
 
 adminRouter.get('/permissions', (_req, res) => res.json({ items: ADMIN_PERMISSIONS }));
+
+// ---------------------------------------------------------------------------------------------
+// Blog & SEO (cms permission)
+// ---------------------------------------------------------------------------------------------
+const postSchema = z.object({ title: z.string().min(3).max(200), slug: z.string().max(120).optional().nullable(), excerpt: z.string().max(400).optional().nullable(), bodyMd: z.string().min(20), coverUrl: z.string().max(500).optional().nullable(), coverAlt: z.string().max(200).optional().nullable(), category: z.string().max(60).optional().nullable(), tags: z.array(z.string().max(40)).max(12).optional(), keywords: z.array(z.string().max(80)).max(12).optional(), language: z.string().max(5).optional().nullable(), authorName: z.string().max(80).optional().nullable(), status: z.enum(['draft', 'review', 'scheduled', 'published', 'archived']).optional(), metaTitle: z.string().max(120).optional().nullable(), metaDescription: z.string().max(300).optional().nullable(), canonicalUrl: z.string().max(300).optional().nullable(), faq: z.array(z.object({ question: z.string().max(300), answer: z.string().max(2000) })).max(12).optional(), sources: z.array(z.object({ title: z.string().max(200), url: z.string().max(500) })).max(20).optional(), social: z.record(z.string(), z.string()).optional(), scheduledFor: z.string().datetime({ offset: true }).optional().nullable() });
+adminRouter.get('/blog/posts', requirePermission('cms'), (req, res) => {
+  const { page, pageSize } = parsePagination(req.query, 30);
+  res.json(listPosts({ status: (req.query.status ? String(req.query.status) : 'all') as any, q: req.query.q ? String(req.query.q) : null, page, pageSize }));
+});
+adminRouter.get('/blog/posts/:id', requirePermission('cms'), (req, res) => res.json({ post: getPost(String(req.params.id), false), rendered: renderPost(String(req.params.id), false) }));
+adminRouter.post('/blog/posts', requirePermission('cms'), (req, res) => {
+  const body = validate(postSchema, req.body);
+  const post = createPost({ ...body, authorUserId: req.user!.id, authorName: body.authorName ?? req.user!.full_name }, { type: 'admin', id: req.user!.id });
+  audit(req.user!.id, 'blog.post.create', 'post', post.id, { slug: post.slug, status: post.status });
+  if (post.status === 'published') void pingIndexNow([post.url]);
+  res.status(201).json({ post });
+});
+adminRouter.patch('/blog/posts/:id', requirePermission('cms'), (req, res) => {
+  const body = validate(postSchema.partial(), req.body);
+  const post = updatePost(String(req.params.id), body, { type: 'admin', id: req.user!.id });
+  audit(req.user!.id, 'blog.post.update', 'post', post.id, { fields: Object.keys(body) });
+  if (body.status === 'published') void pingIndexNow([post.url]);
+  res.json({ post });
+});
+adminRouter.delete('/blog/posts/:id', requirePermission('cms'), (req, res) => {
+  deletePost(String(req.params.id), { type: 'admin', id: req.user!.id });
+  audit(req.user!.id, 'blog.post.delete', 'post', String(req.params.id), {});
+  res.json({ ok: true });
+});
+/** AI content agent. */
+adminRouter.get('/seo', requirePermission('cms'), (_req, res) => {
+  const s = getSeoSettings();
+  res.json({ settings: { ...s, agent: { ...s.agent, apiKey: s.agent.apiKey ? '••••••••' : '' } }, agent: agentStatus(), views: pageviewSummary(30), rules: listLinkRules(), backlinks: listBacklinks(), runs: listRuns(30), outreach: outreachCandidates(), posts: listPosts({ status: 'all', pageSize: 100 }).items });
+});
+adminRouter.put('/seo/settings', requirePermission('settings'), (req, res) => {
+  const current = getSeoSettings();
+  const body = req.body ?? {};
+  const agent = { ...current.agent, ...(body.agent ?? {}) };
+  if (!body.agent || body.agent.apiKey === undefined || body.agent.apiKey === '••••••••') agent.apiKey = current.agent.apiKey;
+  else if (body.agent.apiKey) agent.apiKey = encrypt(String(body.agent.apiKey));
+  else agent.apiKey = '';
+  const next = { ...current, ...body, agent };
+  setSetting('seo', next);
+  audit(req.user!.id, 'seo.settings.update', 'settings', 'seo', { keys: Object.keys(body) });
+  res.json({ settings: { ...next, agent: { ...next.agent, apiKey: next.agent.apiKey ? '••••••••' : '' } }, agent: agentStatus() });
+});
+adminRouter.post('/seo/agent/draft', requirePermission('cms'), wrap(async (req, res) => {
+  const body = validate(z.object({ topic: z.string().min(4).max(300), keywords: z.array(z.string().max(80)).max(10).optional(), language: z.string().max(5).optional(), extraInstructions: z.string().max(1000).optional().nullable() }), req.body);
+  const r = await draftArticle(body, { type: 'admin', id: req.user!.id }, req.user!.id);
+  audit(req.user!.id, 'seo.agent.draft', 'post', r.post.id, { runId: r.run.id, status: r.run.status });
+  res.status(201).json(r);
+}));
+adminRouter.post('/seo/agent/keywords', requirePermission('cms'), wrap(async (req, res) => {
+  const body = validate(z.object({ seed: z.string().min(2).max(200) }), req.body);
+  res.json(await keywordIdeas(body.seed, { type: 'admin', id: req.user!.id }));
+}));
+adminRouter.post('/seo/agent/audit/:postId', requirePermission('cms'), wrap(async (req, res) => res.json(await auditPost(String(req.params.postId), { type: 'admin', id: req.user!.id }))));
+adminRouter.post('/seo/agent/social/:postId', requirePermission('cms'), wrap(async (req, res) => res.json(await socialPack(String(req.params.postId), { type: 'admin', id: req.user!.id }))));
+adminRouter.post('/seo/ping', requirePermission('cms'), wrap(async (req, res) => {
+  const body = validate(z.object({ paths: z.array(z.string().max(300)).min(1).max(100) }), req.body);
+  res.json(await pingIndexNow(body.paths));
+}));
+adminRouter.put('/seo/rules/:id', requirePermission('cms'), (req, res) => {
+  const body = validate(z.object({ keyword: z.string().min(2).max(80), url: z.string().min(1).max(300), title: z.string().max(200).optional().nullable(), kind: z.enum(['internal', 'outbound']).optional(), maxPerPage: z.number().int().min(1).max(10).optional(), priority: z.number().int().min(0).max(100).optional(), enabled: z.boolean().optional() }), req.body);
+  res.json({ rule: upsertLinkRule({ id: String(req.params.id) === 'new' ? undefined : String(req.params.id), ...body }) });
+});
+adminRouter.delete('/seo/rules/:id', requirePermission('cms'), (req, res) => { deleteLinkRule(String(req.params.id)); res.json({ ok: true }); });
+adminRouter.put('/seo/backlinks/:id', requirePermission('cms'), (req, res) => {
+  const body = validate(z.object({ direction: z.enum(['inbound', 'outbound', 'partner']), sourceUrl: z.string().url().max(500), targetUrl: z.string().max(500), anchor: z.string().max(200).optional().nullable(), status: z.enum(['live', 'pending', 'lost', 'rejected']).optional(), nofollow: z.boolean().optional(), notes: z.string().max(500).optional().nullable() }), req.body);
+  res.json({ backlink: upsertBacklink({ id: String(req.params.id) === 'new' ? undefined : String(req.params.id), ...body }) });
+});
+adminRouter.delete('/seo/backlinks/:id', requirePermission('cms'), (req, res) => { deleteBacklink(String(req.params.id)); res.json({ ok: true }); });
+adminRouter.post('/seo/backlinks/verify', requirePermission('cms'), wrap(async (_req, res) => res.json(await verifyBacklinks())));
 
 // ---------------- Transactions ----------------
 adminRouter.get('/transactions', requirePermission('transactions'), (req, res) => {

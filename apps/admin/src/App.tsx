@@ -11,6 +11,7 @@ import { Verification } from './pages/Verification';
 import { Controls } from './pages/Controls';
 import { Corridors } from './pages/Corridors';
 import { Emoney } from './pages/Emoney';
+import { Seo } from './pages/Seo';
 import { Currencies } from './pages/Currencies';
 import { Fees } from './pages/Fees';
 import { Gateways } from './pages/Gateways';
@@ -48,6 +49,7 @@ export function App() {
         <Route path="/controls" element={<P><Controls /></P>} />
         <Route path="/corridors" element={<P><Corridors /></P>} />
         <Route path="/emoney" element={<P><Emoney /></P>} />
+        <Route path="/seo" element={<P><Seo /></P>} />
         <Route path="/kyc" element={<P><Kyc /></P>} />
         <Route path="/currencies" element={<P><Currencies /></P>} />
         <Route path="/fees" element={<P><Fees /></P>} />

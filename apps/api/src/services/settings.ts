@@ -142,7 +142,55 @@ export interface EmoneySettings {
 }
 const DEFAULT_EMONEY: EmoneySettings = { promoCoversFees: true, promoExpiryDays: 90, autoSuspendOnBreach: true, reconciliationHourUtc: 2 };
 
+export interface SeoSettings {
+  siteName: string;
+  /** Public web origin used for canonical URLs, sitemaps and structured data. */
+  siteUrl: string;
+  defaultTitle: string;
+  titleSuffix: string;
+  defaultDescription: string;
+  ogImage: string | null;
+  twitterHandle: string;
+  /** Languages the site is published in (hreflang). */
+  languages: string[];
+  organization: { legalName: string; foundingCountry: string; email: string; phone: string; address: string; sameAs: string[] };
+  /** IndexNow key (Bing, Yandex, Seznam, Naver): published at /<key>.txt and used to ping on every publish. */
+  indexNowKey: string;
+  agent: {
+    enabled: boolean;
+    provider: 'anthropic';
+    model: string;
+    /** Encrypted at rest; masked when read. */
+    apiKey: string;
+    /** Agent drafts go to review unless autoPublish is on. */
+    autoPublish: boolean;
+    /** Posts the agent writes per week from the topic backlog (0 = manual only). */
+    postsPerWeek: number;
+    /** Topic backlog the scheduler works through. */
+    topics: string[];
+    audience: string;
+    tone: string;
+    languages: string[];
+    /** Countries and corridors the content focuses on. */
+    markets: string[];
+  };
+}
+const DEFAULT_SEO: SeoSettings = {
+  siteName: 'BitriPay',
+  siteUrl: '',
+  defaultTitle: 'BitriPay – QR code payments, mobile money, cards and remittance for everyone',
+  titleSuffix: ' · BitriPay',
+  defaultDescription: 'Send, receive and accept money with a QR code. Wallets, virtual cards, mobile money, bank transfers, agents and remittance that work for market traders, moto-taxi riders and businesses alike.',
+  ogImage: null,
+  twitterHandle: '@bitripay',
+  languages: ['en', 'fr', 'sw', 'ln'],
+  organization: { legalName: 'BitriPay', foundingCountry: 'CD', email: 'hello@bitripay.app', phone: '', address: '', sameAs: [] },
+  indexNowKey: '',
+  agent: { enabled: true, provider: 'anthropic', model: 'claude-opus-5', apiKey: '', autoPublish: false, postsPerWeek: 2, topics: ['How mobile money agents keep cash flowing in markets', 'QR code payments for street food vendors: a practical guide', 'Sending money from the UK to Congo: fees, speed and safety compared', 'What safeguarding means for your e-money balance', 'Virtual cards for online shopping without a bank card', 'How moto-taxi riders can get paid without cash'], audience: 'Everyday people, market traders, moto-taxi riders, small merchants, agents and diaspora senders in Africa and their families abroad', tone: 'Plain, warm, concrete and honest. Short sentences. No hype.', languages: ['en'], markets: ['CD', 'KE', 'NG', 'SN', 'UG', 'GB', 'FR'] },
+};
+
 const DEFAULTS: Record<string, unknown> = {
+  seo: DEFAULT_SEO,
   emoney: DEFAULT_EMONEY,
   compliance: DEFAULT_COMPLIANCE,
   fees: DEFAULT_FEES,
@@ -181,3 +229,6 @@ export const getFxSettings = () => getSetting<FxSettings>('fx');
 export const getRiskSettings = () => getSetting<RiskSettings>('risk');
 export const getComplianceSettings = () => getSetting<ComplianceSettings>('compliance');
 export const getEmoneySettings = () => getSetting<EmoneySettings>('emoney');
+export const getSeoSettings = () => getSetting<SeoSettings>('seo');
+/** Site settings without importing the CMS module (used by the SEO renderer). */
+export const getSiteSettingsSafe = () => getSetting<any>('site', null) as { siteName?: string; logoUrl?: string | null; contactEmail?: string; social?: Record<string, string>; appUrls?: Record<string, string> } | null;

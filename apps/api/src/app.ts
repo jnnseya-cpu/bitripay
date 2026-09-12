@@ -3,6 +3,8 @@ import cors from 'cors';
 import { config } from './config';
 import { getDb } from './db';
 import { errorHandler, notFoundHandler } from './middleware/error';
+import { siteRouter, blogApiRouter } from './routes/site';
+import { ensureDefaultContent } from './content/defaults';
 import { publicRouter } from './routes/public';
 import { authRouter } from './routes/auth';
 import { accountRouter } from './routes/account';
@@ -50,6 +52,7 @@ export function bootstrap() {
 }
 
 export function createApp() {
+  ensureDefaultContent();
   const app = express();
   app.set('trust proxy', true);
   app.disable('x-powered-by');
@@ -103,6 +106,9 @@ export function createApp() {
   app.use('/api/admin', adminRouter);
 
   app.get('/', (_req, res) => res.json({ name: `${config.appName} API`, docs: '/api/health', web: config.webUrl }));
+  // Public, server-rendered marketing pages, feeds and the blog JSON API.
+  app.use('/api/blog', blogApiRouter);
+  app.use('/', siteRouter);
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;
