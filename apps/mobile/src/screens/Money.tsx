@@ -12,11 +12,11 @@ const OPEN = (p: PaymentView) => !['succeeded', 'failed', 'cancelled'].includes(
 const STEPS: [string, string[]][] = [['Initiated', ['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED']], ['Sent', ['PAYMENT_SENT']], ['Verifying', ['EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED']], ['Confirmed', ['CONFIRMED']], ['Settled', ['SETTLED']]];
 
 /** Initiated → sent → verifying → confirmed → settled, so nobody mistakes an instruction for money. */
-export const ROUTE_STEPS: [string, string[]][] = [['Initiated', ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'FUNDING_PENDING']], ['Funds confirmed', ['FUNDS_CONFIRMED', 'MANUAL_REVIEW', 'LIQUIDITY_UNAVAILABLE']], ['Paying out', ['PAYOUT_QUEUED', 'PAYOUT_IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MISMATCHED', 'DUPLICATE']], ['Settled', ['SETTLED']]];
+export const ROUTE_STEPS: [string, string[]][] = [['Initiated', ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'FUNDING_PENDING']], ['Funds confirmed', ['FUNDED', 'MANUAL_REVIEW', 'INSUFFICIENT_LIQUIDITY']], ['Paying out', ['PAYOUT_ROUTED', 'PAYOUT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MISMATCHED', 'DUPLICATE']], ['Settled', ['SETTLED']]];
 export function StageBar({ stage, label, description, steps = STEPS }: { stage?: string; label?: string; description?: string; steps?: [string, string[]][] }) {
   if (!stage) return null;
   const bad = ['EXPIRED', 'REJECTED', 'REVERSED', 'FAILED', 'REFUNDED', 'DISPUTED'].includes(stage);
-  const warn = ['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'LIQUIDITY_UNAVAILABLE'].includes(stage);
+  const warn = ['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'INSUFFICIENT_LIQUIDITY'].includes(stage);
   const idx = steps.findIndex(([, s]) => s.includes(stage));
   return (
     <View style={{ alignSelf: 'stretch', gap: 6 }}>

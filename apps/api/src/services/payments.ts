@@ -271,7 +271,11 @@ export async function authenticatePayment(user: UserRow, id: string, body: { pin
   if (authn.required) throw badRequest('Confirm with biometrics or your transaction PIN', 'authentication_required');
   markAuthenticated(id, authn.method!, actorFor(user));
   const stored = parseJson<any>(payment.metadata, {}).intentInput ?? {};
-  return dispatchToProvider(user, getPayment(id), { card: body.card, savedCardId: body.savedCardId ?? stored.savedCardId, saveCard: body.saveCard ?? stored.saveCard, returnUrl: body.returnUrl ?? stored.returnUrl });
+  const routeId = parseJson<any>(payment.metadata, {}).routeId as string | null;
+  if (routeId) tryTransitionRoute(routeId, 'BIOMETRICALLY_APPROVED', actorFor(user), { paymentId: id, method: authn.method });
+  const view = await dispatchToProvider(user, getPayment(id), { card: body.card, savedCardId: body.savedCardId ?? stored.savedCardId, saveCard: body.saveCard ?? stored.saveCard, returnUrl: body.returnUrl ?? stored.returnUrl });
+  if (routeId && view.status !== 'failed' && view.stage !== 'SETTLED') tryTransitionRoute(routeId, 'FUNDING_PENDING', actorFor(user), { paymentId: id, gateway: view.gateway });
+  return view;
 }
 
 /** Hand the authenticated intent to the rail: issue instructions / redirect / prompt, or settle immediately when the processor already confirmed. */
@@ -611,11 +615,11 @@ export function openChargeback(paymentId: string, input: { reason?: string | nul
     let status: ChargebackView['status'] = 'open';
     let reversalTx: string | null = null;
     const payoutState = payout?.stage ?? (route ? route.stage : null);
-    const notPaidOut = !route || ['CREATED', 'QUOTED', 'FUNDING_PENDING', 'FUNDS_CONFIRMED', 'PAYOUT_QUEUED', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED'].includes(route.stage);
+    const notPaidOut = !route || ['CREATED', 'QUOTED', 'FUNDING_PENDING', 'FUNDED', 'PAYOUT_ROUTED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED'].includes(route.stage);
     if (route) tryTransitionRoute(route.id, 'DISPUTED', input.actor, { paymentId, reason: input.reason ?? null });
     if (notPaidOut) {
       if (route) recallRouteFunds(route.id, input.actor, 'Funding disputed (chargeback)');
-      else if (payout && ['QUEUED', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED', 'MISMATCHED', 'DUPLICATE'].includes(payout.stage)) cancelPayout(payout.id, input.actor, 'Funding disputed (chargeback)');
+      else if (payout && ['QUEUED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED', 'MISMATCHED', 'DUPLICATE'].includes(payout.stage)) cancelPayout(payout.id, input.actor, 'Funding disputed (chargeback)');
       const tx = reverseFunding(payment, input.actor, input.reason ?? 'chargeback', 'chargeback');
       reversalTx = tx.id;
       status = 'reversed_before_payout';

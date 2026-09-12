@@ -29,7 +29,7 @@ settlement evidence. Where automation is unavailable, a human maker-checker deci
 operator and amount; the platform quotes rate, margin, fees, recipient amount, payout time, quote
 expiry and refund conditions; the sender approves with Face ID / fingerprint / passkey (PIN
 fallback); the processor charges the card; once the funds are confirmed the routing engine creates a
-DRC payout instruction, selects a prefunded Orange Money account (or `LIQUIDITY_UNAVAILABLE` until
+DRC payout instruction, selects a prefunded Orange Money account (or `INSUFFICIENT_LIQUIDITY` until
 treasury prefunds it); the payout device claims it, pays the recipient by USSD, and forwards the
 operator SMS signed with its key and SIM identity; the verification engine matches recipient,
 amount, reference, operator, SIM and timestamps, rejects replays/duplicates, and marks the transfer
@@ -41,8 +41,8 @@ changes can interrupt automation, operator limits still apply, and reversals may
 processing. The UI says so everywhere it matters.
 
 **Transfer lifecycle** – `CREATED → QUOTED → BIOMETRIC_APPROVAL_REQUIRED → FUNDING_PENDING →
-FUNDS_CONFIRMED → PAYOUT_QUEUED → PAYOUT_IN_PROGRESS → EVIDENCE_RECEIVED → VERIFYING → SETTLED`,
-with `EXPIRED · FAILED · MISMATCHED · DUPLICATE · LIQUIDITY_UNAVAILABLE · MANUAL_REVIEW · DISPUTED ·
+FUNDED → PAYOUT_ROUTED → PAYOUT_SENT → EVIDENCE_RECEIVED → VERIFYING → SETTLED`,
+with `EXPIRED · FAILED · MISMATCHED · DUPLICATE · INSUFFICIENT_LIQUIDITY · MANUAL_REVIEW · DISPUTED ·
 REVERSED · REFUNDED`. External funds never become spendable or `SETTLED` because a customer,
 administrator or agent says a payment was made.
 

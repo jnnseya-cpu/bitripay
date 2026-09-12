@@ -10,6 +10,8 @@ import { listGateways, isGatewayReady, getGatewayCredentials } from '../payments
 import { getSmtpSettings } from '../services/messaging';
 import { COUNTRIES } from '@bitripay/shared';
 import { rateLimit } from '../middleware/rateLimit';
+import { consentView, confirmPayoutCurrency } from '../services/routing';
+import { verifyStatement } from '../services/statements';
 import { listOperators as listMomoOperators } from '../services/momo';
 
 export const publicRouter = Router();
@@ -54,6 +56,19 @@ publicRouter.get('/config', (_req, res) => {
 });
 
 publicRouter.get('/countries', (_req, res) => res.json({ items: COUNTRIES }));
+/** Verify a statement's number and integrity hash (no personal data is returned). */
+publicRouter.get('/statements/verify/:id', rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'stmt' }), (req, res) => res.json({ statement: verifyStatement(String(req.params.id)) }));
+/** Beneficiary currency confirmation (regulated corridors): the recipient opens the link, sees what is offered and confirms. */
+publicRouter.get('/routes/consent/:token', rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'consent' }), (req, res) => res.json(consentView(String(req.params.token))));
+publicRouter.post(
+  '/routes/consent/:token',
+  rateLimit({ windowMs: 60_000, max: 20, keyPrefix: 'consent' }),
+  wrap(async (req, res) => {
+    const body = validate(z.object({ accept: z.boolean(), currency: z.string().length(3).optional().nullable() }), req.body);
+    const route = confirmPayoutCurrency(String(req.params.token), { accept: body.accept, currency: body.currency }, { type: 'user', id: null });
+    res.json({ ok: true, stage: route.stage, currency: route.targetCurrency });
+  }),
+);
 publicRouter.get('/mobile-money-operators', (req, res) => res.json({ items: listMomoOperators({ country: req.query.country ? String(req.query.country) : null }) }));
 publicRouter.get('/currencies', (req, res) => res.json({ items: listCurrencies(req.query.all !== '1') }));
 publicRouter.get('/pages', (_req, res) => res.json({ items: listPages().map(({ content, ...p }) => p) }));

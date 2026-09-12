@@ -12,6 +12,8 @@ import { listCorridors } from './corridors';
 import { listPayoutAccounts } from './liquidity';
 import { listDevices } from './evidence';
 import { listSanctions } from './risk';
+import { listProgrammes } from './emoney';
+import { listCurrencies } from './currencies';
 import { getSmtpSettings } from './messaging';
 import { hasPermission } from '../middleware/permissions';
 
@@ -47,6 +49,13 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
   items.push({ id: 'liquidity', label: 'Every live corridor has a prefunded payout account', ok: live.length > 0 && live.every((c) => accounts.some((a) => a.currency === c.destCurrency && (!c.operatorId || a.operatorId === c.operatorId) && a.balance > 0)), blocking: true, detail: accounts.map((a) => `${a.label}: ${a.balance} ${a.currency}`).join(' · ') || 'No active payout accounts', fix: 'Corridors → Liquidity → create and prefund payout accounts' });
   const devices = listDevices().filter((d) => d.status === 'active' && d.kind === 'payout');
   items.push({ id: 'devices', label: 'Registered payout devices or approved agents for each payout account', ok: accounts.length > 0 && accounts.every((a) => a.agent || devices.some((d) => d.payoutAccountId === a.id)), blocking: false, detail: `${devices.length} active payout device(s)`, fix: 'Mobile money & evidence → Evidence devices → register the Android payout device (kind: payout, SIM identity)' });
+  // E-money may only be issued through an authorised issuer with a safeguarding account, and never beyond cleared reserves.
+  const programmes = listProgrammes().filter((p) => p.issuerModel !== 'sandbox');
+  const enabledCurrencies = listCurrencies(true).map((c) => c.code);
+  const covered = enabledCurrencies.filter((c) => programmes.some((p) => p.currency === c && p.readiness.ready));
+  items.push({ id: 'emoney_issuer', label: 'E-money issuer programme (own authorisation or licensed partner) with safeguarding account for every enabled currency', ok: enabledCurrencies.length > 0 && covered.length === enabledCurrencies.length, blocking: true, detail: programmes.length ? programmes.map((p) => `${p.currency}/${p.jurisdiction}: ${p.issuerModel}${p.readiness.ready ? '' : ` (missing: ${p.readiness.missing.join(', ')})`}`).join(' · ') : 'No issuer programme registered', fix: 'Gateway controls → E-money → register the authorised issuer, licence, regulator and safeguarding account per currency' });
+  const positions = programmes.map((p) => p.position);
+  items.push({ id: 'emoney_reserves', label: 'Outstanding e-money fully backed by cleared safeguarded reserves (1:1)', ok: programmes.length > 0 && positions.every((p) => p.coverage >= 0 && p.liabilities <= p.clearedReserves + p.pendingInflows), blocking: true, detail: programmes.map((p) => `${p.currency}: reserves ${p.position.clearedReserves}, outstanding ${p.position.liabilities}, headroom ${p.position.headroom}`).join(' · ') || 'n/a', fix: 'Gateway controls → E-money → confirm reserve funding (maker-checker) until every currency is fully covered' });
   items.push({ id: 'sanctions', label: 'Sanctions / screening list loaded', ok: listSanctions().length > 0, blocking: true, detail: `${listSanctions().length} entries`, fix: 'Gateway controls → Sanctions → import your screening provider list' });
   const admins = db.prepare("SELECT id, permissions, pin_hash, two_factor_enabled FROM users WHERE role = 'admin' AND is_system = 0 AND status = 'active'").all() as any[];
   const approvers = admins.filter((a) => hasPermission(a, 'approvals') && a.pin_hash);

@@ -1,4 +1,9 @@
 import { getDb } from '../db';
+import { consumePromoCredit, reserveHooks } from './emoney';
+import { getEmoneySettings } from './settings';
+
+/** Internal transaction types whose platform fee may be covered by promotional credit. */
+const PROMO_FEE_TYPES = new Set(['transfer', 'qr_payment', 'merchant_payment', 'bill_payment', 'airtime', 'gift_card', 'exchange']);
 import { uuid, now, txReference } from '../lib/ids';
 import { badRequest, conflict, forbidden, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
@@ -6,7 +11,7 @@ import type { Transaction, TransactionStatus, TransactionType, PublicUser } from
 import { applyBps } from '@bitripay/shared';
 import { getFees, getLimits } from './settings';
 import { fromBase, toBase } from './currencies';
-import { getSystemUser, usersById, type UserRow } from './users';
+import { findUserById, getSystemUser, usersById, type UserRow } from './users';
 import { ensureWallet, getWallet, type WalletRow } from './wallets';
 import { recordEvent } from './events';
 
@@ -243,7 +248,10 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     // Money entering circulation from the treasury = e-money creation → must be authorised.
     const creates = isSenderSystem && !!input.toWalletId && toWallet.user_id !== treasury.id;
     const issuance = creates ? assertIssuanceAuthorised(input.issuance, input.type) : null;
-    const totalDebit = feeFrom === 'receiver' ? input.amount : input.amount + fee;
+    if (!isSenderSystem && fromWallet.frozen_at) throw forbidden(`This ${fromWallet.currency} balance is frozen: ${fromWallet.frozen_reason ?? 'contact support'}`, 'wallet_frozen');
+    // Promotional credit may cover platform fees on completed internal transactions – it never becomes money.
+    const promoCover = status === 'completed' && feeFrom === 'sender' && fee > 0 && !isSenderSystem && PROMO_FEE_TYPES.has(input.type) && getEmoneySettings().promoCoversFees ? Math.min(fee, fromWallet.promo_balance ?? 0) : 0;
+    const totalDebit = (feeFrom === 'receiver' ? input.amount : input.amount + fee) - promoCover;
     if (!isSenderSystem && !input.allowNegativeSender && fromWallet.balance < totalDebit) {
       throw unprocessable('Insufficient balance', 'insufficient_funds');
     }
@@ -267,7 +275,7 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
       fromWallet.id,
       toWallet.id,
       input.note ?? null,
-      JSON.stringify({ ...(input.metadata ?? {}), feeFrom, ...(issuance ? { issuance } : {}) }),
+      JSON.stringify({ ...(input.metadata ?? {}), feeFrom, ...(promoCover ? { promoFeeCover: promoCover } : {}), ...(issuance ? { issuance } : {}) }),
       input.idempotencyKey ?? null,
       ts,
       status === 'completed' ? ts : null,
@@ -276,6 +284,12 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     if (issuance) recordEvent('issuance', id, `issuance.${issuance.authority}`, issuance.authority === 'admin' || issuance.authority === 'liquidity' ? { type: 'admin', id: issuance.adminId ?? null } : { type: 'system' }, { type: input.type, amount: receiveAmount, currency: receiveCurrency, receiverUserId: input.receiverUserId ?? toWallet.user_id, paymentId: issuance.paymentId ?? null, verificationId: issuance.verificationId ?? null, programme: issuance.programme ?? null, reference: issuance.reference ?? null });
     // Debit sender (held even while pending)
     insertLedgerEntry(id, fromWallet, 'debit', totalDebit);
+    if (promoCover > 0) {
+      // The covered part of the fee is paid by the platform's marketing budget (treasury → revenue), booked as a programme issuance.
+      consumePromoCredit(fromWallet, promoCover, id);
+      insertLedgerEntry(id, ensureWallet(treasury.id, input.currency), 'debit', promoCover);
+      recordEvent('issuance', id, 'issuance.programme', { type: 'system' }, { type: input.type, amount: promoCover, currency: input.currency, programme: 'promo_fee_cover', receiverUserId: revenue.id });
+    }
     if (status === 'completed') {
       insertLedgerEntry(id, toWallet, 'credit', receiveAmount);
       creditFees(id, fee, input.currency, revenue.id, input.feeSplits);
@@ -287,7 +301,9 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     }
     const balance = assertLedgerBalanced(id);
     recordEvent('ledger', id, `ledger.posted.${status}`, { type: 'system' }, { type: input.type, amount: input.amount, fee, currency: input.currency, debits: balance.d, credits: balance.c, senderUserId: input.senderUserId ?? null, receiverUserId: input.receiverUserId ?? null });
-    return db.prepare('SELECT * FROM transactions WHERE id = ?').get(id) as TransactionRow;
+    const posted = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id) as TransactionRow;
+    if (issuance?.authority === 'external_funding' && status === 'completed') reserveHooks.externalFunding(posted);
+    return posted;
   })();
 }
 
@@ -334,7 +350,10 @@ export function completeTransaction(id: string, extraMetadata?: Record<string, u
     db.prepare("UPDATE transactions SET status = 'completed', completed_at = ?, metadata = ? WHERE id = ?").run(now(), JSON.stringify(metadata), tx.id);
     const balance = assertLedgerBalanced(tx.id);
     recordEvent('ledger', tx.id, 'ledger.completed', { type: 'system' }, { debits: balance.d, credits: balance.c, ...(extraMetadata ?? {}) });
-    return getTransaction(tx.id)!;
+    const done = getTransaction(tx.id)!;
+    // E-money redeemed: a holder's balance left the platform through the treasury (withdrawal / external payout).
+    if (toWallet.user_id === getSystemUser('treasury').id && done.sender_user_id && !findUserById(done.sender_user_id)?.is_system) reserveHooks.redemption(done);
+    return done;
   })();
 }
 

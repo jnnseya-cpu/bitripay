@@ -3,7 +3,7 @@ import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, StepUpButton, Table, Tabs, Textarea, UserCell, fmtDate, useAsync } from '../components/ui';
 
-const STAGE_KIND: Record<string, 'success' | 'warning' | 'danger' | 'primary' | undefined> = { SETTLED: 'success', QUEUED: 'primary', IN_PROGRESS: 'primary', EVIDENCE_RECEIVED: 'primary', VERIFYING: 'primary', MANUAL_REVIEW: 'warning', LIQUIDITY_UNAVAILABLE: 'warning', MISMATCHED: 'danger', DUPLICATE: 'danger', FAILED: 'danger', EXPIRED: undefined, CANCELLED: undefined };
+const STAGE_KIND: Record<string, 'success' | 'warning' | 'danger' | 'primary' | undefined> = { SETTLED: 'success', QUEUED: 'primary', IN_PROGRESS: 'primary', EVIDENCE_RECEIVED: 'primary', VERIFYING: 'primary', MANUAL_REVIEW: 'warning', INSUFFICIENT_LIQUIDITY: 'warning', MISMATCHED: 'danger', DUPLICATE: 'danger', FAILED: 'danger', EXPIRED: undefined, CANCELLED: undefined };
 const Stage = ({ stage }: { stage: string }) => <Chip kind={STAGE_KIND[stage]}>{stage.toLowerCase().replace(/_/g, ' ')}</Chip>;
 
 /** Corridor registry, prefunded liquidity, payout instructions (device / agent execution) and chargebacks. */
@@ -54,7 +54,7 @@ export function Corridors() {
       {tab === 'payouts' && (
         <div className="grid cols-2">
           <div className="card">
-            <div className="row mb"><h4 style={{ margin: 0 }}>Instructions</h4><Select value={stage} onChange={(e) => setStage(e.target.value)} style={{ width: 200, marginLeft: 'auto' }}><option value="">All stages</option>{['QUEUED', 'IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'LIQUIDITY_UNAVAILABLE', 'SETTLED', 'FAILED', 'EXPIRED', 'CANCELLED'].map((s) => <option key={s} value={s}>{s.toLowerCase().replace(/_/g, ' ')}</option>)}</Select></div>
+            <div className="row mb"><h4 style={{ margin: 0 }}>Instructions</h4><Select value={stage} onChange={(e) => setStage(e.target.value)} style={{ width: 200, marginLeft: 'auto' }}><option value="">All stages</option>{['QUEUED', 'IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'INSUFFICIENT_LIQUIDITY', 'SETTLED', 'FAILED', 'EXPIRED', 'CANCELLED'].map((s) => <option key={s} value={s}>{s.toLowerCase().replace(/_/g, ' ')}</option>)}</Select></div>
             {(payouts.data?.pending ?? []).length > 0 && <Alert kind="warning">{payouts.data.pending.length} decision(s) await a second approver in the <a href="/verification">verification console</a>.</Alert>}
             <Table head={['Ref', 'Amount', 'To', 'Account', 'Stage', 'Created', '']} rows={(payouts.data?.items ?? []).map((p: any) => [
               <span className="mono small">{p.reference}</span>, <b>{money(p.amount, p.currency)}</b>, <span className="small">{p.operatorName ?? p.rail}<br /><span className="mono tiny">{p.recipientMasked}</span></span>, <span className="tiny">{p.payoutAccount?.label ?? <span className="muted">unassigned</span>}</span>, <Stage stage={p.stage} />, <span className="small">{fmtDate(p.createdAt)}</span>, <Button size="sm" variant={sel === p.id ? undefined : 'secondary'} onClick={() => setSel(p.id)}>Open</Button>,
@@ -73,7 +73,7 @@ export function Corridors() {
                 {!['SETTLED', 'CANCELLED'].includes(p.stage) && (
                   <div className="card soft compact mt">
                     <div className="row wrap mb-sm">
-                      {['LIQUIDITY_UNAVAILABLE', 'FAILED', 'EXPIRED', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE'].includes(p.stage) && <Button size="sm" onClick={() => api.post(`/api/admin/payouts/${p.id}/requeue`).then(() => ok('Re-queued')).catch(err)}>Re-queue</Button>}
+                      {['INSUFFICIENT_LIQUIDITY', 'FAILED', 'EXPIRED', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE'].includes(p.stage) && <Button size="sm" onClick={() => api.post(`/api/admin/payouts/${p.id}/requeue`).then(() => ok('Re-queued')).catch(err)}>Re-queue</Button>}
                       {p.stage === 'IN_PROGRESS' && <ConfirmButton size="sm" variant="secondary" prompt="Reason" onConfirm={(r) => api.post(`/api/admin/payouts/${p.id}/release`, { reason: r }).then(() => ok('Released to queue')).catch(err)}>Release claim</ConfirmButton>}
                       <StepUpButton size="sm" variant="danger" prompt="Reason" title="Cancel payout (funds back to sender)" onConfirm={(pin, r) => api.post(`/api/admin/payouts/${p.id}/cancel`, { reason: r, pin }).then(() => ok('Cancelled')).catch(err)}>Cancel</StepUpButton>
                       <ConfirmButton size="sm" variant="danger" prompt="Reason (proposal – a second admin approves)" onConfirm={(r) => api.post(`/api/admin/payouts/${p.id}/fail`, { reason: r }).then(() => ok('Failure proposed')).catch(err)}>Propose: failed</ConfirmButton>

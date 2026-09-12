@@ -88,8 +88,8 @@ v1Router.use(requireAuth, (req, _res, next) => {
   if (req.user!.role !== 'merchant' && req.user!.role !== 'admin') return next(forbidden('API access requires a merchant account'));
   next();
 });
-v1Router.get('/me', (req, res) => res.json({ merchant: toUser(req.user!), wallets: listWallets(req.user!.id).map(toWallet) }));
-v1Router.get('/balance', (req, res) => res.json({ wallets: listWallets(req.user!.id).map(toWallet) }));
+v1Router.get('/me', (req, res) => res.json({ merchant: toUser(req.user!), wallets: listWallets(req.user!.id).map((w) => toWallet(w)) }));
+v1Router.get('/balance', (req, res) => res.json({ wallets: listWallets(req.user!.id).map((w) => toWallet(w)) }));
 v1Router.post(
   '/payment-requests',
   wrap(async (req, res) => {

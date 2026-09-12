@@ -68,7 +68,7 @@ describe('direct mobile money rail (no operator API)', () => {
     const list = await request(app).get('/api/admin/withdrawals?status=pending').set(admin.auth);
     expect(list.body.items.some((t: any) => t.id === w.body.transaction.id)).toBe(true);
     // The payout is routed to a payout instruction; with no prefunded M-Pesa float it waits on liquidity and can still be settled manually under maker-checker.
-    expect(w.body.transaction.metadata.payoutStage).toBe('LIQUIDITY_UNAVAILABLE');
+    expect(w.body.transaction.metadata.payoutStage).toBe('INSUFFICIENT_LIQUIDITY');
     await decideWithdrawal(app, w.body.transaction.id, 'approve', 'MPESA-QX1');
     const done = await request(app).get(`/api/wallets/transactions/${w.body.transaction.id}`).set(u.auth);
     expect(done.body.transaction.status).toBe('completed');

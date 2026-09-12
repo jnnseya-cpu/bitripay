@@ -10,6 +10,9 @@ import { rateFreshness, getRateStatus } from './services/currencies';
 import { notify } from './services/notifications';
 import { getFxSettings } from './services/settings';
 import { config } from './config';
+import { reconcileReserves, expirePromoCredits } from './services/emoney';
+import { getEmoneySettings } from './services/settings';
+let lastReconciliationDay = '';
 
 let lastRateRefresh = 0;
 let lastSettlement = 0;
@@ -30,6 +33,16 @@ export function startJobs() {
       if (lic.suspended.length) {
         console.warn(`[jobs] suspended corridors with expired licences: ${lic.suspended.join(', ')}`);
         for (const a of db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_system = 0 AND status = 'active'").all() as { id: string }[]) notify(a.id, 'Corridor suspended', `${lic.suspended.length} corridor(s) were suspended because the licence expired.`, { kind: 'corridor' });
+      }
+      // Daily safeguarding reconciliation (1:1 reserve-to-liability); breaches suspend issuance automatically.
+      const day = new Date().toISOString().slice(0, 10);
+      if (day !== lastReconciliationDay && new Date().getUTCHours() >= getEmoneySettings().reconciliationHourUtc) {
+        lastReconciliationDay = day;
+        const recon = reconcileReserves(null);
+        const breaches = recon.filter((r) => r.status === 'breach');
+        console.log(`[jobs] safeguarding reconciliation: ${recon.length} programme(s), ${breaches.length} breach(es)`);
+        const expiredPromo = expirePromoCredits();
+        if (expiredPromo) console.log(`[jobs] expired ${expiredPromo} promotional credits`);
       }
       db.prepare("DELETE FROM idempotency_keys WHERE created_at < ?").run(new Date(Date.now() - 24 * 3600_000).toISOString());
       db.prepare("DELETE FROM evidence_nonces WHERE created_at < ?").run(new Date(Date.now() - 7 * 86_400_000).toISOString());

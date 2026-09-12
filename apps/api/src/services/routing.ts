@@ -6,14 +6,14 @@
  * approved devices / agents and confirmed by signed operator evidence.
  *
  * Lifecycle (see routeLifecycle.ts):
- *   CREATED → QUOTED → BIOMETRIC_APPROVAL_REQUIRED → FUNDING_PENDING → FUNDS_CONFIRMED
- *   → PAYOUT_QUEUED → PAYOUT_IN_PROGRESS → EVIDENCE_RECEIVED → VERIFYING → SETTLED
+ *   CREATED → QUOTED → BIOMETRIC_APPROVAL_REQUIRED → FUNDING_PENDING → FUNDED
+ *   → PAYOUT_ROUTED → PAYOUT_SENT → EVIDENCE_RECEIVED → VERIFYING → SETTLED
  */
 import { getDb } from '../db';
 import { uuid, now } from '../lib/ids';
 import { badRequest, conflict, notFound, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
-import { decodeQr, formatMoney } from '@bitripay/shared';
+import { decodeQr, formatMoney, COUNTRY_BY_CODE } from '@bitripay/shared';
 import { getCurrency, fromBase, toBase } from './currencies';
 import { getFees, getComplianceSettings, getFxSettings } from './settings';
 import { calculateFee } from './ledger';
@@ -31,6 +31,10 @@ import { describeRoute, type RouteDeclaration } from './railCatalog';
 import { recordEvent, listEvents, type Actor } from './events';
 import { ROUTE_STAGE_LABELS, ROUTE_REFUNDABLE, ROUTE_TERMINAL, transitionRoute, tryTransitionRoute, type RouteStage } from './routeLifecycle';
 import { findCorridor, ensureCorridor, assertCorridorAllowed, type Corridor } from './corridors';
+import { listPayoutAccounts } from './liquidity';
+import { listCurrencies } from './currencies';
+import { config } from '../config';
+import { randomBytes } from 'node:crypto';
 import { availableGateways, getGateway } from '../payments';
 import { assessRisk } from './risk';
 import { getPayout, cancelPayout, requeuePayout, type PayoutView } from './payouts';
@@ -78,6 +82,10 @@ export interface RouteView {
   error: string | null;
   expiresAt: string | null;
   payment?: PaymentView | null;
+  /** Confirmation method that actually settled the external leg (declared methods are in the quote). */
+  confirmationMethod: string | null;
+  consent: { required: boolean; confirmedAt: string | null; url: string | null } | null;
+  currencyOptions: PayoutCurrencyOptions | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -113,6 +121,9 @@ function toView(r: any): RouteView {
     error: r.error,
     expiresAt: r.expires_at,
     payment: r.payment_id ? (() => { try { return toPaymentView(getPayment(r.payment_id)); } catch { return null; } })() : null,
+    confirmationMethod: r.confirmation_method ?? null,
+    consent: r.consent_token ? { required: true, confirmedAt: r.consent_confirmed_at ?? null, url: `${config.webUrl}/confirm-currency/${r.consent_token}` } : null,
+    currencyOptions: parseJson<PayoutCurrencyOptions | null>(r.currency_options, null),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -277,6 +288,123 @@ export interface RouteQuote {
   refundConditions: string;
   corridor: { id: string; status: string; destCountry: string; operatorId: string | null; estimatedPayoutMinutes: number } | null;
   sourceOfFundsRequired: boolean;
+  /** FX margin applied on top of the reference rate, in basis points. */
+  fxMarginBps: number;
+  /** The recipient amount is guaranteed only when the rate is live, fresh and locked for the quote TTL (or no conversion is needed). */
+  guaranteedRecipientAmount: number | null;
+  /** Default and optional receiving currencies with real-time availability (corridor rules, licence coverage, liquidity). */
+  receivingCurrencies: PayoutCurrencyOptions | null;
+  estimatedDeliveryMinutes: number | null;
+  payoutConditions: string;
+  /** Declared confirmation method of each external leg. */
+  confirmation: { funding: string; payout: string };
+  /** The beneficiary must confirm the payout currency before the payout executes (regulated corridor, non-local currency). */
+  recipientConsentRequired: boolean;
+}
+
+export interface PayoutCurrencyOption {
+  currency: string;
+  available: boolean;
+  isLocal: boolean;
+  /** Why the currency cannot be chosen right now. */
+  reasons: string[];
+  /** Non-blocking notes (e.g. the local currency will wait for liquidity rather than be refused). */
+  warnings: string[];
+  consentRequired: boolean;
+  liquidityAvailable: number | null;
+}
+export interface PayoutCurrencyOptions {
+  defaultCurrency: string;
+  localCurrency: string | null;
+  options: PayoutCurrencyOption[];
+}
+
+/** Country the destination pays into and its local currency. */
+function destinationCountry(dest: RouteDestination | undefined): { country: string | null; localCurrency: string | null; operatorId: string | null } {
+  if (!dest) return { country: null, localCurrency: null, operatorId: null };
+  if (dest.method === 'mobile_money') {
+    try {
+      const op = getOperator(dest.operatorId);
+      return { country: op.country, localCurrency: op.currency, operatorId: op.id };
+    } catch {
+      return { country: null, localCurrency: null, operatorId: null };
+    }
+  }
+  if (dest.method === 'bank') {
+    const country = dest.country ?? (dest.bankAccountId ? ((getDb().prepare('SELECT country FROM bank_accounts WHERE id = ?').get(dest.bankAccountId) as any)?.country ?? null) : null);
+    return { country, localCurrency: country ? COUNTRY_BY_CODE[country.toUpperCase()]?.currency ?? null : null, operatorId: null };
+  }
+  return { country: null, localCurrency: null, operatorId: null };
+}
+
+/** The destination country's local currency is the default payout currency for external destinations; otherwise the source currency. */
+export function defaultTargetCurrency(dest: RouteDestination | undefined, sourceCurrency: string): string {
+  const { localCurrency } = destinationCountry(dest);
+  if (!localCurrency) return sourceCurrency;
+  try {
+    return getCurrency(localCurrency).code;
+  } catch {
+    return sourceCurrency;
+  }
+}
+
+/**
+ * Recipient-controlled payout currency. A currency is offered only when, right now: the corridor permits it, the
+ * destination institution / agent can pay it, prefunded liquidity exists, the recipient account supports it and FX /
+ * capital-control rules allow it. The destination country's local currency is always the default.
+ */
+export function payoutCurrencyOptions(dest: RouteDestination | undefined, sourceCurrency: string, amount: number, ctx: { requested?: string | null } = {}): PayoutCurrencyOptions | null {
+  if (!dest || !['mobile_money', 'bank', 'wallet'].includes(dest.method)) return null;
+  const compliance = getComplianceSettings();
+  const enabled = new Set(listCurrencies(true).map((c) => c.code));
+  const { country, localCurrency, operatorId } = destinationCountry(dest);
+  if (dest.method === 'wallet') {
+    const target = findUserByIdentifier(dest.to);
+    const local = target?.country ? COUNTRY_BY_CODE[target.country]?.currency ?? null : null;
+    const held = target ? (getDb().prepare('SELECT currency FROM wallets WHERE user_id = ?').all(target.id) as { currency: string }[]).map((w) => w.currency) : [];
+    const candidates = [...new Set([sourceCurrency, ...(local ? [local] : []), ...held, ...(ctx.requested ? [ctx.requested] : [])])].filter((c) => enabled.has(c));
+    return { defaultCurrency: held.includes(sourceCurrency) || !local ? sourceCurrency : local, localCurrency: local, options: candidates.map((c) => ({ currency: c, available: true, isLocal: c === local, reasons: [], warnings: [], consentRequired: false, liquidityAvailable: null })) };
+  }
+  if (!country || !localCurrency) return null;
+  const rail = dest.method === 'mobile_money' ? 'mobile_money' : 'bank';
+  const local = findCorridor({ sourceCurrency, destCountry: country, destCurrency: localCurrency, operatorId, rail });
+  const listed = local?.payoutCurrencies ?? [];
+  const candidates = [...new Set([localCurrency, ...listed, ...(ctx.requested ? [ctx.requested.toUpperCase()] : [])])];
+  const accounts = listPayoutAccounts({ rail, status: 'active' }).filter((a) => !operatorId || a.operatorId === operatorId);
+  const options: PayoutCurrencyOption[] = candidates.map((cur) => {
+    const reasons: string[] = [];
+    const warnings: string[] = [];
+    const isLocal = cur === localCurrency;
+    if (!enabled.has(cur)) reasons.push('Currency is not enabled on the platform');
+    const corridor = isLocal ? local : findCorridor({ sourceCurrency, destCountry: country, destCurrency: cur, operatorId, rail }) ?? (listed.includes(cur) ? local : null);
+    // The local currency is always the default: a missing corridor is registered (sandbox) on first use and missing liquidity
+    // parks the transfer in INSUFFICIENT_LIQUIDITY with the funds safely held. Optional currencies must be fully available now.
+    if (!corridor && !isLocal) reasons.push(`No corridor permits ${cur} payouts to ${country}${operatorId ? ` via ${operatorId}` : ''}`);
+    else if (corridor && (corridor.status === 'suspended' || !corridor.enabled)) reasons.push('Corridor is suspended');
+    if (!isLocal) {
+      if (dest.method === 'mobile_money') {
+        const op = getOperator(dest.operatorId);
+        if (op.currency !== cur && !listed.includes(cur)) reasons.push(`${op.name} wallets in ${country} cannot legally be paid in ${cur}`);
+      }
+      if (dest.method === 'bank' && dest.currency && dest.currency.toUpperCase() !== cur) reasons.push(`The recipient bank account is a ${dest.currency.toUpperCase()} account`);
+      if (compliance.mode === 'live' && !corridor?.compliance?.fxApprovalRef) reasons.push(`No FX / capital-control approval recorded for ${cur} payouts in ${country}`);
+    }
+    let liquidity: number | null = null;
+    let needed = amount;
+    try {
+      if (cur !== sourceCurrency) {
+        const fx = fxDisclosure(sourceCurrency, cur, null, false);
+        needed = Math.round((amount / 10 ** getCurrency(sourceCurrency, false).decimals) * fx.rate * 10 ** getCurrency(cur, false).decimals);
+      }
+    } catch {
+      reasons.push(`No exchange rate available for ${cur}`);
+    }
+    const usable = accounts.filter((a) => a.currency === cur && (!a.perTxLimit || a.perTxLimit >= needed));
+    liquidity = usable.reduce((sum, a) => sum + a.balance, 0);
+    if (!usable.some((a) => a.balance >= needed)) (isLocal ? warnings : reasons).push(liquidity > 0 ? `Prefunded ${cur} liquidity is insufficient for this amount right now${isLocal ? '; the transfer will wait for liquidity' : ''}` : `No prefunded ${cur} payout account for ${country}${operatorId ? ` (${operatorId})` : ''}${isLocal ? '; the transfer will wait for liquidity' : ''}`);
+    return { currency: cur, available: reasons.length === 0, isLocal, reasons, warnings, consentRequired: !isLocal && !!(corridor?.beneficiaryConsent || local?.beneficiaryConsent), liquidityAvailable: liquidity };
+  });
+  return { defaultCurrency: localCurrency, localCurrency, options };
 }
 
 /** Quote how much arrives at the destination after funding fee, FX and payout fee, with the full disclosure. */
@@ -302,12 +430,24 @@ export function quoteRoute(amount: number, currency: string, targetCurrency: str
   const feeType = dest ? payoutFeeType(dest, targetUser) : null;
   const delivered = feeType ? maxSendable(feeType, converted, t.code) : converted;
   const destKind = dest?.method === 'wallet' && targetUser?.role === 'merchant' ? 'merchant' : dest?.method ?? 'keep';
-  const declaration = describeRoute(sourceMethod, destKind as any, { currency: c.code, targetCurrency: t.code, country: ctx.country, operatorId: ctx.operatorId, destinationOperatorId: dest?.method === 'mobile_money' ? dest.operatorId : null, gateway: ctx.gateway });
   const corridor = destCorridor(dest, c.code, t.code, false);
+  const declaration = describeRoute(sourceMethod, destKind as any, { currency: c.code, targetCurrency: t.code, country: ctx.country, operatorId: ctx.operatorId, destinationOperatorId: dest?.method === 'mobile_money' ? dest.operatorId : null, gateway: ctx.gateway, payoutConfirmation: corridor?.payoutConfirmation ?? null });
   const compliance = getComplianceSettings();
   const external = dest?.method === 'bank' || dest?.method === 'mobile_money';
   const ttl = getFxSettings().quoteTtlSeconds;
+  const receiving = external ? payoutCurrencyOptions(dest, c.code, amount, { requested: t.code }) : null;
+  const chosen = receiving?.options.find((o) => o.currency === t.code) ?? null;
+  const guaranteed = c.code === t.code || (!!fx && fx.guaranteed);
   return {
+    fxMarginBps: fx?.markupBps ?? 0,
+    guaranteedRecipientAmount: guaranteed ? delivered : null,
+    receivingCurrencies: receiving,
+    estimatedDeliveryMinutes: corridor ? corridor.estimatedPayoutMinutes : external ? null : 0,
+    payoutConditions: external
+      ? `Paid out in ${t.code}${chosen && !chosen.isLocal ? ` (non-local currency${chosen.consentRequired ? '; the recipient must confirm this currency before payout' : ''})` : ''} from a prefunded local account once funding is confirmed and risk checks pass. Settlement only on a verified operator / bank confirmation (${declaration.payout.confirmationMethod}). Card-funded transfers may be held for chargeback review.`
+      : 'Credited to the recipient\'s BitriPay balance instantly after approval.',
+    confirmation: { funding: declaration.funding.confirmationMethod, payout: declaration.payout.confirmationMethod },
+    recipientConsentRequired: !!chosen?.consentRequired,
     amount, currency: c.code, senderAmount: amount, recipientAmount: delivered, fundingFee, cardFee: sourceMethod === 'card' ? fundingFee : 0, exchangeFee, payoutFee: converted - delivered, platformFee: exchangeFee + (converted - delivered) + (sourceMethod === 'card' ? 0 : fundingFee), rate, targetAmount: delivered, targetCurrency: t.code, fx, declaration,
     estimatedPayoutTime: corridor ? `~${corridor.estimatedPayoutMinutes} min after funds are confirmed (business hours)` : declaration.expectedCompletion,
     quoteExpiresAt: fx?.expiresAt ?? new Date(Date.now() + ttl * 1000).toISOString(),
@@ -335,25 +475,33 @@ function predictedFundingProvider(source: RouteSource, currency: string, country
 
 export async function createRoute(user: UserRow, input: { source: RouteSource; destination: RouteDestination; amount: number; currency: string; targetCurrency?: string | null; note?: string | null; quoteId?: string | null; sourceOfFunds?: string | null }, auth?: PaymentAuth): Promise<RouteView> {
   const cur = getCurrency(input.currency);
-  const target = getCurrency(input.targetCurrency || input.currency);
   previewDestination(input.destination); // validates
+  const target = getCurrency(input.targetCurrency || defaultTargetCurrency(input.destination, cur.code));
   const quote = quoteRoute(input.amount, cur.code, target.code, input.source.method, input.destination, { userId: user.id, country: user.country, operatorId: input.source.operatorId, gateway: input.source.gateway, persistQuote: false });
   if (quote.sourceOfFundsRequired && !input.sourceOfFunds) throw badRequest('Please declare the source of funds for a transfer of this size', 'source_of_funds_required');
-  const corridor = destCorridor(input.destination, cur.code, target.code, true);
+  const provider = predictedFundingProvider(input.source, cur.code, user.country);
+  const existingCorridor = destCorridor(input.destination, cur.code, target.code, false);
+  if (existingCorridor) assertCorridorAllowed(existingCorridor, provider);
+  // A currency is offered only when corridor rules, licence coverage, the paying institution and liquidity allow it right now.
+  if (quote.receivingCurrencies) {
+    const opt = quote.receivingCurrencies.options.find((o) => o.currency === target.code);
+    if (!opt || !opt.available) throw unprocessable(`${target.code} cannot be paid out for this destination right now: ${(opt?.reasons ?? ['not offered in this corridor']).join('; ')}`, 'payout_currency_unavailable', { options: quote.receivingCurrencies });
+  }
+  const corridor = existingCorridor ?? destCorridor(input.destination, cur.code, target.code, true);
   if (corridor?.maxAmount && toBase(input.amount, cur.code) > corridor.maxAmount) throw unprocessable('Amount exceeds the corridor limit', 'corridor_limit');
-  assertCorridorAllowed(corridor, predictedFundingProvider(input.source, cur.code, user.country));
+  assertCorridorAllowed(corridor, provider);
   const id = uuid();
   const actor: Actor = { type: 'user', id: user.id };
   getDb()
-    .prepare('INSERT INTO money_routes (id, user_id, source_method, source_details, destination_method, destination_details, amount, currency, target_currency, status, stage, quote, corridor_id, expires_at, source_of_funds, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, user.id, input.source.method, JSON.stringify({ operatorId: input.source.operatorId ?? null, phone: input.source.phone ?? null, gateway: input.source.gateway ?? null, quoteId: input.quoteId ?? null }), input.destination.method, JSON.stringify(input.destination), input.amount, cur.code, target.code, 'pending', 'CREATED', JSON.stringify({ ...quote, fx: quote.fx ? { ...quote.fx, quoteId: input.quoteId ?? quote.fx.quoteId } : null }), corridor?.id ?? null, quote.quoteExpiresAt, input.sourceOfFunds ?? null, input.note ?? null, now(), now());
+    .prepare('INSERT INTO money_routes (id, user_id, source_method, source_details, destination_method, destination_details, amount, currency, target_currency, status, stage, quote, corridor_id, expires_at, source_of_funds, note, created_at, updated_at, consent_token, currency_options) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, user.id, input.source.method, JSON.stringify({ operatorId: input.source.operatorId ?? null, phone: input.source.phone ?? null, gateway: input.source.gateway ?? null, quoteId: input.quoteId ?? null }), input.destination.method, JSON.stringify(input.destination), input.amount, cur.code, target.code, 'pending', 'CREATED', JSON.stringify({ ...quote, fx: quote.fx ? { ...quote.fx, quoteId: input.quoteId ?? quote.fx.quoteId } : null }), corridor?.id ?? null, quote.quoteExpiresAt, input.sourceOfFunds ?? null, input.note ?? null, now(), now(), quote.recipientConsentRequired ? randomBytes(24).toString('base64url') : null, quote.receivingCurrencies ? JSON.stringify(quote.receivingCurrencies) : null);
   recordEvent('route', id, 'route.created', actor, { source: input.source.method, destination: input.destination.method, amount: input.amount, currency: cur.code, targetCurrency: target.code, corridorId: corridor?.id ?? null });
   transitionRoute(id, 'QUOTED', actor, { recipientAmount: quote.recipientAmount, rate: quote.rate, quoteExpiresAt: quote.quoteExpiresAt, provider: quote.fx?.provider ?? null });
 
   if (input.source.method === 'wallet') {
     // Biometric / PIN approval already verified by the route handler; wallet funds are confirmed instantly.
     getUserWallet(user.id, cur.code);
-    transitionRoute(id, 'FUNDS_CONFIRMED', actor, { funding: 'wallet' });
+    transitionRoute(id, 'FUNDED', actor, { funding: 'wallet' });
     dispatchPayout(getRouteRow(id), user, input.amount, actor);
     return getRoute(user.id, id);
   }
@@ -409,15 +557,26 @@ function dispatchPayout(row: any, user: UserRow, amount: number, actor: Actor, s
       return;
     }
   }
+  // Regulated corridors: the beneficiary must confirm a non-local payout currency before anything is executed.
+  if (row.consent_token && !row.consent_confirmed_at) {
+    transitionRoute(row.id, 'AWAITING_CONFIRMATION', { type: 'system' }, { reason: 'recipient_currency_consent', targetCurrency: row.target_currency, amount });
+    setRoute(row.id, { destination_details: JSON.stringify({ ...dest, heldAmount: amount }) });
+    const recipient = dest.method === 'wallet' ? findUserByIdentifier((dest as any).to) : null;
+    if (recipient) notify(recipient.id, 'Confirm your payout currency', `${toPublicUser(user).fullName} is sending you money in ${row.target_currency}. Confirm the currency to receive it.`, { kind: 'route_consent', routeId: row.id, token: row.consent_token, loud: true });
+    notify(user.id, 'Recipient confirmation needed', `The recipient must confirm receiving ${row.target_currency} before the payout is executed. Share the confirmation link from the transfer details.`, { kind: 'route', routeId: row.id });
+    return;
+  }
   try {
+    const quote = parseJson<RouteQuote | null>(row.quote, null);
+    if (row.currency !== row.target_currency) transitionRoute(row.id, 'FX_RESERVED', actor, { rate: quote?.rate ?? null, quoteId: src.quoteId ?? quote?.fx?.quoteId ?? null, provider: quote?.fx?.provider ?? null, guaranteed: quote?.fx?.guaranteed ?? false, targetCurrency: row.target_currency });
     const r = executeDestination(user, dest, amount, row.currency, row.target_currency, row.note, src.quoteId ?? null, row.id);
     const fields: Record<string, unknown> = { payout_transaction_id: r.transactionId, error: null, destination_details: JSON.stringify({ ...dest, ...(r.extra ?? {}) }) };
     setRoute(row.id, fields);
     if (r.status === 'completed') transitionRoute(row.id, 'SETTLED', actor, { transactionId: r.transactionId, internal: true });
-    else if (dest.method === 'agent') transitionRoute(row.id, 'PAYOUT_QUEUED', actor, { agent: true, cashOutCode: r.extra?.cashOutCode });
-    // bank / mobile money: the payout instruction already moved the route to PAYOUT_QUEUED or LIQUIDITY_UNAVAILABLE
+    else if (dest.method === 'agent') transitionRoute(row.id, 'PAYOUT_ROUTED', actor, { agent: true, cashOutCode: r.extra?.cashOutCode });
+    // bank / mobile money: the payout instruction already moved the route to PAYOUT_ROUTED or INSUFFICIENT_LIQUIDITY
     const stage = getRouteRow(row.id).stage as RouteStage;
-    notify(user.id, stage === 'SETTLED' ? 'Money delivered' : 'Money on its way', `${formatMoney(amount, getCurrency(row.currency, false))} ${stage === 'SETTLED' ? 'was delivered' : stage === 'LIQUIDITY_UNAVAILABLE' ? 'is held safely while local liquidity is arranged' : 'is queued for local payout'} to ${previewDestination(dest).label}.`, { kind: 'route', routeId: row.id });
+    notify(user.id, stage === 'SETTLED' ? 'Money delivered' : 'Money on its way', `${formatMoney(amount, getCurrency(row.currency, false))} ${stage === 'SETTLED' ? 'was delivered' : stage === 'INSUFFICIENT_LIQUIDITY' ? 'is held safely while local liquidity is arranged' : 'is queued for local payout'} to ${previewDestination(dest).label}.`, { kind: 'route', routeId: row.id });
   } catch (err) {
     // Funds stay safely in the user's wallet; the sender can retry or be refunded.
     tryTransitionRoute(row.id, 'FAILED', { type: 'system' }, { reason: (err as Error).message, fundsInWallet: true });
@@ -432,7 +591,7 @@ export function continueRouteAfterFunding(routeId: string, paymentId: string, fu
   if (row.payout_transaction_id || ROUTE_TERMINAL.includes(row.stage) || !['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'FUNDING_PENDING'].includes(row.stage)) return;
   setRoute(routeId, { payment_id: paymentId, funding_transaction_id: fundingTxId });
   const actor: Actor = { type: 'processor', id: getPayment(paymentId).gateway };
-  transitionRoute(routeId, 'FUNDS_CONFIRMED', actor, { paymentId, fundingTransactionId: fundingTxId, credited: creditedAmount });
+  transitionRoute(routeId, 'FUNDED', actor, { paymentId, fundingTransactionId: fundingTxId, credited: creditedAmount });
   dispatchPayout(getRouteRow(routeId), getUserById(row.user_id), creditedAmount, actor);
 }
 
@@ -453,7 +612,7 @@ export function releaseRoute(routeId: string, actor: Actor, verificationId: stri
     requeuePayout(row.payout_id, actor);
     return;
   }
-  transitionRoute(routeId, 'FUNDS_CONFIRMED', actor, { verificationId, released: true });
+  transitionRoute(routeId, 'FUNDED', actor, { verificationId, released: true });
   dispatchPayout(getRouteRow(routeId), user, amount, actor, true);
 }
 
@@ -461,19 +620,19 @@ export function releaseRoute(routeId: string, actor: Actor, verificationId: stri
 export function retryRoute(user: UserRow, id: string, destination?: RouteDestination): RouteView {
   const row = getDb().prepare('SELECT * FROM money_routes WHERE id = ? AND user_id = ?').get(id, user.id) as any;
   if (!row) throw notFound('Route not found');
-  if (row.stage === 'LIQUIDITY_UNAVAILABLE' && row.payout_id) {
+  if (row.stage === 'INSUFFICIENT_LIQUIDITY' && row.payout_id) {
     requeuePayout(row.payout_id, { type: 'user', id: user.id });
     return getRoute(user.id, id);
   }
-  if (!['FUNDS_CONFIRMED', 'FAILED'].includes(row.stage)) throw unprocessable(`Transfer is ${row.stage.toLowerCase().replace(/_/g, ' ')}`, 'invalid_stage_transition');
+  if (!['FUNDED', 'FAILED'].includes(row.stage)) throw unprocessable(`Transfer is ${row.stage.toLowerCase().replace(/_/g, ' ')}`, 'invalid_stage_transition');
   const held = getDb().prepare('SELECT status FROM transactions WHERE id = ?').get(row.payout_transaction_id ?? '') as any;
   if (held && held.status === 'pending') throw unprocessable('A payout is still held for this transfer', 'invalid_stage_transition');
   const dest = destination ?? parseJson<RouteDestination>(row.destination_details, { method: 'keep' });
   setRoute(id, { destination_details: JSON.stringify(dest), payout_transaction_id: null, payout_id: null });
-  if (row.stage === 'FAILED') transitionRoute(id, 'PAYOUT_QUEUED', { type: 'user', id: user.id }, { retry: true });
-  // Re-run through the normal dispatch (from FUNDS_CONFIRMED / PAYOUT_QUEUED the payout instruction syncs the stage).
+  if (row.stage === 'FAILED') transitionRoute(id, 'PAYOUT_ROUTED', { type: 'user', id: user.id }, { retry: true });
+  // Re-run through the normal dispatch (from FUNDED / PAYOUT_ROUTED the payout instruction syncs the stage).
   const fresh = getRouteRow(id);
-  if (fresh.stage === 'PAYOUT_QUEUED') { /* dispatch will transition again via instruction */ }
+  if (fresh.stage === 'PAYOUT_ROUTED') { /* dispatch will transition again via instruction */ }
   dispatchPayout(fresh, user, parseJson<any>(row.destination_details, {}).heldAmount ?? row.amount, { type: 'user', id: user.id }, true);
   return getRoute(user.id, id);
 }
@@ -547,6 +706,51 @@ export async function refundRoute(routeId: string, actor: Actor, reason: string,
   return toView(getRouteRow(routeId));
 }
 
+/** Public view for the beneficiary consent link (no login): what is being sent and the currencies on offer. */
+export function consentView(token: string) {
+  const row = getDb().prepare('SELECT * FROM money_routes WHERE consent_token = ?').get(token) as any;
+  if (!row) throw notFound('Confirmation link not found', 'consent_not_found');
+  const sender = getUserById(row.user_id);
+  const options = parseJson<PayoutCurrencyOptions | null>(row.currency_options, null);
+  const quote = parseJson<RouteQuote | null>(row.quote, null);
+  return { routeId: row.id, stage: row.stage, sender: { name: toPublicUser(sender).fullName }, amount: quote?.recipientAmount ?? null, currency: row.target_currency, localCurrency: options?.localCurrency ?? null, options: options?.options.filter((o) => o.available).map((o) => ({ currency: o.currency, isLocal: o.isLocal })) ?? [], confirmedAt: row.consent_confirmed_at, expiresAt: row.expires_at };
+}
+
+/**
+ * Beneficiary decides the payout currency (regulated corridors). Accepting continues the payout in the quoted currency;
+ * choosing another available currency re-quotes; declining leaves the funds with the sender (refundable).
+ */
+export function confirmPayoutCurrency(token: string, decision: { accept: boolean; currency?: string | null }, actor: Actor): RouteView {
+  const row = getDb().prepare('SELECT * FROM money_routes WHERE consent_token = ?').get(token) as any;
+  if (!row) throw notFound('Confirmation link not found', 'consent_not_found');
+  if (row.consent_confirmed_at) throw conflict('The payout currency was already confirmed', 'consent_already_given');
+  if (row.stage !== 'AWAITING_CONFIRMATION') throw conflict(`Transfer is ${String(row.stage).toLowerCase().replace(/_/g, ' ')}`, 'invalid_stage_transition');
+  const user = getUserById(row.user_id);
+  const dest = parseJson<any>(row.destination_details, {});
+  const amount = dest.heldAmount ?? row.amount;
+  if (!decision.accept) {
+    transitionRoute(row.id, 'FAILED', actor, { reason: 'recipient_declined_currency', fundsInWallet: true });
+    setRoute(row.id, { error: 'The recipient declined the payout currency; your funds remain in your wallet', consent_confirmed_at: now() });
+    notify(user.id, 'Recipient declined the currency', 'Your money stays in your wallet. You can retry in the local currency.', { kind: 'route', routeId: row.id });
+    return getRoute(user.id, row.id);
+  }
+  let target = row.target_currency as string;
+  if (decision.currency && decision.currency.toUpperCase() !== target) {
+    const options = payoutCurrencyOptions(dest, row.currency, amount, { requested: decision.currency.toUpperCase() });
+    const opt = options?.options.find((o) => o.currency === decision.currency!.toUpperCase());
+    if (!opt?.available) throw unprocessable(`${decision.currency.toUpperCase()} is not available for this payout: ${(opt?.reasons ?? []).join('; ')}`, 'payout_currency_unavailable');
+    target = opt.currency;
+    const quote = quoteRoute(row.amount, row.currency, target, row.source_method, dest, { userId: user.id, country: user.country, persistQuote: false });
+    const corridor = destCorridor(dest, row.currency, target, true);
+    setRoute(row.id, { target_currency: target, quote: JSON.stringify(quote), corridor_id: corridor?.id ?? null });
+  }
+  setRoute(row.id, { consent_confirmed_at: now() });
+  recordEvent('route', row.id, 'route.currency_confirmed', actor, { currency: target, changed: target !== row.target_currency });
+  transitionRoute(row.id, 'FUNDED', actor, { consent: true, targetCurrency: target });
+  dispatchPayout(getRouteRow(row.id), user, amount, actor, true);
+  return getRoute(user.id, row.id);
+}
+
 export function getRoute(userId: string, id: string): RouteView {
   const row = getDb().prepare('SELECT * FROM money_routes WHERE id = ? AND user_id = ?').get(id, userId);
   if (!row) throw notFound('Route not found');
@@ -572,7 +776,7 @@ export async function refreshRoute(userId: string, id: string): Promise<RouteVie
     } else if (row.stage === 'BIOMETRIC_APPROVAL_REQUIRED' && p.stage !== 'AUTHENTICATION_REQUIRED' && p.status !== 'succeeded') tryTransitionRoute(id, 'FUNDING_PENDING', { type: 'system' }, { paymentId: p.id });
   }
   const fresh = getRouteRow(id);
-  if (fresh.stage === 'PAYOUT_QUEUED' && fresh.destination_method === 'agent') {
+  if (fresh.stage === 'PAYOUT_ROUTED' && fresh.destination_method === 'agent') {
     const dest = parseJson<any>(fresh.destination_details, {});
     const cr = dest.cashOutCode ? (getDb().prepare('SELECT status, transaction_id FROM cash_requests WHERE code = ?').get(dest.cashOutCode) as any) : null;
     if (cr?.status === 'completed') {

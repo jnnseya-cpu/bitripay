@@ -130,7 +130,20 @@ export interface ComplianceSettings {
 }
 const DEFAULT_COMPLIANCE: ComplianceSettings = { mode: 'sandbox', cardPayoutHoldMinutes: 0, cardReviewAmount: 100_000, sourceOfFundsThreshold: 500_000, maxPayoutsPerRecipientPerDay: 5, payoutClaimMinutes: 30 };
 
+export interface EmoneySettings {
+  /** Promotional credit may cover platform fees on internal transactions; it is never money. */
+  promoCoversFees: boolean;
+  /** Days before an unused promotional credit expires. */
+  promoExpiryDays: number;
+  /** Reconciliation breaches suspend issuance for the programme automatically. */
+  autoSuspendOnBreach: boolean;
+  /** Hour (UTC) of the daily safeguarding reconciliation. */
+  reconciliationHourUtc: number;
+}
+const DEFAULT_EMONEY: EmoneySettings = { promoCoversFees: true, promoExpiryDays: 90, autoSuspendOnBreach: true, reconciliationHourUtc: 2 };
+
 const DEFAULTS: Record<string, unknown> = {
+  emoney: DEFAULT_EMONEY,
   compliance: DEFAULT_COMPLIANCE,
   fees: DEFAULT_FEES,
   limits: DEFAULT_LIMITS,
@@ -167,3 +180,4 @@ export const getGatewayControls = () => getSetting<GatewayControls>('gateway');
 export const getFxSettings = () => getSetting<FxSettings>('fx');
 export const getRiskSettings = () => getSetting<RiskSettings>('risk');
 export const getComplianceSettings = () => getSetting<ComplianceSettings>('compliance');
+export const getEmoneySettings = () => getSetting<EmoneySettings>('emoney');

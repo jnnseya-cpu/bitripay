@@ -5,6 +5,8 @@
  * so prefunding and payouts are ordinary balanced ledger postings.
  */
 import { getDb } from '../db';
+import { parseJson } from '../lib/json';
+import { reserveHooks } from './emoney';
 import { uuid, now, shortCode } from '../lib/ids';
 import { badRequest, notFound } from '../lib/errors';
 import { getCurrency } from './currencies';
@@ -79,7 +81,11 @@ export function createPayoutAccount(input: { rail: 'mobile_money' | 'bank'; oper
   if (input.rail === 'mobile_money') {
     if (!input.operatorId) throw badRequest('Mobile money payout accounts need an operator');
     const op = getOperator(input.operatorId);
-    if (op.currency !== input.currency.toUpperCase()) throw badRequest(`${op.name} pays out in ${op.currency}`);
+    // Operators normally pay out in their local currency; another currency is allowed only where a corridor declares the operator can legally pay it (e.g. USD wallets in the DRC).
+    if (op.currency !== input.currency.toUpperCase()) {
+      const declared = (getDb().prepare('SELECT payout_currencies FROM corridors WHERE operator_id = ?').all(op.id) as { payout_currencies: string }[]).some((c) => parseJson<string[]>(c.payout_currencies, []).includes(input.currency.toUpperCase()));
+      if (!declared) throw badRequest(`${op.name} pays out in ${op.currency}; declare ${input.currency.toUpperCase()} as an additional payout currency on the corridor first`, 'operator_currency');
+    }
     if (!input.msisdn) throw badRequest('Enter the merchant SIM number (MSISDN) of the payout account');
   }
   if (input.agentUserId) {
@@ -111,6 +117,7 @@ export function prefundAccount(id: string, amount: number, input: { reference?: 
   if (!Number.isInteger(amount) || amount <= 0) throw badRequest('Amount must be greater than zero');
   const tx = postTransaction({ type: 'liquidity_prefund', amount, currency: a.currency, toWalletId: a.walletId, receiverUserId: a.systemUserId, senderUserId: getSystemUser('treasury').id, note: `Prefund ${a.label}${input.reference ? ` · ${input.reference}` : ''}`, metadata: { payoutAccountId: a.id, reference: input.reference ?? null, adminId: admin.id }, issuance: { authority: 'liquidity', adminId: admin.id, reference: input.reference ?? null } });
   getDb().prepare('INSERT INTO liquidity_movements (id, payout_account_id, kind, amount, currency, transaction_id, reference, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(uuid(), a.id, 'prefund', amount, a.currency, tx.id, input.reference ?? null, input.note ?? null, admin.id, now());
+  reserveHooks.liquidityTransfer(tx, admin.id);
   recordEvent('liquidity', a.id, 'payout_account.prefunded', { type: 'admin', id: admin.id }, { amount, currency: a.currency, reference: input.reference ?? null, transactionId: tx.id });
   return getPayoutAccount(id);
 }
@@ -152,7 +159,7 @@ export function selectPayoutAccount(q: { rail: 'mobile_money' | 'bank'; operator
 export function liquidityOverview() {
   const db = getDb();
   return listPayoutAccounts().map((a) => {
-    const queued = (db.prepare("SELECT COALESCE(SUM(amount), 0) s FROM payout_instructions WHERE (payout_account_id = ? OR (payout_account_id IS NULL AND rail = ? AND operator_id IS ? AND currency = ?)) AND stage IN ('QUEUED', 'IN_PROGRESS', 'LIQUIDITY_UNAVAILABLE')").get(a.id, a.rail, a.operatorId, a.currency) as any).s as number;
+    const queued = (db.prepare("SELECT COALESCE(SUM(amount), 0) s FROM payout_instructions WHERE (payout_account_id = ? OR (payout_account_id IS NULL AND rail = ? AND operator_id IS ? AND currency = ?)) AND stage IN ('QUEUED', 'IN_PROGRESS', 'INSUFFICIENT_LIQUIDITY')").get(a.id, a.rail, a.operatorId, a.currency) as any).s as number;
     return { ...a, queuedDemand: queued, shortfall: Math.max(0, queued - a.balance) };
   });
 }

@@ -124,7 +124,7 @@ export function MoveMoney() {
             <div>
               {error && <Alert kind="error">{error}</Alert>}
               <div className="center">
-                <div style={{ fontSize: '3rem' }}>{route.stage === 'SETTLED' ? '✅' : ['FAILED', 'EXPIRED', 'REVERSED', 'REFUNDED'].includes(route.stage) ? '❌' : ['MANUAL_REVIEW', 'LIQUIDITY_UNAVAILABLE', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'].includes(route.stage) ? '🔍' : '⏳'}</div>
+                <div style={{ fontSize: '3rem' }}>{route.stage === 'SETTLED' ? '✅' : ['FAILED', 'EXPIRED', 'REVERSED', 'REFUNDED'].includes(route.stage) ? '❌' : ['MANUAL_REVIEW', 'INSUFFICIENT_LIQUIDITY', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'].includes(route.stage) ? '🔍' : '⏳'}</div>
                 <h2>{money(route.amount, route.currency)} → {destLabels[route.destination as Dest]}</h2>
                 <StatusBadge status={route.stageLabel ?? route.status} />
                 {route.corridor && <div className="mt-sm">{route.corridor.status === 'live' ? <span className="chip success">authorised corridor · {route.corridor.destCountry}</span> : <span className="chip warning">sandbox corridor · {route.corridor.destCountry} · no real funds</span>}</div>}
@@ -134,15 +134,15 @@ export function MoveMoney() {
               {route.payout && <div className="card soft compact mt"><div className="small bold">Local payout · {route.payout.stageLabel ?? route.payout.stage.toLowerCase().replace(/_/g, ' ')}</div><KV k="To" v={`${route.payout.operatorName ?? route.payout.rail} · ${route.payout.recipientMasked ?? ''}${route.payout.recipientName ? ` · ${route.payout.recipientName}` : ''}`} /><KV k="Reference" v={<span className="mono">{route.payout.reference}</span>} />{route.payout.externalRef && <KV k="Operator confirmation" v={<span className="mono">{route.payout.externalRef}</span>} />}{route.payout.payoutAccount && <KV k="Paid from" v={route.payout.payoutAccount.label} />}</div>}
               {['FUNDING_PENDING', 'BIOMETRIC_APPROVAL_REQUIRED'].includes(route.stage) && route.payment && <div className="mt"><PaymentStatus payment={route.payment as PaymentView} onDone={() => {}} /></div>}
               {route.stage === 'BIOMETRIC_APPROVAL_REQUIRED' && <Alert kind="warning">This transfer was not authorised. Start again and confirm with biometrics or your PIN.</Alert>}
-              {route.stage === 'LIQUIDITY_UNAVAILABLE' && <Alert kind="warning">No prefunded local account can pay this right now. Your funds are held safely; the payout resumes automatically once liquidity is available, or you can cancel for a refund.</Alert>}
+              {route.stage === 'INSUFFICIENT_LIQUIDITY' && <Alert kind="warning">No prefunded local account can pay this right now. Your funds are held safely; the payout resumes automatically once liquidity is available, or you can cancel for a refund.</Alert>}
               {route.stage === 'MANUAL_REVIEW' && <Alert kind="warning">A verifier is reviewing this transfer before the local payout is released. Nothing has been paid out yet.</Alert>}
-              {route.stage === 'PAYOUT_IN_PROGRESS' && <Alert kind="info">The local payout is being executed from the payout account right now. It can no longer be recalled.</Alert>}
+              {route.stage === 'PAYOUT_SENT' && <Alert kind="info">The local payout is being executed from the payout account right now. It can no longer be recalled.</Alert>}
               {route.destinationDetails?.cashOutCode && <Alert kind="success">Cash-out code for the agent: <b className="mono">{route.destinationDetails.cashOutCode}</b></Alert>}
               {route.error && !['SETTLED'].includes(route.stage) && <div className="tiny muted">{route.error}</div>}
               <div className="row mt wrap">
                 <Button variant="secondary" onClick={() => { setRoute(null); setError(null); }}>New transfer</Button>
-                {['FUNDS_CONFIRMED', 'FAILED', 'LIQUIDITY_UNAVAILABLE'].includes(route.stage) && <Button onClick={() => api.post(`/api/money/${route.id}/retry`, {}).then((r: any) => setRoute(r.route)).catch((e) => setError(e.message))}>Retry payout</Button>}
-                {['FUNDS_CONFIRMED', 'PAYOUT_QUEUED', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED'].includes(route.stage) && <Button variant="danger" onClick={() => { setPinFor('cancel'); setPinOpen(true); }}>Cancel & refund</Button>}
+                {['FUNDED', 'FAILED', 'INSUFFICIENT_LIQUIDITY'].includes(route.stage) && <Button onClick={() => api.post(`/api/money/${route.id}/retry`, {}).then((r: any) => setRoute(r.route)).catch((e) => setError(e.message))}>Retry payout</Button>}
+                {['FUNDED', 'PAYOUT_ROUTED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED'].includes(route.stage) && <Button variant="danger" onClick={() => { setPinFor('cancel'); setPinOpen(true); }}>Cancel & refund</Button>}
                 {route.payoutTransactionId && <Button variant="ghost" onClick={() => nav(`/app/transactions/${route.payoutTransactionId}`)}>View transaction</Button>}
                 <Button variant="ghost" onClick={() => api.get<any>(`/api/money/${route.id}/receipt`).then((r) => { const w = window.open('', '_blank'); if (w) { w.document.write(`<pre>${JSON.stringify(r, null, 2).replace(/</g, '&lt;')}</pre>`); w.document.close(); } })}>Receipt</Button>
               </div>

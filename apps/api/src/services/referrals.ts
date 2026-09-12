@@ -1,9 +1,8 @@
 import { getDb } from '../db';
+import { grantPromoCredit } from './emoney';
 import { uuid, now } from '../lib/ids';
 import { getReferralSettings } from './settings';
 import { getBaseCurrency } from './currencies';
-import { ensureWallet } from './wallets';
-import { postTransaction } from './ledger';
 import { notify } from './notifications';
 import { findUserById, type UserRow } from './users';
 import { formatMoney } from '@bitripay/shared';
@@ -21,17 +20,8 @@ function payRewards(referee: UserRow, trigger: 'registration' | 'first_deposit')
   while (current && level <= settings.rewards.length) {
     const amount = settings.rewards[level - 1];
     if (amount > 0) {
-      const wallet = ensureWallet(current.id, base.code);
-      const tx = postTransaction({
-        type: 'referral_reward',
-        amount,
-        currency: base.code,
-        toWalletId: wallet.id,
-        receiverUserId: current.id,
-        note: `Level ${level} referral reward for @${referee.tag}`,
-        metadata: { refereeId: referee.id, level },
-        issuance: { authority: 'programme', programme: 'referral_rewards' },
-      });
+      // Referral rewards are promotional credit: a marketing liability that can cover fees, never redeemable money.
+      const tx = { id: grantPromoCredit(current.id, base.code, amount, 'referral_rewards', `Level ${level} referral reward for @${referee.tag}`, { referenceId: referee.id }).id };
       db.prepare('INSERT INTO referral_rewards (id, referrer_id, referee_id, level, amount, currency, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
         uuid(),
         current.id,
@@ -42,7 +32,7 @@ function payRewards(referee: UserRow, trigger: 'registration' | 'first_deposit')
         tx.id,
         now(),
       );
-      notify(current.id, 'Referral reward earned', `You earned ${formatMoney(amount, base)} for a level ${level} referral (@${referee.tag}).`, { kind: 'referral', transactionId: tx.id });
+      notify(current.id, 'Referral reward earned', `You earned ${formatMoney(amount, base)} of promotional credit for a level ${level} referral (@${referee.tag}). It covers your BitriPay fees and cannot be withdrawn.`, { kind: 'referral', transactionId: tx.id });
     }
     current = current.referred_by ? findUserById(current.referred_by) : undefined;
     level += 1;

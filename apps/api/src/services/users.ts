@@ -63,6 +63,7 @@ export function toUser(row: UserRow): User {
     status: row.status,
     hasPin: !!row.pin_hash,
     twoFactorEnabled: !!row.two_factor_enabled,
+    loudAlerts: (row as any).loud_alerts === undefined ? true : !!(row as any).loud_alerts,
     referralCode: row.referral_code,
     referredBy: row.referred_by,
     agentCommissionBps: row.agent_commission_bps,

@@ -81,8 +81,8 @@ describe('UK card → Orange Money DRC (sandbox)', () => {
     // Without liquidity the transfer waits (funds held), nothing leaves the platform.
     const empty = await sendUkToDrc(sender.auth);
     expect(empty.status, JSON.stringify(empty.body)).toBe(201);
-    expect(empty.body.route.stage).toBe('LIQUIDITY_UNAVAILABLE');
-    expect(empty.body.route.payout.stage).toBe('LIQUIDITY_UNAVAILABLE');
+    expect(empty.body.route.stage).toBe('INSUFFICIENT_LIQUIDITY');
+    expect(empty.body.route.payout.stage).toBe('INSUFFICIENT_LIQUIDITY');
     const liq = await request(app).get('/api/admin/liquidity').set(s.admin.auth);
     expect(liq.body.items[0].shortfall).toBeGreaterThan(0);
     // Treasury prefunds the SIM (step-up): waiting payouts are re-queued.
@@ -90,13 +90,13 @@ describe('UK card → Orange Money DRC (sandbox)', () => {
     expect(pre.status, JSON.stringify(pre.body)).toBe(200);
     expect(pre.body.requeued).toBe(1);
     const queued = await request(app).get(`/api/money/${empty.body.route.id}`).set(sender.auth);
-    expect(queued.body.route.stage).toBe('PAYOUT_QUEUED');
+    expect(queued.body.route.stage).toBe('PAYOUT_ROUTED');
 
     // 3-6. a second transfer now routes straight to the prefunded account
     const r = await sendUkToDrc(sender.auth, '20');
     expect(r.status, JSON.stringify(r.body)).toBe(201);
     const route = r.body.route;
-    expect(route.stage).toBe('PAYOUT_QUEUED');
+    expect(route.stage).toBe('PAYOUT_ROUTED');
     expect(route.payment.stage).toBe('SETTLED');
     expect(route.payment.authMethod).toBe('pin');
     expect(route.payout.payoutAccountId).toBe(s.accountId);
@@ -105,7 +105,7 @@ describe('UK card → Orange Money DRC (sandbox)', () => {
     const events = await request(app).get(`/api/money/${route.id}/receipt`).set(sender.auth);
     const seq = events.body.events.map((e: any) => e.event);
     // The sandbox processor confirms synchronously, so FUNDING_PENDING is skipped; a hosted processor passes through it.
-    expect(seq.slice(0, 4)).toEqual(['route.created', 'route.quoted', 'route.funds_confirmed', 'route.payout_queued']);
+    expect(seq.slice(0, 5)).toEqual(['route.created', 'route.quoted', 'route.funded', 'route.fx_reserved', 'route.payout_routed']);
 
     // 7. the Android payout device fetches its queue, claims the payout and gets USSD instructions with the full recipient number
     const badAuth = await request(app).get('/api/payouts/device/queue').set({ 'X-Device-Id': s.deviceId, 'X-Device-Timestamp': new Date().toISOString(), 'X-Device-Signature': 'AAAA' });
@@ -118,7 +118,7 @@ describe('UK card → Orange Money DRC (sandbox)', () => {
     expect(p.recipientMsisdn).toBe('+243990000123');
     const claim = await request(app).post(`/api/payouts/device/${p.id}/claim`).set(deviceHeaders(s.privateKey, s.deviceId, 'POST', `/api/payouts/device/${p.id}/claim`));
     expect(claim.body.payout.stage).toBe('IN_PROGRESS');
-    expect((await request(app).get(`/api/money/${route.id}`).set(sender.auth)).body.route.stage).toBe('PAYOUT_IN_PROGRESS');
+    expect((await request(app).get(`/api/money/${route.id}`).set(sender.auth)).body.route.stage).toBe('PAYOUT_SENT');
 
     // 8-10. operator SMS on the payout device, signed and forwarded; verification matches recipient, amount, reference, operator and timing
     const amountMajor = (p.amount / 100).toFixed(2);
@@ -199,7 +199,7 @@ describe('UK card → Orange Money DRC (sandbox)', () => {
     const relOk = await request(app).post(`/api/admin/verifications/${rel.body.verification.id}/approve`).set(s.checker.auth).send({ pin: s.checker.pin });
     expect(relOk.status, JSON.stringify(relOk.body)).toBe(200);
     const released = await request(app).get(`/api/money/${held.body.route.id}`).set(sender.auth);
-    expect(released.body.route.stage).toBe('PAYOUT_QUEUED');
+    expect(released.body.route.stage).toBe('PAYOUT_ROUTED');
     // The sender cancels before execution: payout cancelled, card refunded at the (sandbox) processor.
     const cancel = await request(app).post(`/api/money/${held.body.route.id}/cancel`).set(sender.auth).send({ pin: '1234', reason: 'Changed my mind' });
     expect(cancel.status, JSON.stringify(cancel.body)).toBe(200);
@@ -217,7 +217,7 @@ describe('UK card → Orange Money DRC (sandbox)', () => {
     await request(app).post(`/api/admin/liquidity/accounts/${s.accountId}/prefund`).set(s.admin.auth).send({ amount: '9000000', reference: 'CASHIN-003', pin: s.admin.pin });
     const sender = await ukSender();
     const r = await sendUkToDrc(sender.auth, '15');
-    expect(r.body.route.stage).toBe('PAYOUT_QUEUED');
+    expect(r.body.route.stage).toBe('PAYOUT_ROUTED');
     const cb = await request(app).post('/api/admin/chargebacks').set(s.admin.auth).send({ paymentId: r.body.route.paymentId, reason: 'fraudulent', pin: s.admin.pin });
     expect(cb.status, JSON.stringify(cb.body)).toBe(201);
     expect(cb.body.chargeback.status).toBe('reversed_before_payout');
@@ -287,5 +287,96 @@ describe('UK card → Orange Money DRC (sandbox)', () => {
     expect(suspended.body.error.code).toBe('corridor_suspended');
     await request(app).put('/api/admin/settings/compliance').set(admin.auth).send({ value: { mode: 'sandbox' } });
     await request(app).delete('/api/admin/gateways/stripe_gbp').set(admin.auth);
+  });
+});
+
+describe('recipient-controlled payout currency', () => {
+  it('offers only currencies the corridor, institution and liquidity allow right now, defaults to the local currency, and requires beneficiary consent for non-local payouts', async () => {
+    const s = await corridorSetup();
+    const admin = s.admin;
+    // The earlier scenario suspended this corridor (expired licence); put it back in sandbox for this one.
+    await request(app).post(`/api/admin/corridors/${s.corridorId}/status`).set(admin.auth).send({ status: 'sandbox', pin: admin.pin });
+    await request(app).put('/api/admin/currencies/USD').set(admin.auth).send({ enabled: true });
+    const sender = await ukSender();
+    await fund(app, sender.user.id, '500.00', 'GBP');
+    const dest = { method: 'mobile_money', operatorId: 'orange_cd', phone: '+243990000123', name: 'Marie Kabila' };
+    // Before the corridor lists USD: only CDF (local) is offered; USD is refused with reasons.
+    let opts = await request(app).post('/api/money/payout-currencies').set(sender.auth).send({ destination: dest, amount: '100', currency: 'GBP', requested: 'USD' });
+    expect(opts.status).toBe(200);
+    expect(opts.body.options.defaultCurrency).toBe('CDF');
+    const cdf = opts.body.options.options.find((o: any) => o.currency === 'CDF');
+    expect(cdf.available, JSON.stringify(cdf)).toBe(true);
+    let usd = opts.body.options.options.find((o: any) => o.currency === 'USD');
+    expect(usd.available).toBe(false);
+    expect(usd.reasons.join(' ')).toMatch(/No corridor permits USD/);
+    const refused = await request(app).post('/api/money').set(sender.auth).send({ source: { method: 'wallet' }, destination: dest, amount: '100', currency: 'GBP', targetCurrency: 'USD', pin: '1234' });
+    expect(refused.status).toBe(422);
+    expect(refused.body.error.code).toBe('payout_currency_unavailable');
+    // The corridor permits USD payouts with beneficiary consent – but there is no USD liquidity yet.
+    const c = await request(app).put(`/api/admin/corridors/${s.corridorId}`).set(admin.auth).send({ sourceCountry: 'GB', sourceCurrency: 'GBP', destCountry: 'CD', destCurrency: 'CDF', operatorId: 'orange_cd', rail: 'mobile_money', payoutCurrencies: ['USD'], beneficiaryConsent: true, payoutConfirmation: 'SECURED_DEVICE_CONFIRMATION' });
+    expect(c.status).toBe(200);
+    expect(c.body.corridor.payoutCurrencies).toEqual(['USD']);
+    opts = await request(app).post('/api/money/payout-currencies').set(sender.auth).send({ destination: dest, amount: '100', currency: 'GBP' });
+    usd = opts.body.options.options.find((o: any) => o.currency === 'USD');
+    expect(usd.available).toBe(false);
+    expect(usd.reasons.join(' ')).toMatch(/No prefunded USD payout account/);
+    // Prefunded USD Orange Money account → USD becomes available (consent required); CDF stays the default.
+    const acc = await request(app).post('/api/admin/liquidity/accounts').set(admin.auth).send({ rail: 'mobile_money', operatorId: 'orange_cd', country: 'CD', currency: 'USD', label: 'Orange Money DRC USD SIM', msisdn: '+243890000200', simIccid: '8924300000000000200', agentUserId: s.agent.user.id });
+    expect(acc.status).toBe(201);
+    const pre = await request(app).post(`/api/admin/liquidity/accounts/${acc.body.account.id}/prefund`).set(admin.auth).send({ amount: '1000.00', reference: 'USD float', pin: admin.pin });
+    expect(pre.status, JSON.stringify(pre.body)).toBe(200);
+    opts = await request(app).post('/api/money/payout-currencies').set(sender.auth).send({ destination: dest, amount: '100', currency: 'GBP' });
+    usd = opts.body.options.options.find((o: any) => o.currency === 'USD');
+    expect(usd.available, JSON.stringify(usd)).toBe(true);
+    expect(usd.consentRequired).toBe(true);
+    expect(usd.isLocal).toBe(false);
+    // Omitting the currency defaults to the local one.
+    const dflt = await request(app).post('/api/money/preview').set(sender.auth).send({ destination: dest, sourceMethod: 'wallet', amount: '10', currency: 'GBP' });
+    expect(dflt.body.quote.targetCurrency).toBe('CDF');
+    expect(dflt.body.quote.receivingCurrencies.options.map((o: any) => o.currency).sort()).toEqual(['CDF', 'USD']);
+    expect(dflt.body.quote.fxMarginBps).toBe(100);
+    expect(dflt.body.quote.confirmation.payout).toBe('SECURED_DEVICE_CONFIRMATION');
+    expect(dflt.body.quote.payoutConditions).toContain('SECURED_DEVICE_CONFIRMATION');
+    // Sender chooses USD: the route waits for the recipient's confirmation before any FX or payout.
+    const r = await request(app).post('/api/money').set(sender.auth).send({ source: { method: 'wallet' }, destination: dest, amount: '100', currency: 'GBP', targetCurrency: 'USD', pin: '1234' });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(r.body.route.stage).toBe('AWAITING_CONFIRMATION');
+    expect(r.body.route.consent.required).toBe(true);
+    expect(r.body.route.consent.url).toContain('/confirm-currency/');
+    expect(r.body.route.quote.recipientConsentRequired).toBe(true);
+    const token = r.body.route.consent.url.split('/').pop();
+    const view = await request(app).get(`/api/routes/consent/${token}`);
+    expect(view.status).toBe(200);
+    expect(view.body.currency).toBe('USD');
+    expect(view.body.options.map((o: any) => o.currency).sort()).toEqual(['CDF', 'USD']);
+    const ok = await request(app).post(`/api/routes/consent/${token}`).send({ accept: true });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.stage).toBe('PAYOUT_ROUTED');
+    const after = await request(app).get(`/api/money/${r.body.route.id}`).set(sender.auth);
+    expect(after.body.route.targetCurrency).toBe('USD');
+    expect(after.body.route.payout.currency).toBe('USD');
+    expect(after.body.route.payout.payoutAccount.id).toBe(acc.body.account.id);
+    const receipt = await request(app).get(`/api/money/${r.body.route.id}/receipt`).set(sender.auth);
+    const seq = receipt.body.events.map((e: any) => e.event);
+    expect(seq).toEqual(expect.arrayContaining(['route.funded', 'route.awaiting_confirmation', 'route.currency_confirmed', 'route.fx_reserved', 'route.payout_routed']));
+    const again = await request(app).post(`/api/routes/consent/${token}`).send({ accept: true });
+    expect(again.status).toBe(409);
+    // Recipient switches to the local currency instead: re-quoted and routed to the CDF account.
+    const r2 = await request(app).post('/api/money').set(sender.auth).send({ source: { method: 'wallet' }, destination: dest, amount: '50', currency: 'GBP', targetCurrency: 'USD', pin: '1234' });
+    const token2 = r2.body.route.consent.url.split('/').pop();
+    const sw = await request(app).post(`/api/routes/consent/${token2}`).send({ accept: true, currency: 'CDF' });
+    expect(sw.status, JSON.stringify(sw.body)).toBe(200);
+    expect(sw.body.currency).toBe('CDF');
+    const r2after = await request(app).get(`/api/money/${r2.body.route.id}`).set(sender.auth);
+    expect(r2after.body.route.targetCurrency).toBe('CDF');
+    expect(r2after.body.route.payout.currency).toBe('CDF');
+    // Recipient declines: funds stay with the sender.
+    const before = (await request(app).get('/api/wallets').set(sender.auth)).body.items.find((w: any) => w.currency === 'GBP').balance;
+    const r3 = await request(app).post('/api/money').set(sender.auth).send({ source: { method: 'wallet' }, destination: dest, amount: '30', currency: 'GBP', targetCurrency: 'USD', pin: '1234' });
+    const token3 = r3.body.route.consent.url.split('/').pop();
+    const no = await request(app).post(`/api/routes/consent/${token3}`).send({ accept: false });
+    expect(no.body.stage).toBe('FAILED');
+    const balance = (await request(app).get('/api/wallets').set(sender.auth)).body.items.find((w: any) => w.currency === 'GBP').balance;
+    expect(balance).toBe(before);
   });
 });

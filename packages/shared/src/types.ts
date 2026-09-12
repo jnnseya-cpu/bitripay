@@ -20,6 +20,8 @@ export interface User extends PublicUser {
   status: 'active' | 'suspended';
   hasPin: boolean;
   twoFactorEnabled: boolean;
+  /** Loud sound + vibration for money events (default on). */
+  loudAlerts?: boolean;
   referralCode: string;
   referredBy?: string | null;
   agentCommissionBps?: number | null;
@@ -33,6 +35,12 @@ export interface Wallet {
   currency: string;
   balance: number;
   createdAt: string;
+  /** Promotional credit – a marketing liability that can cover fees; never withdrawable or transferable as money. */
+  promoBalance?: number;
+  frozen?: boolean;
+  frozenReason?: string | null;
+  /** What this balance legally is (regulated e-money, merchant balance, agent float or sandbox money). */
+  classification?: { class: 'emoney' | 'merchant' | 'agent_float' | 'sandbox'; label: string; redeemable: boolean; transferable: boolean; backing: string; issuer: string | null; programmeStatus: string | null };
 }
 
 export interface Transaction {

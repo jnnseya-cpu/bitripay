@@ -24,6 +24,10 @@ export const TRANSACTION_TYPES = [
   'payout',
   'liquidity_prefund',
   'liquidity_adjustment',
+  'emoney_mint',
+  'emoney_burn',
+  'distribution',
+  'promo_credit',
 ] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
@@ -79,4 +83,8 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   payout: 'Payout (external)',
   liquidity_prefund: 'Liquidity Prefund',
   liquidity_adjustment: 'Liquidity Adjustment',
+  emoney_mint: 'E-money Issued',
+  emoney_burn: 'E-money Redeemed',
+  distribution: 'Distribution',
+  promo_credit: 'Promotional Credit',
 };

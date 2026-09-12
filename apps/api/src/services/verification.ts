@@ -18,36 +18,11 @@ import { approveWithdrawal, rejectWithdrawal } from './withdrawals';
 import { releaseRoute, refundRoute, getRouteRow } from './routing';
 import { badRequest } from '../lib/errors';
 import { hasPermission } from '../middleware/permissions';
-import { postTransaction } from './ledger';
-import { ensureWallet } from './wallets';
-import { getCurrency } from './currencies';
-import { notify } from './notifications';
-import { formatMoney } from '@bitripay/shared';
+import { executeIssuance, validateIssuanceRequest, clearReserveMovement, type IssuancePayload } from './emoney';
 
-/** The only code path that creates or destroys e-money by administrative decision: after a second administrator approved it. */
-function executeIssuance(userId: string, payload: { direction: 'credit' | 'debit'; amount: number; currency: string; reason: string }, approver: UserRow, proposerId: string, verificationId: string) {
-  const cur = getCurrency(payload.currency);
-  const wallet = ensureWallet(userId, cur.code);
-  const credit = payload.direction === 'credit';
-  const tx = postTransaction({
-    type: 'admin_adjustment',
-    amount: payload.amount,
-    currency: cur.code,
-    fromWalletId: credit ? null : wallet.id,
-    toWalletId: credit ? wallet.id : null,
-    senderUserId: credit ? null : userId,
-    receiverUserId: credit ? userId : null,
-    note: payload.reason,
-    metadata: { direction: payload.direction, proposedBy: proposerId, approvedBy: approver.id, verificationId },
-    issuance: credit ? { authority: 'admin', adminId: approver.id, verificationId, reference: payload.reason } : undefined,
-    allowNegativeSender: !credit,
-  });
-  notify(userId, credit ? 'Balance credited' : 'Balance debited', `${formatMoney(payload.amount, cur)} was ${credit ? 'added to' : 'deducted from'} your wallet: ${payload.reason}`, { kind: 'adjustment', transactionId: tx.id });
-  return tx;
-}
 import { listEvents } from './events';
 
-export type VerificationSubject = 'payment' | 'payout' | 'withdrawal' | 'route_release' | 'route_refund' | 'issuance';
+export type VerificationSubject = 'payment' | 'payout' | 'withdrawal' | 'route_release' | 'route_refund' | 'issuance' | 'reserve_funding';
 export interface VerificationView {
   id: string;
   /** Id of the payment, payout instruction, withdrawal transaction or route being decided. */
@@ -106,9 +81,16 @@ export function proposeVerification(user: UserRow, paymentId: string, input: { a
   } else if (subjectType === 'issuance') {
     // Creating (or destroying) e-money by hand: only administrators holding the issuance permission may propose, and the payload must be complete.
     if (user.role !== 'admin' || !hasPermission(user as any, 'issuance')) throw forbidden('Only administrators with the issuance permission can create e-money', 'permission_denied');
-    const p = input.payload as any;
+    const p = input.payload as IssuancePayload | undefined;
     if (!p || !['credit', 'debit'].includes(p.direction) || !Number.isInteger(p.amount) || p.amount <= 0 || !p.currency || !p.reason) throw badRequest('Issuance payload needs direction, amount, currency and reason', 'validation_error');
-    findUserById(paymentId) ?? (() => { throw badRequest('Target user not found'); })();
+    if (!p.poolId) findUserById(paymentId) ?? (() => { throw badRequest('Target user not found'); })();
+    // The reserve rule is checked when the request is made and again when it is executed: a maker cannot queue an unbacked amount.
+    validateIssuanceRequest(p);
+  } else if (subjectType === 'reserve_funding') {
+    if (user.role !== 'admin' || !hasPermission(user as any, 'treasury')) throw forbidden('Only treasury administrators can confirm safeguarded reserve funding', 'permission_denied');
+    const m = db.prepare('SELECT * FROM reserve_movements WHERE id = ?').get(paymentId) as any;
+    if (!m) throw badRequest('Reserve movement not found');
+    if (m.status !== 'pending') throw conflict(`Reserve movement is already ${m.status}`, 'invalid_status');
   } else {
     getRouteRow(paymentId);
   }
@@ -132,6 +114,7 @@ export function approveVerification(user: UserRow, id: string, pin: string | und
     if (getGatewayControls().makerChecker && row.proposed_by === user.id) throw forbidden('Maker-checker: the person who proposed a decision cannot approve it', 'maker_checker');
     if (user.role !== 'admin') throw forbidden('Only administrators can approve manual settlement', 'role_required');
     if (row.subject_type === 'issuance' && !hasPermission(user as any, 'issuance')) throw forbidden('Approving e-money issuance requires the issuance permission', 'permission_denied');
+    if (row.subject_type === 'reserve_funding' && !hasPermission(user as any, 'treasury')) throw forbidden('Confirming reserve funding requires the treasury permission', 'permission_denied');
     assertAdminStepUp(user, pin, req);
   }
   const db = getDb();
@@ -155,6 +138,8 @@ export function approveVerification(user: UserRow, id: string, pin: string | und
     if (row.action === 'confirm') void refundRoute(row.payment_id, actor, row.note || 'Refund approved', id);
   } else if (subject === 'issuance') {
     if (row.action === 'confirm') executeIssuance(row.payment_id, JSON.parse(row.payload), user, row.proposed_by, id);
+  } else if (subject === 'reserve_funding') {
+    if (row.action === 'confirm') clearReserveMovement(row.payment_id, user, id);
   }
   return getVerification(id);
 }

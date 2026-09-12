@@ -5,8 +5,9 @@ import { requireAuth } from '../middleware/auth';
 import * as auth from '../services/auth';
 import { toUser, updateUser, normalizeTag, findUserByTag, findUserByIdentifier, toPublicUser } from '../services/users';
 import { badRequest, conflict } from '../lib/errors';
-import { listNotifications, markRead, registerPushToken, removePushToken, unreadCount } from '../services/notifications';
+import { listNotifications, markRead, registerPushToken, removePushToken, unreadCount, setLoudAlerts } from '../services/notifications';
 import { referralStats } from '../services/referrals';
+import { poolsForOwner, listPromoCredits } from '../services/emoney';
 import { qrDataUrl } from '../services/qr';
 import { listLanguages } from '../services/cms';
 import { COUNTRY_BY_CODE } from '@bitripay/shared';
@@ -25,10 +26,12 @@ accountRouter.patch(
         businessName: z.string().max(120).optional().nullable(),
         language: z.string().min(2).max(5).optional(),
         avatarColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        loudAlerts: z.boolean().optional(),
       }),
       req.body,
     );
     const fields: Record<string, unknown> = {};
+    if (body.loudAlerts !== undefined) setLoudAlerts(req.user!.id, body.loudAlerts);
     if (body.fullName) fields.full_name = body.fullName.trim();
     if (body.tag) {
       const tag = normalizeTag(body.tag);
@@ -118,6 +121,9 @@ accountRouter.post(
   }),
 );
 
+/** Distribution pools this user owns (institutions, master agents) and their promotional credit register. */
+accountRouter.get('/pools', (req, res) => res.json({ items: poolsForOwner(req.user!) }));
+accountRouter.get('/promo', (req, res) => res.json({ items: listPromoCredits(req.user!.id) }));
 accountRouter.get('/notifications', (req, res) => res.json({ items: listNotifications(req.user!.id), unread: unreadCount(req.user!.id) }));
 accountRouter.post('/notifications/read', (req, res) => {
   markRead(req.user!.id, typeof req.body?.id === 'string' ? req.body.id : undefined);

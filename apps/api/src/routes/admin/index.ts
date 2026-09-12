@@ -26,6 +26,8 @@ import { listKyc, getKyc, reviewKyc } from '../../services/kyc';
 import { settleRemittance, toRemittance } from '../../services/remittance';
 import { getCurrency, listCurrencies, upsertCurrency, refreshRatesFromProvider, importRates, listRateSnapshots, getRateStatus, rateFreshness, RATE_PROVIDERS } from '../../services/currencies';
 import { goLiveChecklist } from '../../services/goLive';
+import { buildStatement, statementCsv, statementPdf, listStatements } from '../../services/statements';
+import { emoneyOverview, listProgrammes, getProgramme, upsertProgramme, setProgrammeStatus, listReserveMovements, recordReserveMovement, reverseReserveMovement, listPools, getPool, createPool, allocate, reconcileReserves, listReconciliations, freezeWallet, listPromoCredits } from '../../services/emoney';
 import { testGateway } from '../../payments';
 import { encrypt } from '../../lib/crypto';
 import { getSetting, setSetting, getFees, getLimits, getReferralSettings, getAppSettings, getGatewayControls, getFxSettings, getRiskSettings } from '../../services/settings';
@@ -56,8 +58,12 @@ function verificationSubject(v: { subjectType: string; paymentId: string }) {
       case 'route_release':
       case 'route_refund':
         return { route: adminRouteView(v.paymentId) };
-      case 'issuance':
-        return { user: toUser(getUserById(v.paymentId)), wallets: listWallets(v.paymentId).map(toWallet) };
+      case 'issuance': {
+        const u = getUserById(v.paymentId);
+        return { user: toUser(u), wallets: listWallets(v.paymentId).map((w) => toWallet(w, u)), pool: u.tag?.startsWith('pool_') ? listPools().find((p) => p.walletUserId === u.id) ?? null : null };
+      }
+      case 'reserve_funding':
+        return { movement: listReserveMovements(null, 500).find((m) => m.id === v.paymentId) ?? null };
       default:
         return { payment: toPaymentView(getPayment(v.paymentId)) };
     }
@@ -122,7 +128,7 @@ adminRouter.get('/users', requirePermission('users'), (req, res) => {
   const whereSql = `WHERE ${where.join(' AND ')}`;
   const total = (db.prepare(`SELECT COUNT(*) c FROM users ${whereSql}`).get(...params) as any).c;
   const rows = db.prepare(`SELECT * FROM users ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize) as UserRow[];
-  res.json({ items: rows.map((r) => ({ ...toUser(r), permissions: JSON.parse((r as any).permissions || '[]'), wallets: listWallets(r.id).map(toWallet), lastLoginAt: r.last_login_at })), total, page, pageSize });
+  res.json({ items: rows.map((r) => ({ ...toUser(r), permissions: JSON.parse((r as any).permissions || '[]'), wallets: listWallets(r.id).map((w) => toWallet(w)), lastLoginAt: r.last_login_at })), total, page, pageSize });
 });
 
 adminRouter.post(
@@ -144,7 +150,7 @@ adminRouter.get('/users/:id', requirePermission('users'), (req, res) => {
   const referrer = user.referred_by ? findUserById(user.referred_by) : null;
   res.json({
     user: { ...toUser(user), permissions: JSON.parse((user as any).permissions || '[]'), lastLoginAt: user.last_login_at, webhookUrl: user.webhook_url },
-    wallets: listWallets(user.id).map(toWallet),
+    wallets: listWallets(user.id).map((w) => toWallet(w)),
     transactions: tx.items,
     kyc: kyc ? { id: kyc.id, status: kyc.status, docType: kyc.doc_type, createdAt: kyc.created_at } : null,
     referrer: referrer ? toPublicUser(referrer) : null,
@@ -222,11 +228,112 @@ adminRouter.post(
     res.status(201).json({ verification, wallet: toWallet(ensureWallet(target.id, cur.code)) });
   }),
 );
-/** Outstanding e-money per currency, how it was issued, and the immutable issuance register. */
+/** Outstanding e-money per currency, how it was issued, the reserve position of every programme and the immutable issuance register. */
 adminRouter.get('/emoney', requirePermission('reports'), (req, res) => {
   const { page, pageSize } = parsePagination(req.query, 50);
-  res.json({ supply: emoneySupply(), register: listEvents({ stream: 'issuance', limit: pageSize, page }), pending: listVerifications({ status: 'proposed' }).filter((v) => v.subjectType === 'issuance') });
+  res.json({ supply: emoneySupply(), ...emoneyOverview(), register: listEvents({ stream: 'issuance', limit: pageSize, page }), pending: listVerifications({ status: 'proposed' }).filter((v) => v.subjectType === 'issuance' || v.subjectType === 'reserve_funding') });
 });
+
+// ---------------------------------------------------------------------------------------------
+// E-money issuance engine (TREASURY_SUPER_ADMIN = 'treasury' permission)
+// ---------------------------------------------------------------------------------------------
+const programmeSchema = z.object({ currency: z.string().length(3), jurisdiction: z.string().min(2).max(10), issuerModel: z.enum(['own_authorisation', 'partner_issuer', 'sandbox']).optional(), issuerName: z.string().max(200).optional().nullable(), licenceRef: z.string().max(200).optional().nullable(), regulator: z.string().max(200).optional().nullable(), safeguardingBank: z.string().max(200).optional().nullable(), safeguardingAccountRef: z.string().max(200).optional().nullable(), reservedExposure: z.number().int().min(0).optional(), limits: z.object({ maxIssuancePerRequest: z.number().int().min(0).optional(), dailyIssuanceLimit: z.number().int().min(0).optional(), maxHolderBalance: z.number().int().min(0).optional() }).optional() });
+adminRouter.get('/emoney/programmes', requirePermission('reports'), (_req, res) => res.json({ items: listProgrammes() }));
+adminRouter.put('/emoney/programmes/:id', requirePermission('treasury'), (req, res) => {
+  const body = validate(programmeSchema, req.body);
+  const programme = upsertProgramme({ id: String(req.params.id) === 'new' ? undefined : String(req.params.id), ...body }, req.user!);
+  audit(req.user!.id, 'emoney.programme.upsert', 'programme', programme.id, { currency: programme.currency, jurisdiction: programme.jurisdiction, issuerModel: programme.issuerModel });
+  res.json({ programme });
+});
+/** Going live / suspending a programme is an attributable, step-up protected act. */
+adminRouter.post('/emoney/programmes/:id/status', requirePermission('treasury'), (req, res) => {
+  const body = validate(z.object({ status: z.enum(['sandbox', 'live', 'suspended']), reason: z.string().max(300).optional().nullable(), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  const programme = setProgrammeStatus(String(req.params.id), body.status, req.user!, body.reason);
+  audit(req.user!.id, `emoney.programme.${body.status}`, 'programme', programme.id, { reason: body.reason ?? null });
+  res.json({ programme });
+});
+adminRouter.get('/emoney/programmes/:id', requirePermission('reports'), (req, res) => {
+  const programme = getProgramme(String(req.params.id));
+  res.json({ programme, movements: listReserveMovements(programme.id), pools: listPools({ programmeId: programme.id }), reconciliations: listReconciliations(programme.id) });
+});
+/**
+ * Reserve funding confirmed: the treasury administrator records cleared safeguarded funds (bank reference + statement
+ * evidence); a different treasury administrator must confirm before the funds count towards issuance.
+ */
+adminRouter.post('/emoney/programmes/:id/reserves', requirePermission('treasury'), (req, res) => {
+  const body = validate(z.object({ kind: z.enum(['funding', 'adjustment', 'redemption']).default('funding'), direction: z.enum(['in', 'out']).default('in'), amount: z.string(), reference: z.string().min(2).max(200), evidence: z.record(z.string(), z.unknown()).optional().nullable(), note: z.string().min(8).max(500) }), req.body);
+  const programme = getProgramme(String(req.params.id));
+  const cur = getCurrency(programme.currency);
+  const amount = toMinor(body.amount, cur.decimals);
+  const movement = recordReserveMovement({ programmeId: programme.id, kind: body.kind, direction: body.direction, amount, status: 'pending', reference: body.reference, evidence: body.evidence ?? null, proposedBy: req.user!.id, note: body.note }, { type: 'admin', id: req.user!.id });
+  const verification = proposeVerification(req.user!, movement.id, { subjectType: 'reserve_funding', action: 'confirm', note: body.note, externalRef: body.reference, payload: { programmeId: programme.id, kind: body.kind, direction: body.direction, amount, currency: programme.currency } });
+  audit(req.user!.id, 'emoney.reserve.proposed', 'programme', programme.id, { movementId: movement.id, amount, direction: body.direction, reference: body.reference, verificationId: verification.id });
+  res.status(201).json({ movement, verification, programme: getProgramme(programme.id) });
+});
+adminRouter.post('/emoney/reserves/:id/reverse', requirePermission('treasury'), (req, res) => {
+  const body = validate(z.object({ reason: z.string().min(4).max(300), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  const movement = reverseReserveMovement(String(req.params.id), req.user!, body.reason);
+  audit(req.user!.id, 'emoney.reserve.reversed', 'programme', movement.programmeId, { movementId: movement.id, reason: body.reason });
+  res.json({ movement });
+});
+/** Issuance request against a distribution pool (maker → independent checker → mint). */
+adminRouter.post('/emoney/issue', requirePermission('issuance'), (req, res) => {
+  const body = validate(z.object({ programmeId: z.string(), poolId: z.string(), direction: z.enum(['credit', 'debit']).default('credit'), amount: z.string(), reason: z.string().min(3).max(300) }), req.body);
+  const programme = getProgramme(body.programmeId);
+  const pool = getPool(body.poolId);
+  const cur = getCurrency(programme.currency);
+  const amount = toMinor(body.amount, cur.decimals);
+  const verification = proposeVerification(req.user!, pool.walletUserId, { subjectType: 'issuance', action: 'confirm', note: body.reason, payload: { direction: body.direction, amount, currency: cur.code, reason: body.reason, poolId: pool.id, programmeId: programme.id } });
+  audit(req.user!.id, `issuance.${body.direction}.proposed`, 'pool', pool.id, { amount, currency: cur.code, reason: body.reason, verificationId: verification.id });
+  res.status(201).json({ verification, pool: getPool(pool.id), position: programme.position });
+});
+adminRouter.get('/emoney/pools', requirePermission('reports'), (req, res) => res.json({ items: listPools({ programmeId: req.query.programmeId ? String(req.query.programmeId) : null }) }));
+adminRouter.post('/emoney/pools', requirePermission('treasury'), (req, res) => {
+  const body = validate(z.object({ programmeId: z.string(), name: z.string().min(2).max(120), level: z.enum(['country', 'institution', 'master_agent', 'agent', 'merchant']), parentId: z.string().optional().nullable(), ownerUserId: z.string().optional().nullable(), country: z.string().length(2).optional().nullable(), limits: z.record(z.string(), z.number()).optional() }), req.body);
+  const pool = createPool(body, req.user!);
+  audit(req.user!.id, 'emoney.pool.created', 'pool', pool.id, { name: pool.name, level: pool.level });
+  res.status(201).json({ pool });
+});
+/** Distribution moves existing e-money down the hierarchy under step-up; it never creates money. */
+adminRouter.post('/emoney/pools/:id/allocate', requirePermission('treasury'), (req, res) => {
+  const body = validate(z.object({ toPoolId: z.string().optional().nullable(), toUserId: z.string().optional().nullable(), amount: z.string(), reason: z.string().min(3).max(300), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  const from = getPool(String(req.params.id));
+  const amount = toMinor(body.amount, getCurrency(from.currency).decimals);
+  const r = allocate({ fromPoolId: from.id, toPoolId: body.toPoolId, toUserId: body.toUserId, amount, reason: body.reason }, req.user!);
+  audit(req.user!.id, 'emoney.pool.allocated', 'pool', from.id, { toPoolId: body.toPoolId ?? null, toUserId: body.toUserId ?? null, amount, transactionId: r.transaction.id });
+  res.json({ transaction: toTransaction(r.transaction), from: r.from, to: r.to });
+});
+adminRouter.post('/emoney/reconcile', requirePermission('treasury'), (req, res) => {
+  const items = reconcileReserves(req.user!.id);
+  audit(req.user!.id, 'emoney.reconciled', 'programme', 'all', { results: items.map((i) => ({ programmeId: i.programmeId, status: i.status, headroom: i.headroom })) });
+  res.json({ items });
+});
+adminRouter.get('/emoney/reconciliations', requirePermission('reports'), (req, res) => res.json({ items: listReconciliations(req.query.programmeId ? String(req.query.programmeId) : null) }));
+/** Freeze / release a holder's balance where legally permitted (attributable, step-up protected). */
+adminRouter.post('/users/:id/wallets/:currency/freeze', requirePermission('treasury'), (req, res) => {
+  const body = validate(z.object({ freeze: z.boolean().default(true), reason: z.string().min(4).max(300), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  const target = getUserById(String(req.params.id));
+  const wallet = freezeWallet(target.id, String(req.params.currency), req.user!, body.reason, body.freeze);
+  audit(req.user!.id, body.freeze ? 'wallet.frozen' : 'wallet.released', 'user', target.id, { currency: wallet.currency, reason: body.reason });
+  res.json({ wallet: toWallet(wallet, target) });
+});
+/** Statement for any holder (support / regulatory requests); every generation is audited. */
+adminRouter.get('/users/:id/statement', requirePermission('users'), (req, res) => {
+  const q = validate(z.object({ currency: z.string().length(3), from: z.string().min(10), to: z.string().min(10), format: z.enum(['json', 'csv', 'pdf']).default('json') }), req.query);
+  const target = getUserById(String(req.params.id));
+  const s = buildStatement(target, q.currency.toUpperCase(), q.from, q.to, req.user!.id);
+  audit(req.user!.id, 'statement.generated', 'user', target.id, { statementId: s.id, currency: s.account.currency, from: s.period.from, to: s.period.to, format: q.format });
+  const name = `bitripay-statement-${s.number}-${s.account.currency}`;
+  if (q.format === 'csv') return res.type('text/csv').setHeader('Content-Disposition', `attachment; filename="${name}.csv"`).send(statementCsv(s));
+  if (q.format === 'pdf') return res.type('application/pdf').setHeader('Content-Disposition', `attachment; filename="${name}.pdf"`).send(statementPdf(s));
+  res.json({ statement: s });
+});
+adminRouter.get('/users/:id/statements', requirePermission('users'), (req, res) => res.json({ items: listStatements(String(req.params.id)) }));
+adminRouter.get('/users/:id/promo', requirePermission('users'), (req, res) => res.json({ items: listPromoCredits(String(req.params.id)) }));
 
 adminRouter.get('/permissions', (_req, res) => res.json({ items: ADMIN_PERMISSIONS }));
 
@@ -389,7 +496,7 @@ adminRouter.get('/route-catalog', requirePermission('gateways'), (req, res) => r
 // ---------------- Corridors, liquidity, payouts, chargebacks ----------------
 adminRouter.get('/corridors', requirePermission('gateways'), (_req, res) => res.json({ items: listCorridors(), compliance: getSetting('compliance') }));
 adminRouter.put('/corridors/:id', requirePermission('gateways'), (req, res) => {
-  const body = validate(z.object({ sourceCountry: z.string().length(2).optional().nullable(), sourceCurrency: z.string().min(1).max(3), destCountry: z.string().length(2), destCurrency: z.string().length(3), operatorId: z.string().optional().nullable(), rail: z.enum(['mobile_money', 'bank', 'agent']).default('mobile_money'), estimatedPayoutMinutes: z.number().int().min(1).optional(), maxAmount: z.number().int().min(0).optional(), notes: z.string().max(1000).optional().nullable(), enabled: z.boolean().optional(), collectionPartner: z.string().max(200).optional().nullable(), payoutPartner: z.string().max(200).optional().nullable(), licenceRef: z.string().max(200).optional().nullable(), compliance: complianceSchema.optional().nullable(), licenceExpiresAt: z.string().datetime({ offset: true }).optional().nullable() }), req.body);
+  const body = validate(z.object({ sourceCountry: z.string().length(2).optional().nullable(), sourceCurrency: z.string().min(1).max(3), destCountry: z.string().length(2), destCurrency: z.string().length(3), operatorId: z.string().optional().nullable(), rail: z.enum(['mobile_money', 'bank', 'agent']).default('mobile_money'), estimatedPayoutMinutes: z.number().int().min(1).optional(), maxAmount: z.number().int().min(0).optional(), notes: z.string().max(1000).optional().nullable(), enabled: z.boolean().optional(), collectionPartner: z.string().max(200).optional().nullable(), payoutPartner: z.string().max(200).optional().nullable(), licenceRef: z.string().max(200).optional().nullable(), compliance: complianceSchema.optional().nullable(), licenceExpiresAt: z.string().datetime({ offset: true }).optional().nullable(), payoutCurrencies: z.array(z.string().length(3)).max(20).optional().nullable(), beneficiaryConsent: z.boolean().optional().nullable(), payoutConfirmation: z.enum(['PROCESSOR_WEBHOOK', 'SIGNED_SMS_FORWARDER', 'SECURED_DEVICE_CONFIRMATION', 'AGENT_WITH_EVIDENCE', 'ADMIN_MAKER_CHECKER']).optional().nullable() }), req.body);
   const corridor = upsertCorridor({ id: String(req.params.id) === 'new' ? undefined : String(req.params.id), ...body }, { type: 'admin', id: req.user!.id });
   audit(req.user!.id, 'corridor.upsert', 'corridor', corridor.id, { destCountry: body.destCountry, operatorId: body.operatorId ?? null });
   res.json({ corridor });

@@ -25,6 +25,32 @@ export interface LegDeclaration {
   regulatedRail: boolean;
   /** Provider that actually carries the leg (processor id, 'direct_rail', 'internal', 'treasury'). */
   carrier: string;
+  /** Declared confirmation method: what independent evidence settles this leg. */
+  confirmationMethod: ConfirmationMethod;
+}
+
+export type ConfirmationMethod = 'PROCESSOR_WEBHOOK' | 'SIGNED_SMS_FORWARDER' | 'SECURED_DEVICE_CONFIRMATION' | 'AGENT_WITH_EVIDENCE' | 'ADMIN_MAKER_CHECKER' | 'INTERNAL_LEDGER';
+export const CONFIRMATION_METHODS: Record<ConfirmationMethod, { label: string; description: string }> = {
+  PROCESSOR_WEBHOOK: { label: 'Processor webhook', description: 'A licensed card / payment processor confirms the funds by signed webhook (replay-protected) before the ledger is credited.' },
+  SIGNED_SMS_FORWARDER: { label: 'Signed SMS forwarder', description: 'A registered device forwards the operator SMS signed with its Ed25519 key; reference, amount, currency, sender and timing must match.' },
+  SECURED_DEVICE_CONFIRMATION: { label: 'Secured payout device', description: 'The Android payout device that executed the USSD payout forwards the operator confirmation signed with its key and SIM identity.' },
+  AGENT_WITH_EVIDENCE: { label: 'Agent with evidence', description: 'An approved local agent executes the payout and submits the operator reference; a second administrator confirms (maker-checker).' },
+  ADMIN_MAKER_CHECKER: { label: 'Administrator maker-checker', description: 'Treasury executes the transfer and two administrators confirm against documentary evidence (bank / operator statement).' },
+  INTERNAL_LEDGER: { label: 'Internal ledger', description: 'Both sides are BitriPay balances; settlement is a double-entry posting with no external confirmation needed.' },
+};
+
+function fundingMethod(leg: Omit<LegDeclaration, 'confirmationMethod'>): ConfirmationMethod {
+  if (leg.carrier === 'internal') return 'INTERNAL_LEDGER';
+  if (leg.carrier === 'direct_rail' || leg.carrier === 'manual_momo') return 'SIGNED_SMS_FORWARDER';
+  if (leg.carrier === 'manual_bank' || leg.carrier === 'treasury') return 'ADMIN_MAKER_CHECKER';
+  return 'PROCESSOR_WEBHOOK';
+}
+function payoutMethod(leg: Omit<LegDeclaration, 'confirmationMethod'>, override?: string | null): ConfirmationMethod {
+  if (override && override in CONFIRMATION_METHODS) return override as ConfirmationMethod;
+  if (leg.carrier === 'internal') return 'INTERNAL_LEDGER';
+  if (leg.kind === 'mobile_money') return 'SECURED_DEVICE_CONFIRMATION';
+  if (leg.kind === 'agent') return 'AGENT_WITH_EVIDENCE';
+  return 'ADMIN_MAKER_CHECKER';
 }
 
 export interface RouteDeclaration {
@@ -45,6 +71,10 @@ const modeRank: Record<ProcessingMode, number> = { automatic: 0, assisted: 1, ma
 const slower = (a: ProcessingMode, b: ProcessingMode) => (modeRank[a] >= modeRank[b] ? a : b);
 
 export function describeFunding(source: RouteSourceKind, opts: { currency?: string | null; country?: string | null; operatorId?: string | null; gateway?: string | null } = {}): LegDeclaration {
+  const leg = describeFundingLeg(source, opts);
+  return { ...leg, confirmationMethod: fundingMethod(leg) };
+}
+function describeFundingLeg(source: RouteSourceKind, opts: { currency?: string | null; country?: string | null; operatorId?: string | null; gateway?: string | null } = {}): Omit<LegDeclaration, 'confirmationMethod'> {
   if (source === 'wallet' || source === 'qr') {
     return { kind: source, initiation: 'Internal wallet debit after biometric or PIN approval', confirmation: 'Immediate (internal ledger)', settlement: 'Double-entry ledger posting', expectedCompletion: 'Instant', processing: 'automatic', refundMethod: 'Ledger reversal to the wallet', feeType: null, regulatedRail: false, carrier: 'internal' };
   }
@@ -107,7 +137,11 @@ export function describeFunding(source: RouteSourceKind, opts: { currency?: stri
   };
 }
 
-export function describePayout(destination: RouteDestKind, opts: { operatorId?: string | null } = {}): LegDeclaration {
+export function describePayout(destination: RouteDestKind, opts: { operatorId?: string | null; payoutConfirmation?: string | null } = {}): LegDeclaration {
+  const leg = describePayoutLeg(destination, opts);
+  return { ...leg, confirmationMethod: payoutMethod(leg, opts.payoutConfirmation) };
+}
+function describePayoutLeg(destination: RouteDestKind, opts: { operatorId?: string | null } = {}): Omit<LegDeclaration, 'confirmationMethod'> {
   switch (destination) {
     case 'wallet':
     case 'qr':
@@ -116,7 +150,7 @@ export function describePayout(destination: RouteDestKind, opts: { operatorId?: 
       return { kind: destination, initiation: destination === 'keep' ? 'Funds stay in the wallet' : 'Internal wallet credit to the recipient (user, merchant or QR target)', confirmation: 'Immediate (internal ledger)', settlement: 'Double-entry ledger posting', expectedCompletion: 'Instant', processing: 'automatic', refundMethod: 'Ledger reversal', feeType: destination === 'merchant' || destination === 'keep' ? null : 'transfer', regulatedRail: false, carrier: 'internal' };
     case 'mobile_money': {
       const op = opts.operatorId ? safeOperator(opts.operatorId) : null;
-      return { kind: 'mobile_money', initiation: `Payout request to ${op?.name ?? 'the operator'} number; funds held in escrow`, confirmation: 'Treasury operator sends from the platform mobile money account and records the operator transaction ID; approval is maker-checker', settlement: 'Operator transfer from the platform account to the recipient number', expectedCompletion: 'Minutes to a few hours during business hours', processing: 'manual', refundMethod: 'Escrow released back to the wallet if the payout is rejected', feeType: 'withdrawal', regulatedRail: true, carrier: 'treasury' };
+      return { kind: 'mobile_money', initiation: `Payout instruction routed to a prefunded ${op?.name ?? 'operator'} payout account; funds held in escrow`, confirmation: 'The secured Android payout device (or approved agent) executes the USSD transfer; the operator confirmation SMS is signed and verified before settlement', settlement: 'Operator transfer from the prefunded local account (merchant SIM) to the recipient number', expectedCompletion: 'Minutes to a few hours during business hours', processing: 'manual', refundMethod: 'Escrow released back to the wallet if the payout is rejected', feeType: 'withdrawal', regulatedRail: true, carrier: 'treasury' };
     }
     case 'bank':
       return { kind: 'bank', initiation: 'Payout request to the bank account; funds held in escrow', confirmation: 'Treasury operator executes a bank transfer and records the bank reference; approval is maker-checker', settlement: 'Bank transfer from the platform account', expectedCompletion: 'Same day to 2 business days', processing: 'manual', refundMethod: 'Escrow released back to the wallet if the payout is rejected', feeType: 'withdrawal', regulatedRail: true, carrier: 'treasury' };
@@ -133,9 +167,9 @@ function safeOperator(id: string) {
   }
 }
 
-export function describeRoute(source: RouteSourceKind, destination: RouteDestKind, opts: { currency?: string | null; targetCurrency?: string | null; country?: string | null; operatorId?: string | null; destinationOperatorId?: string | null; gateway?: string | null } = {}): RouteDeclaration {
+export function describeRoute(source: RouteSourceKind, destination: RouteDestKind, opts: { currency?: string | null; targetCurrency?: string | null; country?: string | null; operatorId?: string | null; destinationOperatorId?: string | null; gateway?: string | null; payoutConfirmation?: string | null } = {}): RouteDeclaration {
   const funding = describeFunding(source, { currency: opts.currency, country: opts.country, operatorId: opts.operatorId, gateway: opts.gateway });
-  const payout = describePayout(destination, { operatorId: opts.destinationOperatorId });
+  const payout = describePayout(destination, { operatorId: opts.destinationOperatorId, payoutConfirmation: opts.payoutConfirmation });
   const crossCurrency = !!opts.currency && !!opts.targetCurrency && opts.currency !== opts.targetCurrency;
   const processing = slower(funding.processing, payout.processing);
   const external = funding.regulatedRail || payout.regulatedRail;

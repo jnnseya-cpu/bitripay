@@ -35,6 +35,12 @@ export interface Corridor {
   compliance: CorridorCompliance;
   licenceExpiresAt: string | null;
   readiness: { ready: boolean; missing: string[]; warnings: string[] };
+  /** Additional payout currencies the destination institution / agent can legally pay in this corridor (besides destCurrency). */
+  payoutCurrencies: string[];
+  /** Regulated corridors where the beneficiary must confirm a non-local payout currency before the payout executes. */
+  beneficiaryConsent: boolean;
+  /** Declared confirmation method for the payout leg (overrides the rail default). */
+  payoutConfirmation: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -85,7 +91,7 @@ export function corridorReadiness(r: { collection_partner: string | null; payout
 }
 
 function toCorridor(r: any): Corridor {
-  return { compliance: parseJson(r.compliance, {}), licenceExpiresAt: r.licence_expires_at ?? null, readiness: corridorReadiness(r), id: r.id, sourceCountry: r.source_country, sourceCurrency: r.source_currency, destCountry: r.dest_country, destCurrency: r.dest_currency, operatorId: r.operator_id, rail: r.rail, status: r.status, collectionPartner: r.collection_partner, payoutPartner: r.payout_partner, licenceRef: r.licence_ref, approvedBy: r.approved_by, approvedAt: r.approved_at, estimatedPayoutMinutes: r.estimated_payout_minutes, maxAmount: r.max_amount, notes: r.notes, enabled: !!r.enabled, createdAt: r.created_at, updatedAt: r.updated_at };
+  return { compliance: parseJson(r.compliance, {}), licenceExpiresAt: r.licence_expires_at ?? null, readiness: corridorReadiness(r), payoutCurrencies: parseJson<string[]>(r.payout_currencies, []), beneficiaryConsent: !!r.beneficiary_consent, payoutConfirmation: r.payout_confirmation ?? null, id: r.id, sourceCountry: r.source_country, sourceCurrency: r.source_currency, destCountry: r.dest_country, destCurrency: r.dest_currency, operatorId: r.operator_id, rail: r.rail, status: r.status, collectionPartner: r.collection_partner, payoutPartner: r.payout_partner, licenceRef: r.licence_ref, approvedBy: r.approved_by, approvedAt: r.approved_at, estimatedPayoutMinutes: r.estimated_payout_minutes, maxAmount: r.max_amount, notes: r.notes, enabled: !!r.enabled, createdAt: r.created_at, updatedAt: r.updated_at };
 }
 
 export function listCorridors(): Corridor[] {
@@ -97,7 +103,7 @@ export function getCorridor(id: string): Corridor {
   return toCorridor(r);
 }
 
-export function upsertCorridor(input: Partial<Omit<Corridor, 'compliance'>> & { sourceCurrency: string; destCountry: string; destCurrency: string; rail?: Corridor['rail']; compliance?: CorridorCompliance | null; licenceExpiresAt?: string | null }, actor?: Actor): Corridor {
+export function upsertCorridor(input: Partial<Omit<Corridor, 'compliance' | 'payoutCurrencies' | 'beneficiaryConsent' | 'payoutConfirmation'>> & { sourceCurrency: string; destCountry: string; destCurrency: string; rail?: Corridor['rail']; compliance?: CorridorCompliance | null; licenceExpiresAt?: string | null; payoutCurrencies?: string[] | null; beneficiaryConsent?: boolean | null; payoutConfirmation?: string | null }, actor?: Actor): Corridor {
   const db = getDb();
   if (input.operatorId) getOperator(input.operatorId);
   // One corridor per (source currency, destination, operator, rail): re-registering updates it instead of duplicating.
@@ -111,6 +117,10 @@ export function upsertCorridor(input: Partial<Omit<Corridor, 'compliance'>> & { 
      ON CONFLICT(id) DO UPDATE SET source_country = excluded.source_country, source_currency = excluded.source_currency, dest_country = excluded.dest_country, dest_currency = excluded.dest_currency, operator_id = excluded.operator_id, rail = excluded.rail, status = excluded.status, collection_partner = excluded.collection_partner, payout_partner = excluded.payout_partner, licence_ref = excluded.licence_ref, approved_by = excluded.approved_by, approved_at = excluded.approved_at, estimated_payout_minutes = excluded.estimated_payout_minutes, max_amount = excluded.max_amount, notes = excluded.notes, enabled = excluded.enabled, updated_at = excluded.updated_at`,
   ).run(id, input.sourceCountry ?? existing?.source_country ?? null, input.sourceCurrency.toUpperCase(), input.destCountry.toUpperCase(), input.destCurrency.toUpperCase(), input.operatorId ?? existing?.operator_id ?? null, input.rail ?? existing?.rail ?? 'mobile_money', status, input.collectionPartner ?? existing?.collection_partner ?? null, input.payoutPartner ?? existing?.payout_partner ?? null, input.licenceRef ?? existing?.licence_ref ?? null, existing?.approved_by ?? null, existing?.approved_at ?? null, input.estimatedPayoutMinutes ?? existing?.estimated_payout_minutes ?? 60, input.maxAmount ?? existing?.max_amount ?? 0, input.notes ?? existing?.notes ?? null, input.enabled === false ? 0 : 1, existing?.created_at ?? now(), now());
   if (input.compliance !== undefined || input.licenceExpiresAt !== undefined) db.prepare('UPDATE corridors SET compliance = ?, licence_expires_at = ? WHERE id = ?').run(JSON.stringify({ ...parseJson(existing?.compliance, {}), ...(input.compliance ?? {}) }), input.licenceExpiresAt === undefined ? existing?.licence_expires_at ?? null : input.licenceExpiresAt, id);
+  if (input.payoutCurrencies !== undefined || input.beneficiaryConsent !== undefined || input.payoutConfirmation !== undefined) {
+    const currencies = input.payoutCurrencies === undefined ? parseJson<string[]>(existing?.payout_currencies, []) : (input.payoutCurrencies ?? []).map((c) => c.toUpperCase()).filter((c) => c !== input.destCurrency.toUpperCase());
+    db.prepare('UPDATE corridors SET payout_currencies = ?, beneficiary_consent = ?, payout_confirmation = ? WHERE id = ?').run(JSON.stringify([...new Set(currencies)]), input.beneficiaryConsent === undefined ? existing?.beneficiary_consent ?? 0 : input.beneficiaryConsent ? 1 : 0, input.payoutConfirmation === undefined ? existing?.payout_confirmation ?? null : input.payoutConfirmation, id);
+  }
   recordEvent('corridor', id, existing ? 'corridor.updated' : 'corridor.created', actor ?? { type: 'system' }, { status, destCountry: input.destCountry, operatorId: input.operatorId ?? null });
   return getCorridor(id);
 }

@@ -28,9 +28,9 @@ import { ensureCorridor, type Corridor } from './corridors';
 import { normalizePhoneDigits } from './risk';
 import { tryTransitionRoute } from './routeLifecycle';
 
-export const PAYOUT_STAGES = ['QUEUED', 'IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING', 'SETTLED', 'FAILED', 'MISMATCHED', 'DUPLICATE', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'EXPIRED', 'CANCELLED'] as const;
+export const PAYOUT_STAGES = ['QUEUED', 'IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING', 'SETTLED', 'FAILED', 'MISMATCHED', 'DUPLICATE', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'EXPIRED', 'CANCELLED'] as const;
 export type PayoutStage = (typeof PAYOUT_STAGES)[number];
-const OPEN: PayoutStage[] = ['QUEUED', 'IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MISMATCHED', 'DUPLICATE', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW'];
+const OPEN: PayoutStage[] = ['QUEUED', 'IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MISMATCHED', 'DUPLICATE', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW'];
 
 export interface PayoutView {
   id: string;
@@ -119,7 +119,9 @@ function setStage(id: string, stage: PayoutStage, actor: Actor, details: Record<
   getDb().prepare(`UPDATE payout_instructions SET stage = ?, updated_at = ?${keys.map((k) => `, ${k} = ?`).join('')} WHERE id = ?`).run(stage, now(), ...keys.map((k) => fields[k]), id);
   recordEvent('payout', id, `payout.${stage.toLowerCase()}`, actor, { from: r.stage, to: stage, ...details });
 }
-const ROUTE_FOR: Partial<Record<PayoutStage, 'PAYOUT_QUEUED' | 'PAYOUT_IN_PROGRESS' | 'EVIDENCE_RECEIVED' | 'VERIFYING' | 'SETTLED' | 'FAILED' | 'MISMATCHED' | 'DUPLICATE' | 'LIQUIDITY_UNAVAILABLE' | 'MANUAL_REVIEW' | 'EXPIRED'>> = { QUEUED: 'PAYOUT_QUEUED', IN_PROGRESS: 'PAYOUT_IN_PROGRESS', EVIDENCE_RECEIVED: 'EVIDENCE_RECEIVED', VERIFYING: 'VERIFYING', SETTLED: 'SETTLED', FAILED: 'FAILED', MISMATCHED: 'MISMATCHED', DUPLICATE: 'DUPLICATE', LIQUIDITY_UNAVAILABLE: 'LIQUIDITY_UNAVAILABLE', MANUAL_REVIEW: 'MANUAL_REVIEW', EXPIRED: 'MANUAL_REVIEW' };
+const ROUTE_FOR: Partial<Record<PayoutStage, 'PAYOUT_ROUTED' | 'PAYOUT_SENT' | 'EVIDENCE_RECEIVED' | 'VERIFYING' | 'VERIFIED' | 'SETTLED' | 'FAILED' | 'MISMATCHED' | 'DUPLICATE' | 'INSUFFICIENT_LIQUIDITY' | 'MANUAL_REVIEW' | 'EXPIRED'>> = { QUEUED: 'PAYOUT_ROUTED', IN_PROGRESS: 'PAYOUT_SENT', EVIDENCE_RECEIVED: 'EVIDENCE_RECEIVED', VERIFYING: 'VERIFYING', SETTLED: 'SETTLED', FAILED: 'FAILED', MISMATCHED: 'MISMATCHED', DUPLICATE: 'DUPLICATE', INSUFFICIENT_LIQUIDITY: 'INSUFFICIENT_LIQUIDITY', MANUAL_REVIEW: 'MANUAL_REVIEW', EXPIRED: 'MANUAL_REVIEW' };
+/** Which declared confirmation method actually settled the leg. */
+const CONFIRMATION_FOR_SOURCE: Record<string, string> = { signed_device: 'SECURED_DEVICE_CONFIRMATION', shared_secret: 'SIGNED_SMS_FORWARDER', manual: 'AGENT_WITH_EVIDENCE', admin: 'ADMIN_MAKER_CHECKER', processor: 'PROCESSOR_WEBHOOK' };
 function syncRoute(r: any, stage: PayoutStage, actor: Actor, details: Record<string, unknown> = {}) {
   const target = ROUTE_FOR[stage];
   if (r.route_id && target) tryTransitionRoute(r.route_id, target, actor, { payoutId: r.id, ...details });
@@ -141,7 +143,7 @@ export interface CreatePayoutInput {
   sourceCountry?: string | null;
 }
 
-/** Create and route a payout instruction. Picks a prefunded account now; LIQUIDITY_UNAVAILABLE keeps the funds safely held. */
+/** Create and route a payout instruction. Picks a prefunded account now; INSUFFICIENT_LIQUIDITY keeps the funds safely held. */
 export function createPayoutInstruction(input: CreatePayoutInput, actor: Actor = { type: 'system' }): PayoutView {
   const tx = getTransaction(input.transactionId);
   if (!tx) throw badRequest('Transaction not found');
@@ -151,7 +153,7 @@ export function createPayoutInstruction(input: CreatePayoutInput, actor: Actor =
   const account = selectPayoutAccount({ rail: input.rail, operatorId: input.operatorId ?? null, currency: input.currency, amount: input.amount, country });
   const id = uuid();
   const reference = `PO${shortCode(8)}`;
-  const stage: PayoutStage = account ? 'QUEUED' : 'LIQUIDITY_UNAVAILABLE';
+  const stage: PayoutStage = account ? 'QUEUED' : 'INSUFFICIENT_LIQUIDITY';
   const expiresAt = new Date(Date.now() + getGatewayControls().intentExpiryHours * 3600_000).toISOString();
   getDb().prepare(
     `INSERT INTO payout_instructions (id, reference, route_id, transaction_id, user_id, corridor_id, payout_account_id, agent_user_id, rail, operator_id, recipient_msisdn, recipient_name, bank_details, amount, currency, stage, attempts, risk_flags, error, expires_at, created_at, updated_at)
@@ -379,7 +381,12 @@ export function settlePayout(id: string, actor: Actor, input: { evidenceId?: str
     let floatTx: TransactionRow | null = null;
     if (account) floatTx = debitFloatForPayout(account, r.amount, r.id, r.reference, input.externalRef ?? null);
     setStage(id, 'SETTLED', actor, { evidenceId: input.evidenceId ?? null, externalRef: input.externalRef ?? null, source: input.source, verificationId: input.verificationId ?? null }, { evidence_id: input.evidenceId ?? r.evidence_id, external_ref: input.externalRef ?? null, float_transaction_id: floatTx?.id ?? null, error: null });
-    syncRoute(r, 'SETTLED', actor, { externalRef: input.externalRef ?? null });
+    const method = CONFIRMATION_FOR_SOURCE[input.source] ?? 'ADMIN_MAKER_CHECKER';
+    if (r.route_id) {
+      tryTransitionRoute(r.route_id, 'VERIFIED', actor, { payoutId: r.id, confirmationMethod: method, evidenceId: input.evidenceId ?? null });
+      getDb().prepare('UPDATE money_routes SET confirmation_method = ? WHERE id = ?').run(method, r.route_id);
+    }
+    syncRoute(r, 'SETTLED', actor, { externalRef: input.externalRef ?? null, confirmationMethod: method });
     const cur = getCurrency(r.currency, false);
     const sender = findUserById(r.user_id);
     if (sender) notify(sender.id, 'Payout delivered', `${formatMoney(r.amount, cur)} was delivered to ${r.recipient_name || mask(r.recipient_msisdn) || 'the recipient'} (${r.operator_id ? getOperator(r.operator_id).name : 'bank'}). Operator reference ${input.externalRef ?? r.reference}.`, { kind: 'payout', payoutId: r.id, transactionId: tx.id });
@@ -405,7 +412,7 @@ export function failPayout(id: string, actor: Actor, reason: string, input: { ve
 /** Cancel before execution (refund / chargeback flows). Returns held funds to the wallet. */
 export function cancelPayout(id: string, actor: Actor, reason: string): PayoutView {
   const r = row(id);
-  if (!['QUEUED', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'EXPIRED', 'FAILED', 'MISMATCHED', 'DUPLICATE'].includes(r.stage)) throw conflict(`Payout is ${r.stage.toLowerCase().replace(/_/g, ' ')} and cannot be cancelled`, 'invalid_stage_transition');
+  if (!['QUEUED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'EXPIRED', 'FAILED', 'MISMATCHED', 'DUPLICATE'].includes(r.stage)) throw conflict(`Payout is ${r.stage.toLowerCase().replace(/_/g, ' ')} and cannot be cancelled`, 'invalid_stage_transition');
   const tx = getTransaction(r.transaction_id)!;
   if (tx.status === 'pending') reverseTransaction(tx.id, 'cancelled', reason);
   setStage(id, 'CANCELLED', actor, { reason }, { error: reason });
@@ -415,14 +422,14 @@ export function cancelPayout(id: string, actor: Actor, reason: string): PayoutVi
 /** Retry routing (after prefunding, or after a device failure). */
 export function requeuePayout(id: string, actor: Actor): PayoutView {
   const r = row(id);
-  if (!['LIQUIDITY_UNAVAILABLE', 'FAILED', 'EXPIRED', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE'].includes(r.stage)) throw conflict(`Payout is ${r.stage.toLowerCase()}`, 'invalid_stage_transition');
+  if (!['INSUFFICIENT_LIQUIDITY', 'FAILED', 'EXPIRED', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE'].includes(r.stage)) throw conflict(`Payout is ${r.stage.toLowerCase()}`, 'invalid_stage_transition');
   const tx = getTransaction(r.transaction_id)!;
   if (tx.status !== 'pending') throw conflict('Held funds were already released; create a new transfer', 'invalid_status');
   const account = selectPayoutAccount({ rail: r.rail, operatorId: r.operator_id, currency: r.currency, amount: r.amount });
   if (!account) {
-    if (r.stage !== 'LIQUIDITY_UNAVAILABLE') {
-      setStage(id, 'LIQUIDITY_UNAVAILABLE', actor, {}, { error: 'No prefunded payout account with enough float', payout_account_id: null });
-      syncRoute(r, 'LIQUIDITY_UNAVAILABLE', actor);
+    if (r.stage !== 'INSUFFICIENT_LIQUIDITY') {
+      setStage(id, 'INSUFFICIENT_LIQUIDITY', actor, {}, { error: 'No prefunded payout account with enough float', payout_account_id: null });
+      syncRoute(r, 'INSUFFICIENT_LIQUIDITY', actor);
     }
     return getPayout(id);
   }
@@ -433,7 +440,7 @@ export function requeuePayout(id: string, actor: Actor): PayoutView {
 
 /** Retry every payout waiting on liquidity for this account's rail/operator/currency (after a prefund). */
 export function requeueWaiting(account: PayoutAccount, actor: Actor): number {
-  const rows = getDb().prepare("SELECT id FROM payout_instructions WHERE stage = 'LIQUIDITY_UNAVAILABLE' AND rail = ? AND currency = ? AND (operator_id IS ? OR ? IS NULL) ORDER BY created_at ASC").all(account.rail, account.currency, account.operatorId, account.operatorId) as { id: string }[];
+  const rows = getDb().prepare("SELECT id FROM payout_instructions WHERE stage = 'INSUFFICIENT_LIQUIDITY' AND rail = ? AND currency = ? AND (operator_id IS ? OR ? IS NULL) ORDER BY created_at ASC").all(account.rail, account.currency, account.operatorId, account.operatorId) as { id: string }[];
   let n = 0;
   for (const r of rows) if (requeuePayout(r.id, actor).stage === 'QUEUED') n += 1;
   return n;
@@ -448,7 +455,7 @@ export function expirePayouts(): { released: number; expired: number } {
     releasePayout(r.id, null, 'Claim expired without evidence', { type: 'system' });
     released += 1;
   }
-  for (const r of db.prepare("SELECT * FROM payout_instructions WHERE stage IN ('QUEUED', 'LIQUIDITY_UNAVAILABLE') AND expires_at < ?").all(now()) as any[]) {
+  for (const r of db.prepare("SELECT * FROM payout_instructions WHERE stage IN ('QUEUED', 'INSUFFICIENT_LIQUIDITY') AND expires_at < ?").all(now()) as any[]) {
     setStage(r.id, 'EXPIRED', { type: 'system' }, {}, { error: 'Not executed before expiry' });
     syncRoute(r, 'EXPIRED', { type: 'system' }, { reason: 'payout_expired' });
     expired += 1;

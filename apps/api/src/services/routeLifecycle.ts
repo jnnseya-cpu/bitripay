@@ -1,8 +1,8 @@
 /**
  * Lifecycle of a cross-rail transfer ("route"):
- *   CREATED → QUOTED → BIOMETRIC_APPROVAL_REQUIRED → FUNDING_PENDING → FUNDS_CONFIRMED
- *   → PAYOUT_QUEUED → PAYOUT_IN_PROGRESS → EVIDENCE_RECEIVED → VERIFYING → SETTLED
- * Exceptions: EXPIRED · FAILED · MISMATCHED · DUPLICATE · LIQUIDITY_UNAVAILABLE · MANUAL_REVIEW · DISPUTED · REVERSED · REFUNDED
+ *   CREATED → QUOTED → BIOMETRIC_APPROVAL_REQUIRED → BIOMETRICALLY_APPROVED → FUNDING_PENDING → FUNDED
+ *   → FX_RESERVED → PAYOUT_ROUTED → PAYOUT_SENT → EVIDENCE_RECEIVED → VERIFYING → VERIFIED → SETTLED
+ * Exceptions: INSUFFICIENT_LIQUIDITY · AWAITING_CONFIRMATION · MISMATCHED · DUPLICATE · MANUAL_REVIEW · FAILED · EXPIRED · DISPUTED · REVERSED · REFUNDED
  * Kept free of imports from routing/payouts so both can use it without cycles.
  */
 import { getDb } from '../db';
@@ -10,30 +10,34 @@ import { now } from '../lib/ids';
 import { conflict } from '../lib/errors';
 import { recordEvent, type Actor } from './events';
 
-export const ROUTE_STAGES = ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'FUNDING_PENDING', 'FUNDS_CONFIRMED', 'PAYOUT_QUEUED', 'PAYOUT_IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING', 'SETTLED', 'EXPIRED', 'FAILED', 'MISMATCHED', 'DUPLICATE', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'DISPUTED', 'REVERSED', 'REFUNDED'] as const;
+export const ROUTE_STAGES = ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'BIOMETRICALLY_APPROVED', 'FUNDING_PENDING', 'FUNDED', 'FX_RESERVED', 'AWAITING_CONFIRMATION', 'PAYOUT_ROUTED', 'PAYOUT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'VERIFIED', 'SETTLED', 'EXPIRED', 'FAILED', 'MISMATCHED', 'DUPLICATE', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'DISPUTED', 'REVERSED', 'REFUNDED'] as const;
 export type RouteStage = (typeof ROUTE_STAGES)[number];
 
 export const ROUTE_TERMINAL: RouteStage[] = ['SETTLED', 'EXPIRED', 'FAILED', 'REVERSED', 'REFUNDED'];
 /** Funds are in the sender's wallet / escrow and nothing has left the platform yet. */
-export const ROUTE_REFUNDABLE: RouteStage[] = ['FUNDS_CONFIRMED', 'PAYOUT_QUEUED', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'FAILED'];
+export const ROUTE_REFUNDABLE: RouteStage[] = ['FUNDED', 'FX_RESERVED', 'AWAITING_CONFIRMATION', 'PAYOUT_ROUTED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'FAILED'];
 
 const T: Record<RouteStage, RouteStage[]> = {
   CREATED: ['QUOTED', 'FAILED', 'EXPIRED'],
-  QUOTED: ['BIOMETRIC_APPROVAL_REQUIRED', 'FUNDING_PENDING', 'FUNDS_CONFIRMED', 'FAILED', 'EXPIRED'],
-  BIOMETRIC_APPROVAL_REQUIRED: ['FUNDING_PENDING', 'FUNDS_CONFIRMED', 'FAILED', 'EXPIRED'],
-  FUNDING_PENDING: ['FUNDS_CONFIRMED', 'FAILED', 'EXPIRED', 'MANUAL_REVIEW', 'DISPUTED'],
-  FUNDS_CONFIRMED: ['PAYOUT_QUEUED', 'PAYOUT_IN_PROGRESS', 'SETTLED', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'FAILED', 'DISPUTED', 'REFUNDED'],
-  PAYOUT_QUEUED: ['PAYOUT_IN_PROGRESS', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'EXPIRED', 'FAILED', 'DISPUTED', 'REFUNDED', 'SETTLED'],
-  PAYOUT_IN_PROGRESS: ['EVIDENCE_RECEIVED', 'PAYOUT_QUEUED', 'MANUAL_REVIEW', 'FAILED', 'DISPUTED', 'SETTLED'],
-  EVIDENCE_RECEIVED: ['VERIFYING', 'MISMATCHED', 'DUPLICATE', 'MANUAL_REVIEW'],
-  VERIFYING: ['SETTLED', 'MISMATCHED', 'DUPLICATE', 'MANUAL_REVIEW', 'FAILED'],
+  QUOTED: ['BIOMETRIC_APPROVAL_REQUIRED', 'BIOMETRICALLY_APPROVED', 'FUNDING_PENDING', 'FUNDED', 'FAILED', 'EXPIRED'],
+  BIOMETRIC_APPROVAL_REQUIRED: ['BIOMETRICALLY_APPROVED', 'FUNDING_PENDING', 'FUNDED', 'FAILED', 'EXPIRED'],
+  BIOMETRICALLY_APPROVED: ['FUNDING_PENDING', 'FUNDED', 'FAILED', 'EXPIRED', 'MANUAL_REVIEW'],
+  FUNDING_PENDING: ['FUNDED', 'FAILED', 'EXPIRED', 'MANUAL_REVIEW', 'DISPUTED'],
+  FUNDED: ['FX_RESERVED', 'AWAITING_CONFIRMATION', 'PAYOUT_ROUTED', 'PAYOUT_SENT', 'SETTLED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'FAILED', 'DISPUTED', 'REFUNDED'],
+  FX_RESERVED: ['PAYOUT_ROUTED', 'PAYOUT_SENT', 'SETTLED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'FAILED', 'DISPUTED', 'REFUNDED'],
+  AWAITING_CONFIRMATION: ['FUNDED', 'FX_RESERVED', 'PAYOUT_ROUTED', 'MANUAL_REVIEW', 'FAILED', 'REFUNDED', 'EXPIRED', 'DISPUTED'],
+  PAYOUT_ROUTED: ['PAYOUT_SENT', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'EXPIRED', 'FAILED', 'DISPUTED', 'REFUNDED', 'SETTLED'],
+  PAYOUT_SENT: ['EVIDENCE_RECEIVED', 'AWAITING_CONFIRMATION', 'PAYOUT_ROUTED', 'MANUAL_REVIEW', 'FAILED', 'DISPUTED', 'SETTLED'],
+  EVIDENCE_RECEIVED: ['VERIFYING', 'VERIFIED', 'MISMATCHED', 'DUPLICATE', 'MANUAL_REVIEW'],
+  VERIFYING: ['VERIFIED', 'SETTLED', 'MISMATCHED', 'DUPLICATE', 'MANUAL_REVIEW', 'FAILED'],
+  VERIFIED: ['SETTLED', 'MANUAL_REVIEW'],
   SETTLED: ['DISPUTED', 'REVERSED'],
   EXPIRED: ['MANUAL_REVIEW', 'REFUNDED'],
-  FAILED: ['PAYOUT_QUEUED', 'MANUAL_REVIEW', 'REFUNDED'],
-  MISMATCHED: ['VERIFYING', 'MANUAL_REVIEW', 'PAYOUT_IN_PROGRESS', 'FAILED'],
-  DUPLICATE: ['VERIFYING', 'MANUAL_REVIEW', 'PAYOUT_IN_PROGRESS', 'FAILED'],
-  LIQUIDITY_UNAVAILABLE: ['PAYOUT_QUEUED', 'MANUAL_REVIEW', 'FAILED', 'REFUNDED', 'EXPIRED'],
-  MANUAL_REVIEW: ['PAYOUT_QUEUED', 'PAYOUT_IN_PROGRESS', 'FUNDS_CONFIRMED', 'VERIFYING', 'SETTLED', 'FAILED', 'REFUNDED', 'REVERSED'],
+  FAILED: ['PAYOUT_ROUTED', 'MANUAL_REVIEW', 'REFUNDED'],
+  MISMATCHED: ['VERIFYING', 'MANUAL_REVIEW', 'PAYOUT_SENT', 'FAILED'],
+  DUPLICATE: ['VERIFYING', 'MANUAL_REVIEW', 'PAYOUT_SENT', 'FAILED'],
+  INSUFFICIENT_LIQUIDITY: ['PAYOUT_ROUTED', 'MANUAL_REVIEW', 'FAILED', 'REFUNDED', 'EXPIRED'],
+  MANUAL_REVIEW: ['PAYOUT_ROUTED', 'PAYOUT_SENT', 'FUNDED', 'FX_RESERVED', 'VERIFYING', 'VERIFIED', 'SETTLED', 'FAILED', 'REFUNDED', 'REVERSED'],
   DISPUTED: ['REVERSED', 'SETTLED', 'MANUAL_REVIEW', 'REFUNDED'],
   REVERSED: [],
   REFUNDED: [],
@@ -44,9 +48,14 @@ export function routeStageToStatus(stage: RouteStage): string {
   switch (stage) {
     case 'BIOMETRIC_APPROVAL_REQUIRED':
       return 'authentication_required';
+    case 'BIOMETRICALLY_APPROVED':
+      return 'approved';
+    case 'FX_RESERVED':
+    case 'AWAITING_CONFIRMATION':
+      return 'funded';
     case 'FUNDING_PENDING':
       return 'funding';
-    case 'FUNDS_CONFIRMED':
+    case 'FUNDED':
       return 'funded';
     case 'SETTLED':
       return 'completed';
@@ -66,17 +75,21 @@ export const ROUTE_STAGE_LABELS: Record<RouteStage, { label: string; group: 'ini
   QUOTED: { label: 'Quoted', group: 'initiated', description: 'Rate, fees and recipient amount quoted.' },
   BIOMETRIC_APPROVAL_REQUIRED: { label: 'Approval required', group: 'initiated', description: 'Approve with Face ID, fingerprint, passkey or PIN.' },
   FUNDING_PENDING: { label: 'Funding pending', group: 'initiated', description: 'Waiting for the card processor, bank or operator to confirm the funds.' },
-  FUNDS_CONFIRMED: { label: 'Funds confirmed', group: 'funded', description: 'Funding confirmed and held. The payout is being prepared.' },
-  PAYOUT_QUEUED: { label: 'Payout queued', group: 'paying', description: 'Queued for a prefunded payout account or an approved local agent.' },
-  PAYOUT_IN_PROGRESS: { label: 'Payout in progress', group: 'paying', description: 'The payout is being executed from the local account (USSD / operator app).' },
+  BIOMETRICALLY_APPROVED: { label: 'Biometrically approved', group: 'initiated', description: 'Approved with biometrics / passkey / PIN. Funding is being collected.' },
+  FUNDED: { label: 'Funded', group: 'funded', description: 'Funding confirmed and held in safeguarded e-money. The payout is being prepared.' },
+  FX_RESERVED: { label: 'FX reserved', group: 'funded', description: 'The exchange rate is locked and local liquidity reserved at the disclosed rate.' },
+  AWAITING_CONFIRMATION: { label: 'Awaiting confirmation', group: 'exception', description: 'Waiting for the recipient to confirm the payout currency (required in this corridor) or for the operator confirmation.' },
+  PAYOUT_ROUTED: { label: 'Payout routed', group: 'paying', description: 'Routed to a prefunded payout account or an approved local agent.' },
+  PAYOUT_SENT: { label: 'Payout sent', group: 'paying', description: 'The payout is being executed from the local account (USSD / operator app).' },
   EVIDENCE_RECEIVED: { label: 'Evidence received', group: 'paying', description: 'The operator confirmation was received and is being checked.' },
   VERIFYING: { label: 'Verifying', group: 'paying', description: 'Recipient, amount, reference, operator and timestamp are being matched.' },
+  VERIFIED: { label: 'Verified', group: 'paying', description: 'The operator confirmation matched every field. Settling.' },
   SETTLED: { label: 'Settled', group: 'settled', description: 'The recipient received the money and the ledger is posted.' },
   EXPIRED: { label: 'Expired', group: 'exception', description: 'The transfer expired before it could complete.' },
   FAILED: { label: 'Failed', group: 'exception', description: 'The transfer failed. Held funds are returned or refundable.' },
   MISMATCHED: { label: 'Mismatched', group: 'exception', description: 'The operator confirmation did not match. Under review.' },
   DUPLICATE: { label: 'Duplicate', group: 'exception', description: 'The confirmation was already used. Under review.' },
-  LIQUIDITY_UNAVAILABLE: { label: 'Liquidity unavailable', group: 'exception', description: 'No prefunded local account can pay this right now. Funds are safe; the payout resumes once liquidity is available.' },
+  INSUFFICIENT_LIQUIDITY: { label: 'Insufficient liquidity', group: 'exception', description: 'No prefunded local account can pay this right now. Funds are safe; the payout resumes once liquidity is available.' },
   MANUAL_REVIEW: { label: 'Manual review', group: 'exception', description: 'A verifier must review this transfer before the payout continues.' },
   DISPUTED: { label: 'Disputed', group: 'exception', description: 'The funding is disputed (chargeback).' },
   REVERSED: { label: 'Reversed', group: 'exception', description: 'The transfer was reversed.' },

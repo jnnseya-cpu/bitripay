@@ -73,7 +73,7 @@ export function Move() {
           <T bold size={22}>{money(route.amount, route.currency)} → {D[route.destination as Dest]}</T>
           <Status status={route.stageLabel ?? route.status} />
           {route.error && !['SETTLED'].includes(route.stage) && <Alert kind="error" text={route.error} />}
-          {['FUNDS_CONFIRMED', 'PAYOUT_QUEUED', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED'].includes(route.stage) && <Button title="Cancel & refund" variant="ghost" onPress={() => { setPinFor('cancel'); setPin(true); }} />}
+          {['FUNDED', 'PAYOUT_ROUTED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED'].includes(route.stage) && <Button title="Cancel & refund" variant="ghost" onPress={() => { setPinFor('cancel'); setPin(true); }} />}
           <StageBar stage={route.stage} label={route.stageLabel} description={route.stageDescription} steps={ROUTE_STEPS} />
           {route.corridor && <Chip label={route.corridor.status === 'live' ? `authorised corridor · ${route.corridor.destCountry}` : `sandbox corridor · ${route.corridor.destCountry} · no real funds`} kind={route.corridor.status === 'live' ? 'success' : undefined} />}
           {route.payout && <Card soft><T size={12}><T bold>Local payout</T> · {route.payout.operatorName ?? route.payout.rail} · {route.payout.recipientMasked}</T><T size={12}>Ref {route.payout.reference}{route.payout.externalRef ? ` · operator ${route.payout.externalRef}` : ''}</T></Card>}

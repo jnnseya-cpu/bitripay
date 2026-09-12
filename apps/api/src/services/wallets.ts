@@ -3,6 +3,7 @@ import { uuid, now } from '../lib/ids';
 import { badRequest, forbidden, notFound } from '../lib/errors';
 import type { Wallet } from '@bitripay/shared';
 import { getCurrency } from './currencies';
+import { classifyBalance } from './emoney';
 
 export interface WalletRow {
   id: string;
@@ -10,10 +11,22 @@ export interface WalletRow {
   currency: string;
   balance: number;
   created_at: string;
+  promo_balance?: number;
+  frozen_at?: string | null;
+  frozen_reason?: string | null;
+  frozen_by?: string | null;
 }
 
-export function toWallet(row: WalletRow): Wallet {
-  return { id: row.id, userId: row.user_id, currency: row.currency, balance: row.balance, createdAt: row.created_at };
+export function toWallet(row: WalletRow, user?: { role: string } | null): Wallet {
+  const base: Wallet = { id: row.id, userId: row.user_id, currency: row.currency, balance: row.balance, createdAt: row.created_at, promoBalance: row.promo_balance ?? 0, frozen: !!row.frozen_at, frozenReason: row.frozen_reason ?? null };
+  if (user) {
+    try {
+      base.classification = classifyBalance(user, row.currency);
+    } catch {
+      /* classification is informational */
+    }
+  }
+  return base;
 }
 
 export function ensureWallet(userId: string, currency: string): WalletRow {

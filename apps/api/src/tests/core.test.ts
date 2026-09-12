@@ -349,8 +349,23 @@ describe('services & referrals', () => {
     await request(app).post('/api/deposits').set(newbie.auth).send({ pin: '1234', method: 'card', amount: '50.00', currency: 'USD', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'New User' } });
     const w1 = await request(app).get('/api/wallets').set(l1.auth);
     const w2 = await request(app).get('/api/wallets').set(l2.auth);
-    expect(w1.body.items[0].balance).toBe(500);
-    expect(w2.body.items[0].balance).toBe(200);
+    // Referral rewards are promotional credit – a marketing liability – never redeemable e-money.
+    expect(w1.body.items[0].balance).toBe(0);
+    expect(w1.body.items[0].promoBalance).toBe(500);
+    expect(w2.body.items[0].promoBalance).toBe(200);
+    expect(w1.body.promoCredits[0].programme).toBe('referral_rewards');
+    expect(w1.body.items[0].classification.class).toBe('sandbox');
+    // Promotional credit cannot be withdrawn or sent, but it covers platform fees on internal transfers.
+    const send = await request(app).post('/api/transfers').set(l1.auth).send({ pin: '1234', to: newbie.user.tag, amount: '1.00', currency: 'USD' });
+    expect(send.status).toBe(422);
+    expect(send.body.error.code).toBe('insufficient_funds');
+    await fund(app, l1.user.id, '100.00', 'USD');
+    const t = await request(app).post('/api/transfers').set(l1.auth).send({ pin: '1234', to: `@${newbie.user.tag}`, amount: '50.00', currency: 'USD' });
+    expect(t.status).toBe(201);
+    expect(t.body.transaction.fee).toBeGreaterThan(0);
+    const after = await request(app).get('/api/wallets').set(l1.auth);
+    expect(after.body.items[0].balance).toBe(10_000 - 5_000);
+    expect(after.body.items[0].promoBalance).toBe(500 - t.body.transaction.fee);
     const stats = await request(app).get('/api/account/referrals').set(l1.auth);
     expect(stats.body.referredCount).toBe(1);
     expect(stats.body.totalEarned).toBe(500);

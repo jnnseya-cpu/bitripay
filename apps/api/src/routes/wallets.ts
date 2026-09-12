@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate, wrap, parsePagination } from '../lib/http';
+import { listPromoCredits } from '../services/emoney';
+import { buildStatement, statementCsv, statementPdf, listStatements } from '../services/statements';
+import { audit } from '../services/audit';
 import { requireAuth } from '../middleware/auth';
 import { listWallets, toWallet, ensureWallet } from '../services/wallets';
 import { getTransaction, listTransactions, toTransaction , calculateFee } from '../services/ledger';
@@ -16,7 +19,7 @@ import { getDb } from '../db';
 export const walletsRouter = Router();
 walletsRouter.use(requireAuth);
 
-walletsRouter.get('/', (req, res) => res.json({ items: listWallets(req.user!.id).map(toWallet) }));
+walletsRouter.get('/', (req, res) => res.json({ items: listWallets(req.user!.id).map((w) => toWallet(w, req.user!)), promoCredits: listPromoCredits(req.user!.id) }));
 
 walletsRouter.post(
   '/',
@@ -49,6 +52,17 @@ walletsRouter.post(
   }),
 );
 
+/** Bank-grade statement of one currency account for a period (JSON, CSV or PDF). Every generated statement is numbered and hashed. */
+walletsRouter.get('/statement', (req, res) => {
+  const q = validate(z.object({ currency: z.string().length(3), from: z.string().min(10), to: z.string().min(10), format: z.enum(['json', 'csv', 'pdf']).default('json') }), req.query);
+  const s = buildStatement(req.user!, q.currency.toUpperCase(), q.from, q.to);
+  audit(req.user!.id, 'statement.generated', 'statement', s.id, { currency: s.account.currency, from: s.period.from, to: s.period.to, format: q.format });
+  const name = `bitripay-statement-${s.number}-${s.account.currency}-${s.period.from}-${s.period.to}`;
+  if (q.format === 'csv') return res.type('text/csv').setHeader('Content-Disposition', `attachment; filename="${name}.csv"`).send(statementCsv(s));
+  if (q.format === 'pdf') return res.type('application/pdf').setHeader('Content-Disposition', `attachment; filename="${name}.pdf"`).send(statementPdf(s));
+  res.json({ statement: s });
+});
+walletsRouter.get('/statements', (req, res) => res.json({ items: listStatements(req.user!.id) }));
 walletsRouter.get('/rates', (_req, res) => res.json({ items: listCurrencies(true) }));
 
 walletsRouter.get('/transactions', (req, res) => {
@@ -89,5 +103,5 @@ walletsRouter.get('/summary', (req, res) => {
   const inflow = db.prepare("SELECT currency, COALESCE(SUM(COALESCE(receive_amount, amount)),0) s, COUNT(*) c FROM transactions WHERE receiver_user_id = ? AND sender_user_id != receiver_user_id AND status = 'completed' AND created_at >= ? GROUP BY currency").all(req.user!.id, since);
   const outflow = db.prepare("SELECT currency, COALESCE(SUM(amount + fee),0) s, COUNT(*) c FROM transactions WHERE sender_user_id = ? AND sender_user_id != receiver_user_id AND status IN ('completed','pending') AND created_at >= ? GROUP BY currency").all(req.user!.id, since);
   const daily = db.prepare("SELECT substr(created_at,1,10) day, SUM(CASE WHEN receiver_user_id = ? THEN COALESCE(receive_amount, amount) ELSE 0 END) inflow, SUM(CASE WHEN sender_user_id = ? THEN amount + fee ELSE 0 END) outflow, currency FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND status = 'completed' AND created_at >= ? GROUP BY day, currency ORDER BY day").all(req.user!.id, req.user!.id, req.user!.id, req.user!.id, since);
-  res.json({ wallets: listWallets(req.user!.id).map(toWallet), inflow, outflow, daily });
+  res.json({ wallets: listWallets(req.user!.id).map((w) => toWallet(w)), inflow, outflow, daily });
 });
