@@ -1,0 +1,425 @@
+{
+  "generatedAt": "2026-09-12T19:59:54.467Z",
+  "shots": [
+    {
+      "group": "Public site",
+      "name": "site-landing",
+      "title": "Landing page",
+      "url": "/",
+      "file": "shots/gallery/site-landing.jpg"
+    },
+    {
+      "group": "Public site",
+      "name": "site-landing-full",
+      "title": "Landing page (full length)",
+      "url": "/",
+      "file": "shots/gallery/site-landing-full.jpg"
+    },
+    {
+      "group": "Public site",
+      "name": "site-login",
+      "title": "Sign in",
+      "url": "/login",
+      "file": "shots/gallery/site-login.jpg"
+    },
+    {
+      "group": "Public site",
+      "name": "site-register",
+      "title": "Open an account",
+      "url": "/register",
+      "file": "shots/gallery/site-register.jpg"
+    },
+    {
+      "group": "Public site",
+      "name": "site-blog",
+      "title": "Blog (SEO engine)",
+      "url": "/blog",
+      "file": "shots/gallery/site-blog.jpg"
+    },
+    {
+      "group": "Public site",
+      "name": "site-about",
+      "title": "About BitriPay",
+      "url": "/pages/about",
+      "file": "shots/gallery/site-about.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-dashboard",
+      "title": "Dashboard",
+      "url": "/app",
+      "file": "shots/gallery/app-dashboard.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-send",
+      "title": "Send money",
+      "url": "/app/send",
+      "file": "shots/gallery/app-send.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-receive",
+      "title": "Receive / my QR",
+      "url": "/app/receive",
+      "file": "shots/gallery/app-receive.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-scan",
+      "title": "Scan to pay (BitriQR)",
+      "url": "/app/scan",
+      "file": "shots/gallery/app-scan.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-add-money",
+      "title": "Add money",
+      "url": "/app/add-money",
+      "file": "shots/gallery/app-add-money.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-move",
+      "title": "Move money (any → any)",
+      "url": "/app/move",
+      "file": "shots/gallery/app-move.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-remittance",
+      "title": "Send abroad",
+      "url": "/app/remittance",
+      "file": "shots/gallery/app-remittance.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-exchange",
+      "title": "Currency exchange",
+      "url": "/app/exchange",
+      "file": "shots/gallery/app-exchange.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-cards",
+      "title": "Virtual cards",
+      "url": "/app/cards",
+      "file": "shots/gallery/app-cards.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-bills",
+      "title": "Bills",
+      "url": "/app/bills",
+      "file": "shots/gallery/app-bills.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-topup",
+      "title": "Mobile top-up",
+      "url": "/app/topup",
+      "file": "shots/gallery/app-topup.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-gift-cards",
+      "title": "Gift cards",
+      "url": "/app/gift-cards",
+      "file": "shots/gallery/app-gift-cards.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-p2p",
+      "title": "P2P exchange",
+      "url": "/app/p2p",
+      "file": "shots/gallery/app-p2p.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-transactions",
+      "title": "Transactions",
+      "url": "/app/transactions",
+      "file": "shots/gallery/app-transactions.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-statements",
+      "title": "Statements",
+      "url": "/app/statements",
+      "file": "shots/gallery/app-statements.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-assist",
+      "title": "Command centre (agents)",
+      "url": "/app/assist",
+      "file": "shots/gallery/app-assist.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-referrals",
+      "title": "Referrals",
+      "url": "/app/referrals",
+      "file": "shots/gallery/app-referrals.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-support",
+      "title": "Support",
+      "url": "/app/support",
+      "file": "shots/gallery/app-support.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-settings",
+      "title": "Settings & security",
+      "url": "/app/settings?tab=security",
+      "file": "shots/gallery/app-settings.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-withdraw",
+      "title": "Withdraw",
+      "url": "/app/withdraw",
+      "file": "shots/gallery/app-withdraw.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-agents",
+      "title": "Find an agent",
+      "url": "/app/agents",
+      "file": "shots/gallery/app-agents.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-mobile-dashboard",
+      "title": "Dashboard on a phone",
+      "url": "/app",
+      "file": "shots/gallery/app-mobile-dashboard.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-mobile-assist",
+      "title": "Command centre on a phone",
+      "url": "/app/assist",
+      "file": "shots/gallery/app-mobile-assist.jpg"
+    },
+    {
+      "group": "User app",
+      "name": "app-mobile-scan",
+      "title": "Scan on a phone",
+      "url": "/app/scan",
+      "file": "shots/gallery/app-mobile-scan.jpg"
+    },
+    {
+      "group": "Merchant",
+      "name": "merchant-dashboard",
+      "title": "Merchant dashboard",
+      "url": "/app/merchant",
+      "file": "shots/gallery/merchant-dashboard.jpg"
+    },
+    {
+      "group": "Merchant",
+      "name": "merchant-pos",
+      "title": "Point of sale (QR)",
+      "url": "/app/merchant/pos",
+      "file": "shots/gallery/merchant-pos.jpg"
+    },
+    {
+      "group": "Merchant",
+      "name": "merchant-gateway",
+      "title": "Gateway, API keys & webhooks",
+      "url": "/app/merchant/gateway",
+      "file": "shots/gallery/merchant-gateway.jpg"
+    },
+    {
+      "group": "Merchant",
+      "name": "merchant-requests",
+      "title": "Payment links & requests",
+      "url": "/app/requests",
+      "file": "shots/gallery/merchant-requests.jpg"
+    },
+    {
+      "group": "Agent",
+      "name": "agent-dashboard",
+      "title": "Agent counter: cash-in / cash-out",
+      "url": "/app/agent",
+      "file": "shots/gallery/agent-dashboard.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-dashboard",
+      "title": "Analytics dashboard",
+      "url": "/",
+      "file": "shots/gallery/admin-dashboard.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-users",
+      "title": "Users, merchants & agents",
+      "url": "/users?role=user",
+      "file": "shots/gallery/admin-users.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-transactions",
+      "title": "Transactions (ledger)",
+      "url": "/transactions",
+      "file": "shots/gallery/admin-transactions.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-approvals",
+      "title": "Maker-checker approvals",
+      "url": "/approvals",
+      "file": "shots/gallery/admin-approvals.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-verification",
+      "title": "Payment verification console",
+      "url": "/verification",
+      "file": "shots/gallery/admin-verification.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-controls",
+      "title": "Controls & go-live checklist",
+      "url": "/controls",
+      "file": "shots/gallery/admin-controls.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-corridors",
+      "title": "Corridors, liquidity & payouts",
+      "url": "/corridors",
+      "file": "shots/gallery/admin-corridors.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-emoney",
+      "title": "E-money console (safeguarding)",
+      "url": "/emoney",
+      "file": "shots/gallery/admin-emoney.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-agents",
+      "title": "Agents console (runs, approvals, billing)",
+      "url": "/agents",
+      "file": "shots/gallery/admin-agents.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-channels",
+      "title": "USSD & SMS channels (simulator)",
+      "url": "/channels",
+      "file": "shots/gallery/admin-channels.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-gateways",
+      "title": "Processors & rails",
+      "url": "/gateways",
+      "file": "shots/gallery/admin-gateways.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-mobile-money",
+      "title": "Mobile money operators",
+      "url": "/mobile-money",
+      "file": "shots/gallery/admin-mobile-money.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-currencies",
+      "title": "Currencies & FX rates",
+      "url": "/currencies",
+      "file": "shots/gallery/admin-currencies.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-fees",
+      "title": "Fees & limits",
+      "url": "/fees",
+      "file": "shots/gallery/admin-fees.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-kyc",
+      "title": "KYC queue",
+      "url": "/kyc",
+      "file": "shots/gallery/admin-kyc.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-seo",
+      "title": "Blog & SEO engine",
+      "url": "/seo",
+      "file": "shots/gallery/admin-seo.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-modules",
+      "title": "Modules",
+      "url": "/modules",
+      "file": "shots/gallery/admin-modules.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-reports",
+      "title": "Reports",
+      "url": "/reports",
+      "file": "shots/gallery/admin-reports.jpg"
+    },
+    {
+      "group": "Admin",
+      "name": "admin-audit",
+      "title": "Audit log",
+      "url": "/audit",
+      "file": "shots/gallery/admin-audit.jpg"
+    },
+    {
+      "group": "BitriPay Lite & USSD",
+      "name": "lite-login",
+      "title": "Lite: sign in (no JavaScript)",
+      "url": "/lite/",
+      "file": "shots/gallery/lite-login.jpg"
+    },
+    {
+      "group": "BitriPay Lite & USSD",
+      "name": "lite-home",
+      "title": "Lite: home",
+      "url": "/lite/home",
+      "file": "shots/gallery/lite-home.jpg"
+    },
+    {
+      "group": "BitriPay Lite & USSD",
+      "name": "lite-send",
+      "title": "Lite: send",
+      "url": "/lite/send",
+      "file": "shots/gallery/lite-send.jpg"
+    },
+    {
+      "group": "BitriPay Lite & USSD",
+      "name": "lite-cash",
+      "title": "Lite: cash out at an agent",
+      "url": "/lite/cash",
+      "file": "shots/gallery/lite-cash.jpg"
+    },
+    {
+      "group": "BitriPay Lite & USSD",
+      "name": "lite-history",
+      "title": "Lite: history",
+      "url": "/lite/history",
+      "file": "shots/gallery/lite-history.jpg"
+    }
+  ],
+  "errors": [
+    "app pageerror: Cannot stop, scanner is not running or paused.",
+    "app pageerror: Cannot stop, scanner is not running or paused.",
+    "app pageerror: Cannot stop, scanner is not running or paused.",
+    "app pageerror: Cannot stop, scanner is not running or paused.",
+    "checkout session: {\"error\":{\"code\":\"unauthorized\",\"message\":\"Authentication required\"}}"
+  ]
+}

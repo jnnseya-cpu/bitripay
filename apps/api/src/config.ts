@@ -39,6 +39,8 @@ export const config = {
   appSecret: env.APP_SECRET || 'dev-app-secret-change-me',
   databasePath: isTest ? ':memory:' : env.DATABASE_PATH || path.resolve(process.cwd(), 'data', 'bitripay.db'),
   baseCurrency: env.BASE_CURRENCY || 'USD',
+  /** National switch: path of the certified adapter module (delivered with the official profile); empty until then. */
+  switch: { adapterModule: env.SWITCH_ADAPTER_MODULE || '' },
   admin: {
     email: env.ADMIN_EMAIL || 'admin@bitripay.local',
     password: env.ADMIN_PASSWORD || 'Admin123!',
