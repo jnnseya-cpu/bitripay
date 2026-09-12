@@ -365,3 +365,33 @@ export function RouteDisclosure({ declaration, fx }: { declaration?: any; fx?: a
     </details>
   );
 }
+
+/** Lifecycle of a cross-rail transfer: initiated → funded → paying out → settled. */
+export const ROUTE_STEPS: { id: string; label: string; stages: string[] }[] = [
+  { id: 'initiated', label: 'Initiated', stages: ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'FUNDING_PENDING'] },
+  { id: 'funded', label: 'Funds confirmed', stages: ['FUNDS_CONFIRMED', 'MANUAL_REVIEW', 'LIQUIDITY_UNAVAILABLE'] },
+  { id: 'paying', label: 'Paying out', stages: ['PAYOUT_QUEUED', 'PAYOUT_IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MISMATCHED', 'DUPLICATE'] },
+  { id: 'settled', label: 'Settled', stages: ['SETTLED'] },
+];
+export function RouteTimeline({ stage, stageLabel, stageDescription }: { stage?: string; stageLabel?: string; stageDescription?: string }) {
+  if (!stage) return null;
+  const bad = ['EXPIRED', 'FAILED', 'REVERSED', 'REFUNDED', 'DISPUTED'].includes(stage);
+  const warn = ['MANUAL_REVIEW', 'LIQUIDITY_UNAVAILABLE', 'MISMATCHED', 'DUPLICATE'].includes(stage);
+  const idx = ROUTE_STEPS.findIndex((s) => s.stages.includes(stage));
+  return (
+    <div className="stage-timeline">
+      <div className="row" style={{ gap: 0, alignItems: 'stretch' }}>
+        {ROUTE_STEPS.map((s, i) => {
+          const state = bad ? (i === 0 ? 'failed' : 'off') : i < idx ? 'done' : i === idx ? (warn ? 'warn' : 'active') : 'off';
+          return (
+            <div key={s.id} style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ height: 6, borderRadius: 3, margin: '0 2px', background: state === 'done' || state === 'active' ? 'var(--success)' : state === 'warn' ? 'var(--warning, #f59e0b)' : state === 'failed' ? 'var(--danger)' : 'var(--border)' }} />
+              <div className="tiny mt-sm" style={{ color: state === 'off' ? 'var(--muted)' : 'inherit', fontWeight: state === 'active' || state === 'warn' ? 700 : 400 }}>{s.label}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="small mt-sm"><b>{stageLabel ?? stage}</b>{stageDescription ? <span className="muted"> – {stageDescription}</span> : null}</div>
+    </div>
+  );
+}

@@ -12,14 +12,15 @@ const OPEN = (p: PaymentView) => !['succeeded', 'failed', 'cancelled'].includes(
 const STEPS: [string, string[]][] = [['Initiated', ['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED']], ['Sent', ['PAYMENT_SENT']], ['Verifying', ['EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED']], ['Confirmed', ['CONFIRMED']], ['Settled', ['SETTLED']]];
 
 /** Initiated → sent → verifying → confirmed → settled, so nobody mistakes an instruction for money. */
-export function StageBar({ stage, label, description }: { stage?: string; label?: string; description?: string }) {
+export const ROUTE_STEPS: [string, string[]][] = [['Initiated', ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'FUNDING_PENDING']], ['Funds confirmed', ['FUNDS_CONFIRMED', 'MANUAL_REVIEW', 'LIQUIDITY_UNAVAILABLE']], ['Paying out', ['PAYOUT_QUEUED', 'PAYOUT_IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MISMATCHED', 'DUPLICATE']], ['Settled', ['SETTLED']]];
+export function StageBar({ stage, label, description, steps = STEPS }: { stage?: string; label?: string; description?: string; steps?: [string, string[]][] }) {
   if (!stage) return null;
-  const bad = ['EXPIRED', 'REJECTED', 'REVERSED'].includes(stage);
-  const warn = ['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'].includes(stage);
-  const idx = STEPS.findIndex(([, s]) => s.includes(stage));
+  const bad = ['EXPIRED', 'REJECTED', 'REVERSED', 'FAILED', 'REFUNDED', 'DISPUTED'].includes(stage);
+  const warn = ['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'LIQUIDITY_UNAVAILABLE'].includes(stage);
+  const idx = steps.findIndex(([, s]) => s.includes(stage));
   return (
     <View style={{ alignSelf: 'stretch', gap: 6 }}>
-      <Row style={{ gap: 3 }}>{STEPS.map(([name], i) => <View key={name} style={{ flex: 1, alignItems: 'center' }}><View style={{ height: 6, borderRadius: 3, alignSelf: 'stretch', backgroundColor: bad ? (i === 0 ? '#dc2626' : '#e5e7eb') : i < idx ? '#16a34a' : i === idx ? (warn ? '#f59e0b' : '#16a34a') : '#e5e7eb' }} /><T size={10} muted={i > idx}>{name}</T></View>)}</Row>
+      <Row style={{ gap: 3 }}>{steps.map(([name], i) => <View key={name} style={{ flex: 1, alignItems: 'center' }}><View style={{ height: 6, borderRadius: 3, alignSelf: 'stretch', backgroundColor: bad ? (i === 0 ? '#dc2626' : '#e5e7eb') : i < idx ? '#16a34a' : i === idx ? (warn ? '#f59e0b' : '#16a34a') : '#e5e7eb' }} /><T size={10} muted={i > idx}>{name}</T></View>)}</Row>
       <T size={13}><T bold>{label ?? stage}</T>{description ? ` – ${description}` : ''}</T>
     </View>
   );

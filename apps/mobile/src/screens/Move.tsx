@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Linking, View } from 'react-native';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Screen, Card, Button, Input, Alert, T, KV, PinSheet, AmountInput, Row, Status, Tabs, Empty, useAsync, Select, Avatar } from '../components/ui';
+import { Screen, Card, Button, Input, Alert, T, KV, PinSheet, AmountInput, Row, Status, Tabs, Empty, useAsync, Select, Avatar, Chip } from '../components/ui';
 import { Header } from '../components/Header';
-import { OperatorPicker, StageBar } from './Money';
+import { OperatorPicker, StageBar, ROUTE_STEPS } from './Money';
 
 type Source = 'wallet' | 'card' | 'mobile_money' | 'bank';
 type Dest = 'wallet' | 'qr' | 'mobile_money' | 'bank' | 'agent';
@@ -27,6 +27,7 @@ export function Move() {
   const [preview, setPreview] = useState<any>(null);
   const [route, setRoute] = useState<any>(null);
   const [pin, setPin] = useState(false);
+  const [pinFor, setPinFor] = useState<'send' | 'cancel'>('send');
   const [loading, setLoading] = useState(false);
   const history = useAsync(() => api.get<{ items: any[] }>('/api/money'), [route?.status]);
   const destination = () => (dest === 'wallet' ? { method: 'wallet', to } : dest === 'qr' ? { method: 'qr', data: qr } : dest === 'mobile_money' ? { method: 'mobile_money', operatorId: dst.operatorId, phone: dst.phone, name: dst.name || null } : dest === 'bank' ? { method: 'bank', ...bank } : { method: 'agent', agent });
@@ -37,8 +38,8 @@ export function Move() {
     return () => clearTimeout(id);
   }, [amount, cur, target, source, dest, to, qr, dst, bank, agent]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!route || !['funding', 'authentication_required'].includes(route.status)) return;
-    const id = setInterval(() => api.get<{ route: any }>(`/api/money/${route.id}`).then((r) => { if (r.route.status !== route.status || r.route.payment?.stage !== route.payment?.stage) setRoute(r.route); if (!['funding', 'authentication_required'].includes(r.route.status)) refreshWallets(); }), route.payment?.next?.type === 'bank_instructions' ? 10000 : 3000);
+    if (!route || ['SETTLED', 'EXPIRED', 'FAILED', 'REVERSED', 'REFUNDED'].includes(route.stage)) return;
+    const id = setInterval(() => api.get<{ route: any }>(`/api/money/${route.id}`).then((r) => { if (r.route.stage !== route.stage || r.route.payment?.stage !== route.payment?.stage || r.route.payout?.stage !== route.payout?.stage) setRoute(r.route); if (['SETTLED', 'EXPIRED', 'FAILED', 'REVERSED', 'REFUNDED'].includes(r.route.stage)) refreshWallets(); }), 8000);
     return () => clearInterval(id);
   }, [route]); // eslint-disable-line react-hooks/exhaustive-deps
   const submit = async (p?: string) => {
@@ -70,9 +71,13 @@ export function Move() {
         <Card style={{ alignItems: 'center' }}>
           <T size={44}>{route.status === 'completed' ? '✅' : route.status === 'failed' ? '❌' : '⏳'}</T>
           <T bold size={22}>{money(route.amount, route.currency)} → {D[route.destination as Dest]}</T>
-          <Status status={route.status} />
-          {route.error && <Alert kind="error" text={route.error} />}
-          {route.payment?.stage && <StageBar stage={route.payment.stage} label={route.payment.stageLabel} description={route.payment.stageDescription} />}
+          <Status status={route.stageLabel ?? route.status} />
+          {route.error && !['SETTLED'].includes(route.stage) && <Alert kind="error" text={route.error} />}
+          {['FUNDS_CONFIRMED', 'PAYOUT_QUEUED', 'LIQUIDITY_UNAVAILABLE', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED'].includes(route.stage) && <Button title="Cancel & refund" variant="ghost" onPress={() => { setPinFor('cancel'); setPin(true); }} />}
+          <StageBar stage={route.stage} label={route.stageLabel} description={route.stageDescription} steps={ROUTE_STEPS} />
+          {route.corridor && <Chip label={route.corridor.status === 'live' ? `authorised corridor · ${route.corridor.destCountry}` : `sandbox corridor · ${route.corridor.destCountry} · no real funds`} kind={route.corridor.status === 'live' ? 'success' : undefined} />}
+          {route.payout && <Card soft><T size={12}><T bold>Local payout</T> · {route.payout.operatorName ?? route.payout.rail} · {route.payout.recipientMasked}</T><T size={12}>Ref {route.payout.reference}{route.payout.externalRef ? ` · operator ${route.payout.externalRef}` : ''}</T></Card>}
+          {['FUNDING_PENDING', 'BIOMETRIC_APPROVAL_REQUIRED'].includes(route.stage) && route.payment?.stage && <StageBar stage={route.payment.stage} label={route.payment.stageLabel} description={route.payment.stageDescription} />}
           {route.status === 'funding' && route.payment?.next?.type === 'bank_instructions' && ['INSTRUCTION_ISSUED', 'PAYMENT_SENT'].includes(route.payment.stage) && <View style={{ alignSelf: 'stretch' }}><Alert text={route.payment.next.message} />{Object.entries(route.payment.next.instructions ?? {}).map(([k, v]) => <KV key={k} k={k} v={String(v)} />)}</View>}
           {route.status === 'funding' && route.payment?.next?.type === 'prompt' && <Alert text={route.payment.next.message} />}
           {route.status === 'pending' && <Alert text="Money arrived and is held in escrow; the payout is executed by our treasury team or a local agent under maker-checker approval." />}
@@ -94,13 +99,13 @@ export function Move() {
           {dest === 'bank' && <><Input label="Bank name" value={bank.bankName} onChangeText={(v) => setBank({ ...bank, bankName: v })} /><Input label="Account holder" value={bank.accountName} onChangeText={(v) => setBank({ ...bank, accountName: v })} /><Input label="Account number / IBAN" value={bank.accountNumber} onChangeText={(v) => setBank({ ...bank, accountNumber: v })} /></>}
           {dest === 'agent' && <Input label="Agent @tag" value={agent} onChangeText={setAgent} autoCapitalize="none" />}
           <Select label="Deliver in" value={target} onChange={setTarget} options={[{ value: '', label: `Same as sent (${cur})` }, ...(config?.currencies ?? []).map((c: any) => ({ value: c.code, label: c.code }))]} />
-          {preview && <Card soft><Row>{preview.destination.user && <Avatar user={preview.destination.user} size={30} />}<T bold>{preview.destination.label}</T></Row>{preview.quote.rate !== 1 && <KV k="Rate" v={`${preview.quote.rate.toFixed(4)} · ${preview.fx?.guaranteed ? 'guaranteed' : 'indicative'}`} />}{preview.fx && preview.fx.sourceCurrency !== preview.fx.targetCurrency && <T size={11} muted>Reference {preview.fx.midRate.toFixed(4)} · {preview.fx.providerLabel} · markup {(preview.fx.markupBps / 100).toFixed(2)}%</T>}<KV k="Recipient gets" v={money(preview.quote.targetAmount, preview.quote.targetCurrency)} />{preview.declaration && <T size={11} muted>{preview.declaration.processing} · {preview.declaration.expectedCompletion} · {preview.declaration.funding.confirmation}</T>}</Card>}
-          <Button title="🔐 Confirm and send" loading={loading} disabled={!preview} onPress={() => setPin(true)} />
+          {preview && <Card soft><Row>{preview.destination.user && <Avatar user={preview.destination.user} size={30} />}<T bold>{preview.destination.label}</T></Row>{preview.quote.rate !== 1 && <KV k="Rate" v={`${preview.quote.rate.toFixed(4)} · ${preview.fx?.guaranteed ? 'guaranteed' : 'indicative'}`} />}{preview.fx && preview.fx.sourceCurrency !== preview.fx.targetCurrency && <T size={11} muted>Reference {preview.fx.midRate.toFixed(4)} · {preview.fx.providerLabel} · markup {(preview.fx.markupBps / 100).toFixed(2)}%</T>}<KV k="Recipient gets" v={money(preview.quote.targetAmount, preview.quote.targetCurrency)} /><KV k="Estimated payout" v={preview.quote.estimatedPayoutTime} />{preview.quote.corridor && <T size={11} muted>{preview.quote.corridor.status === 'live' ? 'Authorised corridor' : 'Sandbox corridor – no real funds'} · {preview.quote.corridor.destCountry}</T>}<T size={11} muted>Refunds: {preview.quote.refundConditions}</T>{preview.declaration && <T size={11} muted>{preview.declaration.processing} · {preview.declaration.expectedCompletion} · {preview.declaration.funding.confirmation}</T>}</Card>}
+          <Button title="🔐 Confirm and send" loading={loading} disabled={!preview} onPress={() => { setPinFor('send'); setPin(true); }} />
         </Card>
       )}
       {(history.data?.items ?? []).length > 0 && <Card><T bold>Recent</T>{history.data!.items.slice(0, 8).map((r) => <Row key={r.id} between><View><T bold>{money(r.amount, r.currency)}</T><T muted size={12}>{S[r.source as Source]} → {D[r.destination as Dest]}</T></View><Status status={r.status} /></Row>)}</Card>}
       {history.data?.items.length === 0 && <Empty icon="🔀" />}
-      <PinSheet open={pin} onClose={() => setPin(false)} onSubmit={(p) => submit(p)} loading={loading} summary={preview && <KV k={`Send to ${preview.destination.label}`} v={money(preview.quote.targetAmount, preview.quote.targetCurrency)} />} />
+      <PinSheet open={pin} onClose={() => setPin(false)} onSubmit={(p) => (pinFor === 'cancel' && route ? api.post<{ route: any }>(`/api/money/${route.id}/cancel`, { pin: p || undefined }).then((r) => { setPin(false); setRoute(r.route); refreshWallets(); toast('Transfer cancelled', 'success'); }).catch((e) => { setPin(false); toast(e.message, 'error'); }) : submit(p))} loading={loading} title={pinFor === 'cancel' ? 'Confirm cancellation' : undefined} summary={pinFor === 'cancel' && route ? <KV k="Cancel transfer" v={money(route.amount, route.currency)} /> : preview && <KV k={`Send to ${preview.destination.label}`} v={money(preview.quote.targetAmount, preview.quote.targetCurrency)} />} />
     </Screen>
   );
 }

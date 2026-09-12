@@ -17,11 +17,45 @@ bitripay/
 
 ## Features
 
-**Operating principle** – BitriPay never claims to move money between unrelated banks, cards or
-mobile money operators without access to their regulated rails. The shared ledger coordinates every
-route, but an external leg only ever moves value through the payer's own bank or operator, or a licensed
-card processor. External payments stay unsettled (`AWAITING_CONFIRMATION` stages) until they are
-independently confirmed; the ledger never marks unverified external funds as settled.
+**Operating principle** – BitriPay is a biometric payment-orchestration platform. It never claims to
+move money between unrelated banks, cards or mobile money operators without their regulated rails.
+Funds enter through a licensed card processor, a bank or a mobile money operator, and leave through
+**prefunded local payout accounts** (merchant SIMs / treasury bank accounts) operated by approved
+agents and Android payout devices using USSD, SIM Toolkit or the operator app. Operator confirmation
+SMS messages are signed by the device and verified before anything settles; a screenshot is never
+settlement evidence. Where automation is unavailable, a human maker-checker decides.
+
+**Example – UK debit card → Orange Money DRC.** The sender enters the recipient's number, country,
+operator and amount; the platform quotes rate, margin, fees, recipient amount, payout time, quote
+expiry and refund conditions; the sender approves with Face ID / fingerprint / passkey (PIN
+fallback); the processor charges the card; once the funds are confirmed the routing engine creates a
+DRC payout instruction, selects a prefunded Orange Money account (or `LIQUIDITY_UNAVAILABLE` until
+treasury prefunds it); the payout device claims it, pays the recipient by USSD, and forwards the
+operator SMS signed with its key and SIM identity; the verification engine matches recipient,
+amount, reference, operator, SIM and timestamps, rejects replays/duplicates, and marks the transfer
+`SETTLED`; both parties are notified and a receipt with the evidence hashes is available.
+
+**Essential limitation** – "no operator API" is not "no payment rail". Without a direct operator or
+bank API settlement is not instantaneous, payouts may need an authorised agent, operator interface
+changes can interrupt automation, operator limits still apply, and reversals may require manual
+processing. The UI says so everywhere it matters.
+
+**Transfer lifecycle** – `CREATED → QUOTED → BIOMETRIC_APPROVAL_REQUIRED → FUNDING_PENDING →
+FUNDS_CONFIRMED → PAYOUT_QUEUED → PAYOUT_IN_PROGRESS → EVIDENCE_RECEIVED → VERIFYING → SETTLED`,
+with `EXPIRED · FAILED · MISMATCHED · DUPLICATE · LIQUIDITY_UNAVAILABLE · MANUAL_REVIEW · DISPUTED ·
+REVERSED · REFUNDED`. External funds never become spendable or `SETTLED` because a customer,
+administrator or agent says a payment was made.
+
+**Non-negotiable compliance requirement** – accepting money in one country and paying a beneficiary
+in another is a cross-border remittance / money-transfer service whatever the payout technique.
+The platform ships in **compliance mode `sandbox`**: only the sandbox processor and the evidence
+rails may fund transfers, and every corridor starts as `sandbox`. Switching the platform to `live`
+and marking a corridor `live` (which records the authorised collection partner, payout partner and
+licence reference under administrator step-up) is required before a real processor is accepted on
+that corridor. Licensing, KYC/KYB, sanctions screening, source-of-funds controls, transaction
+monitoring, agent due diligence, consumer safeguarding, data protection and country-specific
+mobile-money / FX approvals are the operator's responsibility; the software enforces the gate, it
+does not replace the authorisation.
 
 **Payment lifecycle** – every payment intent moves through
 `CREATED → AUTHENTICATION_REQUIRED → INSTRUCTION_ISSUED → PAYMENT_SENT → EVIDENCE_RECEIVED → VERIFYING → CONFIRMED → SETTLED`
@@ -181,7 +215,9 @@ for apps, `Authorization: Bearer bp_live_…` (merchant API key) for the v1 API.
 | Account | `PATCH /api/account/profile`, `POST /api/account/pin`, `/password`, `/2fa/setup|enable|disable`, `/verify/request|confirm`, `GET /api/account/notifications`, `/referrals`, `/lookup?q=` |
 | Wallets | `GET /api/wallets`, `POST /api/wallets`, `GET /api/wallets/transactions`, `/summary`, `/exchange/quote`, `POST /api/wallets/exchange` |
 | Any → any | `POST /api/money` (source: wallet/card/bank/mobile_money → destination: wallet/qr/bank/mobile_money/agent; `quoteId` locks a guaranteed FX quote), `POST /api/money/preview` (quote + FX disclosure + route declaration), `GET /api/money/catalog`, `GET /api/money/:id`, `POST /api/money/:id/retry`, `GET /api/mobile-money-operators` |
-| Evidence | `POST /api/evidence/sms` (device-signed receipt SMS), `GET /api/evidence/canonical-format`, `GET/POST/DELETE /api/evidence/devices` (admins/agents), `POST /api/evidence/parse-test` |
+| Evidence | `POST /api/evidence/sms` (device-signed receipt SMS), `GET /api/evidence/canonical-format`, `GET/POST/DELETE /api/evidence/devices` (admins/agents; payout devices register SIM identity), `POST /api/evidence/parse-test` |
+| Payouts | Device (signed headers `X-Device-Id/-Timestamp/-Signature`): `GET /api/payouts/device/queue`, `POST /api/payouts/device/:id/claim|release|evidence`. Agent: `GET /api/payouts/agent/queue`, `POST /api/payouts/agent/:id/claim|release|evidence` (manual → maker-checker) |
+| Corridors | `GET /api/money/corridors`, `POST /api/money/:id/cancel`, `GET /api/money/:id/receipt`; admin `/api/admin/corridors` (+ `/:id/status` live/suspended with arrangements), `/api/admin/liquidity` (+ `/accounts`, `/accounts/:id/prefund|adjust|movements`), `/api/admin/payouts` (+ `/:id`, `/requeue|release|settle|fail|cancel`), `/api/admin/money-routes/:id/release|refund`, `/api/admin/chargebacks` (+ `/:id/resolve`), settings key `compliance` |
 | Biometrics | `POST /api/auth/passkey/options|verify` (sign-in), `GET/DELETE /api/account/passkeys`, `POST /api/account/passkeys/register/options|verify`, `POST /api/account/passkeys/step-up/options|verify` → `X-Step-Up-Token` |
 | Payments | `POST /api/transfers`, `GET /api/qr/me`, `POST /api/qr/resolve`, `GET /api/qr/image.svg`, `POST /api/payment-requests`, `/:code/pay|cancel|decline` |
 | Checkout (public) | `GET /api/checkout/:code`, `POST /api/checkout/:code/pay` (card / mobile money / bank / virtual card), `/:code/wallet` |
@@ -216,7 +252,14 @@ receipt SMS it posts to `POST /api/evidence/sms`:
 
 `canonical = deviceId + "\n" + nonce + "\n" + receivedAt + "\n" + from + "\n" + operatorId + "\n" + text`.
 Nonces are single-use; invalid signatures and mismatches raise the device's risk score; a device can be
-revoked at any time. Parsing templates (regular expressions per operator) are managed in the admin
+revoked at any time.
+
+Payout devices additionally register their SIM (`simMsisdn` / `simIccid`), authenticate queue and
+claim calls by signing `deviceId\ntimestamp\nMETHOD\npath`, and submit the outbound confirmation
+with `simIdentity`, `deviceTimestamp` and `clientHash` (sha256 of the raw text). The engine rejects
+unregistered SIMs, altered text, evidence before the claim, reused operator references, amount /
+currency / recipient mismatches, expired windows, payouts to the agent's own numbers and abnormal
+recipient patterns. Parsing templates (regular expressions per operator) are managed in the admin
 panel under *Mobile money & evidence*; confidence is scored (reference 50, amount 25, currency 10,
 operator transaction id 10, sender 5) and only matches at or above `gateway.autoConfirmScore` from a
 trusted device settle automatically.

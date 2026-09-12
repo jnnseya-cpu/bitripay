@@ -6,7 +6,9 @@ import type { PublicUser } from '@bitripay/shared';
 
 export function AgentDashboard() {
   const { user, money, wallets, toast, refreshWallets, config } = useStore();
-  const [tab, setTab] = useState<'cashin' | 'cashout' | 'pickup' | 'requests'>('cashin');
+  const [tab, setTab] = useState<'cashin' | 'cashout' | 'pickup' | 'requests' | 'payouts'>('cashin');
+  const payouts = useAsync(() => (tab === 'payouts' ? api.get<{ items: any[] }>('/api/payouts/agent/queue') : Promise.resolve(null)), [tab]);
+  const [evidence, setEvidence] = useState<{ id: string; text: string; externalRef: string } | null>(null);
   const stats = useAsync(() => api.get<any>('/api/agents/me/stats'), [tab]);
   const requests = useAsync(() => api.get<{ items: any[] }>('/api/agents/cash-requests'), [tab]);
   const [customer, setCustomer] = useState('');
@@ -62,7 +64,7 @@ export function AgentDashboard() {
         <div className="card"><div className="stat"><span className="label">Commission (30d)</span><span className="value">{s ? money(s.commissionEarned, wallets[0]?.currency || 'USD') : '—'}</span><span className="small muted">{s?.pendingRequests ?? 0} pending requests</span></div></div>
       </div>
       <div className="mt" />
-      <Tabs tabs={[{ id: 'cashin', label: 'Cash-in (deposit)' }, { id: 'cashout', label: 'Cash-out (withdraw)' }, { id: 'pickup', label: 'Cash pickup' }, { id: 'requests', label: 'Requests' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <Tabs tabs={[{ id: 'cashin', label: 'Cash-in (deposit)' }, { id: 'cashout', label: 'Cash-out (withdraw)' }, { id: 'pickup', label: 'Cash pickup' }, { id: 'requests', label: 'Requests' }, { id: 'payouts', label: '📤 Payouts to execute' }]} value={tab} onChange={(v) => setTab(v as any)} />
       {error && <Alert kind="error">{error}</Alert>}
       <div className="grid cols-2">
         {tab === 'cashin' && (
@@ -126,6 +128,36 @@ export function AgentDashboard() {
           <div className="mt bold">@{user?.tag}</div>
         </div>
       </div>
+      {tab === 'payouts' && (
+        <div className="card">
+          <h3>Payouts assigned to your payout account</h3>
+          <p className="small muted">Execute each transfer from the merchant SIM with USSD / the operator app. The Android forwarder on that SIM submits the signed confirmation SMS automatically; only then does the transfer settle. If you must type the confirmation by hand it goes to a second administrator for approval – it never settles on your word alone.</p>
+          {payouts.data?.items.length === 0 && <Empty icon="📤" text="Nothing queued for you" />}
+          <div className="list">
+            {(payouts.data?.items ?? []).map((p: any) => (
+              <div key={p.id} className="list-item" style={{ alignItems: 'flex-start' }}>
+                <div className="flex1">
+                  <div className="main-text">{money(p.amount, p.currency)} → {p.operatorName ?? p.rail} {p.recipientMsisdn ?? p.recipientMasked}{p.recipientName ? ` (${p.recipientName})` : ''}</div>
+                  <div className="sub-text">Ref <span className="mono">{p.reference}</span> · <StatusBadge status={p.stage.toLowerCase().replace(/_/g, ' ')} />{p.riskFlags?.length ? <span className="tiny" style={{ color: 'var(--danger)' }}> · {p.riskFlags.join(', ')}</span> : null}</div>
+                  {p.instructions && <ol className="tiny mt-sm">{p.instructions.steps.map((st: string) => <li key={st}>{st}</li>)}</ol>}
+                </div>
+                <div className="col">
+                  {p.stage === 'QUEUED' && <Button size="sm" onClick={() => api.post(`/api/payouts/agent/${p.id}/claim`).then(() => { toast('Claimed – execute the transfer now', 'success'); payouts.reload(); }).catch((e) => toast(e.message, 'error'))}>Start payout</Button>}
+                  {p.stage === 'IN_PROGRESS' && <><Button size="sm" variant="secondary" onClick={() => setEvidence({ id: p.id, text: '', externalRef: '' })}>Enter confirmation manually</Button><Button size="sm" variant="ghost" onClick={() => api.post(`/api/payouts/agent/${p.id}/release`, { reason: 'Could not execute' }).then(payouts.reload)}>Give back</Button></>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {evidence && (
+        <div className="card">
+          <h4>Manual confirmation (goes to maker-checker)</h4>
+          <Field label="Operator confirmation SMS, exactly as received"><Input value={evidence.text} onChange={(e) => setEvidence({ ...evidence, text: e.target.value })} /></Field>
+          <Field label="Operator transaction ID"><Input value={evidence.externalRef} onChange={(e) => setEvidence({ ...evidence, externalRef: e.target.value })} /></Field>
+          <div className="row"><Button disabled={evidence.text.length < 5 || evidence.externalRef.length < 4} onClick={() => api.post(`/api/payouts/agent/${evidence.id}/evidence`, { text: evidence.text, externalRef: evidence.externalRef }).then(() => { toast('Submitted for approval', 'success'); setEvidence(null); payouts.reload(); }).catch((e) => toast(e.message, 'error'))}>Submit</Button><Button variant="ghost" onClick={() => setEvidence(null)}>Cancel</Button></div>
+        </div>
+      )}
       <PinModal open={!!pin} onClose={() => setPin(null)} onSubmit={run} loading={loading} title="Confirm with your PIN" />
     </div>
   );

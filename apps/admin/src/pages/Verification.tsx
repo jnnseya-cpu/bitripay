@@ -32,8 +32,8 @@ export function Verification() {
       {(data.data?.pending ?? []).length > 0 && (
         <div className="card mb">
           <h4>Awaiting a second approver</h4>
-          <Table head={['Payment', 'Decision', 'Proposed by', 'Note', 'When', '']} rows={data.data.pending.map((v: any) => [
-            <Button size="sm" variant="ghost" onClick={() => setParams({ payment: v.paymentId })}><span className="mono tiny">{v.paymentId.slice(0, 8)}…</span></Button>, <Chip kind={v.action === 'confirm' ? 'success' : 'danger'}>{v.action}</Chip>, <UserCell user={v.proposedBy} />, <span className="small">{v.note ?? '—'}</span>, fmtDate(v.proposedAt),
+          <Table head={['Item', 'Decision', 'Proposed by', 'Note', 'When', '']} rows={data.data.pending.map((v: any) => [
+            <span><Chip>{(v.subjectType ?? 'payment').replace('_', ' ')}</Chip> {v.subjectType === 'payment' || !v.subjectType ? <Button size="sm" variant="ghost" onClick={() => setParams({ payment: v.paymentId })}><span className="mono tiny">{v.paymentId.slice(0, 8)}…</span></Button> : <span className="mono tiny">{v.paymentId.slice(0, 8)}… {v.externalRef ? `· ref ${v.externalRef}` : ''}</span>}</span>, <Chip kind={v.action === 'confirm' ? 'success' : 'danger'}>{v.action}</Chip>, <UserCell user={v.proposedBy} />, <span className="small">{v.note ?? '—'}</span>, fmtDate(v.proposedAt),
             v.proposedBy?.id === user?.id ? <span className="tiny muted">you proposed this – another admin must approve</span> : <div className="row"><StepUpButton size="sm" variant={v.action === 'confirm' ? 'success' : 'danger'} title={`Approve ${v.action}`} onConfirm={(pin) => act(api.post(`/api/admin/verifications/${v.id}/approve`, { pin }), `Decision approved – payment ${v.action === 'confirm' ? 'settled' : 'rejected'}`)}>Approve {v.action}</StepUpButton><ConfirmButton size="sm" variant="ghost" prompt="Why are you declining?" onConfirm={(r) => act(api.post(`/api/admin/verifications/${v.id}/decline`, { reason: r }), 'Proposal declined')}>Decline</ConfirmButton></div>,
           ])} />
         </div>

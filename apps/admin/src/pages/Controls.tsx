@@ -17,6 +17,14 @@ const FX_FIELDS: [string, string, 'number' | 'boolean'][] = [
   ['maxRateAgeHours', 'Live rates older than this are stale (no guaranteed quotes, labelled)', 'number'],
   ['guaranteedQuotes', 'Offer guaranteed (locked) rates when a fresh live rate exists', 'boolean'],
 ];
+const COMPLIANCE_FIELDS: [string, string, 'number' | 'boolean' | 'mode'][] = [
+  ['mode', 'Compliance mode: sandbox (no live customer funds) or live (authorised corridors only)', 'mode'],
+  ['cardPayoutHoldMinutes', 'Hold card-funded payouts this many minutes before execution (chargeback exposure)', 'number'],
+  ['cardReviewAmount', 'Card-funded transfers at/above this base amount (minor units) need a verifier before payout', 'number'],
+  ['sourceOfFundsThreshold', 'Senders must declare source of funds at/above this base amount (minor units)', 'number'],
+  ['maxPayoutsPerRecipientPerDay', 'Abnormal pattern: max settled payouts to one recipient per day', 'number'],
+  ['payoutClaimMinutes', 'Minutes a claimed payout may stay in progress before it returns to the queue', 'number'],
+];
 const RISK_FIELDS: [string, string, 'number' | 'boolean'][] = [
   ['maxTxPerHour', 'Velocity: transactions per hour before flagging', 'number'],
   ['maxTxPerDay', 'Velocity: transactions per day before flagging', 'number'],
@@ -26,7 +34,7 @@ const RISK_FIELDS: [string, string, 'number' | 'boolean'][] = [
   ['blockScore', 'Outbound movements at/above this score are blocked', 'number'],
 ];
 
-function SettingsForm({ title, keyName, fields, initial, onSaved }: { title: string; keyName: string; fields: [string, string, 'number' | 'boolean'][]; initial: any; onSaved: () => void }) {
+function SettingsForm({ title, keyName, fields, initial, onSaved }: { title: string; keyName: string; fields: [string, string, 'number' | 'boolean' | 'mode'][]; initial: any; onSaved: () => void }) {
   const { toast } = useStore();
   const [v, setV] = useState<any>(initial ?? {});
   useEffect(() => setV(initial ?? {}), [initial]);
@@ -34,7 +42,7 @@ function SettingsForm({ title, keyName, fields, initial, onSaved }: { title: str
     <div className="card">
       <h4>{title}</h4>
       {fields.map(([k, label, type]) => (
-        <Field key={k} label={label}>{type === 'boolean' ? <Switch on={!!v[k]} onChange={(on) => setV({ ...v, [k]: on })} /> : <Input type="number" step="any" value={v[k] ?? ''} onChange={(e) => setV({ ...v, [k]: Number(e.target.value) })} style={{ maxWidth: 200 }} />}</Field>
+        <Field key={k} label={label}>{type === 'boolean' ? <Switch on={!!v[k]} onChange={(on) => setV({ ...v, [k]: on })} /> : type === 'mode' ? <Select value={v[k] ?? 'sandbox'} onChange={(e) => setV({ ...v, [k]: e.target.value })} style={{ maxWidth: 220 }}><option value="sandbox">sandbox – no live funds</option><option value="live">live – authorised corridors only</option></Select> : <Input type="number" step="any" value={v[k] ?? ''} onChange={(e) => setV({ ...v, [k]: Number(e.target.value) })} style={{ maxWidth: 200 }} />}</Field>
       ))}
       <Button onClick={() => api.put(`/api/admin/settings/${keyName}`, { value: v }).then(() => { toast('Saved', 'success'); onSaved(); }).catch((e) => toast(e.message, 'error'))}>Save</Button>
     </div>
@@ -62,6 +70,7 @@ export function Controls() {
           <SettingsForm title="Payment lifecycle & evidence" keyName="gateway" fields={GATEWAY_FIELDS} initial={settings.data.gateway} onSaved={settings.reload} />
           <SettingsForm title="Foreign exchange disclosure" keyName="fx" fields={FX_FIELDS} initial={settings.data.fx} onSaved={settings.reload} />
           <SettingsForm title="Fraud, velocity & cooling-off" keyName="risk" fields={RISK_FIELDS} initial={settings.data.risk} onSaved={settings.reload} />
+          <SettingsForm title="Compliance & payout exposure" keyName="compliance" fields={COMPLIANCE_FIELDS} initial={settings.data.compliance} onSaved={settings.reload} />
         </div>
       )}
       {tab === 'sanctions' && (

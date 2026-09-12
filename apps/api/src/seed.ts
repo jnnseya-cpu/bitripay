@@ -60,6 +60,7 @@ if (listCorridors().length === 0) {
   upsertCorridor({ sourceCurrency: '*', destCountry: 'CD', destCurrency: 'CDF', operatorId: 'airtel_cd', rail: 'mobile_money', status: 'sandbox', estimatedPayoutMinutes: 30 });
   console.log('seeded demo corridors (all sandbox)');
 }
+db.prepare("UPDATE currencies SET enabled = 1 WHERE code IN ('CDF', 'GBP', 'KES', 'XOF')").run(); // demo corridor currencies
 if (listPayoutAccounts().length === 0) {
   const orange = createPayoutAccount({ rail: 'mobile_money', operatorId: 'orange_cd', country: 'CD', currency: 'CDF', label: 'Orange Money DRC – merchant SIM 1', msisdn: '+243890000100', simIccid: '8924300000000000100', agentUserId: drcAgent.id, dailyLimit: 0, perTxLimit: 0 }, { type: 'system' });
   prefundAccount(orange.id, 5_000_000_00, { reference: 'SEED-PREFUND-CDF', note: 'Demo prefunding' }, admin);
