@@ -16,6 +16,9 @@ import { recordEvent, type Actor } from './events';
 import { emitEvent } from './webhooks';
 import { publish } from './bus';
 import { formatMoney } from '@bitripay/shared';
+import { getUserWallet } from './wallets';
+import { heldByKind } from './finops/holds';
+import { topUpFromMandate } from './openBanking';
 
 export type PlanInterval = 'day' | 'week' | 'month' | 'year';
 export const DUNNING_DAYS = [1, 3, 7];
@@ -64,7 +67,7 @@ export function archivePlan(merchant: UserRow, id: string): Plan {
 // ---------------------------------------------------------------- subscriptions
 function subView(r: any): Subscription { return { id: r.id, planId: r.plan_id, plan: getPlan(r.plan_id), merchantId: r.merchant_user_id, customerId: r.customer_user_id, status: r.status, currentPeriodStart: r.current_period_start, currentPeriodEnd: r.current_period_end, nextChargeAt: r.next_charge_at, usageQty: r.usage_qty, dunningAttempts: r.dunning_attempts, lastError: r.last_error, cancelAtPeriodEnd: !!r.cancel_at_period_end, reference: r.reference, createdAt: r.created_at }; }
 /** The customer subscribes: the mandate is the step-up (PIN / passkey) confirmed by the caller; the first period is charged now unless there is a trial. */
-export function subscribe(customer: UserRow, planIdOrCode: string, opts: { reference?: string | null; mandateConfirmed: boolean }): { subscription: Subscription; invoice: Invoice | null } {
+export async function subscribe(customer: UserRow, planIdOrCode: string, opts: { reference?: string | null; mandateConfirmed: boolean }): Promise<{ subscription: Subscription; invoice: Invoice | null }> {
   if (!opts.mandateConfirmed) throw forbidden('Confirm the mandate with your PIN or passkey', 'step_up_required');
   const plan = getPlan(planIdOrCode);
   if (plan.status !== 'ACTIVE') throw unprocessable('This plan is no longer offered', 'plan_archived');
@@ -81,7 +84,7 @@ export function subscribe(customer: UserRow, planIdOrCode: string, opts: { refer
   recordEvent('payment', id, 'billing.subscribed', { type: 'user', id: customer.id }, { plan: plan.code, trial: !!trialEnd });
   emitEvent(plan.merchantId, 'subscription.created', { subscription: subView(getDb().prepare('SELECT * FROM merchant_subscriptions WHERE id = ?').get(id)) }, { resource: { type: 'subscription', id } });
   let invoice: Invoice | null = null;
-  if (!trialEnd) invoice = collect(id, { type: 'user', id: customer.id });
+  if (!trialEnd) invoice = await collectWithMandate(id, { type: 'user', id: customer.id });
   else notify(customer.id, `Trial started: ${plan.name}`, `Your ${plan.trialDays}-day trial with ${merchant.business_name || merchant.full_name} ends on ${trialEnd.slice(0, 10)}; the first charge of ${formatMoney(plan.amountMinor, getCurrency(plan.currency))} follows then.`, { kind: 'wallet', subscriptionId: id });
   return { subscription: getSubscription(id), invoice };
 }
@@ -147,6 +150,32 @@ function raiseInvoice(s: any): any {
 }
 /** Raise (or reuse) the invoice for the current period and collect it from the customer's wallet. */
 export function collect(subscriptionId: string, actor: Actor): Invoice {
+  return collectInner(subscriptionId, actor);
+}
+/**
+ * Collection with a bank fallback: when the wallet is short and the customer holds a billing mandate on a linked bank
+ * account, the shortfall is drawn under the mandate first (an ordinary pay-by-bank deposit), then the invoice is
+ * collected from the wallet as usual.
+ */
+export async function collectWithMandate(subscriptionId: string, actor: Actor): Promise<Invoice> {
+  const s = getDb().prepare('SELECT * FROM merchant_subscriptions WHERE id = ?').get(subscriptionId) as any;
+  if (s) {
+    const plan = getPlan(s.plan_id);
+    const total = plan.amountMinor + s.usage_qty * plan.usagePriceMinor;
+    const withTax = total + Math.round((total * plan.taxBps) / 10_000);
+    try {
+      const wallet = getUserWallet(s.customer_user_id, plan.currency);
+      const held = Object.values(heldByKind(wallet.id)).reduce((a, b) => a + b, 0);
+      const shortfall = withTax - (wallet.balance - held);
+      if (shortfall > 0) {
+        const topUp = await topUpFromMandate(s.customer_user_id, plan.currency, shortfall, 'billing', `${plan.name} invoice`);
+        if (topUp.ok) recordEvent('payment', s.id, 'billing.mandate_topup', actor, { paymentId: topUp.paymentId, amount: shortfall });
+      }
+    } catch { /* no wallet yet: the collection below reports the shortfall */ }
+  }
+  return collectInner(subscriptionId, actor);
+}
+function collectInner(subscriptionId: string, actor: Actor): Invoice {
   const db = getDb();
   const s = db.prepare('SELECT * FROM merchant_subscriptions WHERE id = ?').get(subscriptionId) as any;
   if (!s) throw notFound('Subscription not found', 'subscription_not_found');
@@ -198,7 +227,7 @@ export function collect(subscriptionId: string, actor: Actor): Invoice {
   }
 }
 /** Job: every due subscription (period ended, trial ended, dunning retry due) is collected; cancel-at-period-end subscriptions end instead. */
-export function runBilling(at: Date = new Date()): { collected: number; failed: number; ended: number } {
+export async function runBilling(at: Date = new Date()): Promise<{ collected: number; failed: number; ended: number }> {
   const db = getDb();
   const due = db.prepare("SELECT * FROM merchant_subscriptions WHERE status IN ('TRIALING', 'ACTIVE', 'PAST_DUE') AND next_charge_at <= ? ORDER BY next_charge_at").all(at.toISOString()) as any[];
   let collected = 0;
@@ -216,7 +245,7 @@ export function runBilling(at: Date = new Date()): { collected: number; failed: 
       const start = s.current_period_end;
       db.prepare("UPDATE merchant_subscriptions SET current_period_start = ?, current_period_end = ?, updated_at = ? WHERE id = ?").run(start, addInterval(start, plan.interval, plan.intervalCount), now(), s.id);
     }
-    const inv = collect(s.id, { type: 'system' });
+    const inv = await collectWithMandate(s.id, { type: 'system' });
     if (inv.status === 'PAID') collected += 1; else failed += 1;
   }
   return { collected, failed, ended };

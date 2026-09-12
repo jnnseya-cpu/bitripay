@@ -138,7 +138,7 @@ describe('credit readiness', () => {
     const r0 = (await request(app).get('/api/credit').set(fresh.auth)).body.readiness;
     expect(r0.band).toBe('building');
     expect(r0.score).toBeLessThan(200);
-    expect(r0.signals.map((s: any) => s.key)).toEqual(['income_regularity', 'spend_discipline', 'savings', 'balance_stability', 'account', 'commitments', 'conduct']);
+    expect(r0.signals.map((s: any) => s.key)).toEqual(['income_regularity', 'spend_discipline', 'savings', 'balance_stability', 'account', 'commitments', 'conduct', 'verified_income']);
     expect(r0.tips.length).toBeGreaterThan(2);
     // an account with income, savings and paid commitments
     const payer = await registerUser(app);
@@ -199,7 +199,7 @@ describe('subscriptions and billing', () => {
     const id = sub.body.subscription.id;
     expect((await request(app).post(`/api/v1/subscriptions/${id}/usage`).set(m.auth).send({ quantity: 12 })).body.subscription.usageQty).toBe(12);
     const periodEnd = new Date(sub.body.subscription.currentPeriodEnd);
-    const run1 = runBilling(new Date(periodEnd.getTime() + 1000));
+    const run1 = await runBilling(new Date(periodEnd.getTime() + 1000));
     expect(run1).toMatchObject({ collected: 1, failed: 0 });
     const invoices = (await request(app).get(`/api/v1/subscriptions/${id}`).set(m.auth)).body.invoices;
     expect(invoices[0]).toMatchObject({ status: 'PAID', usageQty: 12, usageMinor: 600, subtotalMinor: 1000, taxMinor: 256, totalMinor: 1856 });
@@ -207,7 +207,7 @@ describe('subscriptions and billing', () => {
     // third period: the wallet is short → dunning
     const s2 = (await request(app).get(`/api/v1/subscriptions/${id}`).set(m.auth)).body.subscription;
     let at = new Date(Date.parse(s2.currentPeriodEnd) + 1000);
-    const run2 = runBilling(at);
+    const run2 = await runBilling(at);
     expect(run2).toMatchObject({ collected: 0, failed: 1 });
     let s3 = (await request(app).get(`/api/billing/subscriptions/${id}`).set(c.auth)).body.subscription;
     expect(s3.status).toBe('PAST_DUE');
@@ -219,7 +219,7 @@ describe('subscriptions and billing', () => {
     let runs = 0;
     while (s3.status === 'PAST_DUE' && runs < 6) {
       at = new Date(Date.parse(s3.nextChargeAt) + 1000);
-      runBilling(at);
+      await runBilling(at);
       s3 = (await request(app).get(`/api/billing/subscriptions/${id}`).set(c.auth)).body.subscription;
       runs += 1;
     }
@@ -236,12 +236,12 @@ describe('subscriptions and billing', () => {
     expect(t.body.subscription.status).toBe('TRIALING');
     expect(t.body.invoice).toBeNull();
     expect(await balanceOf(c2.auth)).toBe(1000);
-    expect(runBilling(new Date(Date.parse(t.body.subscription.currentPeriodEnd) + 1000))).toMatchObject({ collected: 1 });
+    expect(await runBilling(new Date(Date.parse(t.body.subscription.currentPeriodEnd) + 1000))).toMatchObject({ collected: 1 });
     expect(await balanceOf(c2.auth)).toBe(500);
     const cancel = await request(app).post(`/api/billing/subscriptions/${t.body.subscription.id}/cancel`).set(c2.auth).send({});
     expect(cancel.body.subscription.cancelAtPeriodEnd).toBe(true);
     expect(cancel.body.subscription.status).toBe('ACTIVE');
-    const after = runBilling(new Date(Date.parse(cancel.body.subscription.currentPeriodEnd) + 1000));
+    const after = await runBilling(new Date(Date.parse(cancel.body.subscription.currentPeriodEnd) + 1000));
     expect(after.ended).toBe(1);
     expect(await balanceOf(c2.auth)).toBe(500);
     const overview = (await request(app).get('/api/v1/subscriptions').set(m.auth)).body.overview;

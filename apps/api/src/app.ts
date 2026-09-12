@@ -36,6 +36,7 @@ import { riskRouter } from './routes/risk';
 import { intelligenceRouter } from './routes/intelligence';
 import { savingsRouter } from './routes/savings';
 import { fxToolsRouter, creditRouter, billingRouter } from './routes/growth';
+import { openBankingRouter } from './routes/openBanking';
 import { ensureDefaultBindings } from './services/assist/bindings';
 import './services/assist/meshTools';
 import { ensureDefaultConnections } from './services/switch/connections';
@@ -129,6 +130,7 @@ export function createApp() {
   app.use('/api/fx-tools', fxToolsRouter);
   app.use('/api/credit', creditRouter);
   app.use('/api/billing', billingRouter);
+  app.use('/api/open-banking', openBankingRouter);
   app.use('/api/support', supportRouter);
   app.use('/api/p2p', p2pRouter);
   app.use('/api/merchant', merchantRouter);

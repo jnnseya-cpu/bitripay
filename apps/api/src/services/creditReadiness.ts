@@ -79,6 +79,10 @@ export function computeReadiness(userId: string): Readiness {
   // 7. conduct: disputes and risk reviews subtract
   const conductPts = 100 - Math.min(100, disputes * 40 + reviews * 25);
   add('conduct', 'Disputes and risk reviews', disputes + reviews, conductPts, 100, `${disputes} dispute(s), ${reviews} movement(s) held for review`);
+  // 8. verified income from a linked bank or an imported statement (module 15): confidence-weighted
+  const ext = db.prepare('SELECT monthly_income_base, confidence, months_covered FROM open_banking_income WHERE user_id = ?').get(userId) as any;
+  const extPts = !ext || ext.confidence === 'none' ? 0 : ext.confidence === 'high' ? 100 : ext.confidence === 'medium' ? 70 : 40;
+  add('verified_income', 'Verified income (linked bank)', ext?.monthly_income_base ?? null, extPts, 100, ext && ext.confidence !== 'none' ? `Regular income verified from ${ext.months_covered} month(s) of bank statements (${ext.confidence} confidence)` : 'No linked bank account or statement yet', 'Link your bank account or import a statement so a lender can see your income is regular.');
   const score = Math.min(1000, signals.reduce((a, s) => a + s.points, 0));
   const readiness: Readiness = { userId, score, band: bandOf(score), signals, tips, computedAt: now(), windowDays: WINDOW_DAYS };
   const prev = db.prepare('SELECT score, band FROM credit_readiness WHERE user_id = ?').get(userId) as any;

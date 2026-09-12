@@ -11,6 +11,7 @@ import { mtnMomoProvider } from './mtnMomo';
 import { mpesaProvider } from './mpesa';
 import { manualBankProvider } from './manualBank';
 import { manualMomoProvider } from './manualMomo';
+import { openBankingProvider } from './openBanking';
 import type { GatewayProvider, GatewayProviderId, PaymentMethod, GatewayMode, HealthResult } from './types';
 import { getSetting } from '../services/settings';
 
@@ -23,6 +24,7 @@ export const PROVIDERS: Record<GatewayProviderId, GatewayProvider> = {
   mpesa: mpesaProvider,
   manual_bank: manualBankProvider,
   manual_momo: manualMomoProvider,
+  open_banking: openBankingProvider,
 };
 
 export interface GatewayConfig {
@@ -111,6 +113,7 @@ export function isGatewayReady(g: GatewayConfig): boolean {
   const provider = PROVIDERS[g.provider];
   if (!provider) return false;
   if (g.provider === 'manual_momo' || g.provider === 'manual_bank' || g.provider === 'sandbox') return true;
+  if (g.provider === 'open_banking') return true; // the sandbox bank needs no credentials; live providers are keyed per link
   const required = provider.credentialFields.filter((f) => f.secret || ['secretKey', 'consumerKey', 'apiUser', 'subscriptionKey'].includes(f.key));
   const creds = getGatewayCredentials(g.id);
   return required.every((f) => !!creds[f.key]);
@@ -198,6 +201,7 @@ export function ensureDefaultGateways() {
   const count = (getDb().prepare('SELECT COUNT(*) c FROM gateways').get() as any).c;
   if (count > 0) {
     if (!getGateway('manual_momo')) upsertGateway({ id: 'manual_momo', name: 'Mobile money (direct, all operators)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], sortOrder: 7 });
+    if (!getGateway('open_banking')) upsertGateway({ id: 'open_banking', name: 'Pay by bank (open banking)', provider: 'open_banking', enabled: true, methods: ['bank'], currencies: [], sortOrder: 8 });
     return;
   }
   upsertGateway({ id: 'sandbox', name: 'Sandbox (test)', provider: 'sandbox', enabled: !config.isProduction, methods: ['card', 'mobile_money', 'bank'], currencies: [], sortOrder: 0 });
@@ -208,4 +212,5 @@ export function ensureDefaultGateways() {
   upsertGateway({ id: 'mpesa', name: 'M-Pesa', provider: 'mpesa', enabled: !!config.mpesa.consumerKey, methods: ['mobile_money'], currencies: ['KES'], sortOrder: 5 });
   upsertGateway({ id: 'manual_bank', name: 'Bank transfer', provider: 'manual_bank', enabled: true, methods: ['bank'], currencies: [], sortOrder: 6 });
   upsertGateway({ id: 'manual_momo', name: 'Mobile money (direct, all operators)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], sortOrder: 7 });
+  upsertGateway({ id: 'open_banking', name: 'Pay by bank (open banking)', provider: 'open_banking', enabled: true, methods: ['bank'], currencies: [], sortOrder: 8 });
 }

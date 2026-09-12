@@ -54,6 +54,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/app/gift-cards', key: 'nav.giftCards', ico: '🎁', module: 'giftCards' },
     { to: '/app/p2p', key: 'nav.p2p', ico: '🤝', module: 'p2p' },
     { to: '/app/subscriptions', key: 'nav.subscriptions', ico: '🔄' },
+    { to: '/app/banks', key: 'nav.banks', ico: '🏦', module: 'addMoney' },
   ];
   const account: NavItem[] = [
     { to: '/app/transactions', key: 'nav.transactions', ico: '📜' },

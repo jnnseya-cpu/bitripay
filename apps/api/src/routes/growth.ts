@@ -65,11 +65,11 @@ export const billingRouter = Router();
 billingRouter.use(requireAuth);
 billingRouter.get('/plans/:code', (req, res) => { const p = getPlan(String(req.params.code)); res.json({ plan: p.status === 'ACTIVE' ? p : { ...p, description: null } }); });
 billingRouter.get('/subscriptions', (req, res) => res.json({ items: listSubscriptions({ customerId: req.user!.id }), invoices: listInvoices({ customerId: req.user!.id, limit: 50 }) }));
-billingRouter.post('/subscriptions', (req, res) => {
+billingRouter.post('/subscriptions', wrap(async (req, res) => {
   const b = validate(z.object({ plan: z.string().min(2), reference: z.string().max(80).optional().nullable(), pin: z.string().optional() }), req.body);
   const ctx = riskContext(req);
   if (!ctx.stepUpVerified) assertPin(req.user!, b.pin, req);
-  res.status(201).json(subscribe(req.user!, b.plan, { reference: b.reference ?? null, mandateConfirmed: true }));
-});
+  res.status(201).json(await subscribe(req.user!, b.plan, { reference: b.reference ?? null, mandateConfirmed: true }));
+}));
 billingRouter.get('/subscriptions/:id', (req, res) => { const s = getSubscription(String(req.params.id)); if (s.customerId !== req.user!.id) return res.status(404).json({ error: { code: 'subscription_not_found', message: 'Subscription not found' } }); res.json({ subscription: s, invoices: listInvoices({ subscriptionId: s.id }) }); });
 billingRouter.post('/subscriptions/:id/cancel', (req, res) => res.json({ subscription: cancelSubscription(req.user!, String(req.params.id), { immediately: !!req.body?.immediately }) }));

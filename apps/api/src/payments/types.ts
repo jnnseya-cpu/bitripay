@@ -1,7 +1,7 @@
 import type { Request } from 'express';
 
 export type PaymentMethod = 'card' | 'mobile_money' | 'bank' | 'wallet' | 'virtual_card';
-export type GatewayProviderId = 'sandbox' | 'stripe' | 'paystack' | 'flutterwave' | 'mtn_momo' | 'mpesa' | 'manual_bank' | 'manual_momo';
+export type GatewayProviderId = 'sandbox' | 'stripe' | 'paystack' | 'flutterwave' | 'mtn_momo' | 'mpesa' | 'manual_bank' | 'manual_momo' | 'open_banking';
 
 export interface GatewayPaymentRow {
   id: string;

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { validate } from '../../lib/http';
+import { validate, wrap } from '../../lib/http';
 import { requirePermission } from '../../middleware/permissions';
 import { audit } from '../../services/audit';
 import { getDb } from '../../db';
@@ -8,6 +8,7 @@ import { getSetting, setSetting } from '../../services/settings';
 import { getForwardSettings, runForwards, checkFxAlerts, runSweepRules, settleForward } from '../../services/fxTools';
 import { runReadinessBatch } from '../../services/creditReadiness';
 import { runBilling, listSubscriptions, listInvoices } from '../../services/billing';
+import { listAllLinksAdmin } from '../../services/openBanking';
 
 /** Platform view of the FX forward book, alert and rule activity, credit readiness batches and merchant billing. */
 export const adminGrowthRouter = Router();
@@ -42,8 +43,10 @@ r.post('/credit/run', requirePermission('compliance'), (req, res) => {
   res.json(out);
 });
 r.get('/billing', requirePermission('transactions'), (req, res) => res.json({ subscriptions: listSubscriptions({ status: req.query.status ? String(req.query.status) : null, limit: 200 }), invoices: listInvoices({ limit: 200 }) }));
-r.post('/billing/run', requirePermission('transactions'), (req, res) => {
-  const out = runBilling();
+r.post('/billing/run', requirePermission('transactions'), wrap(async (req, res) => {
+  const out = await runBilling();
   audit(req.user!.id, 'billing.run', 'jobs', 'billing', out);
   res.json(out);
-});
+}));
+
+r.get('/open-banking', requirePermission('transactions'), (req, res) => res.json(listAllLinksAdmin({ limit: Number(req.query.limit) || 200 })));

@@ -636,6 +636,28 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
   `subscription.cancelled`, `invoice.paid`, `invoice.payment_failed`; recurring-revenue and 30-day collection
   overview per merchant.
 
+### Open banking: linked accounts, income verification, pay by bank, recurring mandates
+
+- **One provider contract** (`services/openBanking.ts`): institutions, hosted authorisation, consent exchange,
+  statement sync, single payments and VRP mandates. The **sandbox bank** ships complete (institutions for CD, GB, FR,
+  KE, NG; a hosted approve/decline page at `/api/open-banking/sandbox/authorise/:link`; one or two accounts; six
+  months of deterministic statements; payments that debit the sandbox balance; mandates) so every flow runs end to end
+  without credentials. No live provider credentials are bundled: a live provider is added by implementing the same
+  contract. **Statement import** (`POST /api/open-banking/statements`, CSV with date / description / amount or
+  credit / debit columns) gives real bank data today without any provider.
+- **Consent lifecycle**: links are `PENDING → LINKED` (or `DECLINED`), expire with the bank consent, and can be revoked
+  at any time; revocation drops the consent token and every mandate on the link. Consent tokens are encrypted at rest
+  and never returned, not even to administrators (`/api/admin/growth/open-banking`).
+- **Income verification**: recurring credits (three or more months, amounts within a quarter of the median) become
+  verified income streams with a confidence level; the report feeds the **verified income** factor of credit
+  readiness and is re-run on every link, sync and import.
+- **Pay by bank**: the `open_banking` gateway (`src/payments/openBanking.ts`, method `bank`) runs an ordinary deposit
+  through the payments pipeline — fees, issuance authority, settlement and the stage log all apply — executed from
+  the account holder's linked account; a bank refusal fails the payment cleanly.
+- **VRP mandates** (`POST /api/open-banking/mandates`, step-up protected): per-payment and monthly limits, purpose
+  `top_up` or `billing`. Subscription collection draws a wallet shortfall under a billing mandate before it charges;
+  an amount over the limits fails the invoice into dunning. Web page **Linked banks** (`/app/banks`).
+
 ### Public site, blog and SEO engine
 
 The marketing surface is **server-rendered by the API** so search engines, social previews and AI answer

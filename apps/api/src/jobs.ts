@@ -139,7 +139,7 @@ export function startJobs() {
         const sw = runSweepRules();
         if (sw.converted) console.log(`[fx] sweep rules converted on ${sw.converted} account(s)`);
       }
-      const billing = runBilling();
+      const billing = await runBilling();
       if (billing.collected || billing.failed || billing.ended) console.log(`[billing] collected ${billing.collected}, failed ${billing.failed}, ended ${billing.ended}`);
       const renewed = renewSubscriptions();
       if (renewed.renewed || renewed.expired) console.log(`[jobs] add-on subscriptions: renewed ${renewed.renewed}, expired ${renewed.expired}`);

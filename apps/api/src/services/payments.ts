@@ -51,12 +51,16 @@ export interface InitiatePaymentInput {
   /** Optional onward destination executed automatically once the money arrives (any → any). */
   route?: RouteDestination | null;
   routeId?: string | null;
+  /** Pay by bank: which linked account (and VRP mandate) executes the payment. */
+  openBanking?: { linkId: string; accountId: string; mandateId?: string | null; reason?: string | null } | null;
 }
 
 /** Proof of a fresh biometric (passkey step-up token) or the transaction PIN, supplied by the payer. */
 export interface PaymentAuth {
   pin?: string | null;
   req?: Pick<Request, 'headers' | 'body'> | null;
+  /** A variable recurring payment mandate the account holder confirmed under step-up authenticates draws within its limits. */
+  mandateId?: string | null;
 }
 
 export interface PaymentView {
@@ -185,6 +189,7 @@ function resolveAuthentication(user: UserRow | null, auth: PaymentAuth | undefin
     // A guest is authenticated by the rail itself: the processor (3-D Secure / OTP) or the payer's own operator/bank app.
     return { method: gatewayProvider === 'sandbox' ? 'sandbox' : method === 'card' ? 'processor' : method === 'mobile_money' ? 'operator' : 'payer_bank', required: false };
   }
+  if (auth?.mandateId) return { method: 'vrp_mandate', required: false };
   const token = (auth?.req?.headers?.['x-step-up-token'] as string | undefined) || auth?.req?.body?.stepUpToken;
   if (token && verifyStepUpToken(user, token)) return { method: 'passkey', required: false };
   if (auth?.pin) {
@@ -249,7 +254,7 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
   const controls = getGatewayControls();
   const expiresAt = new Date(Date.now() + controls.intentExpiryHours * 3600_000).toISOString();
   // Non-sensitive inputs are kept so the intent can be dispatched after authentication. Card data is never stored.
-  const intentInput = { operatorId: input.operatorId ?? null, route: input.route ?? null, routeId: input.routeId ?? null, returnUrl: input.returnUrl ?? null, saveCard: !!input.saveCard, savedCardId: input.savedCardId ?? null };
+  const intentInput = { operatorId: input.operatorId ?? null, route: input.route ?? null, routeId: input.routeId ?? null, returnUrl: input.returnUrl ?? null, saveCard: !!input.saveCard, savedCardId: input.savedCardId ?? null, openBanking: input.openBanking ?? null };
   getDb()
     .prepare(
       `INSERT INTO gateway_payments (id, gateway, provider_ref, method, purpose, user_id, payment_request_id, amount, currency, fee, status, stage, expires_at, payer_email, payer_phone, payer_name, saved_card_id, metadata, transaction_id, created_at, updated_at)
