@@ -278,7 +278,7 @@ describe('ledger, audit and idempotency', () => {
     const first = await request(app).post('/api/transfers').set(a.auth).set('Idempotency-Key', key).send({ to: '@idem_rcv', amount: '10', currency: 'USD', pin: '1234' });
     expect(first.status).toBe(201);
     const again = await request(app).post('/api/transfers').set(a.auth).set('Idempotency-Key', key).send({ to: '@idem_rcv', amount: '10', currency: 'USD', pin: '1234' });
-    expect(again.status).toBe(201);
+    expect(again.status).toBe(200); // the identical resource already exists: 200, not a second 201
     expect(again.headers['idempotent-replayed']).toBe('true');
     expect(again.body.transaction.id).toBe(first.body.transaction.id);
     expect(await balance(b.auth, 'USD')).toBe(1000);

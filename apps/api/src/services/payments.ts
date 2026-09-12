@@ -23,6 +23,7 @@ import { getGatewayControls } from './settings';
 import { recordEvent, type Actor } from './events';
 import { STAGE_LABELS, TERMINAL_STAGES, advanceThrough, transitionStage, type PaymentStage } from './lifecycle';
 import { startAttempt, reconcileOpenAttempt } from './intents';
+import { pickConnector, connectorHealth } from './rails';
 import { assertPin } from './auth';
 import { verifyStepUpToken } from './webauthn';
 import { assessRisk } from './risk';
@@ -165,6 +166,13 @@ function pickMobileMoneyGateway(candidates: ReturnType<typeof availableGateways>
   return candidates.find((g) => g.provider === 'sandbox') ?? direct ?? candidates[0];
 }
 
+/** Smart Route: best usable connector for a method among the candidates the capability filters already allowed. */
+function smartPick(candidates: ReturnType<typeof availableGateways>, method: PaymentMethod, policy: string) {
+  if (!candidates.length) return undefined;
+  const { id } = pickConnector(candidates.map((g, i) => ({ id: g.id, method, costBps: typeof g.config.costBps === 'number' ? (g.config.costBps as number) : null, preferenceRank: i })), (['smart', 'cheapest', 'fastest', 'most_reliable'].includes(policy) ? policy : 'smart') as any);
+  return id ? candidates.find((g) => g.id === id) : undefined;
+}
+
 function actorFor(user: UserRow | null | undefined): Actor {
   if (!user) return { type: 'guest' };
   return { type: user.role === 'admin' ? 'admin' : user.role === 'agent' ? 'agent' : user.role === 'merchant' ? 'merchant' : 'user', id: user.id };
@@ -212,8 +220,15 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
   if (!Number.isInteger(amount) || amount <= 0) throw badRequest('Amount must be greater than zero', 'invalid_amount');
 
   const candidates = availableGateways(input.method, cur.code, user?.country);
-  const gateway = input.method === 'mobile_money' ? pickMobileMoneyGateway(candidates, input.operatorId, input.gateway) : input.gateway ? candidates.find((g) => g.id === input.gateway) : candidates.find((g) => g.provider !== 'manual_momo');
+  const policy = (request ? (getDb().prepare('SELECT method_policy FROM payment_intents WHERE id = ?').get(request.intent_id ?? '') as any)?.method_policy : null) ?? 'smart';
+  let gateway = input.method === 'mobile_money' ? pickMobileMoneyGateway(candidates, input.operatorId, input.gateway) : input.gateway ? candidates.find((g) => g.id === input.gateway) : smartPick(candidates.filter((g) => g.provider !== 'manual_momo'), input.method, policy);
+  if (gateway && !input.gateway && !connectorHealth(gateway.id).usable) {
+    // the preferred connector is paused or its circuit is open: fail over to the best usable one for the same method
+    const alternative = smartPick(candidates.filter((g) => g.id !== gateway!.id && g.provider !== 'manual_momo'), input.method, policy);
+    if (alternative) gateway = alternative;
+  }
   if (!gateway) throw unprocessable(`No ${input.method.replace('_', ' ')} gateway is available for ${cur.code}`, 'no_gateway');
+  if (input.gateway && !connectorHealth(gateway.id).usable) throw unprocessable(`${gateway.name} is temporarily unavailable (${connectorHealth(gateway.id).reason}); choose another method or try again shortly`, 'connector_unavailable');
   if (gateway.provider === 'manual_momo' && input.operatorId) {
     const op = getOperator(input.operatorId);
     if (op.currency !== cur.code) throw badRequest(`${op.name} collects ${op.currency}. Choose ${op.currency} as the currency to pay with this operator.`, 'operator_currency_mismatch');

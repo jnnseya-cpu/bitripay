@@ -37,6 +37,7 @@ import { runGuardian, listGuardianChecks, getOperatingState, setOperatingMode } 
 import { countryCapabilities, listCountryCapabilities, setCountryCapabilities, PURPOSE_CODES } from '../../services/capabilities';
 import { listIntents, intentTimeline } from '../../services/intents';
 import { listRefunds, resolveRefund } from '../../services/gateway';
+import { adminSwitchRouter } from './switch';
 import { addonReport } from '../../services/assist/addon';
 import { billingReport } from '../../services/assist/billing';
 import { recentUssdSessions, ussdRequest, ussdSessionId } from '../../services/channels/ussd';
@@ -94,6 +95,7 @@ const complianceSchema = z.object({ regulator: z.string().max(200).optional().nu
 
 export const adminRouter = Router();
 adminRouter.use(...requireAdmin);
+adminRouter.use('/switch', adminSwitchRouter);
 
 // ---------------- Dashboard ----------------
 adminRouter.get('/stats', requirePermission('reports'), (_req, res) => {

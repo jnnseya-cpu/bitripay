@@ -12,6 +12,9 @@ import { now } from '../lib/ids';
 export function idempotency(req: Request, res: Response, next: NextFunction) {
   const key = req.header('idempotency-key');
   if (!key || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
+  // National switch payments keep their own financial tombstones (never released by TTL, IDM-007) and answer with the
+  // scheme's business codes; the 24-hour response cache must not sit in front of them.
+  if (/^\/(api\/)?v1\/payments(\/|$)/.test(req.path)) return next();
   if (key.length > 200) return res.status(400).json({ error: { code: 'invalid_idempotency_key', message: 'Idempotency-Key is too long' } });
   const scope = sha256(`${req.header('authorization') || req.ip || ''}`);
   const requestHash = sha256(`${req.method} ${req.originalUrl}\n${JSON.stringify(req.body ?? {})}`);
@@ -21,7 +24,8 @@ export function idempotency(req: Request, res: Response, next: NextFunction) {
     if (existing.request_hash !== requestHash) return res.status(422).json({ error: { code: 'idempotency_key_reused', message: 'This Idempotency-Key was already used with a different request' } });
     if (existing.status_code === null) return res.status(409).json({ error: { code: 'request_in_progress', message: 'A request with this Idempotency-Key is still being processed' } });
     res.setHeader('Idempotent-Replayed', 'true');
-    return res.status(existing.status_code).type('application/json').send(existing.response);
+    // an identical repeat of a creation returns the same resource with 200 (it already exists); other statuses replay as stored
+    return res.status(existing.status_code === 201 ? 200 : existing.status_code).type('application/json').send(existing.response);
   }
   db.prepare('INSERT INTO idempotency_keys (scope, key, request_hash, status_code, response, created_at) VALUES (?, ?, ?, NULL, NULL, ?)').run(scope, key, requestHash, now());
   const originalJson = res.json.bind(res);

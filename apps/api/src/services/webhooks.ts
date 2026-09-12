@@ -61,6 +61,13 @@ export const WEBHOOK_EVENT_TYPES: { type: string; description: string }[] = [
   { type: 'payment.completed', description: 'Legacy event: a payment request was paid (kept for existing integrations).' },
   { type: 'payment_request.created', description: 'Legacy event: an API or link payment request was created.' },
   { type: 'reconciliation.exception', description: 'Reconciliation found a discrepancy involving one of your payments.' },
+  { type: 'payment.created', description: 'National switch payment created (durable intent received).' },
+  { type: 'payment.action_required', description: 'National switch payment needs payer consent or authentication before it can be sent.' },
+  { type: 'payment.pending', description: 'National switch payment transmitted or technically acknowledged; confirmation in progress.' },
+  { type: 'payment.unknown', description: 'National switch payment outcome uncertain after transmission: do not repeat the payment; an inquiry is running.' },
+  { type: 'payment.rejected', description: 'National switch payment definitively rejected.' },
+  { type: 'payment.cancelled', description: 'National switch payment cancelled locally before any transmission.' },
+  { type: 'payment.expired', description: 'National switch payment expired before any possible transmission.' },
   { type: 'ping', description: 'Test event sent from the dashboard or the API.' },
 ];
 const KNOWN_TYPES = new Set(WEBHOOK_EVENT_TYPES.map((e) => e.type));
@@ -236,7 +243,7 @@ export interface EmitOptions {
 
 /**
  * Record an event and queue one delivery per subscribed endpoint. Called after the producing transaction committed.
- * Returns the event id (null when the merchant has no destination at all).
+ * Returns the event id (null only when the user does not exist).
  */
 export function emitEvent(userId: string, type: string, data: Record<string, unknown>, opts: EmitOptions = {}): string | null {
   const db = getDb();
@@ -244,7 +251,7 @@ export function emitEvent(userId: string, type: string, data: Record<string, unk
   if (!user) return null;
   const endpoints = (db.prepare('SELECT * FROM webhook_endpoints WHERE user_id = ? AND active = 1').all(userId) as any[]).filter((e) => (opts.endpointId ? e.id === opts.endpointId : subscribed(parseJson<string[]>(e.events, ['*']), type)));
   const legacy = !opts.endpointId && user.webhook_url && user.webhook_secret ? { id: null as string | null, url: user.webhook_url } : null;
-  if (!endpoints.length && !legacy) return null;
+  // the event is always recorded after the durable commit (it is the merchant's event log); deliveries only exist for destinations
   const id = `evt_${shortCode(20).toLowerCase()}`;
   const ts = now();
   const envelope = {

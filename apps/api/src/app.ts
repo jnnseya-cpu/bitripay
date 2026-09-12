@@ -30,6 +30,10 @@ import { supportRouter } from './routes/support';
 import { p2pRouter } from './routes/p2p';
 import { merchantRouter, v1Router } from './routes/merchant';
 import { adminRouter } from './routes/admin';
+import { switchRouter } from './routes/switch';
+import { ensureDefaultConnections } from './services/switch/connections';
+import { ensureMessageCatalogue } from './services/switch/payments';
+import { ensureSimulationParticipants } from './services/switch/participants';
 import { passkeysRouter, passkeyAuthRouter } from './routes/passkeys';
 import { routingRouter } from './routes/routing';
 import { evidenceRouter } from './routes/evidence';
@@ -53,6 +57,10 @@ export function bootstrap() {
   ensureDefaultGateways();
   ensureMomoOperators();
   ensureParseTemplates();
+  // National switch gateway: the DRC connection in simulation, the message catalogue and (outside production) the fictitious institutions the simulator uses.
+  ensureDefaultConnections();
+  ensureMessageCatalogue();
+  if (!config.isProduction) ensureSimulationParticipants();
   seedDefaultCatalogs();
 }
 
@@ -114,6 +122,8 @@ export function createApp() {
   // Gateway v1 (intents, QR, resolver, keys) first; the merchant v1 alias below keeps serving its existing paths.
   app.use('/api/v1', gatewayV1Router);
   app.use('/v1', gatewayV1Router);
+  app.use('/api/v1', switchRouter);
+  app.use('/v1', switchRouter);
   app.use('/lite', liteRouter);
   app.use('/v1', v1Router);
   app.use('/api/admin', adminRouter);

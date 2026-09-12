@@ -18,6 +18,14 @@ export const ADMIN_PERMISSIONS = [
   'issuance',
   'treasury',
   'agents',
+  /** Payment Operations: investigate switch payments, request inquiries, open incidents (never alter amounts, evidence or finality). */
+  'switch',
+  /** Reconciliation Analyst: import reports, match evidence, propose resolutions (never approve own closure). */
+  'reconciliation',
+  /** Security Administrator: identities, keys, certificates, security incidents. */
+  'security',
+  /** Compliance Officer: case review, restrictions, authorised reports. */
+  'compliance',
 ] as const;
 export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];
 

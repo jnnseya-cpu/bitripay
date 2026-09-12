@@ -20,6 +20,16 @@ import { expireIntents } from './services/intents';
 import { runGuardian } from './services/guardian';
 import { processDueDeliveries } from './services/webhooks';
 import { syncCheckoutSessions } from './services/gateway';
+import { dispatchOutbox, recoverUncertainEmissions, expirePayments as expireSwitchPayments } from './services/switch/payments';
+import { certificateAlerts } from './services/switch/connections';
+import { checkCoverage } from './services/switch/reconciliation';
+import { probeConnectors } from './services/rails';
+import { registryStatus } from './services/switch/participants';
+import { listConnections } from './services/switch/connections';
+let lastCertificateCheck = 0;
+let lastCoverageDay = '';
+let lastRegistryAlert = 0;
+const dispatcherOwner = `node:${process.pid}:${Math.random().toString(36).slice(2, 8)}`;
 let lastGuardian = 0;
 let lastAgentDay = '';
 let lastBacklinkCheck = 0;
@@ -58,6 +68,33 @@ export function startJobs() {
       if (expiredIntents) console.log(`[jobs] expired ${expiredIntents} payment intent(s)`);
       const cs = syncCheckoutSessions();
       if (cs.completed || cs.expired) console.log(`[jobs] checkout sessions: completed ${cs.completed}, expired ${cs.expired}`);
+      // National switch: recover uncertain emissions (never resend), expire never-sent payments, dispatch the outbox under the lease.
+      const recovered = recoverUncertainEmissions();
+      if (recovered) console.warn(`[switch] ${recovered} uncertain emission(s) recovered into inquiry`);
+      const expiredSwitch = expireSwitchPayments();
+      if (expiredSwitch) console.log(`[switch] expired ${expiredSwitch} never-transmitted payment(s)`);
+      const dispatched = await dispatchOutbox(dispatcherOwner, { limit: 100 });
+      if (dispatched.processed) console.log(`[switch] dispatched ${dispatched.processed} outbox message(s) as ${dispatched.lease?.owner} (fencing token ${dispatched.lease?.fencingToken})`);
+      const probes = await probeConnectors();
+      if (probes.failed.length) console.warn(`[rails] probe failures: ${probes.failed.join(', ')}`);
+      if (Date.now() - lastCertificateCheck > 24 * 3600_000) {
+        lastCertificateCheck = Date.now();
+        const certs = certificateAlerts();
+        if (certs.expired.length) console.error(`[switch] certificates expired on ${certs.expired.join(', ')} — emission stopped`);
+      }
+      if (Date.now() - lastRegistryAlert > 6 * 3600_000) {
+        lastRegistryAlert = Date.now();
+        for (const c of listConnections()) {
+          const reg = registryStatus(c.country);
+          if (reg.stale || reg.contradictions.length) console.warn(`[switch] participant registry for ${c.country}: ${reg.stale ? 'stale' : ''} ${reg.contradictions.join('; ')}`);
+        }
+      }
+      const coverageDay = new Date().toISOString().slice(0, 10);
+      if (coverageDay !== lastCoverageDay && new Date().getUTCHours() >= 7) {
+        lastCoverageDay = coverageDay;
+        const cov = checkCoverage();
+        if (cov.missing.length) console.warn(`[reconciliation] missing reports: ${cov.missing.join(', ')}`);
+      }
       // Webhook retries survive restarts: deliveries whose retry time has passed are attempted here.
       const delivered = await processDueDeliveries();
       if (delivered) console.log(`[jobs] retried ${delivered} webhook deliver${delivered === 1 ? 'y' : 'ies'}`);

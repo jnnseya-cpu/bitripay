@@ -372,6 +372,52 @@ legacy `payment.completed` and `payment_request.created`.
 Mutating requests accept an `Idempotency-Key` header: a repeat with the same key and body replays the
 stored response (`Idempotent-Replayed: true`); a repeat with a different body is refused (422).
 
+### National Switch Gateway (Switch Monétique National, DRC) and the rail registry
+
+BitriPay is an aggregator in the DRC: it initiates, orchestrates, normalises, tracks and reconciles; it never holds
+customer funds for switch flows, never executes final settlement and never routes an interinstitutional payment
+around the national switch. The gateway is built so the team can develop, test and operate everything without the
+switch protocol: the adapter is abstract, the **simulator** (labelled `SIMULATION`, fictitious institutions only)
+exercises every branch, and a real connector cannot be enabled until it is certified.
+
+**Objects and rules** (services under `apps/api/src/services/switch/`)
+
+| Piece | What it does |
+| --- | --- |
+| Participant registry (CMP-06) | Official codes, kinds, services, currencies, channels, validity dates, routing ids, versions; author ≠ approver; pair capability tests (`OPEN` only with evidence). A service exists only when *BitriPay authorisation × switch admission × debtor capability × creditor capability × currency × product × channel × validity* all hold. |
+| Route policy engine (CMP-05) | Classifies from the institutions and the product (`DOMESTIC_INTEROPERABLE`, `ON_US_REVIEW_REQUIRED`, `CLOSED_LOOP`, `CROSS_BORDER`, `UNSUPPORTED`), applies RTE-001…006, returns an explainable decision (rule, profile, institutions, currency, rejection, config version). Callers cannot force a rail, sponsor, currency or exemption. Exceptions are signed objects with an official document and two approvals; none exist by default. |
+| Connections (CMP-07 gate) | Access mode `DIRECT` / `SPONSORED`, adapter `simulator` / `certified`, environment, certification steps `NOT_STARTED → INTERNAL_TESTS → SANDBOX → CERTIFIED` (evidence + distinct approver), certificate inventory with 60/30/14/7-day alerts; an expired certificate stops emission (P1 incident) — TLS is never disabled. Production needs the certified adapter module (`SWITCH_ADAPTER_MODULE`). |
+| Orchestrator (CMP-03/08/09) | `switch_payments` with the state machine `RECEIVED → REQUIRES_ACTION → READY → DISPATCHING → PENDING/AUTHORIZED/COMPLETED/REJECTED/UNKNOWN` and separate `authorization_status`, `beneficiary_credit_status`, `settlement_status` (default `NOT_OBSERVED`), `reconciliation_status`, `resolution_status`; payment + event + outbox committed atomically; stable message id persisted before the network write; dispatcher lease with a fencing token; revalidation of every revocable control before emission; timeouts → `UNKNOWN` + inquiry chain, never a resend; provisional `NOT_FOUND` keeps `UNKNOWN`; versioned message catalogue (unknown code → quarantine, ACK ≠ authorisation, `AUTHORIZED` never auto-completes, no regression, contradictions → `REVIEW_REQUIRED` + case); inbound dedup on (source, external id), tampered same id → integrity incident; refunds/reversals as linked operations with atomic reservations (an unknown refund keeps its reservation). Every payment mirrors onto a platform intent (webhooks, timeline, guardian) with **no ledger posting**: the observation journal records principal, credit, fees, refunds and settlement references. |
+| Reconciliation (CMP-10) | Imports with checksum and control totals (same file twice = one import; corrected file = linked import), coverage per expected source, exact-reference matching then amount/currency/status/fee checks, cases `LOCAL_ONLY`, `EXTERNAL_ONLY`, `STATUS_CONFLICT`, `AMOUNT_MISMATCH`, `CURRENCY_MISMATCH`, `DUPLICATE_EXTERNAL`, `FEES_MISMATCH`, `SETTLEMENT_NOT_OBSERVED`, `LATE_RECORD`, `MISSING_REPORT`, `INTEGRITY` with exposure, age, owner, next action, deadline; analyst proposes, a different approver closes; totals per currency only. |
+| Evidence vault (CMP-12) | Raw switch bytes, encrypted at rest, addressed by SHA-256, append-only, integrity sweep. |
+| Rail registry & Smart Route | Every connector (wallet, processors, direct operators, switch connections) with hourly success/failure/unknown/decline/latency telemetry, circuit breaker (open after consecutive faults, half-open after cooldown), operator pause, health probes, and a deterministic 0–100 score per policy (`smart`, `cheapest`, `fastest`, `most_reliable`) used by checkout method discovery and processor selection. Failover only inside the same capability set. |
+
+**Merchant API** (scopes in brackets): `POST /v1/payments` [payments:create] (idempotent: 201 new, 200 identical, 409
+`IDEMPOTENCY_CONFLICT` / `ORDER_ALREADY_EXISTS`), `GET /v1/payments[/:id]` [payments:read] (an `UNKNOWN` payment is a 200
+with its business state), `GET /v1/payments/:id/timeline`, `POST /v1/payments/:id/cancel` [payments:cancel] (409
+`PAYMENT_ALREADY_DISPATCHED` once transmission was possible), `POST /v1/payments/:id/consent`, `POST /v1/payments/:id/refunds`
+[refunds:create] (422 `CAPABILITY_NOT_AVAILABLE` when the product does not support it), `GET /v1/participants`
+[participants:read], `POST /v1/qr-intents` [qr:create], `POST /v1/webhook-endpoints` [webhooks:manage],
+`GET /v1/reconciliation/cases` [reconciliation:read] (cursor pagination), `POST/GET /v1/beneficiary_bindings`
+[bindings:manage] (verified by compliance, activated by a different approver), `POST /v1/consents` (simulation only).
+Request body per §11.1 (`amount.value_minor` is a string, never a float); errors per §11.3 (`INVALID_REQUEST`,
+`SCOPE_DENIED`, `RESOURCE_NOT_FOUND`, `UNSUPPORTED_PARTICIPANT_PAIR`, `CURRENCY_NOT_ENABLED`, `RATE_LIMITED` with
+`Retry-After`, `SERVICE_UNAVAILABLE`). Webhook types `payment.created / action_required / pending / unknown / completed /
+rejected / cancelled / expired`, `refund.updated`, `reconciliation.exception` carry `state_version`.
+
+**Operations console API** `/api/admin/switch/*` (permissions `switch`, `reconciliation`, `security`, `compliance`,
+`approvals`): connections (certification, certificates, enable gate, probe, simulator link and inbound injection,
+national view), participants and pairs, policies and exceptions, payments (timeline with every fact's source and time,
+inquiry, evidence), inbox quarantine, outbox and dead letters, message catalogue, dispatcher lease/run/recover/takeover,
+reconciliation imports/runs/cases, incidents (P1/P2/P3), recovery view (journal mode, emission journal, runbook
+checklist, exercises) and `/rails` (registry, pause/resume, probe, score). Scheduler: outbox dispatch under the lease,
+uncertain-emission recovery, expiry of never-sent payments, probes, certificate alerts, registry staleness, daily coverage.
+
+Simulator scenarios are selected by the payer `account_token` suffix (`tok_ok`, `tok_pending`, `tok_slow`,
+`tok_reject`, `tok_timeout`, `tok_timeout_nf`, `tok_unknown_code`, `tok_ack_only`, `tok_authorized`, `tok_dup`,
+`tok_contradict`, `tok_badsig`, `tok_refund_unknown`). The acceptance matrix T01–T32 of the dossier runs in
+`src/tests/switch.test.ts`. Settings keys: `switch`, `routing`.
+
 ### Public site, blog and SEO engine
 
 The marketing surface is **server-rendered by the API** so search engines, social previews and AI answer

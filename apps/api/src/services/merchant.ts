@@ -38,6 +38,14 @@ export const API_KEY_SCOPES = [
   'balance:read',
   'webhooks:manage',
   'events:read',
+  'payments:create',
+  'payments:read',
+  'payments:cancel',
+  'refunds:create',
+  'participants:read',
+  'qr:create',
+  'reconciliation:read',
+  'bindings:manage',
 ] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 export type ApiKeyKind = 'secret' | 'publishable' | 'restricted';

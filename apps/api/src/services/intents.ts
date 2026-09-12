@@ -25,6 +25,7 @@ import { notify } from './notifications';
 import { dispatchWebhook } from './webhooks';
 import { getGatewaySettings } from './users';
 import { completeCheckoutSessionForIntent } from './gateway';
+import { recordRoutingOutcome, pickConnector, type RouteCandidate } from './rails';
 
 export const INTENT_STATES = ['CREATED', 'REQUIRES_PAYMENT_METHOD', 'ROUTING', 'REQUIRES_CUSTOMER_ACTION', 'PROCESSING', 'AUTHORISED', 'CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED', 'FAILED', 'EXPIRED', 'CANCELLED', 'PARTIALLY_REFUNDED', 'REFUNDED', 'DISPUTED', 'REVERSED', 'UNDER_REVIEW', 'UNKNOWN_PROVIDER_STATE', 'AMBIGUOUS'] as const;
 export type IntentState = (typeof INTENT_STATES)[number];
@@ -381,6 +382,10 @@ export function finishAttempt(attemptId: string, outcome: 'CAPTURED' | 'AUTHORIS
       }
     }
     recordEvent('payment', r.id, `attempt.${outcome.toLowerCase()}`, actor, { attemptId, failureCategory: details.failureCategory ?? null, providerRef: details.providerRef ?? null });
+    // Smart Route telemetry: the connector's own faults trip the breaker; customer declines only count as attempts.
+    const latency = a.started_at ? Date.now() - Date.parse(a.started_at) : null;
+    const connectorFault = details.failureCategory ? ['provider_unavailable', 'timeout_before_send'].includes(details.failureCategory) : false;
+    recordRoutingOutcome(a.connector, a.method_class, outcome === 'CAPTURED' || outcome === 'AUTHORISED' ? 'success' : outcome === 'UNKNOWN' ? 'unknown' : connectorFault ? 'failure' : 'decline', latency);
     return { attempt: toAttempt(db.prepare('SELECT * FROM payment_attempts WHERE id = ?').get(attemptId)), intent };
   })();
 }
@@ -495,6 +500,17 @@ export function discoverMethods(r: IntentRow, payer: UserRow | null, payerCountr
   list.push({ methodClass: 'card', label: 'Card', available: caps.cardCollection && !!card && allowed.includes('card') && rails.includes('card'), gateways: card?.gateways });
   const bank = options.find((o) => o.method === 'bank');
   list.push({ methodClass: 'bank', label: 'Bank transfer', available: !!bank && allowed.includes('bank') && rails.includes('bank'), gateways: bank?.gateways });
+  // Smart Route: rank the connectors of each method for this intent's policy; the recommended one is what the
+  // checkout uses when the payer expresses no preference, and the failed connector of the last attempt is avoided.
+  const lastFailed = listAttempts(r.id).filter((a) => a.status === 'FAILED' && ['provider_unavailable', 'timeout_before_send'].includes(a.failureCategory ?? '')).map((a) => a.connector);
+  for (const m of list) {
+    const gws = (m.gateways as { id: string }[] | undefined) ?? [];
+    if (!gws.length) continue;
+    const candidates: RouteCandidate[] = gws.map((g, i) => ({ id: g.id, method: m.methodClass, preferenceRank: i }));
+    const { id, scores } = pickConnector(candidates.filter((c) => !lastFailed.includes(c.id)).length ? candidates.filter((c) => !lastFailed.includes(c.id)) : candidates, (r.method_policy as any) ?? 'smart');
+    (m as any).recommendedGateway = id;
+    (m as any).routeScores = scores.map((sc) => ({ id: sc.id, score: sc.score, usable: sc.usable, reason: sc.reason }));
+  }
   const crossBorder = !!payerCountry && !!merchant?.country && payerCountry.toUpperCase() !== merchant.country.toUpperCase();
   if (crossBorder) list.push({ methodClass: 'diaspora', label: 'Pay from abroad in your currency', available: caps.crossBorder && rails.includes('diaspora') && countryCapabilities(payerCountry).crossBorder, crossBorder: true });
   if (rails.includes('bitcoin')) list.push({ methodClass: 'bitcoin', label: 'Bitcoin / Lightning', available: caps.bitcoin, reason: caps.bitcoin ? undefined : 'not enabled in this country' });

@@ -72,7 +72,8 @@ export function runGuardian(opts: { haltOnFailure?: boolean } = {}): GuardianRes
   for (const n of negatives) findings.push({ kind: 'negative_balance', ref: n.id, detail: `${n.tag} at ${n.balance}` });
   const orphanEvents = db.prepare("SELECT e.event_id, e.transaction_id FROM payment_events e LEFT JOIN transactions t ON t.id = e.transaction_id WHERE e.transaction_id IS NOT NULL AND t.id IS NULL").all() as any[];
   for (const e of orphanEvents) findings.push({ kind: 'event_without_ledger', ref: e.event_id, detail: `transaction ${e.transaction_id} missing` });
-  const captured = db.prepare("SELECT id FROM payment_intents WHERE status IN ('CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED') AND transaction_id IS NULL").all() as any[];
+  // Observation-only rails (national switch, aggregator phase) never post a customer balance: their proof is the observation journal.
+  const captured = db.prepare("SELECT id FROM payment_intents WHERE status IN ('CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED') AND transaction_id IS NULL AND rails NOT LIKE '%national_switch%'").all() as any[];
   for (const c of captured) findings.push({ kind: 'captured_without_posting', ref: c.id, detail: 'captured intent has no ledger transaction' });
   const overRefunded = db.prepare("SELECT * FROM (SELECT t.id, t.amount, (SELECT COALESCE(SUM(r.amount), 0) FROM transactions r WHERE r.type = 'refund' AND json_extract(r.metadata, '$.refundOf') = t.id AND r.status = 'completed') refunded FROM transactions t WHERE t.status IN ('completed', 'reversed') AND EXISTS (SELECT 1 FROM transactions r WHERE r.type = 'refund' AND json_extract(r.metadata, '$.refundOf') = t.id)) WHERE refunded > amount").all() as any[];
   for (const o of overRefunded) findings.push({ kind: 'refund_exceeds', ref: o.id, detail: `refunded ${o.refunded} of ${o.amount}` });

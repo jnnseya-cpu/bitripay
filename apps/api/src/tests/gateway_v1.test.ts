@@ -315,7 +315,7 @@ describe('sandbox simulator, Scan-to-Verify and payouts', () => {
     expect(blocked.status).toBe(409);
     expect(blocked.body.error.code).toBe('attempt_in_flight');
     const ambEvent = getDb().prepare("SELECT id FROM webhook_events WHERE user_id = ? AND type = 'payment_intent.ambiguous_hold'").get(m.user.id);
-    expect(ambEvent).toBeUndefined(); // no endpoint registered yet → nothing to deliver, nothing recorded
+    expect(ambEvent).toBeDefined(); // the event log is written even before any endpoint exists; there is simply nothing to deliver
     const balance = await request(app).get('/api/v1/balance').set(auth);
     const usd = balance.body.data.find((b: any) => b.currency === 'USD');
     expect(usd.pending).toBe(900);
