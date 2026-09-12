@@ -28,8 +28,12 @@ import { getCurrency, listCurrencies, upsertCurrency, refreshRatesFromProvider, 
 import { goLiveChecklist } from '../../services/goLive';
 import { listPosts, getPost, createPost, updatePost, deletePost, renderPost } from '../../services/blog';
 import { listLinkRules, upsertLinkRule, deleteLinkRule, listBacklinks, upsertBacklink, deleteBacklink, verifyBacklinks, pingIndexNow, pageviewSummary } from '../../services/seo';
+import { agentStats, runtimeStatus, listRuns as listAgentRuns, getRun, cancelRun, startRun, listApprovals, decideApproval } from '../../services/assist/runtime';
+import { listPolicies, publishPolicy, FORBIDDEN } from '../../services/assist/policy';
+import { TOOLS } from '../../services/assist/tools';
+import { getAgentDef } from '../../services/assist/registry';
 import { draftArticle, keywordIdeas, auditPost, socialPack, listRuns, agentStatus, outreachCandidates } from '../../services/seoAgent';
-import { getSeoSettings } from '../../services/settings';
+import { getSeoSettings, getAssistSettings } from '../../services/settings';
 import { buildStatement, statementCsv, statementPdf, listStatements } from '../../services/statements';
 import { emoneyOverview, listProgrammes, getProgramme, upsertProgramme, setProgrammeStatus, listReserveMovements, recordReserveMovement, reverseReserveMovement, listPools, getPool, createPool, allocate, reconcileReserves, listReconciliations, freezeWallet, listPromoCredits } from '../../services/emoney';
 import { testGateway } from '../../payments';
@@ -1032,3 +1036,94 @@ adminRouter.get('/audit-logs', requirePermission('admins'), (req, res) => {
   const { page, pageSize } = parsePagination(req.query, 50);
   res.json({ ...listAuditLogs(page, pageSize, req.query.search ? String(req.query.search) : undefined), page, pageSize });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Command centres: agent registry, runs explorer, policies, approvals (maker-checker), usage and settings
+// ---------------------------------------------------------------------------------------------------------------------
+adminRouter.get('/agents', requirePermission('agents'), (_req, res) => {
+  const s = getAssistSettings();
+  res.json({ agents: agentStats(), runtime: runtimeStatus(), policies: listPolicies(), approvals: listApprovals({ status: 'proposed' }), forbidden: FORBIDDEN, tools: TOOLS.map((t) => ({ name: t.name, description: t.description, roles: t.roles, permission: t.permission ?? null, sideEffect: t.sideEffect, requiresApproval: !!t.requiresApproval })), settings: { ...s, apiKey: s.apiKey ? '••••••••' : '' }, usage: getDb().prepare("SELECT day, agent_key, model, SUM(runs) runs, SUM(tokens_in) tokens_in, SUM(tokens_out) tokens_out, SUM(cost_micros) cost_micros, SUM(acu) acu FROM agent_usage WHERE day >= ? GROUP BY day, agent_key, model ORDER BY day DESC").all(new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)) });
+});
+adminRouter.post('/agents/:key/pause', requirePermission('agents'), (req, res) => {
+  const s = getAssistSettings();
+  if (!getAgentDef(String(req.params.key))) throw notFound('Unknown agent');
+  const paused = Array.from(new Set([...s.paused, String(req.params.key)]));
+  setSetting('assist', { ...s, paused });
+  audit(req.user!.id, 'agents.pause', 'agent', String(req.params.key));
+  res.json({ paused });
+});
+adminRouter.post('/agents/:key/resume', requirePermission('agents'), (req, res) => {
+  const s = getAssistSettings();
+  const paused = s.paused.filter((k) => k !== String(req.params.key));
+  setSetting('assist', { ...s, paused });
+  audit(req.user!.id, 'agents.resume', 'agent', String(req.params.key));
+  res.json({ paused });
+});
+adminRouter.post('/agents/kill-switch', requirePermission('agents'), (req, res) => {
+  const body = validate(z.object({ on: z.boolean(), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  const s = getAssistSettings();
+  setSetting('assist', { ...s, killSwitch: body.on });
+  audit(req.user!.id, body.on ? 'agents.kill_switch.on' : 'agents.kill_switch.off', 'settings', 'assist');
+  res.json({ killSwitch: body.on });
+});
+adminRouter.put('/agents/settings', requirePermission('agents'), (req, res) => {
+  const current = getAssistSettings();
+  const body = req.body ?? {};
+  const next = { ...current, ...body };
+  if (body.apiKey === undefined || body.apiKey === '••••••••') next.apiKey = current.apiKey;
+  else next.apiKey = body.apiKey ? encrypt(String(body.apiKey)) : '';
+  next.paused = Array.isArray(next.paused) ? next.paused : current.paused;
+  next.allowances = { ...current.allowances, ...(body.allowances ?? {}) };
+  next.pricing = { ...current.pricing, ...(body.pricing ?? {}) };
+  next.maxStepsPerRun = Math.max(1, Math.min(20, Number(next.maxStepsPerRun) || current.maxStepsPerRun));
+  next.maxTokensPerRun = Math.max(1000, Math.min(500_000, Number(next.maxTokensPerRun) || current.maxTokensPerRun));
+  setSetting('assist', next);
+  audit(req.user!.id, 'agents.settings.update', 'settings', 'assist', { keys: Object.keys(body) });
+  res.json({ settings: { ...next, apiKey: next.apiKey ? '••••••••' : '' }, runtime: runtimeStatus() });
+});
+adminRouter.get('/agents/runs', requirePermission('agents'), (req, res) => res.json({ items: listAgentRuns({ userId: req.query.user ? String(req.query.user) : null, agentKey: req.query.agent ? String(req.query.agent) : null, status: req.query.status ? String(req.query.status) : null, limit: Math.min(200, Number(req.query.limit) || 50) }) }));
+adminRouter.get('/agents/runs/:id', requirePermission('agents'), (req, res) => {
+  const run = getRun(String(req.params.id));
+  const user = findUserById(run.userId);
+  res.json({ run, user: user ? toPublicUser(user) : null });
+});
+adminRouter.post('/agents/runs/:id/cancel', requirePermission('agents'), (req, res) => res.json({ run: cancelRun(String(req.params.id)) }));
+adminRouter.post(
+  '/agents/run',
+  requirePermission('agents'),
+  wrap(async (req, res) => {
+    const body = validate(z.object({ agent: z.string(), input: z.string().min(1).max(4000) }), req.body);
+    res.status(202).json({ run: await startRun(req.user!, body.agent, body.input, { trigger: 'admin', wait: req.query.wait === '1' }) });
+  }),
+);
+adminRouter.get('/agents/policies', requirePermission('agents'), (req, res) => res.json({ items: listPolicies(req.query.all === '1'), forbidden: FORBIDDEN }));
+adminRouter.put('/agents/policies', requirePermission('agents'), (req, res) => {
+  const body = validate(z.object({ scope: z.enum(['global', 'agent', 'user']), scopeId: z.string().default('*'), rules: z.object({ deny: z.array(z.string()).optional(), requireApproval: z.array(z.string()).optional(), allow: z.array(z.string()).optional(), maxStepsPerRun: z.number().optional(), maxRunsPerDay: z.number().optional() }), note: z.string().max(300).optional().nullable(), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  const policy = publishPolicy(body.scope, body.scope === 'global' ? '*' : body.scopeId, body.rules, req.user!.id, body.note ?? null);
+  audit(req.user!.id, 'agents.policy.publish', 'policy', policy.id, { scope: policy.scope, scopeId: policy.scopeId, version: policy.version });
+  res.status(201).json({ policy });
+});
+adminRouter.get('/agents/approvals', requirePermission('approvals'), (req, res) => res.json({ items: listApprovals({ status: req.query.status ? String(req.query.status) : null, limit: 100 }) }));
+adminRouter.post(
+  '/agents/approvals/:id/approve',
+  requirePermission('approvals'),
+  wrap(async (req, res) => {
+    const body = validate(z.object({ pin: z.string().optional(), reason: z.string().max(300).optional().nullable() }), req.body ?? {});
+    assertAdminStepUp(req.user!, body.pin, req);
+    const approval = await decideApproval(req.user!, String(req.params.id), true, body.reason ?? null);
+    audit(req.user!.id, 'agents.approval.approve', 'agent_approval', approval.id, { tool: approval.tool });
+    res.json({ approval, run: getRun(approval.runId) });
+  }),
+);
+adminRouter.post(
+  '/agents/approvals/:id/decline',
+  requirePermission('approvals'),
+  wrap(async (req, res) => {
+    const body = validate(z.object({ reason: z.string().min(2).max(300) }), req.body ?? {});
+    const approval = await decideApproval(req.user!, String(req.params.id), false, body.reason);
+    audit(req.user!.id, 'agents.approval.decline', 'agent_approval', approval.id, { tool: approval.tool, reason: body.reason });
+    res.json({ approval, run: getRun(approval.runId) });
+  }),
+);

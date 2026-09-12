@@ -14,6 +14,8 @@ import { reconcileReserves, expirePromoCredits } from './services/emoney';
 import { publishScheduled } from './services/blog';
 import { runContentSchedule } from './services/seoAgent';
 import { pingIndexNow, verifyBacklinks } from './services/seo';
+import { runScheduledAgents, expireApprovals } from './services/assist/runtime';
+let lastAgentDay = '';
 let lastBacklinkCheck = 0;
 import { getEmoneySettings } from './services/settings';
 let lastReconciliationDay = '';
@@ -43,6 +45,14 @@ export function startJobs() {
       if (published.length) {
         console.log(`[jobs] published ${published.length} scheduled article(s)`);
         void pingIndexNow(published);
+      }
+      // Command centres: expire stale approvals; run the system agents once a day at 05:00 UTC for administrators.
+      expireApprovals();
+      const dayKey = new Date().toISOString().slice(0, 10);
+      if (new Date().getUTCHours() === 5 && lastAgentDay !== dayKey) {
+        lastAgentDay = dayKey;
+        const r = await runScheduledAgents();
+        if (r.ran.length) console.log(`[jobs] scheduled agents ran: ${r.ran.join(', ')}`);
       }
       if (new Date().getUTCHours() === 6 && new Date().getUTCMinutes() < 2) {
         const c = await runContentSchedule();

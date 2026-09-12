@@ -142,6 +142,31 @@ export interface EmoneySettings {
 }
 const DEFAULT_EMONEY: EmoneySettings = { promoCoversFees: true, promoExpiryDays: 90, autoSuspendOnBreach: true, reconciliationHourUtc: 2 };
 
+export interface AssistSettings {
+  /** Master switch for every command centre. */
+  enabled: boolean;
+  provider: 'anthropic';
+  /** Model for reasoning, drafting and multi-step work. */
+  model: string;
+  /** Cheaper model for classification and short answers (used by the model router for simple prompts). */
+  fastModel: string;
+  /** Encrypted API key; falls back to the content agent key and then ANTHROPIC_API_KEY. */
+  apiKey: string;
+  /** Hard budgets enforced by the run controller. */
+  maxStepsPerRun: number;
+  maxTokensPerRun: number;
+  /** Monthly Agent Compute Unit allowance per role (1 ACU = one US cent of model spend at list price; 0 = unlimited). */
+  allowances: Record<string, number>;
+  /** List prices in USD per million tokens, editable so billing follows the provider's price list. */
+  pricing: Record<string, { input: number; output: number }>;
+  /** Agents an administrator paused; runs are refused while paused. */
+  paused: string[];
+  /** Global kill switch. */
+  killSwitch: boolean;
+  /** Run the scheduled system agents (operations, compliance, system health) for administrators each morning. */
+  scheduledSystemAgents: boolean;
+}
+
 export interface SeoSettings {
   siteName: string;
   /** Public web origin used for canonical URLs, sitemaps and structured data. */
@@ -189,7 +214,23 @@ const DEFAULT_SEO: SeoSettings = {
   agent: { enabled: true, provider: 'anthropic', model: 'claude-opus-5', apiKey: '', autoPublish: false, postsPerWeek: 2, topics: ['How mobile money agents keep cash flowing in markets', 'QR code payments for street food vendors: a practical guide', 'Sending money from the UK to Congo: fees, speed and safety compared', 'What safeguarding means for your e-money balance', 'Virtual cards for online shopping without a bank card', 'How moto-taxi riders can get paid without cash'], audience: 'Everyday people, market traders, moto-taxi riders, small merchants, agents and diaspora senders in Africa and their families abroad', tone: 'Plain, warm, concrete and honest. Short sentences. No hype.', languages: ['en'], markets: ['CD', 'KE', 'NG', 'SN', 'UG', 'GB', 'FR'] },
 };
 
+const DEFAULT_ASSIST: AssistSettings = {
+  enabled: true,
+  provider: 'anthropic',
+  model: 'claude-opus-5',
+  fastModel: 'claude-sonnet-5',
+  apiKey: '',
+  maxStepsPerRun: 8,
+  maxTokensPerRun: 60_000,
+  allowances: { user: 500, merchant: 2_000, agent: 1_000, admin: 0 },
+  pricing: { 'claude-opus-5': { input: 15, output: 75 }, 'claude-sonnet-5': { input: 3, output: 15 }, 'claude-haiku-4-5-20251001': { input: 1, output: 5 } },
+  paused: [],
+  killSwitch: false,
+  scheduledSystemAgents: true,
+};
+
 const DEFAULTS: Record<string, unknown> = {
+  assist: DEFAULT_ASSIST,
   seo: DEFAULT_SEO,
   emoney: DEFAULT_EMONEY,
   compliance: DEFAULT_COMPLIANCE,
@@ -230,5 +271,6 @@ export const getRiskSettings = () => getSetting<RiskSettings>('risk');
 export const getComplianceSettings = () => getSetting<ComplianceSettings>('compliance');
 export const getEmoneySettings = () => getSetting<EmoneySettings>('emoney');
 export const getSeoSettings = () => getSetting<SeoSettings>('seo');
+export const getAssistSettings = () => getSetting<AssistSettings>('assist');
 /** Site settings without importing the CMS module (used by the SEO renderer). */
 export const getSiteSettingsSafe = () => getSetting<any>('site', null) as { siteName?: string; logoUrl?: string | null; contactEmail?: string; social?: Record<string, string>; appUrls?: Record<string, string> } | null;

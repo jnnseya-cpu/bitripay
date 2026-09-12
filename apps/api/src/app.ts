@@ -5,6 +5,7 @@ import { getDb } from './db';
 import { errorHandler, notFoundHandler } from './middleware/error';
 import { siteRouter, blogApiRouter } from './routes/site';
 import { ensureDefaultContent } from './content/defaults';
+import { assistRouter } from './routes/assist';
 import { publicRouter } from './routes/public';
 import { authRouter } from './routes/auth';
 import { accountRouter } from './routes/account';
@@ -102,6 +103,7 @@ export function createApp() {
   app.use('/api/support', supportRouter);
   app.use('/api/p2p', p2pRouter);
   app.use('/api/merchant', merchantRouter);
+  app.use('/api/assist', assistRouter);
   app.use('/v1', v1Router);
   app.use('/api/admin', adminRouter);
 
