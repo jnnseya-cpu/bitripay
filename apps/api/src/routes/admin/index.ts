@@ -150,7 +150,7 @@ adminRouter.get('/users/:id', requirePermission('users'), (req, res) => {
   const referrer = user.referred_by ? findUserById(user.referred_by) : null;
   res.json({
     user: { ...toUser(user), permissions: JSON.parse((user as any).permissions || '[]'), lastLoginAt: user.last_login_at, webhookUrl: user.webhook_url },
-    wallets: listWallets(user.id).map((w) => toWallet(w)),
+    wallets: listWallets(user.id).map((w) => toWallet(w, user)),
     transactions: tx.items,
     kyc: kyc ? { id: kyc.id, status: kyc.status, docType: kyc.doc_type, createdAt: kyc.created_at } : null,
     referrer: referrer ? toPublicUser(referrer) : null,

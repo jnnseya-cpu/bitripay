@@ -26,6 +26,7 @@ export type RootParams = {
   TxDetail: { id: string };
   Settings: undefined;
   Security: undefined;
+  Statements: undefined;
   Kyc: undefined;
   Referrals: undefined;
   Support: undefined;

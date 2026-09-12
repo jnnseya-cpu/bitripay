@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { api, qs } from '../lib/api';
+import { api, qs, API_BASE, getToken } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Pager, Select, StatusBadge, Table, Tabs, UserCell, fmtDate, useAsync, useDebounce } from '../components/ui';
+import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Pager, Select, StatusBadge, StepUpButton, Table, Tabs, UserCell, fmtDate, useAsync, useDebounce } from '../components/ui';
 import { TRANSACTION_TYPE_LABELS } from '@bitripay/shared';
 
 const PERMS = ['users', 'transactions', 'approvals', 'kyc', 'settings', 'gateways', 'catalogs', 'cms', 'support', 'p2p', 'reports', 'admins', 'issuance'];
@@ -69,6 +69,22 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const [edit, setEdit] = useState<any>(null);
   const [adjust, setAdjust] = useState({ direction: 'credit', amount: '', currency: 'USD', reason: '' });
   const [tab, setTab] = useState<'overview' | 'edit' | 'balance'>('overview');
+  const today = new Date().toISOString().slice(0, 10);
+  const [stmt, setStmt] = useState({ currency: 'USD', from: `${today.slice(0, 8)}01`, to: today });
+  const downloadStatement = async (format: 'pdf' | 'csv') => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${id}/statement?currency=${stmt.currency}&from=${stmt.from}&to=${stmt.to}&format=${format}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error?.message ?? 'Download failed');
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `statement-${stmt.currency}-${stmt.from}-${stmt.to}.${format}`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    }
+  };
   useEffect(() => {
     if (detail.data) setEdit({ fullName: detail.data.user.fullName, email: detail.data.user.email ?? '', phone: detail.data.user.phone ?? '', role: detail.data.user.role, status: detail.data.user.status, kycStatus: detail.data.user.kycStatus, country: detail.data.user.country ?? '', businessName: detail.data.user.businessName ?? '', agentCommissionBps: detail.data.user.agentCommissionBps ?? '', permissions: detail.data.user.permissions ?? [], password: '' });
   }, [detail.data]);
@@ -148,6 +164,15 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
               </div>
               <Field label="Reason (shown to the user)"><Input value={adjust.reason} onChange={(e) => setAdjust({ ...adjust, reason: e.target.value })} /></Field>
               <Button onClick={doAdjust} disabled={!adjust.amount || adjust.reason.length < 3}>Apply adjustment</Button>
+              <div className="divider" />
+              <h4>Balances, freezes & statements</h4>
+              <Table head={['Currency', 'Balance', 'Promotional credit', 'Class', 'Frozen', '']} rows={(d.wallets ?? []).map((w: any) => [w.currency, money(w.balance, w.currency), money(w.promoBalance ?? 0, w.currency), <span className="tiny">{w.classification?.label ?? '—'}</span>, w.frozen ? <Chip kind="danger">frozen · {w.frozenReason}</Chip> : <Chip kind="success">available</Chip>, can('treasury') ? (w.frozen ? <StepUpButton size="sm" variant="success" prompt="Reason for releasing" onConfirm={(pin, reason) => api.post(`/api/admin/users/${id}/wallets/${w.currency}/freeze`, { freeze: false, reason: reason || 'Released', pin }).then(() => { toast('Balance released', 'success'); detail.reload(); }).catch((e) => toast(e.message, 'error'))}>Release</StepUpButton> : <StepUpButton size="sm" variant="danger" prompt="Legal basis / reason for freezing" onConfirm={(pin, reason) => api.post(`/api/admin/users/${id}/wallets/${w.currency}/freeze`, { freeze: true, reason: reason || 'Frozen by administrator', pin }).then(() => { toast('Balance frozen', 'success'); detail.reload(); }).catch((e) => toast(e.message, 'error'))}>Freeze</StepUpButton>) : null])} empty="No wallets" />
+              <div className="grid cols-3 mt">
+                <Field label="Statement currency"><Select value={stmt.currency} onChange={(e) => setStmt({ ...stmt, currency: e.target.value })}>{(d.wallets ?? []).map((w: any) => <option key={w.id} value={w.currency}>{w.currency}</option>)}</Select></Field>
+                <Field label="From"><Input type="date" value={stmt.from} onChange={(e) => setStmt({ ...stmt, from: e.target.value })} /></Field>
+                <Field label="To"><Input type="date" value={stmt.to} onChange={(e) => setStmt({ ...stmt, to: e.target.value })} /></Field>
+              </div>
+              <div className="row wrap"><Button variant="secondary" onClick={() => downloadStatement('pdf')}>⬇ Statement PDF</Button><Button variant="secondary" onClick={() => downloadStatement('csv')}>⬇ Statement CSV</Button><span className="tiny muted">Every statement generated for a holder is numbered, hashed and written to the audit log.</span></div>
             </div>
           )}
         </>

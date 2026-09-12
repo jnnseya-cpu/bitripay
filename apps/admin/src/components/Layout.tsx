@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { api } from '../lib/api';
+import { armAlerts, ringForNew } from '../lib/alerts';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../lib/store';
 import { Avatar } from './ui';
@@ -6,7 +8,7 @@ import { Avatar } from './ui';
 const NAV: { section: string; items: { to: string; label: string; ico: string; perm: string }[] }[] = [
   { section: 'Overview', items: [{ to: '/', label: 'Dashboard', ico: '📊', perm: 'reports' }, { to: '/reports', label: 'Reports', ico: '📈', perm: 'reports' }] },
   { section: 'Care', items: [{ to: '/users?role=user', label: 'User care', ico: '👤', perm: 'users' }, { to: '/users?role=merchant', label: 'Merchant care', ico: '🏪', perm: 'users' }, { to: '/users?role=agent', label: 'Agent care', ico: '🧑‍💼', perm: 'users' }, { to: '/users?role=admin', label: 'Admin care & roles', ico: '🛡️', perm: 'admins' }] },
-  { section: 'Money', items: [{ to: '/transactions', label: 'All transactions', ico: '📜', perm: 'transactions' }, { to: '/approvals', label: 'Approvals', ico: '✅', perm: 'approvals' }, { to: '/verification', label: 'Verification console', ico: '🔎', perm: 'approvals' }, { to: '/corridors', label: 'Corridors, liquidity & payouts', ico: '🌍', perm: 'approvals' }, { to: '/kyc', label: 'KYC verification', ico: '🪪', perm: 'kyc' }, { to: '/p2p', label: 'P2P & disputes', ico: '🤝', perm: 'p2p' }] },
+  { section: 'Money', items: [{ to: '/transactions', label: 'All transactions', ico: '📜', perm: 'transactions' }, { to: '/approvals', label: 'Approvals', ico: '✅', perm: 'approvals' }, { to: '/verification', label: 'Verification console', ico: '🔎', perm: 'approvals' }, { to: '/corridors', label: 'Corridors, liquidity & payouts', ico: '🌍', perm: 'approvals' }, { to: '/emoney', label: 'E-money & reserves', ico: '🏦', perm: 'reports' }, { to: '/kyc', label: 'KYC verification', ico: '🪪', perm: 'kyc' }, { to: '/p2p', label: 'P2P & disputes', ico: '🤝', perm: 'p2p' }] },
   { section: 'Setup', items: [{ to: '/currencies', label: 'Currencies & rates', ico: '💱', perm: 'settings' }, { to: '/fees', label: 'Fees, limits & referral', ico: '🧮', perm: 'settings' }, { to: '/gateways', label: 'Deposit / payment gateways', ico: '🔌', perm: 'gateways' }, { to: '/mobile-money', label: 'Mobile money & evidence', ico: '📱', perm: 'gateways' }, { to: '/controls', label: 'Gateway controls & risk', ico: '🛡️', perm: 'settings' }, { to: '/modules', label: 'Modules & methods', ico: '🧩', perm: 'settings' }, { to: '/catalogs', label: 'Bills, top-up & gift cards', ico: '🧾', perm: 'catalogs' }] },
   { section: 'Website & apps', items: [{ to: '/site', label: 'Web, SEO & app settings', ico: '🌐', perm: 'cms' }, { to: '/pages', label: 'Pages & links', ico: '📄', perm: 'cms' }, { to: '/languages', label: 'Languages', ico: '🗣️', perm: 'cms' }, { to: '/messaging', label: 'Email, SMS & push', ico: '✉️', perm: 'settings' }] },
   { section: 'Support', items: [{ to: '/support', label: 'Support tickets', ico: '🎫', perm: 'support' }, { to: '/chat', label: 'Live chat', ico: '💬', perm: 'support' }, { to: '/inbox', label: 'Contact & newsletter', ico: '📬', perm: 'cms' }] },
@@ -17,6 +19,15 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, logout, theme, toggleTheme, can, config } = useStore();
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
+  // Loud alerts for administrators: new maker-checker items, reconciliation breaches, corridor suspensions.
+  useEffect(() => {
+    const arm = () => armAlerts();
+    window.addEventListener('pointerdown', arm, { once: true });
+    const poll = () => api.get<{ items: any[] }>('/api/account/notifications').then((r) => ringForNew(r.items)).catch(() => {});
+    poll();
+    const t = setInterval(poll, 20000);
+    return () => { clearInterval(t); window.removeEventListener('pointerdown', arm); };
+  }, []);
   return (
     <div className="app-shell">
       {open && <div className="backdrop" onClick={() => setOpen(false)} />}

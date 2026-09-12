@@ -117,6 +117,7 @@ export function Controls() {
       )}
       {tab === 'emoney' && (
         <>
+          <Alert kind="success">Issuer programmes, safeguarded reserves, distribution pools and reconciliation live in the <a href="/emoney">E-money & reserves console</a>. Spendable e-money never exceeds verified safeguarded reserves.</Alert>
           <Alert kind="info"><b>E-money is created by administrators only.</b> Balance enters circulation solely through confirmed external funding, administrator issuance (proposed by one admin, approved by a different admin with the issuance permission under step-up), liquidity prefunding of payout floats, or an administrator-configured programme. Users, agents, merchants and devices can never create balance; the ledger refuses any posting from the treasury without an issuance authority.</Alert>
           {(emoney.data?.pending ?? []).length > 0 && <Alert kind="warning">{emoney.data.pending.length} issuance proposal(s) await a second approver in the <a href="/verification">verification console</a>.</Alert>}
           <div className="card mb">

@@ -134,6 +134,8 @@ export function MoveMoney() {
               {route.payout && <div className="card soft compact mt"><div className="small bold">Local payout · {route.payout.stageLabel ?? route.payout.stage.toLowerCase().replace(/_/g, ' ')}</div><KV k="To" v={`${route.payout.operatorName ?? route.payout.rail} · ${route.payout.recipientMasked ?? ''}${route.payout.recipientName ? ` · ${route.payout.recipientName}` : ''}`} /><KV k="Reference" v={<span className="mono">{route.payout.reference}</span>} />{route.payout.externalRef && <KV k="Operator confirmation" v={<span className="mono">{route.payout.externalRef}</span>} />}{route.payout.payoutAccount && <KV k="Paid from" v={route.payout.payoutAccount.label} />}</div>}
               {['FUNDING_PENDING', 'BIOMETRIC_APPROVAL_REQUIRED'].includes(route.stage) && route.payment && <div className="mt"><PaymentStatus payment={route.payment as PaymentView} onDone={() => {}} /></div>}
               {route.stage === 'BIOMETRIC_APPROVAL_REQUIRED' && <Alert kind="warning">This transfer was not authorised. Start again and confirm with biometrics or your PIN.</Alert>}
+              {route.stage === 'AWAITING_CONFIRMATION' && route.consent && <Alert kind="warning">The recipient must confirm receiving <b>{route.targetCurrency}</b> before the payout is executed. Share this link with them: <a href={route.consent.url} target="_blank" rel="noreferrer">{route.consent.url}</a></Alert>}
+              {route.confirmationMethod && <div className="tiny muted center mt-sm">Settled on {route.confirmationMethod.replace(/_/g, ' ').toLowerCase()}</div>}
               {route.stage === 'INSUFFICIENT_LIQUIDITY' && <Alert kind="warning">No prefunded local account can pay this right now. Your funds are held safely; the payout resumes automatically once liquidity is available, or you can cancel for a refund.</Alert>}
               {route.stage === 'MANUAL_REVIEW' && <Alert kind="warning">A verifier is reviewing this transfer before the local payout is released. Nothing has been paid out yet.</Alert>}
               {route.stage === 'PAYOUT_SENT' && <Alert kind="info">The local payout is being executed from the payout account right now. It can no longer be recalled.</Alert>}
@@ -169,7 +171,20 @@ export function MoveMoney() {
               )}
               {dest === 'agent' && <Field label="Agent (@tag)"><Input value={agent} onChange={(e) => setAgent(e.target.value)} placeholder="@kwameagent" /></Field>}
               <div className="grid cols-2">
-                <Field label="Deliver in currency"><Select value={target} onChange={(e) => setTarget(e.target.value)}><option value="">Same as sent ({cur})</option>{(config?.currencies ?? []).map((c) => <option key={c.code} value={c.code}>{c.code} – {c.name}</option>)}</Select></Field>
+                <Field label="Recipient receives in" hint={preview?.quote?.receivingCurrencies ? `Default: the local currency (${preview.quote.receivingCurrencies.defaultCurrency}). Other currencies are offered only when the corridor, the paying institution and prefunded liquidity allow it right now.` : undefined}>
+                  {preview?.quote?.receivingCurrencies ? (
+                    <div className="row wrap">
+                      {preview.quote.receivingCurrencies.options.map((o: any) => (
+                        <button key={o.currency} type="button" className={`chip ${(target || preview.quote.targetCurrency) === o.currency ? 'primary' : ''}`} disabled={!o.available} title={o.reasons.concat(o.warnings ?? []).join('\n')} onClick={() => setTarget(o.currency)}>
+                          {o.currency}{o.isLocal ? ' · local' : ''}{o.consentRequired ? ' · recipient confirms' : ''}{!o.available ? ' · unavailable' : ''}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <Select value={target} onChange={(e) => setTarget(e.target.value)}><option value="">Same as sent ({cur})</option>{(config?.currencies ?? []).map((c) => <option key={c.code} value={c.code}>{c.code} – {c.name}</option>)}</Select>
+                  )}
+                  {preview?.quote?.receivingCurrencies?.options.filter((o: any) => !o.available).map((o: any) => <div key={o.currency} className="tiny muted">{o.currency}: {o.reasons.join('; ')}</div>)}
+                </Field>
                 <Field label={t('common.note')}><Input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
               </div>
               {previewError && <Alert kind="warning">{previewError}</Alert>}
@@ -182,10 +197,15 @@ export function MoveMoney() {
                   {preview.quote.payoutFee > 0 && <KV k="Payout fee" v={money(preview.quote.payoutFee, preview.quote.targetCurrency)} />}
                   <KV k="You pay" v={money(preview.quote.senderAmount, preview.quote.currency)} />
                   <KV k="Recipient gets" v={<b style={{ color: 'var(--success)' }}>{money(preview.quote.targetAmount, preview.quote.targetCurrency)}</b>} />
+                  {preview.quote.fx && preview.quote.fx.sourceCurrency !== preview.quote.fx.targetCurrency && <KV k="FX margin" v={`${(preview.quote.fxMarginBps / 100).toFixed(2)}% over ${preview.quote.fx.providerLabel} reference ${preview.quote.fx.midRate.toFixed(4)}`} />}
+                  <KV k="Guaranteed amount" v={preview.quote.guaranteedRecipientAmount != null ? <b>{money(preview.quote.guaranteedRecipientAmount, preview.quote.targetCurrency)}</b> : <span className="muted">not guaranteed – indicative rate</span>} />
                   <KV k="Estimated payout" v={preview.quote.estimatedPayoutTime} />
                   <KV k="Quote valid until" v={new Date(preview.quote.quoteExpiresAt).toLocaleTimeString()} />
+                  {preview.quote.confirmation && <KV k="Confirmed by" v={<span className="tiny">funding: {preview.quote.confirmation.funding.replace(/_/g, ' ').toLowerCase()} · payout: {preview.quote.confirmation.payout.replace(/_/g, ' ').toLowerCase()}</span>} />}
+                  {preview.quote.recipientConsentRequired && <Alert kind="warning">The recipient must confirm receiving {preview.quote.targetCurrency} before the payout is executed. You will get a link to share.</Alert>}
                   {preview.quote.corridor && <KV k="Corridor" v={preview.quote.corridor.status === 'live' ? <span className="chip success">authorised · {preview.quote.corridor.destCountry}</span> : <span className="chip warning">{preview.quote.corridor.status} · {preview.quote.corridor.destCountry} · sandbox only, no real funds</span>} />}
                   {preview.quote.fx && !preview.quote.fx.guaranteed && preview.quote.fx.sourceCurrency !== preview.quote.fx.targetCurrency && <div className="tiny muted">Indicative rate ({preview.quote.fx.providerLabel}). The amount received may differ.</div>}
+                  <div className="tiny muted mt-sm"><b>Payout:</b> {preview.quote.payoutConditions}</div>
                   <div className="tiny muted mt-sm"><b>Refunds:</b> {preview.quote.refundConditions}</div>
                 </div>
               )}

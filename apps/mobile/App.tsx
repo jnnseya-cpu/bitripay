@@ -16,7 +16,7 @@ import { AddMoney, Withdraw, Exchange, Agents } from './src/screens/Money';
 import { Move } from './src/screens/Move';
 import { Remittance, Cards, Bills, Topup, GiftCards } from './src/screens/Services';
 import { P2P, Trade } from './src/screens/P2P';
-import { Activity, TxDetail, Settings, Security, Kyc, Referrals, Support } from './src/screens/Account';
+import { Activity, TxDetail, Settings, Security, Kyc, Referrals, Support, Statements } from './src/screens/Account';
 import { Merchant, MerchantGateway, Agent } from './src/screens/Business';
 import type { RootParams } from './src/navigation';
 
@@ -114,6 +114,7 @@ function Root() {
             <Stack.Screen name="TxDetail" component={TxDetail} />
             <Stack.Screen name="Settings" component={Settings} />
             <Stack.Screen name="Security" component={Security} />
+            <Stack.Screen name="Statements" component={Statements} />
             <Stack.Screen name="Kyc" component={Kyc} />
             <Stack.Screen name="Referrals" component={Referrals} />
             <Stack.Screen name="Support" component={Support} />

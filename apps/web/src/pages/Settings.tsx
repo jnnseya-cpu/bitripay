@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { alertsEnabled, armAlerts, loudAlert, setAlertsEnabled } from '../lib/alerts';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
@@ -226,6 +227,18 @@ function Kyc() {
 function Preferences() {
   const t = useT();
   const { config, lang, setLang, theme, toggleTheme, user, setUser } = useStore();
+  const [loud, setLoud] = useState(user?.loudAlerts !== false && alertsEnabled());
+  const toggleLoud = async (on: boolean) => {
+    setLoud(on);
+    setAlertsEnabled(on);
+    if (on) armAlerts();
+    try {
+      const r = await api.patch<{ user: User }>('/api/account/profile', { loudAlerts: on });
+      setUser(r.user);
+    } catch {
+      /* ignore */
+    }
+  };
   const change = async (l: string) => {
     setLang(l);
     try {
@@ -244,6 +257,11 @@ function Preferences() {
         <span>{t('settings.theme')}</span>
         <button type="button" className={`switch ${theme === 'dark' ? 'on' : ''}`} onClick={toggleTheme} aria-label="Toggle dark mode" />
       </div>
+      <div className="row between mt-sm">
+        <span>🔔 Loud alerts<div className="tiny muted">Alarm sound and long vibration whenever money arrives, a payout completes or something needs your attention.</div></span>
+        <button type="button" className={`switch ${loud ? 'on' : ''}`} onClick={() => toggleLoud(!loud)} aria-label="Toggle loud alerts" />
+      </div>
+      {loud && <div className="mt-sm"><Button variant="secondary" size="sm" onClick={() => { armAlerts(); loudAlert('Test alert', 'This is how a money alert sounds.'); }}>Test alert</Button></div>}
       <div className="divider" />
       <KV k="Account created" v={user ? new Date(user.createdAt).toLocaleDateString() : ''} />
       <KV k="User ID" v={<span className="mono tiny">{user?.id}</span>} />

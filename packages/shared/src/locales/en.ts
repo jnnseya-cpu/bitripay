@@ -15,6 +15,7 @@ export const en: Record<string, string> = {
   'nav.giftCards': 'Gift cards',
   'nav.p2p': 'P2P trading',
   'nav.transactions': 'Transactions',
+  'nav.statements': 'Statements',
   'nav.referrals': 'Referrals',
   'nav.support': 'Support',
   'nav.settings': 'Settings',

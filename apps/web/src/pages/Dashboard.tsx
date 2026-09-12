@@ -41,10 +41,11 @@ export function Dashboard() {
           </div>
           <div className="row wrap mt-sm">
             {wallets.map((w) => (
-              <span key={w.id} className="chip">{money(w.balance, w.currency)}</span>
+              <span key={w.id} className={`chip ${w.frozen ? 'danger' : ''}`} title={w.classification?.label}>{money(w.balance, w.currency)}{w.frozen ? ' · frozen' : ''}{(w.promoBalance ?? 0) > 0 ? <span className="tiny muted"> +{money(w.promoBalance ?? 0, w.currency)} promo</span> : null}</span>
             ))}
             <Link to="/app/exchange" className="chip" style={{ textDecoration: 'none' }}>+ {t('nav.exchange')}</Link>
           </div>
+          {wallets[0]?.classification && <div className="tiny mt-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>{wallets[0].classification.class === 'sandbox' ? '🧪 Sandbox balances – no real-world value.' : `${wallets[0].classification.label} · issued by ${wallets[0].classification.issuer} · ${wallets[0].classification.backing}.`}{wallets.some((w) => (w.promoBalance ?? 0) > 0) ? ' Promotional credit covers BitriPay fees only and cannot be withdrawn.' : ''} <Link to="/app/statements" style={{ color: '#fff', textDecoration: 'underline' }}>Statements →</Link></div>}
         </div>
         <div className="card center">
           <QrImage value={`${config?.webUrl ?? ''}/q?v=1&t=${user?.role === 'merchant' ? 'm' : user?.role === 'agent' ? 'ag' : 'u'}&id=${user?.tag}`} size={140} />

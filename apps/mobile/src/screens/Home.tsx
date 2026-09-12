@@ -96,6 +96,7 @@ export function More() {
     ['Referrals', '🎉', t('nav.referrals'), 'referrals'],
     ['Support', '💬', t('nav.support'), 'support'],
     ['Kyc', '🪪', t('settings.kyc'), 'kyc'],
+    ['Statements', '🧾', 'Statements'],
     ['Security', '🔐', t('settings.security')],
     ['Settings', '⚙️', t('nav.settings')],
   ];

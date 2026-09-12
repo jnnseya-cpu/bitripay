@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AppConfig, User, Wallet, Notification, CurrencyInfo, Country } from '@bitripay/shared';
+import { armAlerts, ringForNew } from './alerts';
 import { api, getToken, setToken } from './api';
 import { formatMoney as fmt } from '@bitripay/shared';
 
@@ -64,6 +65,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setWallets(w.items);
     setNotifications(n.items);
     setUnread(n.unread);
+    ringForNew(n.items as any);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -104,6 +106,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
+    const arm = () => armAlerts();
+    window.addEventListener('pointerdown', arm, { once: true });
+    window.addEventListener('keydown', arm, { once: true });
     const timer = setInterval(() => void refreshWallets().catch(() => {}), 20000);
     return () => clearInterval(timer);
   }, [user, refreshWallets]);

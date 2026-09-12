@@ -101,15 +101,43 @@ currencies, the reference (mid-market) rate, the rate provider and timestamp, th
 the exact amount sent, the estimated amount received and the rate expiry. Live, fresh rates can be
 locked for the quote TTL; administrator-entered or stale rates are labelled and never guaranteed.
 
-**E-money is created by administrators only** – balance enters circulation through exactly four
-authorities, enforced inside the ledger (`issuance_authority` on every creating transaction, plus an
-immutable issuance register): `external_funding` (a processor- or evidence-confirmed deposit),
-`admin` (one administrator with the *issuance* permission proposes a credit, a different one approves
-it under step-up), `liquidity` (treasury prefunding a payout float) and `programme` (an
-administrator-configured scheme such as referral rewards). Money returning from a platform-held
-float (virtual card balances, remittance escrow) is tagged `internal_release` with its origin
-transaction. Any other posting from the treasury is refused. `GET /api/admin/emoney` reports the
-outstanding supply per currency and how it was issued.
+**Regulated e-money, never unbacked money** – BitriPay balances are a redeemable claim on the
+authorised issuer (BitriPay under its own e-money authorisation, or a licensed bank / EMI for which
+BitriPay is the distributor), never commercial-bank deposit money. The issuance engine enforces
+
+    issuable ≤ cleared safeguarded funds − redemptions pending − reserved exposure − e-money outstanding
+
+at request time and again at execution. Reserve funding is confirmed by one treasury administrator
+and checked by another (bank reference + statement evidence); issuance requests go through
+maker-checker with step-up; minting posts *debit safeguarded cash asset / credit e-money liability*
+and redemption the reverse; distribution pools (issuer → treasury → country pool → institution /
+master agent → agent / merchant → user) move existing e-money and never create it. A daily 1:1
+reserve-to-liability reconciliation suspends issuance automatically on a breach and alerts every
+administrator. Balances are classified on every view: regulated e-money, merchant balance, agent
+float, promotional credit (a marketing liability that only covers BitriPay fees – never withdrawable
+or transferable) and sandbox money (no real-world value, the default until an administrator completes
+the go-live checklist and marks a programme live). Administrators can freeze, release, redeem and
+correct through compensating entries, but can never edit ledger history, delete a completed
+transaction, bypass maker-checker or disguise promotional credit as money.
+
+**Recipient-controlled payout currency** – the destination country's local currency is always the
+default. Another currency is offered only when, right now, the corridor permits it, the destination
+institution or agent can legally pay it, prefunded liquidity exists, the recipient account supports
+it and FX / capital-control approval is on record. Regulated corridors can require the beneficiary
+to confirm a non-local currency through a public confirmation link before anything is executed.
+Every quote shows send amount, default and optional receiving currencies, rate and source, FX
+margin, all fees, the guaranteed recipient amount (or that the rate is indicative), quote expiry,
+delivery estimate, the declared confirmation method of each leg and the payout / refund conditions.
+
+**Bank-grade statements** – every account holder can generate numbered, hashed statements per
+currency and period (opening balance, each ledger posting with running balance, holds, promotional
+credit, closing balance) as JSON, CSV or PDF, verifiable by anyone through
+`GET /api/statements/verify/:id` without exposing personal data.
+
+**Very loud alerts** – money events (payment received, payout completed, transfer under review,
+issuance suspended, new maker-checker items) ring an alarm tone with a long vibration pattern on
+the mobile app (max-importance channel that bypasses Do-Not-Disturb), the web app, the admin
+console and the payout device; each user can switch loud alerts off.
 
 **Controls** – `Idempotency-Key` on every mutating request, timestamped webhook signatures with replay
 protection, sanctions list screening, velocity limits, cooling-off for new beneficiaries,
@@ -214,6 +242,10 @@ Browser smoke tests (`scripts/e2e-*.mjs`, Playwright) cover the web and admin ap
 PIN-gated intents on the direct rail, device-signed SMS settlement, forged-signature rejection,
 maker-checker approval in the verification console and biometric step-up on Move money.
 
+The API suite covers the e-money engine (reserve rule, maker-checker, redemption, reconciliation
+breach → suspension, pools, freezes), recipient currency choice and consent, statements, the corridor
+operating model and the gateway acceptance criteria.
+
 ```bash
 npm test          # shared unit tests + API integration suite (vitest)
 npm run typecheck # TypeScript across api, web and admin
@@ -268,6 +300,28 @@ Events: `payment.completed`, `payment_request.created`.
 
 Mutating requests accept an `Idempotency-Key` header: a repeat with the same key and body replays the
 stored response (`Idempotent-Replayed: true`); a repeat with a different body is refused (422).
+
+### Transaction lifecycle
+
+Cross-rail transfers move through `CREATED → QUOTED → BIOMETRIC_APPROVAL_REQUIRED →
+BIOMETRICALLY_APPROVED → FUNDING_PENDING → FUNDED → FX_RESERVED → PAYOUT_ROUTED → PAYOUT_SENT →
+EVIDENCE_RECEIVED → VERIFYING → VERIFIED → SETTLED`, with the exception states
+`INSUFFICIENT_LIQUIDITY`, `AWAITING_CONFIRMATION` (beneficiary currency consent / operator
+confirmation), `MISMATCHED`, `DUPLICATE`, `MANUAL_REVIEW`, `FAILED`, `EXPIRED`, `DISPUTED`,
+`REVERSED` and `REFUNDED`. Each external leg declares its confirmation method
+(`PROCESSOR_WEBHOOK`, `SIGNED_SMS_FORWARDER`, `SECURED_DEVICE_CONFIRMATION`,
+`AGENT_WITH_EVIDENCE`, `ADMIN_MAKER_CHECKER`) and the method that actually settled it is recorded on
+the transfer. Nothing is ever marked settled from a screenshot or an unverified statement.
+
+### E-money console
+
+Admin → *E-money & reserves*: issuer programmes per currency and jurisdiction (issuer model,
+licence, regulator, safeguarding account, limits), reserve movements with maker-checker
+confirmation, headroom per programme, distribution pools with step-up allocation, reconciliation
+history and the immutable issuance register. `GET /api/admin/emoney` returns the outstanding supply,
+every programme's reserve position and pending proposals; `POST /api/admin/emoney/reconcile` runs
+the reconciliation on demand. The `treasury` admin permission (TREASURY_SUPER_ADMIN) is required for
+reserves, pools, freezes and programme status; `issuance` for issuance requests and approvals.
 
 ### Going live: processors, rates and corridor arrangements
 

@@ -7,6 +7,7 @@ import * as Device from 'expo-device';
 import type { User, Wallet, Notification, CurrencyInfo } from '@bitripay/shared';
 import { formatMoney, translate } from '@bitripay/shared';
 import { api, loadToken, saveToken, onLogout } from './api';
+import { ringForNew, ringLoud, setLoudEnabled, VIBRATION_PATTERN } from './alerts';
 
 interface Store {
   ready: boolean;
@@ -51,7 +52,11 @@ async function registerPush() {
     let status = existing;
     if (existing !== 'granted') status = (await Notifications.requestPermissionsAsync()).status;
     if (status !== 'granted') return;
-    if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync('default', { name: 'default', importance: Notifications.AndroidImportance.MAX });
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', { name: 'default', importance: Notifications.AndroidImportance.MAX });
+      // Money events: alarm sound, long vibration, bypasses Do-Not-Disturb, shown on the lock screen.
+      await Notifications.setNotificationChannelAsync('bitripay-loud', { name: 'Money alerts (loud)', importance: Notifications.AndroidImportance.MAX, sound: 'loud_alert.wav', vibrationPattern: VIBRATION_PATTERN, enableVibrate: true, bypassDnd: true, lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC, lightColor: '#2563eb' });
+    }
     const token = (await Notifications.getExpoPushTokenAsync()).data;
     await api.post('/api/account/push-tokens', { token, platform: Platform.OS });
   } catch {
@@ -83,6 +88,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const [w, n] = await Promise.all([api.get<{ items: Wallet[] }>('/api/wallets'), api.get<{ items: Notification[]; unread: number }>('/api/account/notifications')]);
     setWallets(w.items);
     setNotifications(n.items);
+    ringForNew(n.items as any);
     setUnread(n.unread);
   }, []);
 
@@ -131,8 +137,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) return;
     void registerPush();
+    setLoudEnabled(user.loudAlerts !== false);
     const id = setInterval(() => refreshWallets().catch(() => {}), 20000);
-    return () => clearInterval(id);
+    // Foreground pushes: ring the alarm ourselves (the OS only plays the channel sound when the app is in the background).
+    const sub = Notifications.addNotificationReceivedListener((n) => {
+      const data = (n.request.content.data ?? {}) as Record<string, unknown>;
+      if (data.loud) void ringLoud();
+      refreshWallets().catch(() => {});
+    });
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
   }, [user, refreshWallets]);
 
   const unlock = useCallback(async () => {

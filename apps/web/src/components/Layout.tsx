@@ -43,6 +43,7 @@ export function Layout({ children }: { children: ReactNode }) {
   ];
   const account: NavItem[] = [
     { to: '/app/transactions', key: 'nav.transactions', ico: '📜' },
+    { to: '/app/statements', key: 'nav.statements', ico: '🧾' },
     { to: '/app/referrals', key: 'nav.referrals', ico: '🎉', module: 'referrals' },
     { to: '/app/support', key: 'nav.support', ico: '💬', module: 'support' },
     { to: '/app/settings', key: 'nav.settings', ico: '⚙️' },

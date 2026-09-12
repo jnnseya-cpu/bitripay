@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, StepUpButton, Table, Tabs, Textarea, UserCell, fmtDate, useAsync } from '../components/ui';
+import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, StepUpButton, Switch, Table, Tabs, Textarea, UserCell, fmtDate, useAsync } from '../components/ui';
 
 const STAGE_KIND: Record<string, 'success' | 'warning' | 'danger' | 'primary' | undefined> = { SETTLED: 'success', QUEUED: 'primary', IN_PROGRESS: 'primary', EVIDENCE_RECEIVED: 'primary', VERIFYING: 'primary', MANUAL_REVIEW: 'warning', INSUFFICIENT_LIQUIDITY: 'warning', MISMATCHED: 'danger', DUPLICATE: 'danger', FAILED: 'danger', EXPIRED: undefined, CANCELLED: undefined };
 const Stage = ({ stage }: { stage: string }) => <Chip kind={STAGE_KIND[stage]}>{stage.toLowerCase().replace(/_/g, ' ')}</Chip>;
@@ -111,6 +111,11 @@ export function Corridors() {
               <Field label="Estimated payout (minutes)"><Input type="number" value={corridorEdit.estimatedPayoutMinutes} onChange={(e) => setCorridorEdit({ ...corridorEdit, estimatedPayoutMinutes: Number(e.target.value) })} /></Field>
               <Field label="Max amount (base minor units, 0 = none)"><Input type="number" value={corridorEdit.maxAmount} onChange={(e) => setCorridorEdit({ ...corridorEdit, maxAmount: Number(e.target.value) })} /></Field>
             </div>
+            <div className="grid cols-2">
+              <Field label="Additional payout currencies (comma-separated)" hint="Only where the destination institution / agent can legally pay them, e.g. USD wallets in the DRC. The local currency is always the default."><Input value={(corridorEdit.payoutCurrencies ?? []).join(', ')} onChange={(e) => setCorridorEdit({ ...corridorEdit, payoutCurrencies: e.target.value.split(',').map((x) => x.trim().toUpperCase()).filter(Boolean) })} placeholder="USD" /></Field>
+              <Field label="Payout confirmation method"><Select value={corridorEdit.payoutConfirmation ?? ''} onChange={(e) => setCorridorEdit({ ...corridorEdit, payoutConfirmation: e.target.value || null })}><option value="">Rail default</option><option value="SECURED_DEVICE_CONFIRMATION">Secured payout device</option><option value="SIGNED_SMS_FORWARDER">Signed SMS forwarder</option><option value="AGENT_WITH_EVIDENCE">Agent with evidence</option><option value="ADMIN_MAKER_CHECKER">Administrator maker-checker</option><option value="PROCESSOR_WEBHOOK">Processor webhook</option></Select></Field>
+            </div>
+            <div className="mb"><Switch on={!!corridorEdit.beneficiaryConsent} onChange={(v) => setCorridorEdit({ ...corridorEdit, beneficiaryConsent: v })} label="Beneficiary must confirm a non-local payout currency before the payout executes (regulated corridor)" /></div>
             <Field label="Notes"><Textarea rows={2} value={corridorEdit.notes ?? ''} onChange={(e) => setCorridorEdit({ ...corridorEdit, notes: e.target.value })} /></Field>
             <Button onClick={() => api.put(`/api/admin/corridors/${corridorEdit.id ?? 'new'}`, corridorEdit).then(() => { ok('Corridor saved'); setCorridorEdit(null); }).catch(err)}>Save</Button>
           </>

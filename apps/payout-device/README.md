@@ -79,6 +79,9 @@ modules/sms-receiver/
 
 ## Operating notes
 
+- A new payout instruction on this SIM rings a loud alarm (bundled `assets/loud_alert.wav`) with a long
+  vibration pattern, even in silent mode, so the operator never misses one.
+
 - Enrol a device only on the phone that physically holds the payout SIM; the server rejects confirmations whose
   `simIdentity` differs from the registration (`unregistered_sim`).
 - If a phone or SIM is lost, revoke the device in the admin console (Evidence → Devices). Its signatures are refused

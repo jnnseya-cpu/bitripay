@@ -12,11 +12,11 @@ const OPEN = (p: PaymentView) => !['succeeded', 'failed', 'cancelled'].includes(
 const STEPS: [string, string[]][] = [['Initiated', ['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED']], ['Sent', ['PAYMENT_SENT']], ['Verifying', ['EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED']], ['Confirmed', ['CONFIRMED']], ['Settled', ['SETTLED']]];
 
 /** Initiated → sent → verifying → confirmed → settled, so nobody mistakes an instruction for money. */
-export const ROUTE_STEPS: [string, string[]][] = [['Initiated', ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'FUNDING_PENDING']], ['Funds confirmed', ['FUNDED', 'MANUAL_REVIEW', 'INSUFFICIENT_LIQUIDITY']], ['Paying out', ['PAYOUT_ROUTED', 'PAYOUT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MISMATCHED', 'DUPLICATE']], ['Settled', ['SETTLED']]];
+export const ROUTE_STEPS: [string, string[]][] = [['Approved', ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'BIOMETRICALLY_APPROVED', 'FUNDING_PENDING']], ['Funded · FX', ['FUNDED', 'FX_RESERVED', 'AWAITING_CONFIRMATION', 'MANUAL_REVIEW', 'INSUFFICIENT_LIQUIDITY']], ['Paying out', ['PAYOUT_ROUTED', 'PAYOUT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'VERIFIED', 'MISMATCHED', 'DUPLICATE']], ['Settled', ['SETTLED']]];
 export function StageBar({ stage, label, description, steps = STEPS }: { stage?: string; label?: string; description?: string; steps?: [string, string[]][] }) {
   if (!stage) return null;
   const bad = ['EXPIRED', 'REJECTED', 'REVERSED', 'FAILED', 'REFUNDED', 'DISPUTED'].includes(stage);
-  const warn = ['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'INSUFFICIENT_LIQUIDITY'].includes(stage);
+  const warn = ['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'INSUFFICIENT_LIQUIDITY', 'AWAITING_CONFIRMATION'].includes(stage);
   const idx = steps.findIndex(([, s]) => s.includes(stage));
   return (
     <View style={{ alignSelf: 'stretch', gap: 6 }}>
@@ -277,7 +277,8 @@ export function Exchange() {
       </Card>
       <Card>
         <T bold>My wallets</T>
-        {wallets.map((w) => <KV key={w.id} k={w.currency} v={money(w.balance, w.currency)} />)}
+        {wallets.map((w) => <KV key={w.id} k={`${w.currency}${w.frozen ? ' · frozen' : ''}${(w.promoBalance ?? 0) > 0 ? ` · +${money(w.promoBalance ?? 0, w.currency)} promo` : ''}`} v={money(w.balance, w.currency)} />)}
+        {wallets[0]?.classification && <T muted size={11}>{wallets[0].classification.class === 'sandbox' ? '🧪 Sandbox balances – no real-world value.' : `${wallets[0].classification.label} · issued by ${wallets[0].classification.issuer} · ${wallets[0].classification.backing}.`}{wallets.some((w) => (w.promoBalance ?? 0) > 0) ? ' Promotional credit covers fees only and cannot be withdrawn.' : ''}</T>}
         <Select label="Add a currency wallet" value={newCur} onChange={setNewCur} options={[{ value: '', label: 'Choose…' }, ...(config?.currencies ?? []).filter((c: any) => !wallets.some((w) => w.currency === c.code)).map((c: any) => ({ value: c.code, label: `${c.code} – ${c.name}` }))]} />
         <Button title="Add wallet" variant="secondary" disabled={!newCur} onPress={() => api.post('/api/wallets', { currency: newCur }).then(() => { toast(`${newCur} wallet created`, 'success'); setNewCur(''); refreshWallets(); })} />
       </Card>

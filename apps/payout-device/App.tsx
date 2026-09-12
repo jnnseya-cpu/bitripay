@@ -10,7 +10,8 @@
  * The private key never leaves the device; the app never decides that money has arrived.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, FlatList, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, Alert, AppState, FlatList, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, Vibration, View, useColorScheme } from 'react-native';
+import { Audio } from 'expo-av';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
@@ -28,6 +29,27 @@ interface Payout { id: string; reference: string; stage: string; amount: number;
 
 const DEFAULT_API = (Constants.expoConfig?.extra as any)?.apiUrl ?? 'http://10.0.2.2:4000';
 const POLL_MS = 10_000;
+
+/** Very loud alarm + long vibration when a new payout instruction lands on this device (operators must not miss one). */
+let alarm: Audio.Sound | null = null;
+async function ringLoud() {
+  try {
+    Vibration.vibrate([0, 600, 150, 600, 150, 900, 300, 600, 150, 600], false);
+  } catch {
+    /* no vibration */
+  }
+  try {
+    if (!alarm) {
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, shouldDuckAndroid: false });
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      alarm = (await Audio.Sound.createAsync(require('./assets/loud_alert.wav'), { volume: 1 })).sound;
+    }
+    await alarm.setPositionAsync(0);
+    await alarm.playAsync();
+  } catch {
+    /* no audio */
+  }
+}
 
 const fmt = (minor: number, currency: string) => `${(minor / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 
@@ -218,6 +240,8 @@ function Home({ t, enrolment, privateKey, onUnenrol }: { t: Theme; enrolment: En
   const [manualText, setManualText] = useState('');
   const [permissions, setPermissions] = useState(Sms.hasPermissions());
   const activeRef = useRef<string | null>(null);
+  const knownRef = useRef<Set<string>>(new Set());
+  const primedRef = useRef(false);
 
   const active = queue.find((p) => p.stage === 'IN_PROGRESS' && p.claimedByDeviceId === enrolment.deviceId) ?? null;
   activeRef.current = active?.id ?? null;
@@ -226,7 +250,16 @@ function Home({ t, enrolment, privateKey, onUnenrol }: { t: Theme; enrolment: En
     setLoading(true);
     try {
       const r: any = await deviceCall(enrolment.apiUrl, privateKey, enrolment.deviceId, 'GET', '/api/payouts/device/queue');
-      setQueue(r.items ?? []);
+      const items: Payout[] = r.items ?? [];
+      // Alarm for every payout we have not seen yet (first load only primes the set).
+      const fresh = items.filter((p) => p.stage === 'QUEUED' && !knownRef.current.has(p.id));
+      items.forEach((p) => knownRef.current.add(p.id));
+      if (primedRef.current && fresh.length) {
+        void ringLoud();
+        await appendLog({ level: 'info', text: `${fresh.length} new payout instruction(s) queued` });
+      }
+      primedRef.current = true;
+      setQueue(items);
       setError(null);
     } catch (err) {
       const e = err as ApiError;

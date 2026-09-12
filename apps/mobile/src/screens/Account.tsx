@@ -6,6 +6,7 @@ import { useStore } from '../lib/store';
 import { Screen, Card, Button, Input, Alert, T, KV, Row, Status, Tabs, Empty, useAsync, TxRow, Select, Qr, Sheet, Chip, useTheme, Avatar } from '../components/ui';
 import { Header } from '../components/Header';
 import { useNav, type ScreenProps } from '../navigation';
+import { ringLoud, setLoudEnabled } from '../lib/alerts';
 import { TRANSACTION_TYPE_LABELS, type Transaction, type User } from '@bitripay/shared';
 
 export function Activity() {
@@ -87,6 +88,9 @@ export function Settings() {
       <Card>
         <Select label={t('settings.language')} value={lang} onChange={setLang} options={(config?.languages ?? [{ code: 'en', nativeName: 'English', name: 'English' }]).map((l: any) => ({ value: l.code, label: `${l.nativeName} (${l.name})` }))} />
         <Row between><T>{t('settings.theme')}</T><RNSwitch value={dark} onValueChange={setDark} /></Row>
+        <Row between><View style={{ flex: 1 }}><T>🔔 Loud alerts</T><T muted size={12}>Alarm sound and long vibration when money arrives, a payout completes or something needs you</T></View><RNSwitch value={user?.loudAlerts !== false} onValueChange={(v) => { setLoudEnabled(v); api.patch<{ user: User }>('/api/account/profile', { loudAlerts: v }).then((r) => setUser(r.user)).catch((e) => toast(e.message, 'error')); }} /></Row>
+        {user?.loudAlerts !== false && <Button title="Test alert" small variant="secondary" onPress={() => ringLoud()} />}
+        <Button title="Account statements" variant="secondary" onPress={() => nav.navigate('Statements')} />
       </Card>
       <Card>
         <KV k={t('auth.email')} v={<Row>{user?.email ? <T>{user.email}</T> : <T muted>—</T>}{user?.email && (user.emailVerified ? <Chip label="verified" kind="success" /> : <Button title="Verify" small variant="secondary" onPress={() => nav.navigate('Security')} />)}</Row>} />
@@ -244,6 +248,72 @@ export function Support() {
           </Sheet>
           <Sheet open={create} onClose={() => setCreate(false)} title="New ticket"><Input label="Subject" value={form.subject} onChangeText={(v) => setForm({ ...form, subject: v })} /><Input label="Describe the issue" value={form.body} onChangeText={(v) => setForm({ ...form, body: v })} multiline /><Button title="Submit" disabled={form.subject.length < 3 || form.body.length < 3} onPress={() => api.post('/api/support/tickets', form).then(() => { setCreate(false); setForm({ subject: '', body: '' }); tickets.reload(); })} /></Sheet>
         </>
+      )}
+    </Screen>
+  );
+}
+
+
+/** Bank-grade statement: opening / closing balance, every ledger posting with running balance, statement number and hash. */
+export function Statements() {
+  const { wallets, money, toast } = useStore();
+  const today = new Date().toISOString().slice(0, 10);
+  const [currency, setCurrency] = useState(wallets[0]?.currency ?? 'USD');
+  const [from, setFrom] = useState(`${today.slice(0, 8)}01`);
+  const [to, setTo] = useState(today);
+  const [st, setSt] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const generate = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get<{ statement: any }>(`/api/wallets/statement${qs({ currency, from, to })}`);
+      setSt(r.statement);
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+  const shareCsv = async () => {
+    if (!st) return;
+    const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [`# BitriPay statement ${st.number} · ${st.account.iban} · ${st.period.from} to ${st.period.to} · hash ${st.hash}`, 'Date,Reference,Description,Counterparty,Status,Debit,Credit,Balance', ...st.lines.map((l: any) => [l.date, l.reference, q(l.description), q(l.counterparty), l.status, l.debit || '', l.credit || '', l.balance].join(','))].join('\n');
+    try {
+      await Share.share({ title: `BitriPay statement ${st.number}`, message: csv });
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    }
+  };
+  return (
+    <Screen>
+      <Header title="Account statements" />
+      <Card>
+        <Select label="Account" value={currency} onChange={setCurrency} options={wallets.map((w) => ({ value: w.currency, label: `${w.currency} · ${money(w.balance, w.currency)}` }))} />
+        <Input label="From (YYYY-MM-DD)" value={from} onChangeText={setFrom} autoCapitalize="none" />
+        <Input label="To (YYYY-MM-DD)" value={to} onChangeText={setTo} autoCapitalize="none" />
+        <Button title="Generate statement" onPress={generate} loading={loading} />
+      </Card>
+      {st && (
+        <Card>
+          <KV k="Statement" v={<T bold>{st.number}</T>} />
+          <KV k="Account" v={<T mono size={12}>{st.account.iban}</T>} />
+          <KV k="Period" v={`${st.period.from} → ${st.period.to}`} />
+          <KV k="Opening" v={money(st.opening, currency)} />
+          <KV k="Credits" v={money(st.totalCredits, currency)} />
+          <KV k="Debits" v={money(st.totalDebits, currency)} />
+          <KV k="Closing" v={<T bold>{money(st.closing, currency)}</T>} />
+          <T muted size={11}>{st.account.classification} · hash {String(st.hash).slice(0, 16)}…</T>
+          {st.disclaimer?.includes('SANDBOX') && <Alert kind="warning" text={st.disclaimer} />}
+          <Button title="Share as CSV" variant="secondary" onPress={shareCsv} />
+          {st.lines.length === 0 && <Empty text="No transactions in this period." />}
+          {st.lines.map((l: any, i: number) => (
+            <Row key={i} between>
+              <View style={{ flex: 1 }}><T size={13}>{l.description}</T><T muted size={11}>{new Date(l.date).toLocaleString()} · {l.reference}{l.counterparty ? ` · ${l.counterparty}` : ''}</T></View>
+              <View style={{ alignItems: 'flex-end' }}><T bold color={l.credit ? '#16a34a' : undefined}>{l.credit ? `+${money(l.credit, currency)}` : `-${money(l.debit, currency)}`}</T><T muted size={11}>{money(l.balance, currency)}</T></View>
+            </Row>
+          ))}
+          {(st.promo.movements.length > 0 || st.promo.closing > 0) && <><T bold size={13}>Promotional credit (not money – covers fees only)</T><KV k="Balance" v={money(st.promo.closing, currency)} /></>}
+        </Card>
       )}
     </Screen>
   );

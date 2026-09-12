@@ -18,6 +18,8 @@ import { VirtualCards } from './pages/VirtualCards';
 import { Bills, Topup, GiftCards } from './pages/Services';
 import { P2P } from './pages/P2P';
 import { Transactions, TransactionDetail } from './pages/Transactions';
+import { Statements } from './pages/Statements';
+import { ConfirmCurrency } from './pages/ConfirmCurrency';
 import { Referrals } from './pages/Referrals';
 import { Support } from './pages/Support';
 import { Settings } from './pages/Settings';
@@ -49,6 +51,7 @@ export function App() {
         <Route path="/u/:tag" element={<QrLanding />} />
         <Route path="/pages/:slug" element={<StaticPage />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/confirm-currency/:token" element={<ConfirmCurrency />} />
         <Route path="/app" element={<Protected><Dashboard /></Protected>} />
         <Route path="/app/send" element={<Protected><Send /></Protected>} />
         <Route path="/app/move" element={<Protected><MoveMoney /></Protected>} />
@@ -67,6 +70,7 @@ export function App() {
         <Route path="/app/p2p/*" element={<Protected><P2P /></Protected>} />
         <Route path="/app/transactions" element={<Protected><Transactions /></Protected>} />
         <Route path="/app/transactions/:id" element={<Protected><TransactionDetail /></Protected>} />
+        <Route path="/app/statements" element={<Protected><Statements /></Protected>} />
         <Route path="/app/referrals" element={<Protected><Referrals /></Protected>} />
         <Route path="/app/support" element={<Protected><Support /></Protected>} />
         <Route path="/app/settings" element={<Protected><Settings /></Protected>} />

@@ -368,9 +368,9 @@ export function RouteDisclosure({ declaration, fx }: { declaration?: any; fx?: a
 
 /** Lifecycle of a cross-rail transfer: initiated → funded → paying out → settled. */
 export const ROUTE_STEPS: { id: string; label: string; stages: string[] }[] = [
-  { id: 'initiated', label: 'Initiated', stages: ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'FUNDING_PENDING'] },
-  { id: 'funded', label: 'Funds confirmed', stages: ['FUNDED', 'MANUAL_REVIEW', 'INSUFFICIENT_LIQUIDITY'] },
-  { id: 'paying', label: 'Paying out', stages: ['PAYOUT_ROUTED', 'PAYOUT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MISMATCHED', 'DUPLICATE'] },
+  { id: 'initiated', label: 'Approved', stages: ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'BIOMETRICALLY_APPROVED', 'FUNDING_PENDING'] },
+  { id: 'funded', label: 'Funded · FX reserved', stages: ['FUNDED', 'FX_RESERVED', 'AWAITING_CONFIRMATION', 'MANUAL_REVIEW', 'INSUFFICIENT_LIQUIDITY'] },
+  { id: 'paying', label: 'Paying out', stages: ['PAYOUT_ROUTED', 'PAYOUT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'VERIFIED', 'MISMATCHED', 'DUPLICATE'] },
   { id: 'settled', label: 'Settled', stages: ['SETTLED'] },
 ];
 export function RouteTimeline({ stage, stageLabel, stageDescription }: { stage?: string; stageLabel?: string; stageDescription?: string }) {

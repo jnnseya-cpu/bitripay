@@ -585,8 +585,23 @@ export function expirePromoCredits(): number {
   return rows.length;
 }
 
+/** In sandbox mode every enabled currency gets a labelled sandbox programme so the console and flows can be demonstrated. */
+export function ensureSandboxProgrammes(): number {
+  if (getComplianceSettings().mode !== 'sandbox') return 0;
+  let created = 0;
+  // Only currencies actually in circulation (some wallet holds them) – not every enabled ISO currency.
+  for (const c of getDb().prepare('SELECT DISTINCT currency code FROM wallets').all() as { code: string }[]) {
+    if (!getDb().prepare('SELECT 1 FROM emoney_programmes WHERE currency = ?').get(c.code)) {
+      programmeForCurrency(c.code);
+      created++;
+    }
+  }
+  return created;
+}
+
 /** Overview for the treasury console. */
 export function emoneyOverview() {
+  ensureSandboxProgrammes();
   const programmes = listProgrammes();
   const pools = listPools();
   const promo = getDb().prepare("SELECT currency, COALESCE(SUM(remaining), 0) total FROM promo_credits WHERE status = 'active' GROUP BY currency").all() as { currency: string; total: number }[];
