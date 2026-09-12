@@ -8,7 +8,7 @@ import { badRequest, conflict, notFound } from '../../lib/errors';
 import { recordEvent, type Actor } from '../events';
 import { getWallet, type WalletRow } from '../wallets';
 
-export type HoldKind = 'dispute' | 'reserve' | 'review' | 'settlement' | 'compliance';
+export type HoldKind = 'dispute' | 'reserve' | 'review' | 'settlement' | 'compliance' | 'savings';
 export interface HoldView {
   id: string;
   walletId: string;

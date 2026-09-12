@@ -34,6 +34,7 @@ import { switchRouter } from './routes/switch';
 import { finopsRouter } from './routes/finops';
 import { riskRouter } from './routes/risk';
 import { intelligenceRouter } from './routes/intelligence';
+import { savingsRouter } from './routes/savings';
 import { ensureDefaultBindings } from './services/assist/bindings';
 import './services/assist/meshTools';
 import { ensureDefaultConnections } from './services/switch/connections';
@@ -123,6 +124,7 @@ export function createApp() {
   app.use('/api/gift-cards', giftCardsRouter);
   app.use('/api/kyc', kycRouter);
   app.use('/api/risk', riskRouter);
+  app.use('/api/savings', savingsRouter);
   app.use('/api/support', supportRouter);
   app.use('/api/p2p', p2pRouter);
   app.use('/api/merchant', merchantRouter);

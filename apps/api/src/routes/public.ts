@@ -13,9 +13,12 @@ import { rateLimit } from '../middleware/rateLimit';
 import { consentView, confirmPayoutCurrency } from '../services/routing';
 import { verifyStatement } from '../services/statements';
 import { listOperators as listMomoOperators } from '../services/momo';
+import { localeFromRequest } from '../services/locale';
+import { optionalAuth } from '../middleware/auth';
 
 export const publicRouter = Router();
 
+publicRouter.get('/locale', optionalAuth, (req, res) => res.json(localeFromRequest({ headers: req.headers as Record<string, unknown>, query: req.query as Record<string, unknown>, user: req.user ?? null })));
 publicRouter.get('/config', (_req, res) => {
   const app = getAppSettings();
   const stripe = listGateways().find((g) => g.provider === 'stripe' && isGatewayReady(g));

@@ -44,6 +44,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/app/agents', key: 'nav.agents', ico: '🏪', module: 'agents' },
     { to: '/app/remittance', key: 'nav.remittance', ico: '🌍', module: 'remittance' },
     { to: '/app/exchange', key: 'nav.exchange', ico: '💱', module: 'exchange' },
+    { to: '/app/savings', key: 'nav.savings', ico: '🎯' },
   ];
   const services: NavItem[] = [
     { to: '/app/cards', key: 'nav.cards', ico: '💳', module: 'virtualCards' },

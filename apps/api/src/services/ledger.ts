@@ -2,6 +2,14 @@ import { getDb } from '../db';
 import { consumePromoCredit, reserveHooks } from './emoney';
 
 /** Pre-commit guards run inside every posting before any ledger entry is written (sanctions screen registers here). */
+/** Active holds on a wallet (queried here to avoid an import cycle with the holds module). */
+function heldOnWallet(walletId: string): number {
+  try {
+    return ((getDb().prepare("SELECT COALESCE(SUM(amount_minor), 0) s FROM holds WHERE wallet_id = ? AND status = 'ACTIVE'").get(walletId) as any)?.s as number) ?? 0;
+  } catch {
+    return 0;
+  }
+}
 export const preCommitHooks: ((ctx: { input: PostTransactionInput; fromUser: UserRow | null; toUser: UserRow | null }) => void)[] = [];
 /** Listeners notified after a pending transaction settles or reverses (payout webhooks register here; avoids import cycles). */
 export const transactionStatusHooks: ((tx: TransactionRow, outcome: 'completed' | 'rejected' | 'cancelled' | 'failed') => void)[] = [];
@@ -179,6 +187,8 @@ export interface PostTransactionInput {
   /** Optional additional credits (e.g. agent commission) taken from the fee. */
   feeSplits?: { walletId: string; amount: number }[];
   allowNegativeSender?: boolean;
+  /** Internal flows that intentionally spend ring-fenced money (a released savings goal, a dispute refund) set this. */
+  allowHeld?: boolean;
   /**
    * Who bears the fee. 'sender' (default): the sender is debited amount + fee and the receiver gets amount.
    * 'receiver': the sender is debited amount and the receiver gets amount - fee (merchant payments, deposits, agent cash-in).
@@ -279,6 +289,11 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     if (!isSenderSystem && !input.allowNegativeSender && fromWallet.balance < totalDebit) {
       throw unprocessable('Insufficient balance', 'insufficient_funds');
     }
+    // Ring-fenced money (holds: disputes, reserves, savings goals…) stays in the wallet but is not spendable.
+    if (!isSenderSystem && !input.allowNegativeSender && !input.allowHeld) {
+      const held = heldOnWallet(fromWallet.id);
+      if (held > 0 && fromWallet.balance - held < totalDebit) throw unprocessable('Insufficient available balance: part of this balance is set aside (savings goal, dispute or reserve)', 'insufficient_funds', { balance: fromWallet.balance, held });
+    }
     const id = uuid();
     const ts = now();
     db.prepare(
@@ -328,6 +343,7 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     const posted = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id) as TransactionRow;
     if (issuance?.authority === 'external_funding' && status === 'completed') reserveHooks.externalFunding(posted);
     publish('transaction.created', { transactionId: id, type: input.type, status, amountMinor: input.amount, currency: input.currency, senderUserId: input.senderUserId ?? null, receiverUserId: input.receiverUserId ?? null }, { aggregateId: id, tenantId: input.receiverUserId ?? input.senderUserId ?? 'platform' });
+    if (status === 'completed' && input.receiverUserId && input.receiverUserId !== input.senderUserId && toWallet.user_id !== treasury.id) publish('income.received', { userId: input.receiverUserId, transactionId: id, type: input.type, amountMinor: receiveAmount, currency: receiveCurrency, senderUserId: input.senderUserId ?? null }, { aggregateId: id, tenantId: input.receiverUserId });
     return posted;
   })();
 }
@@ -380,6 +396,7 @@ export function completeTransaction(id: string, extraMetadata?: Record<string, u
     if (toWallet.user_id === getSystemUser('treasury').id && done.sender_user_id && !findUserById(done.sender_user_id)?.is_system) reserveHooks.redemption(done);
     for (const h of transactionStatusHooks) h(done, 'completed');
     publish('transaction.settled', { transactionId: done.id, type: done.type, amountMinor: done.amount, currency: done.currency, senderUserId: done.sender_user_id, receiverUserId: done.receiver_user_id }, { aggregateId: done.id, tenantId: done.receiver_user_id ?? done.sender_user_id ?? 'platform' });
+    if (done.receiver_user_id && done.receiver_user_id !== done.sender_user_id) publish('income.received', { userId: done.receiver_user_id, transactionId: done.id, type: done.type, amountMinor: done.receive_amount ?? done.amount - (done.fee ?? 0), currency: done.receive_currency ?? done.currency, senderUserId: done.sender_user_id }, { aggregateId: done.id, tenantId: done.receiver_user_id });
     return done;
   })();
 }

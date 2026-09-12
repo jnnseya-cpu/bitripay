@@ -562,6 +562,33 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
   verification), `packages/sdk-php` (`bitripay/sdk`), `packages/sdk-python` (`bitripay`); the OpenAPI 3.1 document
   at `/api/v1/openapi.json` is generated from the same operation table the portal shows.
 
+### Savings, wellbeing and locale resolution
+
+- **Savings goals are holds, not balances**: every contribution is a hold of kind `savings` on the wallet
+  (`services/savings.ts`), so the money never leaves the ledger, cannot be spent by accident (the ledger refuses a
+  debit that would dip into ring-fenced money with `insufficient_funds` and reports the held amount) and is released
+  the moment the account holder withdraws from the goal or closes it. Goals carry a target, a deadline, a weekly pace
+  projection and an on-track flag.
+- **Anchor and round-ups**: opt-in per account. The anchor sets aside at least 10 % (`MIN_ANCHOR_BPS`, can be raised
+  to 50 %, never lowered) of every income event (`income.received` on the domain bus: transfers, QR and merchant
+  payments, deposits, remittances, refunds; administrative credits and e-money issuance never count) into the
+  default goal; round-ups sweep the change of every outgoing payment to the nearest 1.00 / 5.00 / 10.00.
+- **Live-within-means monitor**: 30-day income against spend per currency, green under 70 %, amber under 100 %, red
+  at or above; amber and red come with a concrete plan (weekly amount to set aside, the three categories to trim and
+  by how much). `GET /api/savings` (overview), `/api/savings/wellbeing`, `PUT /api/savings/settings`,
+  `POST /api/savings/goals`, `/goals/:id/contribute`, `/goals/:id/withdraw`, `DELETE /goals/:id`. Web page
+  **Savings & goals** (`/app/savings`).
+- **Language and currency chains** (`services/locale.ts`, `GET /api/locale`): language = explicit (`?lang=`, stored
+  preference) → device (`Accept-Language`, `x-language`) → IP country (`x-ip-country` / `cf-ipcountry`: French for
+  francophone Africa, Portuguese, Arabic with RTL, Swahili, Hindi, Bengali, Spanish) → default; currency = explicit
+  (`?currency=`) → most-used wallet → IP country (CDF in the DRC, GBP, EUR in the euro area, the ISO currency
+  elsewhere) → browser hint (`x-currency`) → USD. Only enabled languages and currencies are ever returned. Launch
+  languages Lingala, Kikongo, Tshiluba, Amharic, Hausa, Yoruba and Igbo are registered in the CMS language list.
+- **Acceptance tests** (`src/tests/acceptance.test.ts`): 3 000 randomised postings (with cross-currency legs and
+  refused overdrafts) leave every currency zero-sum and every wallet equal to its derived balance; fifty offline
+  promises settle in order with the failing one restoring the payer's balance and a replayed nonce refused; the locale
+  chains for CD, GB, FR, KE and AE (RTL); the anchor, round-ups, ring-fencing, manual moves and the red plan.
+
 ### Public site, blog and SEO engine
 
 The marketing surface is **server-rendered by the API** so search engines, social previews and AI answer

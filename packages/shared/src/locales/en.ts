@@ -25,6 +25,7 @@ export const en: Record<string, string> = {
   'nav.centre': 'Command centre',
   'nav.qrCentre': 'QR centre',
   'nav.developer': 'Developer portal',
+  'nav.savings': 'Savings & goals',
   'pwa.offline': 'You are offline. Balances shown are the last synced state; offline codes and promises keep working and sync when the network returns.',
   'pwa.lastSync': 'Last synced',
   'nav.logout': 'Sign out',

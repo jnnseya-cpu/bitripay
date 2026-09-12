@@ -156,6 +156,13 @@ export const DEFAULT_LANGUAGES: Language[] = [
   { code: 'pt', name: 'Portuguese', nativeName: 'Português', rtl: false, enabled: true },
   { code: 'ar', name: 'Arabic', nativeName: 'العربية', rtl: true, enabled: true },
   { code: 'sw', name: 'Swahili', nativeName: 'Kiswahili', rtl: false, enabled: true },
+  { code: 'ln', name: 'Lingala', nativeName: 'Lingála', rtl: false, enabled: true },
+  { code: 'kg', name: 'Kikongo', nativeName: 'Kikongo', rtl: false, enabled: true },
+  { code: 'lua', name: 'Tshiluba', nativeName: 'Tshiluba', rtl: false, enabled: true },
+  { code: 'am', name: 'Amharic', nativeName: 'አማርኛ', rtl: false, enabled: true },
+  { code: 'ha', name: 'Hausa', nativeName: 'Hausa', rtl: false, enabled: true },
+  { code: 'yo', name: 'Yoruba', nativeName: 'Yorùbá', rtl: false, enabled: true },
+  { code: 'ig', name: 'Igbo', nativeName: 'Igbo', rtl: false, enabled: true },
   { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', rtl: false, enabled: true },
   { code: 'bn', name: 'Bengali', nativeName: 'বাংলা', rtl: false, enabled: true },
 ];
