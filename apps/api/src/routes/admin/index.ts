@@ -24,7 +24,10 @@ import { routeCatalog } from '../../services/railCatalog';
 import { OPEN_STAGES, STAGE_LABELS } from '../../services/lifecycle';
 import { listKyc, getKyc, reviewKyc } from '../../services/kyc';
 import { settleRemittance, toRemittance } from '../../services/remittance';
-import { getCurrency, listCurrencies, upsertCurrency, refreshRatesFromProvider } from '../../services/currencies';
+import { getCurrency, listCurrencies, upsertCurrency, refreshRatesFromProvider, importRates, listRateSnapshots, getRateStatus, rateFreshness, RATE_PROVIDERS } from '../../services/currencies';
+import { goLiveChecklist } from '../../services/goLive';
+import { testGateway } from '../../payments';
+import { encrypt } from '../../lib/crypto';
 import { getSetting, setSetting, getFees, getLimits, getReferralSettings, getAppSettings, getGatewayControls, getFxSettings, getRiskSettings } from '../../services/settings';
 import { getModules, DEFAULT_MODULES } from '../../services/modules';
 import { listGateways, upsertGateway, deleteGateway, PROVIDERS } from '../../payments';
@@ -62,6 +65,8 @@ function verificationSubject(v: { subjectType: string; paymentId: string }) {
     return {};
   }
 }
+
+const complianceSchema = z.object({ regulator: z.string().max(200).optional().nullable(), licenceType: z.string().max(200).optional().nullable(), licenceNumber: z.string().max(200).optional().nullable(), safeguardingAccount: z.string().max(200).optional().nullable(), amlProgrammeRef: z.string().max(200).optional().nullable(), dataProtectionRef: z.string().max(200).optional().nullable(), fxApprovalRef: z.string().max(200).optional().nullable(), consumerDisclosureUrl: z.string().max(300).optional().nullable(), agentSupervisionRef: z.string().max(200).optional().nullable() });
 
 export const adminRouter = Router();
 adminRouter.use(...requireAdmin);
@@ -384,14 +389,14 @@ adminRouter.get('/route-catalog', requirePermission('gateways'), (req, res) => r
 // ---------------- Corridors, liquidity, payouts, chargebacks ----------------
 adminRouter.get('/corridors', requirePermission('gateways'), (_req, res) => res.json({ items: listCorridors(), compliance: getSetting('compliance') }));
 adminRouter.put('/corridors/:id', requirePermission('gateways'), (req, res) => {
-  const body = validate(z.object({ sourceCountry: z.string().length(2).optional().nullable(), sourceCurrency: z.string().min(1).max(3), destCountry: z.string().length(2), destCurrency: z.string().length(3), operatorId: z.string().optional().nullable(), rail: z.enum(['mobile_money', 'bank', 'agent']).default('mobile_money'), estimatedPayoutMinutes: z.number().int().min(1).optional(), maxAmount: z.number().int().min(0).optional(), notes: z.string().max(1000).optional().nullable(), enabled: z.boolean().optional(), collectionPartner: z.string().max(200).optional().nullable(), payoutPartner: z.string().max(200).optional().nullable(), licenceRef: z.string().max(200).optional().nullable() }), req.body);
+  const body = validate(z.object({ sourceCountry: z.string().length(2).optional().nullable(), sourceCurrency: z.string().min(1).max(3), destCountry: z.string().length(2), destCurrency: z.string().length(3), operatorId: z.string().optional().nullable(), rail: z.enum(['mobile_money', 'bank', 'agent']).default('mobile_money'), estimatedPayoutMinutes: z.number().int().min(1).optional(), maxAmount: z.number().int().min(0).optional(), notes: z.string().max(1000).optional().nullable(), enabled: z.boolean().optional(), collectionPartner: z.string().max(200).optional().nullable(), payoutPartner: z.string().max(200).optional().nullable(), licenceRef: z.string().max(200).optional().nullable(), compliance: complianceSchema.optional().nullable(), licenceExpiresAt: z.string().datetime({ offset: true }).optional().nullable() }), req.body);
   const corridor = upsertCorridor({ id: String(req.params.id) === 'new' ? undefined : String(req.params.id), ...body }, { type: 'admin', id: req.user!.id });
   audit(req.user!.id, 'corridor.upsert', 'corridor', corridor.id, { destCountry: body.destCountry, operatorId: body.operatorId ?? null });
   res.json({ corridor });
 });
 /** Live / suspended: an explicit, step-up protected decision that records the regulatory arrangements. */
 adminRouter.post('/corridors/:id/status', requirePermission('settings'), (req, res) => {
-  const body = validate(z.object({ status: z.enum(['sandbox', 'live', 'suspended']), collectionPartner: z.string().max(200).optional().nullable(), payoutPartner: z.string().max(200).optional().nullable(), licenceRef: z.string().max(200).optional().nullable(), notes: z.string().max(1000).optional().nullable(), pin: z.string().optional() }), req.body);
+  const body = validate(z.object({ status: z.enum(['sandbox', 'live', 'suspended']), collectionPartner: z.string().max(200).optional().nullable(), payoutPartner: z.string().max(200).optional().nullable(), licenceRef: z.string().max(200).optional().nullable(), notes: z.string().max(1000).optional().nullable(), compliance: complianceSchema.optional().nullable(), licenceExpiresAt: z.string().datetime({ offset: true }).optional().nullable(), pin: z.string().optional() }), req.body);
   assertAdminStepUp(req.user!, body.pin, req);
   const corridor = setCorridorStatus(String(req.params.id), body.status, req.user!, body);
   audit(req.user!.id, `corridor.${body.status}`, 'corridor', corridor.id, { collectionPartner: body.collectionPartner, payoutPartner: body.payoutPartner, licenceRef: body.licenceRef });
@@ -531,7 +536,7 @@ adminRouter.get('/settings', requirePermission('settings'), (_req, res) => {
     fees: getFees(),
     limits: getLimits(),
     referral: getReferralSettings(),
-    app: getAppSettings(),
+    app: { ...getAppSettings(), rateProviderKey: getAppSettings().rateProviderKey ? '••••••••' : '' },
     gateway: getGatewayControls(),
     fx: getFxSettings(),
     risk: getRiskSettings(),
@@ -554,6 +559,17 @@ adminRouter.put(
     if (!allowed.includes(key)) throw badRequest('Unknown settings key');
     let value = req.body?.value ?? req.body;
     if (key === 'smtp' && value?.pass === '••••••••') value = { ...value, pass: getSmtpSettings().pass };
+    if (key === 'app') {
+      // Rate provider API keys are stored encrypted and never echoed back.
+      const current = getAppSettings();
+      if (value?.rateProviderKey === '••••••••' || value?.rateProviderKey === undefined) value = { ...value, rateProviderKey: current.rateProviderKey };
+      else if (value?.rateProviderKey) value = { ...value, rateProviderKey: encrypt(String(value.rateProviderKey)) };
+    }
+    if (key === 'compliance' && value?.mode === 'live' && getSetting<{ mode: string }>('compliance').mode !== 'live') {
+      const checklist = goLiveChecklist();
+      if (!checklist.readyForLive) throw badRequest(`Cannot switch to live: ${checklist.items.filter((i) => i.blocking && !i.ok).map((i) => i.label).join('; ')}`, 'go_live_blocked', checklist);
+      assertAdminStepUp(req.user!, req.body?.pin, req);
+    }
     if (key === 'fees') for (const [t, f] of Object.entries<any>(value)) if (typeof f?.bps !== 'number' || typeof f?.fixed !== 'number') throw badRequest(`Invalid fee config for ${t}`);
     setSetting(key, value);
     audit(req.user!.id, 'settings.update', 'settings', key, key === 'smtp' ? { host: value?.host } : value);
@@ -596,15 +612,36 @@ adminRouter.post(
   requirePermission('settings'),
   wrap(async (req, res) => {
     const result = await refreshRatesFromProvider(req.body?.provider);
-    audit(req.user!.id, 'currency.refresh_rates', undefined, undefined, { provider: result.provider, updated: result.updated.length });
+    audit(req.user!.id, 'currency.refresh_rates', undefined, undefined, { provider: result.provider, updated: result.updated.length, snapshotId: result.snapshotId });
     res.json(result);
   }),
 );
+/** Rate provider status, freshness and the versioned snapshot history. */
+adminRouter.get('/currencies/rate-status', requirePermission('settings'), (_req, res) => res.json({ status: getRateStatus(), freshness: rateFreshness(), providers: RATE_PROVIDERS.map((p) => ({ id: p.id, name: p.name, keyed: p.keyed })), snapshots: listRateSnapshots(20) }));
+/** Versioned manual import (1 base = rate quote) for environments without outbound access – labelled non-live everywhere. */
+adminRouter.post('/currencies/import', requirePermission('settings'), (req, res) => {
+  const body = validate(z.object({ rates: z.record(z.string(), z.number().positive()), note: z.string().max(300).optional().nullable() }), req.body);
+  const result = importRates(req.user!, body.rates, body.note);
+  audit(req.user!.id, 'currency.import_rates', undefined, undefined, { snapshotId: result.snapshotId, updated: result.updated.length });
+  res.status(201).json(result);
+});
 
 // ---------------- Gateways (payment aggregator) ----------------
 adminRouter.get('/gateways', requirePermission('gateways'), (_req, res) =>
   res.json({ items: listGateways(), providers: Object.values(PROVIDERS).map((p) => ({ id: p.id, name: p.name, methods: p.supportedMethods, credentialFields: p.credentialFields })) }),
 );
+/** Onboarding: connectivity test with the stored credentials; the result is kept on the gateway for the go-live checklist. */
+adminRouter.post(
+  '/gateways/:id/test',
+  requirePermission('gateways'),
+  wrap(async (req, res) => {
+    const result = await testGateway(String(req.params.id));
+    audit(req.user!.id, 'gateway.test', 'gateway', String(req.params.id), { ok: result.ok, mode: result.mode });
+    res.json(result);
+  }),
+);
+/** Everything that must be in place before live customer funds are accepted. */
+adminRouter.get('/go-live', requirePermission('settings'), (_req, res) => res.json(goLiveChecklist()));
 adminRouter.put(
   '/gateways/:id',
   requirePermission('gateways'),

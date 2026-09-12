@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { rateLimit } from '../middleware/rateLimit';
+import { forbidden } from '../lib/errors';
+import { getPayoutAccount } from '../services/liquidity';
 import { ingestEvidence, registerDevice, listDevices, revokeDevice, getDevice, parseEvidenceText, evidenceCanonical } from '../services/evidence';
 
 /**
@@ -42,6 +44,13 @@ evidenceRouter.post(
   '/devices',
   wrap(async (req, res) => {
     const body = validate(z.object({ name: z.string().min(2).max(80), publicKey: z.string().min(32).max(2000), operatorIds: z.array(z.string()).max(50).optional().nullable(), kind: z.enum(['collection', 'payout']).optional().nullable(), simMsisdn: z.string().max(30).optional().nullable(), simIccid: z.string().max(30).optional().nullable(), agentUserId: z.string().optional().nullable(), payoutAccountId: z.string().optional().nullable() }), req.body);
+    // Agents may enrol payout devices only on payout accounts they operate; collection devices are theirs to register.
+    if (req.user!.role === 'agent' && body.kind === 'payout') {
+      if (!body.payoutAccountId) throw forbidden('Choose the payout account this device operates', 'payout_account_required');
+      const acc = getPayoutAccount(body.payoutAccountId);
+      if (acc.agent?.id !== req.user!.id) throw forbidden('You do not operate this payout account', 'payout_not_yours');
+      body.agentUserId = req.user!.id;
+    }
     res.status(201).json({ device: registerDevice(req.user!, body, req.user!.id) });
   }),
 );

@@ -11,7 +11,8 @@ import { mtnMomoProvider } from './mtnMomo';
 import { mpesaProvider } from './mpesa';
 import { manualBankProvider } from './manualBank';
 import { manualMomoProvider } from './manualMomo';
-import type { GatewayProvider, GatewayProviderId, PaymentMethod } from './types';
+import type { GatewayProvider, GatewayProviderId, PaymentMethod, GatewayMode, HealthResult } from './types';
+import { getSetting } from '../services/settings';
 
 export const PROVIDERS: Record<GatewayProviderId, GatewayProvider> = {
   sandbox: sandboxProvider,
@@ -37,6 +38,10 @@ export interface GatewayConfig {
   /** Which credential keys are set (never the values). */
   configuredKeys: string[];
   credentialFields: GatewayProvider['credentialFields'];
+  /** test | live | unknown – derived from the stored keys (sandbox and direct rails are always 'test'-safe). */
+  mode: GatewayMode;
+  /** Result of the last admin connectivity test. */
+  lastHealth: (HealthResult & { at: string }) | null;
   updatedAt: string;
 }
 
@@ -64,12 +69,16 @@ export function getGatewayCredentials(gatewayId: string): Record<string, string>
   const stored = row.credentials_encrypted ? parseJson<Record<string, string>>(decrypt(row.credentials_encrypted), {}) : {};
   const merged = { ...envCredentials(row.provider) };
   for (const [k, v] of Object.entries(stored)) if (v) merged[k] = v;
+  const cfg = parseJson<Record<string, unknown>>((getDb().prepare('SELECT config FROM gateways WHERE id = ?').get(gatewayId) as any)?.config, {});
+  if (cfg.threeDSecure) merged.threeDSecure = String(cfg.threeDSecure);
   return merged;
 }
 
 function mapGateway(row: any): GatewayConfig {
   const provider = PROVIDERS[row.provider as GatewayProviderId];
   const creds = getGatewayCredentials(row.id);
+  const cfg = parseJson<Record<string, any>>(row.config, {});
+  const mode: GatewayMode = ['sandbox', 'manual_bank', 'manual_momo'].includes(row.provider) ? 'test' : provider?.keyMode ? provider.keyMode(creds) : ['mtn_momo', 'mpesa'].includes(row.provider) ? (creds.env === 'production' ? 'live' : creds.env ? 'test' : 'unknown') : 'unknown';
   return {
     id: row.id,
     name: row.name,
@@ -82,6 +91,8 @@ function mapGateway(row: any): GatewayConfig {
     sortOrder: row.sort_order,
     configuredKeys: Object.entries(creds).filter(([, v]) => !!v).map(([k]) => k),
     credentialFields: provider?.credentialFields ?? [],
+    mode,
+    lastHealth: cfg.lastHealth ?? null,
     updatedAt: row.updated_at,
   };
 }
@@ -113,6 +124,8 @@ export function availableGateways(method: PaymentMethod, currency: string, count
     if (g.currencies.length && !g.currencies.includes(currency)) return false;
     if (country && g.countries.length && !g.countries.includes(country.toUpperCase())) return false;
     if (g.provider === 'sandbox' && config.isProduction && !g.config.allowInProduction) return false;
+    // Compliance gate: live processor keys are never usable while the platform is in sandbox mode.
+    if (g.mode === 'live' && getSetting<{ mode: string }>('compliance').mode !== 'live') return false;
     return true;
   });
 }
@@ -160,6 +173,20 @@ export function upsertGateway(input: {
     now(),
   );
   return getGateway(input.id)!;
+}
+
+/** Onboarding: prove the stored credentials work and remember the result on the gateway. */
+export async function testGateway(id: string): Promise<HealthResult & { at: string; webhookUrl: string }> {
+  const g = getGateway(id);
+  if (!g) throw new Error('Gateway not found');
+  const provider = PROVIDERS[g.provider];
+  const creds = getGatewayCredentials(id);
+  let result: HealthResult;
+  if (provider.healthCheck) result = await provider.healthCheck({ ...creds, ...(g.config.threeDSecure ? { threeDSecure: String(g.config.threeDSecure) } : {}) });
+  else result = { ok: isGatewayReady(g), mode: g.mode, message: isGatewayReady(g) ? 'Credentials present (provider has no connectivity test)' : 'Missing credentials' };
+  const at = now();
+  getDb().prepare('UPDATE gateways SET config = ?, updated_at = ? WHERE id = ?').run(JSON.stringify({ ...g.config, lastHealth: { ...result, at } }), at, id);
+  return { ...result, at, webhookUrl: `${config.apiUrl}/api/webhooks/${id}` };
 }
 
 export function deleteGateway(id: string) {

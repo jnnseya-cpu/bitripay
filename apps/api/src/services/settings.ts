@@ -20,7 +20,9 @@ export interface AppSettings {
   agentCommissionBps: number;
   /** Auto-refresh rates from the provider (open exchange rate API) every N hours; 0 disables. */
   rateAutoRefreshHours: number;
-  rateProvider: 'manual' | 'frankfurter' | 'open_er_api';
+  rateProvider: 'manual' | 'frankfurter' | 'open_er_api' | 'exchangerate_host' | 'openexchangerates' | 'fixer';
+  /** API key for keyed providers (stored encrypted). */
+  rateProviderKey: string;
   /** Automatic merchant settlement: minimum balance to auto-settle and interval in hours. */
   autoSettlement: { enabled: boolean; minAmount: number; intervalHours: number };
   maintenanceMode: boolean;
@@ -63,6 +65,7 @@ const DEFAULT_APP: AppSettings = {
   agentCommissionBps: 50,
   rateAutoRefreshHours: 0,
   rateProvider: 'manual',
+  rateProviderKey: '',
   autoSettlement: { enabled: false, minAmount: 10_000, intervalHours: 24 },
   maintenanceMode: false,
   registrationOpen: true,

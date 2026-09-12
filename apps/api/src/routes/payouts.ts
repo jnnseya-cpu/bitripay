@@ -7,7 +7,7 @@ import { verifyDeviceRequest, type EvidenceDevice } from '../services/evidence';
 import { queueFor, claimPayout, releasePayout, submitPayoutEvidence, getPayout, listPayouts } from '../services/payouts';
 import { proposeVerification } from '../services/verification';
 import { forbidden } from '../lib/errors';
-import { getPayoutAccount } from '../services/liquidity';
+import { getPayoutAccount, listPayoutAccounts } from '../services/liquidity';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -66,6 +66,8 @@ payoutsRouter.post(
 
 payoutsRouter.use('/agent', requireAuth, requireRole('agent', 'admin'));
 payoutsRouter.get('/agent/queue', (req, res) => res.json({ items: queueFor({ agent: req.user }) }));
+/** Payout accounts this agent operates – the device app picks one at enrolment. */
+payoutsRouter.get('/agent/accounts', (req, res) => res.json({ items: listPayoutAccounts({ status: null }).filter((a) => a.agent?.id === req.user!.id || req.user!.role === 'admin').map((a) => ({ id: a.id, label: a.label, rail: a.rail, operatorId: a.operatorId, operatorName: a.operatorName, country: a.country, currency: a.currency, msisdn: a.msisdn, simIccid: a.simIccid, deviceId: a.deviceId, status: a.status })) }));
 payoutsRouter.get('/agent/history', (req, res) => res.json(listPayouts({ agentUserId: req.user!.id, pageSize: 50 })));
 payoutsRouter.post('/agent/:id/claim', (req, res) => res.json({ payout: claimPayout(String(req.params.id), { agent: req.user }) }));
 payoutsRouter.post('/agent/:id/release', (req, res) => {

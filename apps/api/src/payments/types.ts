@@ -110,4 +110,16 @@ export interface GatewayProvider {
   parseWebhook?(req: Request, credentials: Record<string, string>): Promise<WebhookEvent[]>;
   /** Refund (part of) a settled charge back to the original instrument. Providers without an API return status 'manual'. */
   refund?(payment: GatewayPaymentRow, amountMinor: number, reason: string, credentials: Record<string, string>): Promise<RefundResult>;
+  /** Whether the stored credentials are test or live keys, without calling the provider. */
+  keyMode?(credentials: Record<string, string>): GatewayMode;
+  /** Call the provider with the stored credentials to prove they work (onboarding). */
+  healthCheck?(credentials: Record<string, string>): Promise<HealthResult>;
+}
+
+export type GatewayMode = 'test' | 'live' | 'unknown';
+export interface HealthResult {
+  ok: boolean;
+  mode: GatewayMode;
+  message: string;
+  details?: Record<string, unknown>;
 }

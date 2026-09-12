@@ -25,6 +25,19 @@ export const flutterwaveProvider: GatewayProvider = {
     { key: 'secretKey', label: 'Secret key', secret: true },
     { key: 'webhookHash', label: 'Webhook secret hash', secret: true },
   ],
+  keyMode(credentials) {
+    const k = credentials.secretKey || '';
+    return k.startsWith('FLWSECK_TEST') ? 'test' : k.startsWith('FLWSECK-') ? 'live' : 'unknown';
+  },
+  async healthCheck(credentials) {
+    const mode = flutterwaveProvider.keyMode!(credentials);
+    try {
+      const r: any = await call(credentials.secretKey, '/banks/NG', 'GET');
+      return { ok: true, mode, message: `Connected (${mode}) · ${r.data?.length ?? 0} bank(s) listed`, details: { webhookHash: !!credentials.webhookHash } };
+    } catch (err) {
+      return { ok: false, mode, message: (err as Error).message };
+    }
+  },
   async initiate(ctx: InitiateContext): Promise<InitiateResult> {
     const secret = ctx.credentials.secretKey;
     if (!secret) throw new Error('Flutterwave secret key not configured');

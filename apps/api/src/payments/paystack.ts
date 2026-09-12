@@ -20,6 +20,19 @@ export const paystackProvider: GatewayProvider = {
   id: 'paystack',
   name: 'Paystack',
   supportedMethods: ['card', 'mobile_money', 'bank'],
+  keyMode(credentials) {
+    const k = credentials.secretKey || '';
+    return k.startsWith('sk_live_') ? 'live' : k.startsWith('sk_test_') ? 'test' : 'unknown';
+  },
+  async healthCheck(credentials) {
+    const mode = paystackProvider.keyMode!(credentials);
+    try {
+      const r: any = await call(credentials.secretKey, '/bank?perPage=1', 'GET');
+      return { ok: true, mode, message: `Connected (${mode}) · ${r.data?.length ?? 0} bank(s) listed`, details: {} };
+    } catch (err) {
+      return { ok: false, mode, message: (err as Error).message };
+    }
+  },
   credentialFields: [{ key: 'secretKey', label: 'Secret key', secret: true }],
   async initiate(ctx: InitiateContext): Promise<InitiateResult> {
     const secret = ctx.credentials.secretKey;

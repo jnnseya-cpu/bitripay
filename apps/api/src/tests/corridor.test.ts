@@ -255,19 +255,36 @@ describe('UK card → Orange Money DRC (sandbox)', () => {
     const blocked = await sendUkToDrc(sender.auth, '20', { source: { method: 'card', gateway: 'stripe_gbp', card } });
     expect(blocked.status).toBe(403);
     expect(blocked.body.error.code).toBe('compliance_sandbox_mode');
-    // Live mode, corridor still sandbox → still refused.
-    await request(app).put('/api/admin/settings/compliance').set(admin.auth).send({ value: { mode: 'live' } });
+    // Switching the platform live through the API is refused until the go-live checklist passes.
+    const blockedSwitch = await request(app).put('/api/admin/settings/compliance').set(admin.auth).send({ value: { mode: 'live' }, pin: admin.pin });
+    expect(blockedSwitch.status).toBe(400);
+    expect(blockedSwitch.body.error.code).toBe('go_live_blocked');
+    // Simulate an operator that has completed the checklist: live mode, corridor still sandbox → still refused.
+    const { setSetting } = await import('../services/settings');
+    setSetting('compliance', { ...(await import('../services/settings')).getComplianceSettings(), mode: 'live' });
     const blocked2 = await sendUkToDrc(sender.auth, '20', { source: { method: 'card', gateway: 'stripe_gbp', card } });
     expect(blocked2.body.error.code).toBe('corridor_not_live');
     // Going live needs the arrangements on record and an admin step-up.
     const noArr = await request(app).post(`/api/admin/corridors/${s.corridorId}/status`).set(admin.auth).send({ status: 'live', pin: admin.pin });
     expect(noArr.status).toBe(400);
-    const live = await request(app).post(`/api/admin/corridors/${s.corridorId}/status`).set(admin.auth).send({ status: 'live', collectionPartner: 'Stripe Payments UK Ltd (EMI)', payoutPartner: 'Orange Money RDC – super-agent contract', licenceRef: 'FCA-PI-123456', pin: admin.pin });
+    // Partners and a licence reference alone are not enough: the structured arrangements are mandatory.
+    const partial = await request(app).post(`/api/admin/corridors/${s.corridorId}/status`).set(admin.auth).send({ status: 'live', collectionPartner: 'Stripe Payments UK Ltd (EMI)', payoutPartner: 'Orange Money RDC – super-agent contract', licenceRef: 'FCA-PI-123456', pin: admin.pin });
+    expect(partial.status).toBe(400);
+    expect(partial.body.error.details.missing).toEqual(expect.arrayContaining(['Licence number', 'Licence expiry date']));
+    const live = await request(app).post(`/api/admin/corridors/${s.corridorId}/status`).set(admin.auth).send({ status: 'live', collectionPartner: 'Stripe Payments UK Ltd (EMI)', payoutPartner: 'Orange Money RDC – super-agent contract', licenceRef: 'FCA-PI-123456', licenceExpiresAt: new Date(Date.now() + 400 * 86_400_000).toISOString(), compliance: { regulator: 'FCA', licenceType: 'Authorised Payment Institution', licenceNumber: '123456', safeguardingAccount: 'Barclays safeguarding 12-34-56 00000001', amlProgrammeRef: 'AML-POL-2026-01' }, pin: admin.pin });
     expect(live.status, JSON.stringify(live.body)).toBe(200);
+    expect(live.body.corridor.readiness.ready).toBe(true);
     expect(live.body.corridor.status).toBe('live');
     expect(live.body.corridor.approvedBy).toBeTruthy();
     const corridors = await request(app).get('/api/money/corridors').set(sender.auth);
     expect(corridors.body.items.find((c: any) => c.id === s.corridorId).status).toBe('live');
+    // An expired licence suspends the corridor automatically.
+    const { getDb } = await import('../db');
+    getDb().prepare('UPDATE corridors SET licence_expires_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), s.corridorId);
+    const { enforceLicenceExpiry } = await import('../services/corridors');
+    expect(enforceLicenceExpiry().suspended).toContain(s.corridorId);
+    const suspended = await sendUkToDrc(sender.auth, '20', { source: { method: 'card', gateway: 'stripe_gbp', card } });
+    expect(suspended.body.error.code).toBe('corridor_suspended');
     await request(app).put('/api/admin/settings/compliance').set(admin.auth).send({ value: { mode: 'sandbox' } });
     await request(app).delete('/api/admin/gateways/stripe_gbp').set(admin.auth);
   });

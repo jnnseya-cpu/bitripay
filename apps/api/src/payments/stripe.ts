@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import type { Request } from 'express';
-import type { GatewayProvider, InitiateContext, InitiateResult, VerifyResult, GatewayPaymentRow, WebhookEvent } from './types';
+import type { GatewayProvider, InitiateContext, InitiateResult, VerifyResult, GatewayPaymentRow, WebhookEvent, HealthResult, GatewayMode } from './types';
 
 const ZERO_DECIMAL = new Set(['JPY', 'KRW', 'VND', 'CLP', 'XAF', 'XOF', 'UGX', 'RWF']);
 
@@ -33,6 +33,8 @@ export const stripeProvider: GatewayProvider = {
       description: ctx.description,
       metadata: { bitripay_payment_id: ctx.payment.id, purpose: ctx.payment.purpose },
       automatic_payment_methods: { enabled: true },
+      // 3-D Secure: 'automatic' lets Stripe/issuer decide (SCA), 'any' always challenges – configurable per gateway.
+      payment_method_options: { card: { request_three_d_secure: (ctx.credentials.threeDSecure === 'any' ? 'any' : 'automatic') as 'any' | 'automatic' } },
     };
     if (ctx.payer.email) params.receipt_email = ctx.payer.email;
     if (ctx.saveCard || ctx.savedCardToken) {
@@ -56,6 +58,21 @@ export const stripeProvider: GatewayProvider = {
       next: { type: 'stripe_payment_intent', clientSecret: intent.client_secret ?? undefined, publishableKey: ctx.credentials.publishableKey },
       raw: intent,
     };
+  },
+  keyMode(credentials): GatewayMode {
+    const k = credentials.secretKey || '';
+    return k.startsWith('sk_live_') || k.startsWith('rk_live_') ? 'live' : k.startsWith('sk_test_') || k.startsWith('rk_test_') ? 'test' : 'unknown';
+  },
+  async healthCheck(credentials): Promise<HealthResult> {
+    const mode = stripeProvider.keyMode!(credentials);
+    try {
+      const stripe = client(credentials);
+      const bal = await stripe.balance.retrieve();
+      const pubOk = !credentials.publishableKey || credentials.publishableKey.startsWith(mode === 'live' ? 'pk_live_' : 'pk_test_');
+      return { ok: pubOk, mode, message: pubOk ? `Connected (${mode}) · ${bal.available.map((b) => `${b.currency.toUpperCase()} ${b.amount}`).join(', ') || 'no balance yet'}` : 'Secret and publishable keys are from different modes', details: { livemode: bal.livemode, webhookSecret: !!credentials.webhookSecret } };
+    } catch (err) {
+      return { ok: false, mode, message: (err as Error).message };
+    }
   },
   async refund(payment, amountMinor, reason, credentials) {
     const stripe = client(credentials);
