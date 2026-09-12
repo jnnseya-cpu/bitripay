@@ -8,6 +8,7 @@ import { siteRouter, blogApiRouter } from './routes/site';
 import { ensureDefaultContent } from './content/defaults';
 import { assistRouter } from './routes/assist';
 import { channelsRouter } from './routes/channels';
+import { v1Router as gatewayV1Router } from './routes/v1';
 import { liteRouter } from './site/lite';
 import { publicRouter } from './routes/public';
 import { authRouter } from './routes/auth';
@@ -110,6 +111,9 @@ export function createApp() {
   app.use('/api/merchant', merchantRouter);
   app.use('/api/assist', assistRouter);
   app.use('/api', channelsRouter);
+  // Gateway v1 (intents, QR, resolver, keys) first; the merchant v1 alias below keeps serving its existing paths.
+  app.use('/api/v1', gatewayV1Router);
+  app.use('/v1', gatewayV1Router);
   app.use('/lite', liteRouter);
   app.use('/v1', v1Router);
   app.use('/api/admin', adminRouter);

@@ -66,3 +66,45 @@ export function convertMinor(amountMinor: number, from: CurrencyInfo, to: Curren
 export function exchangeRate(from: CurrencyInfo, to: CurrencyInfo): number {
   return to.rateToBase / from.rateToBase;
 }
+
+
+/**
+ * Canonical money helpers: integers in minor units, never floats. `allocate` splits an amount into parts by weight
+ * with the remainder distributed to the first parts so the parts always sum to the total (split settlement).
+ */
+export interface Money {
+  minor: number;
+  currency: string;
+}
+export function money(minor: number, currency: string): Money {
+  if (!Number.isInteger(minor)) throw new Error('Money must be an integer in minor units');
+  return { minor, currency: currency.toUpperCase() };
+}
+export function addMoney(a: Money, b: Money): Money {
+  if (a.currency !== b.currency) throw new Error(`Currency mismatch ${a.currency} vs ${b.currency}`);
+  return money(a.minor + b.minor, a.currency);
+}
+export function subtractMoney(a: Money, b: Money): Money {
+  if (a.currency !== b.currency) throw new Error(`Currency mismatch ${a.currency} vs ${b.currency}`);
+  return money(a.minor - b.minor, a.currency);
+}
+/** Basis points of an amount, rounded half up, as an integer. */
+export function bpsOf(minor: number, bps: number): number {
+  return Math.round((minor * bps) / 10_000);
+}
+/** Allocate `total` across weights (e.g. [94, 3, 2, 1]) so the parts sum exactly to the total. */
+export function allocate(total: number, weights: number[]): number[] {
+  if (!Number.isInteger(total) || total < 0) throw new Error('Total must be a non-negative integer');
+  const sum = weights.reduce((n, w) => n + w, 0);
+  if (sum <= 0) throw new Error('Weights must sum to more than zero');
+  const parts = weights.map((w) => Math.floor((total * w) / sum));
+  let remainder = total - parts.reduce((n, p) => n + p, 0);
+  for (let i = 0; remainder > 0 && i < parts.length; i++, remainder--) parts[i] += 1;
+  return parts;
+}
+/** Allocate fixed minor amounts first, then the rest by weight; throws when fixed parts exceed the total. */
+export function allocateWithFixed(total: number, fixed: number[], weights: number[]): { fixed: number[]; weighted: number[] } {
+  const fixedSum = fixed.reduce((n, f) => n + f, 0);
+  if (fixedSum > total) throw new Error('Fixed allocations exceed the total');
+  return { fixed, weighted: weights.length ? allocate(total - fixedSum, weights) : [] };
+}

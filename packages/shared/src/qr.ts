@@ -13,7 +13,7 @@
  *   c   optional currency code
  *   n   optional note / description
  */
-export type QrType = 'u' | 'pr' | 'm' | 'ag';
+export type QrType = 'u' | 'pr' | 'm' | 'ag' | 'pi' | 'bq';
 
 export interface QrPayload {
   type: QrType;
@@ -21,6 +21,36 @@ export interface QrPayload {
   amount?: string;
   currency?: string;
   note?: string;
+  /** BitriQR (EMVCo) payloads carry the merchant id and, when dynamic, the intent reference. */
+  merchantId?: string;
+  intentRef?: string | null;
+  raw?: string;
+}
+
+/**
+ * Lightweight BitriQR (EMVCo TLV) reader for the apps: enough to recognise a BitriPay merchant QR and hand the
+ * payload to the server resolver, which verifies the signature. Full codec lives in @bitripay/bitriqr.
+ */
+export function parseBitriQrLite(content: string): QrPayload | null {
+  const s = content.trim();
+  if (!s.startsWith('000201') || !s.includes('cd.bitripay')) return null;
+  const read = (str: string) => {
+    const out: Record<string, string> = {};
+    let i = 0;
+    while (i + 4 <= str.length) {
+      const tag = str.slice(i, i + 2);
+      const len = Number(str.slice(i + 2, i + 4));
+      if (Number.isNaN(len)) return out;
+      out[tag] = str.slice(i + 4, i + 4 + len);
+      i += 4 + len;
+    }
+    return out;
+  };
+  const top = read(s.slice(0, Math.max(0, s.lastIndexOf('6304'))));
+  const mai = top['26'] ? read(top['26']) : {};
+  if (mai['00'] !== 'cd.bitripay') return null;
+  const numeric: Record<string, string> = { '976': 'CDF', '840': 'USD', '978': 'EUR', '826': 'GBP', '404': 'KES', '566': 'NGN', '800': 'UGX', '952': 'XOF', '950': 'XAF', '710': 'ZAR', '834': 'TZS', '646': 'RWF', '936': 'GHS' };
+  return { type: mai['03'] ? 'pi' : 'bq', id: mai['03'] ?? mai['01'] ?? '', merchantId: mai['01'], intentRef: mai['03'] ?? null, amount: top['54'], currency: numeric[top['53'] ?? ''] ?? top['53'], note: top['59'], raw: s };
 }
 
 export const QR_SCHEME = 'bitripay://pay';
@@ -51,6 +81,10 @@ export function encodeQrLink(payload: QrPayload, webBaseUrl: string): string {
 export function decodeQr(content: string): QrPayload | null {
   if (!content) return null;
   const text = content.trim();
+  const emv = parseBitriQrLite(text);
+  if (emv) return emv;
+  const pi = text.match(/^bitripay:\/\/pay\/([A-Za-z0-9_.-]+)/);
+  if (pi) return { type: 'pi', id: pi[1], intentRef: pi[1], raw: text };
   let query: string | null = null;
 
   if (text.toLowerCase().startsWith(QR_SCHEME)) {

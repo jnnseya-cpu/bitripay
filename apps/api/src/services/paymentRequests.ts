@@ -9,11 +9,13 @@ import { ensureWallet, getUserWallet } from './wallets';
 import { findUserByIdentifier, findUserById, getGatewaySettings, toPublicUser, usersById, type UserRow } from './users';
 import { notify } from './notifications';
 import { dispatchWebhook } from './webhooks';
+import { onRequestPaid } from './intents';
 import { qrContent } from './qr';
 import { getModules } from './modules';
 import { config } from '../config';
 
 export interface PaymentRequestRow {
+  intent_id?: string | null;
   id: string;
   code: string;
   kind: PaymentRequest['kind'];
@@ -183,6 +185,7 @@ export function payWithWallet(payer: UserRow, code: string, amount?: number | nu
     });
     db.prepare("UPDATE payment_requests SET status = 'paid', paid_transaction_id = ?, payer_user_id = ? WHERE id = ?").run(tx.id, payer.id, row.id);
     const updated = getPaymentRequestByCode(code);
+    if (updated.intent_id) onRequestPaid(updated, tx.id, 'wallet', { type: 'user', id: payer.id });
     notify(requester.id, 'Payment received', `${payer.full_name} (@${payer.tag}) paid ${formatMoney(finalAmount, currency)}${row.description ? ` for "${row.description}"` : ''}.`, {
       kind: 'payment_received',
       transactionId: tx.id,
@@ -200,6 +203,7 @@ export function markPaidByGateway(code: string, transactionId: string, payerUser
   if (row.status !== 'open') throw conflict('Payment request already settled', 'request_not_open');
   db.prepare("UPDATE payment_requests SET status = 'paid', paid_transaction_id = ?, payer_user_id = COALESCE(?, payer_user_id) WHERE id = ?").run(transactionId, payerUserId, row.id);
   const updated = getPaymentRequestByCode(code);
+  if (updated.intent_id) onRequestPaid(updated, transactionId, 'gateway', { type: 'system' });
   const requester = findUserById(row.requester_user_id)!;
   notify(requester.id, 'Payment received', `A payment of ${formatMoney(updated.amount ?? 0, getCurrency(updated.currency))} was received${row.description ? ` for "${row.description}"` : ''}.`, {
     kind: 'payment_received',
