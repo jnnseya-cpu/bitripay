@@ -7,9 +7,12 @@ import { Scanner } from '../components/Scanner';
 import { Alert, AmountInput, Avatar, Button, Field, Input, KV, Loading, PageHeader, PinModal, StatusBadge } from '../components/ui';
 import { decodeQr, toMinor, type PaymentRequest, type PublicUser, type Transaction } from '@bitripay/shared';
 
+type Trust = 'verified' | 'basic';
 type Resolved =
-  | { kind: 'payment_request'; paymentRequest: PaymentRequest; merchant: PublicUser & { brandColor: string }; methods: string[] }
-  | { kind: 'user' | 'merchant' | 'agent'; user: PublicUser; amount: string | null; currency: string | null; note: string | null };
+  | { kind: 'payment_request'; paymentRequest: PaymentRequest; merchant: PublicUser & { brandColor: string; verified?: boolean; location?: { name: string; city: string | null } | null }; methods: string[]; trust?: Trust; intent?: { id: string; status: string; purposeCode: string | null; reference: string | null } }
+  | { kind: 'user' | 'merchant' | 'agent'; user: PublicUser; amount: string | null; currency: string | null; note: string | null }
+  /** A static BitriQR sticker: the payer enters the amount, an intent is created for the code, then paid. */
+  | { kind: 'bitriqr'; user: PublicUser & { verified?: boolean; location?: { name: string; city: string | null } | null }; qrId: string | null; amount: null; currency: string | null; note: string | null; purposeCode: string | null; trust: Trust };
 
 export function Scan() {
   const t = useT();
@@ -53,8 +56,12 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
   const nav = useNavigate();
   const { wallets, money, currency, refreshWallets, toast, user, config } = useStore();
   const isPr = resolved.kind === 'payment_request';
+  const isBq = resolved.kind === 'bitriqr';
   const pr = isPr ? resolved.paymentRequest : null;
   const target = isPr ? resolved.merchant : resolved.user;
+  const trust: Trust | null = isPr ? resolved.trust ?? null : isBq ? resolved.trust : null;
+  const location = isPr ? resolved.merchant.location : isBq ? resolved.user.location : null;
+  const purpose = isPr ? resolved.intent?.purposeCode ?? null : isBq ? resolved.purposeCode : null;
   const fixedAmount = isPr ? (pr!.amount != null ? String(pr!.amount / 10 ** currency(pr!.currency).decimals) : '') : resolved.amount ?? '';
   const [amount, setAmount] = useState(fixedAmount);
   const [cur, setCur] = useState(isPr ? pr!.currency : resolved.currency || wallets[0]?.currency || config?.baseCurrency || 'USD');
@@ -100,6 +107,11 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
       if (isPr) {
         const r = await api.post<{ transaction: Transaction }>(`/api/payment-requests/${pr!.code}/pay`, { pin, amount: pr!.amount == null ? amount : undefined, note });
         tx = r.transaction;
+      } else if (isBq && resolved.qrId) {
+        // static BitriQR: the amount creates a payment intent for this code, then the intent is paid from the wallet
+        const intent = await api.post<{ id: string; paymentRequestCode: string }>(`/api/v1/qr/${resolved.qrId}/intent`, { amount, description: note || null });
+        const r = await api.post<{ transaction: Transaction }>(`/api/payment-requests/${intent.paymentRequestCode}/pay`, { pin, note });
+        tx = r.transaction;
       } else {
         const r = await api.post<{ transaction: Transaction }>('/api/transfers', { to: target.tag, amount, currency: cur, note, pin });
         tx = r.transaction;
@@ -123,12 +135,19 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
         <div>
           <div className="main-text" style={{ fontSize: '1.1rem' }}>{target.businessName || target.fullName}</div>
           <div className="sub-text">@{target.tag} · {target.role}{isPr && <> · <StatusBadge status={pr!.status} /></>}</div>
+          {(trust || location || purpose) && (
+            <div className="row wrap" style={{ gap: 6, marginTop: 4 }}>
+              {trust && <span className={`chip ${trust === 'verified' ? 'success' : 'warning'}`} title={trust === 'verified' ? 'Signed by the merchant key registered with BitriPay' : 'Unsigned code: check the name before paying'}>{trust === 'verified' ? '✓ Verified merchant' : 'Unverified code'}</span>}
+              {location && <span className="chip">{location.name}{location.city ? ` · ${location.city}` : ''}</span>}
+              {purpose && purpose !== 'GENERAL_MERCHANT' && <span className="chip primary">{purpose.replace(/_/g, ' ').toLowerCase()}</span>}
+            </div>
+          )}
         </div>
       </div>
       {isPr && pr!.status !== 'open' && <Alert kind="warning">This payment request is {pr!.status}.</Alert>}
       {target.id === user?.id && <Alert kind="warning">This is your own code.</Alert>}
       <Field label={t('common.amount')} hint={wallet ? `${t('common.balance')}: ${money(wallet.balance, wallet.currency)}` : undefined}>
-        <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} big disabled={!!fixedAmount} currencies={isPr ? [cur] : undefined} />
+        <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} big disabled={!!fixedAmount} currencies={isPr || isBq ? [cur] : undefined} />
       </Field>
       <Field label={t('common.note')}>
         <Input value={note} onChange={(e) => setNote(e.target.value)} disabled={isPr && !!pr!.description} />

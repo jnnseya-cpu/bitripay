@@ -33,6 +33,9 @@ import { listPolicies, publishPolicy, FORBIDDEN } from '../../services/assist/po
 import { TOOLS } from '../../services/assist/tools';
 import { getAgentDef } from '../../services/assist/registry';
 import { config } from '../../config';
+import { runGuardian, listGuardianChecks, getOperatingState, setOperatingMode } from '../../services/guardian';
+import { countryCapabilities, listCountryCapabilities, setCountryCapabilities, PURPOSE_CODES } from '../../services/capabilities';
+import { listIntents, intentTimeline } from '../../services/intents';
 import { addonReport } from '../../services/assist/addon';
 import { billingReport } from '../../services/assist/billing';
 import { recentUssdSessions, ussdRequest, ussdSessionId } from '../../services/channels/ussd';
@@ -1174,3 +1177,34 @@ adminRouter.post('/channels/sms/simulate', requirePermission('settings'), (req, 
   const body = validate(z.object({ phone: z.string().min(6), text: z.string().min(1) }), req.body);
   res.json({ reply: smsHandle(body.phone, body.text) });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Guardian, operating mode and the country capability matrix
+// ---------------------------------------------------------------------------------------------------------------------
+adminRouter.get('/guardian', requirePermission('reports'), (_req, res) => res.json({ state: getOperatingState(), checks: listGuardianChecks(20) }));
+adminRouter.post('/guardian/run', requirePermission('treasury'), (req, res) => {
+  const result = runGuardian({ haltOnFailure: req.body?.halt !== false });
+  audit(req.user!.id, 'guardian.run', 'ledger', result.id, { ok: result.ok, findings: result.findings.length });
+  res.json({ result, state: getOperatingState() });
+});
+adminRouter.post('/guardian/mode', requirePermission('treasury'), (req, res) => {
+  const body = validate(z.object({ mode: z.enum(['normal', 'degraded', 'halted']), reason: z.string().max(300).optional().nullable(), queueIntents: z.boolean().optional(), freezeOffline: z.boolean().optional(), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  if (body.mode === 'normal') {
+    const last = runGuardian({ haltOnFailure: false });
+    if (!last.ok) return res.status(409).json({ error: { code: 'guardian_findings', message: 'The ledger still has findings; repair them before returning to normal operation.', details: last.findings } });
+  }
+  const state = setOperatingMode(body.mode, body.reason ?? null, req.user!.id, { queueIntents: body.queueIntents, freezeOffline: body.freezeOffline });
+  audit(req.user!.id, `platform.mode.${body.mode}`, 'settings', 'operating_mode', { reason: body.reason ?? null });
+  res.json({ state });
+});
+adminRouter.get('/capabilities', requirePermission('settings'), (_req, res) => res.json({ items: listCountryCapabilities(), purposeCodes: PURPOSE_CODES }));
+adminRouter.get('/capabilities/:country', requirePermission('settings'), (req, res) => res.json({ capabilities: countryCapabilities(String(req.params.country)) }));
+adminRouter.put('/capabilities/:country', requirePermission('settings'), (req, res) => {
+  const body = validate(z.object({ wallet: z.boolean().optional(), cardCollection: z.boolean().optional(), bankPayout: z.boolean().optional(), mobileMoney: z.boolean().optional(), agentCashOut: z.boolean().optional(), crossBorder: z.boolean().optional(), bitcoin: z.boolean().optional(), stablecoin: z.boolean().optional(), kycProvider: z.string().max(60).optional().nullable(), settlementCurrencies: z.array(z.string().length(3)).optional(), collectionCurrencies: z.array(z.string().length(3)).optional(), maxPerTransaction: z.number().int().min(0).optional(), requiredDisclosures: z.array(z.string()).optional(), purposeCodes: z.array(z.string()).optional(), nationalSwitch: z.object({ required: z.boolean(), connector: z.string().nullable() }).optional(), licencePhase: z.enum(['aggregator', 'full']).optional(), notes: z.string().max(500).optional().nullable() }), req.body);
+  const caps = setCountryCapabilities(String(req.params.country), body as any);
+  audit(req.user!.id, 'capabilities.update', 'country', caps.country, { keys: Object.keys(body) });
+  res.json({ capabilities: caps });
+});
+adminRouter.get('/intents', requirePermission('transactions'), (req, res) => res.json({ items: listIntents({ merchantUserId: req.query.merchant ? String(req.query.merchant) : null, status: req.query.status ? String(req.query.status) : null, limit: Math.min(200, Number(req.query.limit) || 50) }) }));
+adminRouter.get('/intents/:id', requirePermission('transactions'), (req, res) => res.json(intentTimeline(String(req.params.id))));

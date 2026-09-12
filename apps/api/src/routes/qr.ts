@@ -8,6 +8,8 @@ import { getPaymentRequestByCode, toPaymentRequest, checkoutInfo } from '../serv
 import { badRequest, notFound } from '../lib/errors';
 import { getCurrency } from '../services/currencies';
 import { toMinor } from '@bitripay/shared';
+import { resolveScan } from '../services/qrcodes';
+import { getClientIp } from '../lib/http';
 
 export const qrRouter = Router();
 
@@ -49,6 +51,19 @@ qrRouter.post(
     const body = validate(z.object({ data: z.string().min(1).max(2000) }), req.body);
     const payload = decodeQr(body.data);
     if (!payload) throw badRequest('This is not a BitriPay QR code', 'invalid_qr');
+    if (payload.type === 'pi' || payload.type === 'bq') {
+      // BitriQR (EMVCo) or intent URI: verified through the key registry; intents are paid as payment requests.
+      const r = await resolveScan(body.data, { payer: req.user ?? null, ip: getClientIp(req), channel: 'app', country: req.user?.country ?? null });
+      if (r.kind === 'invalid') throw badRequest(`This QR code cannot be used: ${r.reasons.join(', ')}`, 'invalid_qr');
+      if (r.kind === 'intent' && r.intent?.paymentRequestCode) {
+        const row = getPaymentRequestByCode(r.intent.paymentRequestCode);
+        const info = checkoutInfo(row.code);
+        return res.json({ kind: 'payment_request', payload, paymentRequest: toPaymentRequest(row), merchant: { ...info.merchant, verified: r.merchant?.verified ?? false, location: r.merchant?.location ?? null }, methods: info.methods, trust: r.trust, intent: { id: r.intent.id, status: r.intent.status, purposeCode: r.purposeCode, reference: r.reference, expiresAt: r.expiresAt }, disclosures: r.disclosures });
+      }
+      const merchant = findUserByTag(r.merchant!.tag);
+      if (!merchant) throw notFound('Merchant not found', 'user_not_found');
+      return res.json({ kind: 'bitriqr', payload, user: { ...toPublicUser(merchant), verified: r.merchant?.verified ?? false, location: r.merchant?.location ?? null }, qrId: r.qr?.id ?? null, amount: null, currency: r.currency, note: r.reference ?? null, purposeCode: r.purposeCode, trust: r.trust, disclosures: r.disclosures });
+    }
     if (payload.type === 'pr') {
       const row = getPaymentRequestByCode(payload.id);
       const info = checkoutInfo(row.code);

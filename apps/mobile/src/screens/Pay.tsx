@@ -9,7 +9,7 @@ import { Header } from '../components/Header';
 import { useNav, type ScreenProps } from '../navigation';
 import { decodeQr, toMinor, type PaymentRequest, type PublicUser, type Transaction } from '@bitripay/shared';
 
-type Resolved = { kind: 'payment_request'; paymentRequest: PaymentRequest; merchant: PublicUser; methods: string[] } | { kind: 'user' | 'merchant' | 'agent'; user: PublicUser; amount: string | null; currency: string | null; note: string | null };
+type Resolved = { kind: 'payment_request'; paymentRequest: PaymentRequest; merchant: PublicUser & { verified?: boolean; location?: { name: string } | null }; methods: string[]; trust?: 'verified' | 'basic'; intent?: { purposeCode: string | null } } | { kind: 'user' | 'merchant' | 'agent'; user: PublicUser; amount: string | null; currency: string | null; note: string | null } | { kind: 'bitriqr'; user: PublicUser & { verified?: boolean; location?: { name: string } | null }; qrId: string | null; amount: null; currency: string | null; note: string | null; purposeCode: string | null; trust: 'verified' | 'basic' };
 
 export function Scan() {
   const { t } = useStore();
@@ -88,7 +88,10 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
     try {
       let tx: Transaction;
       if (isPr) tx = (await api.post<{ transaction: Transaction }>(`/api/payment-requests/${pr!.code}/pay`, { pin: p, amount: pr!.amount == null ? amount : undefined, note })).transaction;
-      else tx = (await api.post<{ transaction: Transaction }>('/api/transfers', { to: target!.tag, amount, currency: cur, note, pin: p })).transaction;
+      else if (resolved?.kind === 'bitriqr' && resolved.qrId) {
+        const intent = await api.post<{ paymentRequestCode: string }>(`/api/v1/qr/${resolved.qrId}/intent`, { amount, description: note || null });
+        tx = (await api.post<{ transaction: Transaction }>(`/api/payment-requests/${intent.paymentRequestCode}/pay`, { pin: p, note })).transaction;
+      } else tx = (await api.post<{ transaction: Transaction }>('/api/transfers', { to: target!.tag, amount, currency: cur, note, pin: p })).transaction;
       await refreshWallets();
       toast('Payment successful', 'success');
       setPin(false);
@@ -118,6 +121,7 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
       <Header title="Pay" />
       <Card>
         <Row><Avatar user={target} size={52} /><View><T bold size={18}>{target.businessName || target.fullName}</T><T muted>@{target.tag} · {target.role}</T></View>{pr && <Status status={pr.status} />}</Row>
+        {(resolved.kind === 'bitriqr' || (isPr && (resolved as any).trust)) && <Row style={{ flexWrap: 'wrap', gap: 6 }}><Chip label={(resolved as any).trust === 'verified' ? '✓ Verified merchant' : 'Unverified code'} kind={(resolved as any).trust === 'verified' ? 'success' : 'warning'} />{(target as any).location?.name ? <Chip label={(target as any).location.name} /> : null}</Row>}
         {pr && pr.status !== 'open' && <Alert kind="warning" text={`This payment request is ${pr.status}.`} />}
         {target.id === user?.id && <Alert kind="warning" text="This is your own code." />}
         {pr?.amount != null ? <View style={{ alignItems: 'center', paddingVertical: 8 }}><T bold size={34}>{money(pr.amount, pr.currency)}</T><T muted>{pr.description}</T></View> : <AmountInput label={t('common.amount')} amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} currencies={isPr ? [cur] : undefined} />}
