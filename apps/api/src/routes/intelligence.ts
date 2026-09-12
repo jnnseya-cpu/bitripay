@@ -12,8 +12,11 @@ import { toMinor } from '@bitripay/shared';
 import { registerOfflineDevice, listOfflineDevices, offlineQr, syncPromises, listPromises, getOfflineSettings, promiseCanonical, promiseHash, issueOfflineNonce } from '../services/offline';
 import { listRateCards, createQuote, getQuote, listQuotes, payQuote, listInstitutions, registerInstitution, getInstitution, institutionQr, purposeCatalogue, RESTRICTED_PURPOSES } from '../services/diaspora';
 import { riskContext } from '../services/risk';
+import { openApiDocument } from '../docs/openapi';
 
 export const intelligenceRouter = Router();
+/** Machine-readable description of the whole v1 surface (cached for an hour). */
+intelligenceRouter.get('/openapi.json', (_req, res) => res.setHeader('Cache-Control', 'public, max-age=3600').json(openApiDocument()));
 const r = intelligenceRouter;
 const writeLimit = rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'intel' });
 
@@ -34,11 +37,11 @@ r.post('/offline/qr', requireAuth, requireRole('merchant', 'admin'), requireScop
   const amountMinor = b.amount_minor ?? (b.amount ? toMinor(b.amount, cur.decimals) : 0);
   res.status(201).json(offlineQr(req.user!, { amountMinor, currency: cur.code, reference: b.reference ?? null, ttlSeconds: b.ttl_seconds ?? null }));
 });
-const promiseSchema = z.object({ merchantId: z.string(), payerId: z.string(), payerDeviceId: z.string(), merchantKeyId: z.string(), payerKeyId: z.string(), amountMinor: z.number().int().positive(), currency: z.string().length(3), nonce: z.string().min(8).max(64), expiresAt: z.string(), counter: z.number().int().min(1), reference: z.string().max(40).optional().nullable(), merchantSig: z.string().min(40), payerSig: z.string().min(40), promisedAt: z.string() });
-r.post('/offline/sync', requireAuth, rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'offline-sync' }), (req, res) => {
+const promiseSchema = z.object({ merchantId: z.string(), payerId: z.string(), payerDeviceId: z.string(), merchantKeyId: z.string(), payerKeyId: z.string(), amountMinor: z.number().int().positive(), currency: z.string().length(3), nonce: z.string().min(8).max(64), expiresAt: z.string(), counter: z.number().int().min(1), reference: z.string().max(40).optional().nullable(), merchantSig: z.string().default(''), payerSig: z.string().min(40), promisedAt: z.string(), qrPayload: z.string().max(4000).optional().nullable() });
+r.post('/offline/sync', requireAuth, rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'offline-sync' }), wrap(async (req, res) => {
   const b = validate(z.object({ promises: z.array(promiseSchema).min(1).max(200) }), req.body);
-  res.json(syncPromises(req.user!, b.promises));
-});
+  res.json(await syncPromises(req.user!, b.promises));
+}));
 r.post('/offline/hash', requireAuth, (req, res) => {
   const b = validate(promiseSchema.pick({ merchantId: true, payerId: true, amountMinor: true, currency: true, nonce: true, expiresAt: true, counter: true, reference: true }), req.body);
   const canonical = promiseCanonical(b);

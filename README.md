@@ -514,6 +514,54 @@ Account-holder routes live under `/api/risk/*` (verification level, Tier 1 activ
 agent float / trust / requests / onboarding); the console under `/api/admin/risk/*` (permissions `compliance`,
 `kyc`, `agents`, `issuance`, `settings`).
 
+### Intelligence, offline protocol, Diaspora-Direct and the developer surface
+
+- **Offline-signed QR protocol** (innovation I-2): a merchant device shows a signed dynamic BitriQR carrying a
+  nonce (server-signed while online, or signed with the device's own 72-hour ed25519 subkey from prefetched
+  nonces when the network is down); the payer's phone signs a **promise** (merchant, payer, amount, currency,
+  nonce, expiry, monotonic device counter) with its subkey and queues it. `POST /api/v1/offline/sync` submits the
+  queue in order; the platform, and only the platform, verifies both legs (the signed QR itself or a merchant
+  countersignature), refuses replayed nonces (72h registry), reused counters, expired promises, amounts above the
+  offline ceilings, sanctions and policy hits and empty wallets, posts an ordinary QR payment, and returns a
+  platform-signed receipt — or `REJECTED` with `restoreMinor` so the device restores its local balance. Nothing
+  offline is ever shown as final before this confirmation. The web app ships the protocol (WebCrypto Ed25519 key in
+  IndexedDB, nonce prefetch, promise queue, sync on reconnect) plus a PWA shell (manifest, service worker that
+  never caches money-moving calls, "last synced" banner).
+- **Diaspora-Direct** (innovation I-4): a treasury administrator **signs a rate policy** per currency pair
+  (markup, fees, ceilings, maximum validity ≤ 4h); **rate cards** are issued from the live mid-market rate under
+  that policy, signed with the platform key and refreshed before they lapse; **institutions** (schools, hospitals,
+  utilities, government, NGOs, landlords, cooperatives) register their purpose codes and are verified; **quotes**
+  for restricted purposes (`SCHOOL`, `HEALTH`, `RENT`, `UTILITY`, `GOVERNMENT_FEE`, `TAX`) can only be paid to a
+  verified institution covering that purpose, at the card rate, in one ledger transaction with a conversion leg.
+  Institutions issue "DD"-flagged BitriQR codes.
+- **AI gateway** (`services/assist/gateway.ts`): the one door to a model, in eight layers — authentication and
+  tenant guard, rate limiter, ACU policy (projected cost, budget, **gross-margin floor 0.66** checked per request,
+  at every pricing change and at the monthly reconciliation), prompt normalisation (PII stripping, injection
+  defence), task-type model router (ordered models from `aiRouting`, failover on errors and 8-second timeouts,
+  per-model circuits), provider adapters (Anthropic, OpenAI-compatible, Gemini), schema normaliser (zod), and the
+  `ai_usage_ledger` only administrators can read. Errors: `UNAUTHENTICATED`, `TENANT_MISMATCH`, `RATE_LIMITED`,
+  `NEURAL_QUOTA_EXCEEDED`, `MARGIN_PROTECTION_VIOLATION`, `PROVIDER_UNAVAILABLE`, `OUTPUT_SCHEMA_INVALID`. Account
+  holders never receive a provider, model, token count or cost (rule 4); rule-based fallbacks keep every core flow
+  working with zero ACU (rule 6).
+- **Agent mesh** (Part VII): PR-A01 Onboarding, PR-A02 KODA Core, PR-B01/B02 Recon, PR-B03 Exception Hunter,
+  PR-C02 FX Oracle, PR-C03 Rebalancer, PR-D02 Sanctions Sentinel, PR-E01 Connector Medic, PR-E02 Retry Surgeon,
+  PR-F01 Fraud Scorer, PR-F02 Dispute Arbiter — each with a charter, typed mesh tools onto the Phase 4–6 services
+  and a deterministic plan, bound to **domain events** on the `bitripay.events` bus (`attempt.unknown`,
+  `connector.degraded`, `dispute.opened`, `agent.float_low`, `statement.imported`, `recon.exception_aged`,
+  `verification.requested`, `diaspora.quote_created`, `sanctions.hit`, `merchant.created`, …). Every binding starts
+  in **shadow** (side-effecting tools refused), can be promoted to **propose** after 90 days or with a recorded
+  override, and has its own kill switch; proposals go through the ordinary maker-checker approvals. The canonical
+  operating-system names (RouteOptimiser, FraudScorer, ComplianceMonitor, LiquidityForecaster, DisputeResolver,
+  RecipientValidator, …) resolve to these agents.
+- **Surfaces**: merchant **Command centre** (balance classes, settlement calendar / cycles / statements, disputes
+  with evidence, effective fees, offline kit), **QR centre** (locations, terminals, static / dynamic / offline
+  codes, analytics, printable sheets, institution registration and DD codes), **Developer portal** (scoped keys,
+  webhook endpoints, deliveries and replay, events, sandbox, OpenAPI, SDK snippets, error catalogue); admin
+  consoles **National switch & rails**, **Finance operations**, **Risk & compliance**, **Intelligence**.
+- **SDKs and docs**: `packages/sdk-node` (`@bitripay/sdk`, zero dependencies, typed resources, webhook
+  verification), `packages/sdk-php` (`bitripay/sdk`), `packages/sdk-python` (`bitripay`); the OpenAPI 3.1 document
+  at `/api/v1/openapi.json` is generated from the same operation table the portal shows.
+
 ### Public site, blog and SEO engine
 
 The marketing surface is **server-rendered by the API** so search engines, social previews and AI answer

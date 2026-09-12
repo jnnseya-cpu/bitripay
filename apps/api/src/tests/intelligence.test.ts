@@ -109,10 +109,18 @@ describe('offline-signed QR protocol', () => {
     expect(await balanceOf(payer.auth)).toBe(3750 - 2000);
     const notif = await request(app).get('/api/account/notifications').set(payer.auth);
     expect(notif.body.items.some((n: any) => n.title === 'Offline payment not completed')).toBe(true);
+    // the payer can sync alone: the merchant's leg is the signed QR itself (no merchant countersignature needed)
+    await fund(app, payer.user.id, '20.00');
+    const qr2 = await request(app).post('/api/v1/offline/qr').set(m.auth).send({ amount: '7.00', currency: 'USD', reference: 'TABLE-9' });
+    const alone = promise({ counter: 5, nonce: qr2.body.nonce, expiresAt: qr2.body.expiresAt, amountMinor: 700, reference: 'TABLE-9' });
+    const viaQr = await request(app).post('/api/v1/offline/sync').set(payer.auth).send({ promises: [{ ...alone, merchantKeyId: qr2.body.keyId, merchantSig: '', qrPayload: qr2.body.payload }] });
+    expect(viaQr.body.results[0].state, JSON.stringify(viaQr.body)).toBe('SETTLED');
+    const forged = promise({ counter: 6, nonce: qr2.body.nonce, expiresAt: qr2.body.expiresAt, amountMinor: 100 });
+    expect((await request(app).post('/api/v1/offline/sync').set(payer.auth).send({ promises: [{ ...forged, merchantKeyId: qr2.body.keyId, merchantSig: '', qrPayload: qr2.body.payload }] })).body.results[0].reason).toBe('merchant_signature_invalid');
     const mine = await request(app).get('/api/v1/offline/promises').set(m.auth);
-    expect(mine.body.data.filter((p: any) => p.state === 'SETTLED')).toHaveLength(2);
+    expect(mine.body.data.filter((p: any) => p.state === 'SETTLED')).toHaveLength(3);
     const console = await request(app).get('/api/admin/intelligence/offline').set(admin.auth);
-    expect(console.body.stats.find((s: any) => s.state === 'SETTLED').count).toBe(2);
+    expect(console.body.stats.find((s: any) => s.state === 'SETTLED').count).toBe(3);
   });
 });
 

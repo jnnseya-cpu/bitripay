@@ -6,6 +6,8 @@ import { useT } from '../lib/i18n';
 import { Scanner } from '../components/Scanner';
 import { Alert, AmountInput, Avatar, Button, Field, Input, KV, Loading, PageHeader, PinModal, StatusBadge } from '../components/ui';
 import { decodeQr, toMinor, type PaymentRequest, type PublicUser, type Transaction } from '@bitripay/shared';
+import * as bitriqr from '@bitripay/bitriqr';
+import { offlineQueue } from '../lib/offline';
 
 type Trust = 'verified' | 'basic';
 type Resolved =
@@ -19,20 +21,46 @@ export function Scan() {
   const [resolved, setResolved] = useState<Resolved | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manual, setManual] = useState('');
+  const { user, toast } = useStore();
+  const [queued, setQueued] = useState<{ amountMinor: number; currency: string; merchantName: string; hash: string } | null>(null);
+  /** Offline: a signed offline BitriQR becomes a locally signed promise, queued until the network returns (never final before the platform confirms). */
+  const queueOffline = useCallback(async (data: string) => {
+    if (!user || !bitriqr.isBitriQr(data)) return false;
+    const d = bitriqr.decode(data);
+    if (!d.offlineNonce) return false;
+    const item = await offlineQueue.promiseFor(data, user.id, d.merchantId);
+    setQueued({ amountMinor: item.amountMinor, currency: item.currency, merchantName: item.merchantName, hash: item.hash });
+    return true;
+  }, [user]);
   const resolve = useCallback(async (data: string) => {
     setError(null);
+    setQueued(null);
     try {
+      if (!navigator.onLine && (await queueOffline(data))) return;
       const r = await api.post<Resolved>('/api/qr/resolve', { data });
       setResolved(r);
     } catch (err) {
-      setError((err as Error).message);
+      const e = err as Error & { status?: number };
+      // a network failure on an offline code: queue it instead of failing
+      if ((e.status === undefined || e.status === 0 || e.status === 503) && (await queueOffline(data).catch(() => false))) return;
+      setError(e.message);
     }
-  }, []);
+  }, [queueOffline]);
+  const syncNow = async () => {
+    try {
+      const r = await offlineQueue.sync();
+      toast(`Synced: ${r.settled} confirmed, ${r.rejected} rejected`, r.rejected ? 'error' : 'success');
+      setQueued(null);
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    }
+  };
 
   return (
     <div style={{ maxWidth: 560 }}>
       <PageHeader title={t('scan.title')} subtitle={t('scan.hint')} />
       {error && <Alert kind="error">{error}</Alert>}
+      {queued && <Alert kind="warning"><b>Offline payment queued</b> · {queued.amountMinor / 100} {queued.currency} to {queued.merchantName}. It is not final yet: it will be confirmed the moment you are back online. <Button size="sm" variant="secondary" onClick={syncNow} disabled={!navigator.onLine}>Sync now</Button></Alert>}
       {resolved ? (
         <PayTarget resolved={resolved} onBack={() => setResolved(null)} />
       ) : (

@@ -29,6 +29,9 @@ import { AgentDashboard } from './pages/Agent';
 import { Checkout } from './pages/Checkout';
 import { StaticPage, Contact } from './pages/Static';
 import { MoveMoney } from './pages/MoveMoney';
+import { MerchantCentre } from './pages/MerchantCentre';
+import { QrCentre } from './pages/QrCentre';
+import { Developer } from './pages/Developer';
 
 function Protected({ children }: { children: React.ReactElement }) {
   const { user, loading } = useStore();
@@ -80,6 +83,9 @@ export function App() {
         <Route path="/app/merchant" element={<Protected><MerchantDashboard /></Protected>} />
         <Route path="/app/merchant/pos" element={<Protected><MerchantPos /></Protected>} />
         <Route path="/app/merchant/gateway" element={<Protected><MerchantGateway /></Protected>} />
+        <Route path="/app/merchant/centre" element={<Protected><MerchantCentre /></Protected>} />
+        <Route path="/app/merchant/qr" element={<Protected><QrCentre /></Protected>} />
+        <Route path="/app/merchant/developer" element={<Protected><Developer /></Protected>} />
         <Route path="/app/agent" element={<Protected><AgentDashboard /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

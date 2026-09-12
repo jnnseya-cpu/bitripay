@@ -1,0 +1,11 @@
+{
+  "name": "@bitripay/sdk",
+  "version": "1.0.0",
+  "description": "BitriPay Gateway API client for Node.js and TypeScript: payment intents, checkout, QR, refunds, verifications, payouts, settlements, disputes, offline sync, Diaspora-Direct and webhook verification",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": { "build": "rm -rf dist && tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit", "test": "node --test --experimental-strip-types src/*.test.ts" },
+  "license": "MIT",
+  "sideEffects": false
+}

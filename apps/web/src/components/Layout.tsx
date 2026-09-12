@@ -1,15 +1,25 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type ReactNode, useEffect } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Avatar } from './ui';
 import { api } from '../lib/api';
+import { onPwaChange, pwaState } from '../lib/pwa';
 
 interface NavItem {
   to: string;
   key: string;
   ico: string;
   module?: string;
+}
+
+/** Shown while the network is down: the shell keeps working on the last synced state (rule 14: nothing offline is final). */
+function OfflineBanner() {
+  const t = useT();
+  const [, force] = useState(0);
+  useEffect(() => onPwaChange(() => force((n) => n + 1)), []);
+  if (pwaState.online) return null;
+  return <div className="alert warning" role="status">📡 {t('pwa.offline')}{pwaState.lastSync ? ` ${t('pwa.lastSync')}: ${new Date(pwaState.lastSync).toLocaleString()}.` : ''}</div>;
 }
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -73,6 +83,9 @@ export function Layout({ children }: { children: ReactNode }) {
               { to: '/app/merchant', key: 'nav.dashboard', ico: '📊' },
               { to: '/app/merchant/pos', key: 'nav.receive', ico: '🧾' },
               { to: '/app/merchant/gateway', key: 'nav.merchant', ico: '🔌' },
+              { to: '/app/merchant/centre', key: 'nav.centre', ico: '🧭' },
+              { to: '/app/merchant/qr', key: 'nav.qrCentre', ico: '🔳' },
+              { to: '/app/merchant/developer', key: 'nav.developer', ico: '🧑‍💻' },
             ])}
           </>
         )}
@@ -141,7 +154,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </Link>
           </div>
         </header>
-        <main className="content">{children}</main>
+        <main className="content"><OfflineBanner />{children}</main>
       </div>
     </div>
   );

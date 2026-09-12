@@ -1,0 +1,19 @@
+{
+  "name": "BitriPay",
+  "short_name": "BitriPay",
+  "description": "One QR. One gateway. Every eligible rail. Pay, get paid and send money home, even when the network drops.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f4ef",
+  "theme_color": "#0b6e4f",
+  "lang": "en",
+  "dir": "auto",
+  "categories": ["finance", "business"],
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }],
+  "shortcuts": [
+    { "name": "Scan to pay", "url": "/app/scan" },
+    { "name": "Receive", "url": "/app/receive" },
+    { "name": "Command centre", "url": "/app/merchant/centre" }
+  ]
+}

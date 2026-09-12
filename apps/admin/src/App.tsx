@@ -29,6 +29,10 @@ import { Reports } from './pages/Reports';
 import { Audit } from './pages/Audit';
 import { Profile } from './pages/Profile';
 import { MobileMoney } from './pages/MobileMoney';
+import { SwitchConsole } from './pages/Switch';
+import { Finops } from './pages/Finops';
+import { Risk } from './pages/Risk';
+import { Intelligence } from './pages/Intelligence';
 
 function P({ children }: { children: React.ReactElement }) {
   const { user, loading } = useStore();
@@ -71,6 +75,10 @@ export function App() {
         <Route path="/p2p" element={<P><P2P /></P>} />
         <Route path="/reports" element={<P><Reports /></P>} />
         <Route path="/audit" element={<P><Audit /></P>} />
+        <Route path="/switch" element={<P><SwitchConsole /></P>} />
+        <Route path="/finops" element={<P><Finops /></P>} />
+        <Route path="/risk" element={<P><Risk /></P>} />
+        <Route path="/intelligence" element={<P><Intelligence /></P>} />
         <Route path="/profile" element={<P><Profile /></P>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

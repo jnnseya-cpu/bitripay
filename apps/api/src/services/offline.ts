@@ -122,6 +122,8 @@ export interface OfflinePromiseInput {
   merchantSig: string;
   payerSig: string;
   promisedAt: string;
+  /** The merchant's offline QR as scanned: its signature binds merchant, amount, currency, nonce and expiry, so a payer can sync alone. */
+  qrPayload?: string | null;
 }
 export interface SyncOutcome {
   hash: string;
@@ -159,7 +161,7 @@ function receiptFor(hash: string, tx: TransactionRow) {
 }
 
 /** Process one promise. Idempotent on the hash; never throws (the outcome carries the reason). */
-export function settlePromise(submitter: UserRow, p: OfflinePromiseInput): SyncOutcome {
+export async function settlePromise(submitter: UserRow, p: OfflinePromiseInput): Promise<SyncOutcome> {
   const db = getDb();
   const s = getOfflineSettings();
   const canonical = promiseCanonical({ merchantId: p.merchantId, payerId: p.payerId, amountMinor: p.amountMinor, currency: p.currency, nonce: p.nonce, expiresAt: p.expiresAt, counter: p.counter, reference: p.reference ?? null });
@@ -175,8 +177,8 @@ export function settlePromise(submitter: UserRow, p: OfflinePromiseInput): SyncO
     return { hash, state: 'REJECTED', reason, restoreMinor: p.amountMinor };
   };
   if (!s.enabled) return reject('offline_disabled');
-  const merchant = findUserById(p.merchantId);
-  const payer = findUserById(p.payerId);
+  const merchant = findUserById(p.merchantId) ?? findUserByIdentifier(p.merchantId);
+  const payer = findUserById(p.payerId) ?? findUserByIdentifier(p.payerId);
   if (!merchant || !payer) return reject('unknown_party');
   if (submitter.id !== merchant.id && submitter.id !== payer.id && submitter.role !== 'admin') return reject('submitter_not_party');
   if (merchant.status !== 'active' || payer.status !== 'active') return reject('party_inactive');
@@ -198,8 +200,22 @@ export function settlePromise(submitter: UserRow, p: OfflinePromiseInput): SyncO
     }
   })();
   if (!merchantKey) return reject('merchant_key_unknown');
-  const merchantOk = merchantKey.scope === 'DEVICE_OFFLINE' ? verifyDeviceSigAt(p.merchantKeyId, canonical, p.merchantSig, p.promisedAt) : verifySig(p.merchantKeyId, canonical, p.merchantSig);
-  if (!merchantOk || (merchantKey.scope === 'MERCHANT' && merchantKey.partyId !== merchant.id) || (merchantKey.scope === 'DEVICE_OFFLINE' && !merchantKey.partyId.startsWith(`${merchant.id}:`))) return reject('merchant_signature_invalid');
+  if ((merchantKey.scope === 'MERCHANT' && merchantKey.partyId !== merchant.id) || (merchantKey.scope === 'DEVICE_OFFLINE' && !merchantKey.partyId.startsWith(`${merchant.id}:`))) return reject('merchant_signature_invalid');
+  let merchantOk = false;
+  if (p.qrPayload) {
+    // the merchant's leg is the signed offline QR itself: same key, same nonce, same amount, currency and expiry
+    try {
+      const d = bitriqr.decode(p.qrPayload);
+      const v = await Promise.resolve(bitriqr.verify(d, (payload, sig) => (merchantKey.scope === 'DEVICE_OFFLINE' ? verifyDeviceSigAt(p.merchantKeyId, payload, Buffer.from(sig).toString('base64'), p.promisedAt) : verifyWithKey(p.merchantKeyId, payload, sig)), Math.floor(Date.parse(p.promisedAt) / 1000)));
+      const qrMinor = d.amount ? Math.round(parseFloat(d.amount) * 10 ** cur.decimals) : 0;
+      merchantOk = v.trust === 'verified' && d.keyId === p.merchantKeyId && d.offlineNonce === p.nonce && qrMinor === p.amountMinor && d.currency.toUpperCase() === cur.code && d.merchantId === merchantCode(merchant) && (d.expiresAt ?? 0) * 1000 >= Date.parse(p.expiresAt) - 1000;
+    } catch {
+      merchantOk = false;
+    }
+  } else {
+    merchantOk = merchantKey.scope === 'DEVICE_OFFLINE' ? verifyDeviceSigAt(p.merchantKeyId, canonical, p.merchantSig, p.promisedAt) : verifySig(p.merchantKeyId, canonical, p.merchantSig);
+  }
+  if (!merchantOk) return reject('merchant_signature_invalid');
   const device = db.prepare('SELECT * FROM offline_devices WHERE device_id = ? AND user_id = ?').get(p.payerDeviceId, payer.id) as any;
   if (!device) return reject('payer_device_unknown');
   const payerKey = (() => {
@@ -255,9 +271,10 @@ export function settlePromise(submitter: UserRow, p: OfflinePromiseInput): SyncO
 }
 
 /** Submit a batch in the order the device recorded it. */
-export function syncPromises(submitter: UserRow, items: OfflinePromiseInput[]): { results: SyncOutcome[]; settled: number; rejected: number; duplicates: number } {
+export async function syncPromises(submitter: UserRow, items: OfflinePromiseInput[]): Promise<{ results: SyncOutcome[]; settled: number; rejected: number; duplicates: number }> {
   if (items.length > 200) throw badRequest('Sync at most 200 promises per call', 'validation_error');
-  const results = items.map((p) => settlePromise(submitter, p));
+  const results: SyncOutcome[] = [];
+  for (const p of items) results.push(await settlePromise(submitter, p)); // strictly in the order the device recorded them
   return { results, settled: results.filter((r) => r.state === 'SETTLED').length, rejected: results.filter((r) => r.state === 'REJECTED').length, duplicates: results.filter((r) => r.state === 'DUPLICATE').length };
 }
 
