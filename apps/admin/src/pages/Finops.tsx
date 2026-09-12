@@ -6,19 +6,20 @@ import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader
 /** Finance operations: versioned fee schedules, settlement obligations, disputes, holds, commissions and the processor reconciliation workbench. */
 export function Finops() {
   const { toast, money } = useStore();
-  const [tab, setTab] = useState<'fees' | 'settlements' | 'disputes' | 'holds' | 'commissions' | 'recon'>('fees');
+  const [tab, setTab] = useState<'fees' | 'settlements' | 'disputes' | 'holds' | 'commissions' | 'recon' | 'batches'>('fees');
   const err = (e: any) => toast(e.message, 'error');
   const ok = (m: string) => toast(m, 'success');
   return (
     <div>
       <PageHeader title="Finance operations" subtitle="Fees with a history, settlement obligations, disputes as objects, holds, the commission ledger and the three-way reconciliation workbench." />
-      <Tabs tabs={[{ id: 'fees', label: 'Fee schedules' }, { id: 'settlements', label: 'Settlements' }, { id: 'disputes', label: 'Disputes' }, { id: 'holds', label: 'Holds' }, { id: 'commissions', label: 'Commissions' }, { id: 'recon', label: 'Processor reconciliation' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <Tabs tabs={[{ id: 'fees', label: 'Fee schedules' }, { id: 'settlements', label: 'Settlements' }, { id: 'disputes', label: 'Disputes' }, { id: 'holds', label: 'Holds' }, { id: 'commissions', label: 'Commissions' }, { id: 'batches', label: 'Payout batches' }, { id: 'recon', label: 'Processor reconciliation' }]} value={tab} onChange={(v) => setTab(v as any)} />
       {tab === 'fees' && <Fees ok={ok} err={err} />}
       {tab === 'settlements' && <Settlements ok={ok} err={err} money={money} />}
       {tab === 'disputes' && <Disputes ok={ok} err={err} money={money} />}
       {tab === 'holds' && <Holds ok={ok} err={err} money={money} />}
       {tab === 'commissions' && <Commissions money={money} />}
       {tab === 'recon' && <Recon ok={ok} err={err} money={money} />}
+      {tab === 'batches' && <PayoutBatches ok={ok} err={err} money={money} />}
     </div>
   );
 }
@@ -130,6 +131,52 @@ function Recon({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
         {wb.data?.exceptions?.length === 0 && <Alert kind="success">No open exceptions.</Alert>}
         <h5 className="mt">Recent runs</h5>
         {(wb.data?.recentRuns ?? []).map((r: any) => <div key={r.id} className="tiny">{fmtDate(r.createdAt)} · {r.connectionId} · {r.cycleRef} · matched {r.matched} · cases {r.casesOpened} · {r.complete ? 'complete' : 'incomplete'}</div>)}
+      </div>
+    </div>
+  );
+}
+
+/** Bulk payout batches across merchants: oversight, and four-eyes approval by an administrator (audited). */
+function PayoutBatches({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => void; money: (m: number, c: string) => string }) {
+  const [status, setStatus] = useState('');
+  const list = useAsync(() => api.get<any>(`/api/admin/finops/payout-batches${qs({ status: status || undefined })}`), [status]);
+  const [selected, setSelected] = useState<any>(null);
+  const open = (id: string) => api.get<any>(`/api/admin/finops/payout-batches/${id}`).then(setSelected).catch(err);
+  const approve = (id: string) => api.post<any>(`/api/admin/finops/payout-batches/${id}/approve`, {}).then((r) => { setSelected({ batch: r.batch }); list.reload(); ok(`Batch ${r.batch.status.toLowerCase()}: ${r.batch.paidRows} row(s) paid`); }).catch(err);
+  const cancel = (id: string) => api.post<any>(`/api/admin/finops/payout-batches/${id}/cancel`, {}).then((r) => { setSelected({ batch: r.batch }); list.reload(); ok('Batch cancelled'); }).catch(err);
+  const b = selected?.batch;
+  return (
+    <div className="grid cols-2">
+      <div className="card">
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3>Batches</h3>
+          <Select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option>{['PENDING_APPROVAL', 'EXECUTED', 'PARTIAL', 'FAILED', 'CANCELLED'].map((s) => <option key={s} value={s}>{s}</option>)}</Select>
+        </div>
+        <Table head={['Merchant', 'Reference', 'Rows', 'Total', 'Status', 'Created']} empty="No batches" rows={(list.data?.items ?? []).map((x: any) => [<a onClick={() => open(x.id)}>{x.owner?.name}</a>, x.reference ?? x.id, `${x.paidRows}/${x.validRows}`, money(x.totalMinor, x.currency), <StatusBadge status={x.status} />, fmtDate(x.createdAt)])} />
+      </div>
+      <div className="card">
+        {!b && <Alert kind="info">Select a batch. Approving here is the second pair of eyes for the merchant's upload: no step-up, but the decision is audited.</Alert>}
+        {b && (
+          <>
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3>{b.reference ?? b.id} <StatusBadge status={b.status} /></h3>
+              {b.status === 'PENDING_APPROVAL' && (
+                <div className="row" style={{ gap: 6 }}>
+                  <ConfirmButton size="sm" prompt={`Approve and pay ${b.validRows} rows, ${money(b.totalMinor + b.feeMinor, b.currency)} including fees?`} onConfirm={() => approve(b.id)}>Approve (four-eyes)</ConfirmButton>
+                  <ConfirmButton size="sm" variant="ghost" prompt="Cancel this batch?" onConfirm={() => cancel(b.id)}>Cancel</ConfirmButton>
+                </div>
+              )}
+            </div>
+            <div className="grid cols-2">
+              <KV k="Created by" v={b.createdBy} />
+              <KV k="Rows" v={`${b.rowCount} (${b.validRows} valid, ${b.invalidRows} invalid)`} />
+              <KV k="Total + fees" v={`${money(b.totalMinor, b.currency)} + ${money(b.feeMinor, b.currency)}`} />
+              <KV k="Approval" v={b.approvalMethod ? `${b.approvalMethod} by ${b.approvedBy} · ${fmtDate(b.approvedAt)}` : 'pending'} />
+              {selected.readiness && <KV k="Available / needed" v={`${money(selected.readiness.available, b.currency)} / ${money(selected.readiness.needed, b.currency)}`} />}
+            </div>
+            <Table head={['#', 'Method', 'Destination', 'Amount', 'Status', 'Outcome']} empty="No rows" rows={(b.rows ?? []).map((r: any) => [r.lineNo, r.method, r.method === 'wallet' ? r.destination.to : r.method === 'mobile_money' ? `${r.destination.operatorId} ${r.destination.phone}` : r.destination.bankName ?? r.destination.bankAccountId, money(r.amountMinor, b.currency), <StatusBadge status={r.status} />, r.error ?? (r.transactionId ? r.transactionId.slice(0, 8) : '')])} />
+          </>
+        )}
       </div>
     </div>
   );

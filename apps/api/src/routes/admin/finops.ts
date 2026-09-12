@@ -13,6 +13,7 @@ import { getDb } from '../../db';
 import { findUserById } from '../../services/users';
 import { notFound } from '../../lib/errors';
 import { getSetting, setSetting } from '../../services/settings';
+import { listAllBatches, getBatch, approveBatch, cancelBatch, batchReadiness } from '../../services/bulkPayouts';
 import { listFeeSchedules, getFeeSchedule, createFeeSchedule, approveFeeSchedule, activateFeeSchedule, retireFeeSchedule, resolveFeeRule, effectiveFees, setFeeTier } from '../../services/finops/fees';
 import { listCycles, getCycle, cycleItems, closeCycle, payCycle, obligations, cycleStatement, cycleStatementCsv, cycleStatementPdf, runSettlementSchedules, listProfiles } from '../../services/finops/settlement';
 import { listDisputes, getDispute, openDispute, decideDispute, requestEvidence, addEvidence, withdrawDispute, disputeChronology, sweepDisputeDeadlines, getDisputeSettings } from '../../services/finops/disputes';
@@ -204,4 +205,28 @@ r.get('/users/:userId/finance', requirePermission('users'), (req, res) => {
   const u = findUserById(String(req.params.userId));
   if (!u) throw notFound('User not found', 'user_not_found');
   res.json({ tier: (getDb().prepare('SELECT fee_tier FROM users WHERE id = ?').get(u.id) as any)?.fee_tier ?? null, fees: effectiveFees({ userId: u.id }), holds: listHolds({ userId: u.id, status: 'ACTIVE' }), profiles: listProfiles(u.id), cycles: listCycles({ userId: u.id, limit: 20 }), disputes: listDisputes({ merchantId: u.id, limit: 20 }) });
+});
+
+// ---------------------------------------------------------------- bulk payout batches (module 14): oversight and four-eyes approval
+r.get('/payout-batches', requirePermission('transactions'), (req, res) => res.json({ items: listAllBatches({ status: req.query.status ? String(req.query.status) : null, limit: Number(req.query.limit) || 100 }) }));
+r.get('/payout-batches/:id', requirePermission('transactions'), (req, res) => {
+  const row = getDb().prepare('SELECT user_id FROM payout_batches WHERE id = ?').get(String(req.params.id)) as { user_id: string } | undefined;
+  if (!row) throw notFound('Payout batch not found', 'batch_not_found');
+  res.json({ batch: getBatch(row.user_id, String(req.params.id)), readiness: batchReadiness(findUserById(row.user_id)!, String(req.params.id)) });
+});
+/** An administrator approving a merchant's batch is the second pair of eyes: no step-up, but the action is audited. */
+r.post('/payout-batches/:id/approve', requirePermission('transactions'), (req, res) => {
+  const row = getDb().prepare('SELECT user_id FROM payout_batches WHERE id = ?').get(String(req.params.id)) as { user_id: string } | undefined;
+  if (!row) throw notFound('Payout batch not found', 'batch_not_found');
+  const owner = findUserById(row.user_id)!;
+  const batch = approveBatch(owner, String(req.params.id), { stepUpVerified: false, approverId: req.user!.id }, { type: 'admin', id: req.user!.id });
+  audit(req.user!.id, 'finops.payout_batch.approve', 'payout_batch', batch.id, { owner: owner.id, status: batch.status, paidRows: batch.paidRows, paidMinor: batch.paidMinor });
+  res.json({ batch });
+});
+r.post('/payout-batches/:id/cancel', requirePermission('transactions'), (req, res) => {
+  const row = getDb().prepare('SELECT user_id FROM payout_batches WHERE id = ?').get(String(req.params.id)) as { user_id: string } | undefined;
+  if (!row) throw notFound('Payout batch not found', 'batch_not_found');
+  const batch = cancelBatch(findUserById(row.user_id)!, String(req.params.id), { type: 'admin', id: req.user!.id });
+  audit(req.user!.id, 'finops.payout_batch.cancel', 'payout_batch', batch.id, {});
+  res.json({ batch });
 });

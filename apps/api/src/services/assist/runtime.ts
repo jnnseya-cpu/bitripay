@@ -117,6 +117,12 @@ export function modelApiKey(): string | null {
   };
   return tryDecrypt(s.apiKey) ?? tryDecrypt(getSeoSettings().agent.apiKey) ?? process.env.ANTHROPIC_API_KEY ?? null;
 }
+/** Account holders never see a provider, a model, token counts or costs (rule 4); administrators keep the full view. */
+export function publicRunView<T extends Record<string, any>>(run: T, role: string): T {
+  if (role === 'admin') return run;
+  const { model: _m, provider: _p, tokensIn: _ti, tokensOut: _to, acu: _a, ...rest } = run as any;
+  return rest;
+}
 export function runtimeStatus() {
   const s = getAssistSettings();
   const key = modelApiKey();

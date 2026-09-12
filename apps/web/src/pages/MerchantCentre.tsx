@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Alert, Button, Chip, Empty, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
+import { Alert, Button, Chip, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
 import { offlineDevice, offlineQueue } from '../lib/offline';
 
 /**
@@ -12,7 +12,7 @@ import { offlineDevice, offlineQueue } from '../lib/offline';
  */
 export function MerchantCentre() {
   const { user, money, toast, config } = useStore();
-  const [tab, setTab] = useState<'overview' | 'settlement' | 'disputes' | 'fees' | 'offline'>('overview');
+  const [tab, setTab] = useState<'overview' | 'settlement' | 'disputes' | 'fees' | 'payouts' | 'offline'>('overview');
   const balance = useAsync(() => api.get<any>('/api/v1/balance'), [tab]);
   const calendar = useAsync(() => api.get<any>('/api/v1/settlement_calendar'), [tab]);
   const disputes = useAsync(() => api.get<any>('/api/v1/disputes'), [tab]);
@@ -24,7 +24,7 @@ export function MerchantCentre() {
   return (
     <div>
       <PageHeader title="Command centre" subtitle="What you can spend, what is on its way, what needs your attention" actions={<><Link className="btn" to="/app/merchant/qr">🔳 QR centre</Link><Link className="btn secondary" to="/app/merchant/developer">🧑‍💻 Developer</Link></>} />
-      <Tabs tabs={[{ id: 'overview', label: 'Overview' }, { id: 'settlement', label: 'Settlement' }, { id: 'disputes', label: `Disputes${open.length ? ` (${open.length})` : ''}` }, { id: 'fees', label: 'My fees' }, { id: 'offline', label: 'Offline kit' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <Tabs tabs={[{ id: 'overview', label: 'Overview' }, { id: 'settlement', label: 'Settlement' }, { id: 'disputes', label: `Disputes${open.length ? ` (${open.length})` : ''}` }, { id: 'fees', label: 'My fees' }, { id: 'payouts', label: 'Bulk payouts' }, { id: 'offline', label: 'Offline kit' }]} value={tab} onChange={(v) => setTab(v as any)} />
       {tab === 'overview' && (
         <>
           <div className="grid cols-4">
@@ -70,6 +70,7 @@ export function MerchantCentre() {
           <div className="list">{(fees.data?.data ?? []).map((f: any) => <div key={f.type} className="list-item"><div className="flex1"><div className="main-text">{f.type.replace(/_/g, ' ')}</div><div className="sub-text">{f.rule.bps / 100}% + {f.rule.fixed}{f.rule.min ? ` · min ${f.rule.min}` : ''}{f.rule.max ? ` · max ${f.rule.max}` : ''}</div></div><Chip>{f.source.scope}{f.source.version ? ` v${f.source.version}` : ''}</Chip></div>)}</div>
         </div>
       )}
+      {tab === 'payouts' && <BulkPayouts money={money} toast={toast} err={err} currencies={(config?.currencies ?? []).map((c) => c.code)} />}
       {tab === 'offline' && <OfflineKit toast={toast} err={err} />}
     </div>
   );
@@ -214,3 +215,96 @@ function OfflineKit({ toast, err }: { toast: any; err: (e: any) => void }) {
   );
 }
 export { qs };
+
+/** Bulk payouts: upload rows or CSV, see every row validated with its reason, approve with the PIN, follow per-row outcomes. */
+function BulkPayouts({ money, toast, err, currencies }: { money: (m: number, c: string) => string; toast: (m: string, k?: 'success' | 'error' | 'info') => void; err: (e: any) => void; currencies: string[] }) {
+  const batches = useAsync(() => api.get<any>('/api/v1/payouts/batches'), []);
+  const columns = useAsync(() => api.get<any>('/api/v1/payouts/batches/columns'), []);
+  const [currency, setCurrency] = useState(currencies[0] ?? 'USD');
+  const [csv, setCsv] = useState('');
+  const [reference, setReference] = useState('');
+  const [skipInvalid, setSkipInvalid] = useState(false);
+  const [selected, setSelected] = useState<any>(null);
+  const [pinFor, setPinFor] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = (id: string) => api.get<any>(`/api/v1/payouts/batches/${id}`).then(setSelected).catch(err);
+  const upload = () => {
+    if (!csv.trim()) return toast('Paste or load a CSV first', 'error');
+    setBusy(true);
+    api.post<any>('/api/v1/payouts/batches', { currency, csv, reference: reference || null, skip_invalid: skipInvalid }).then((r) => { setSelected(r); setCsv(''); batches.reload(); toast(`${r.batch.validRows} valid row(s), ${r.batch.invalidRows} invalid`, r.batch.invalidRows ? 'info' : 'success'); }).catch(err).finally(() => setBusy(false));
+  };
+  const file = (f: File | null) => { if (!f) return; f.text().then(setCsv); };
+  const approve = (pin: string) => {
+    if (!pinFor) return;
+    setBusy(true);
+    api.post<any>(`/api/v1/payouts/batches/${pinFor}/approve`, { pin }).then((r) => { setPinFor(null); setSelected({ batch: r.batch, readiness: selected?.readiness }); batches.reload(); toast(r.batch.status === 'EXECUTED' ? 'Batch paid' : `Batch ${r.batch.status.toLowerCase()}`, r.batch.status === 'EXECUTED' ? 'success' : 'info'); }).catch(err).finally(() => setBusy(false));
+  };
+  const cancel = (id: string) => api.post<any>(`/api/v1/payouts/batches/${id}/cancel`, {}).then((r) => { setSelected({ batch: r.batch, readiness: null }); batches.reload(); }).catch(err);
+  const b = selected?.batch;
+  const readiness = selected?.readiness;
+  return (
+    <div className="grid cols-2">
+      <div className="card">
+        <h3>New batch</h3>
+        <p className="sub-text">One row per payment. Columns: {columns.data?.columns?.join(', ') ?? '…'}. Up to {columns.data?.max_rows ?? 5000} rows. Every row is checked before you approve; nothing moves until you confirm with your PIN.</p>
+        <div className="grid cols-2">
+          <Field label="Currency"><Select value={currency} onChange={(e) => setCurrency(e.target.value)}>{currencies.map((c) => <option key={c} value={c}>{c}</option>)}</Select></Field>
+          <Field label="Reference"><Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="PAYROLL-09" /></Field>
+        </div>
+        <Field label="CSV"><Textarea rows={8} value={csv} onChange={(e) => setCsv(e.target.value)} placeholder={columns.data?.example ?? 'method,amount,wallet,operator_id,phone,name,reference'} /></Field>
+        <div className="row" style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="file" accept=".csv,text/csv" onChange={(e) => file(e.target.files?.[0] ?? null)} />
+          <label className="row" style={{ gap: 6, alignItems: 'center' }}><input type="checkbox" checked={skipInvalid} onChange={(e) => setSkipInvalid(e.target.checked)} /> Skip invalid rows</label>
+          <Button loading={busy} onClick={upload}>Validate batch</Button>
+        </div>
+        <h4 style={{ marginTop: 16 }}>Batches</h4>
+        {(batches.data?.data ?? []).length === 0 && <Empty icon="📑" text="No batch yet." />}
+        {(batches.data?.data ?? []).map((x: any) => (
+          <div key={x.id} className="list-item clickable" onClick={() => load(x.id)}>
+            <div className="flex1"><div className="main-text">{x.reference ?? x.id} <StatusBadge status={x.status} /></div><div className="sub-text">{x.rowCount} rows · {money(x.totalMinor, x.currency)} · {new Date(x.createdAt).toLocaleString()}</div></div>
+            <div className="sub-text">{x.paidRows}/{x.validRows} paid</div>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        {!b && <Empty icon="🧾" text="Select a batch to see its rows." />}
+        {b && (
+          <>
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3>{b.reference ?? b.id} <StatusBadge status={b.status} /></h3>
+              <div className="row" style={{ gap: 6 }}>
+                {b.status === 'PENDING_APPROVAL' && <Button size="sm" onClick={() => setPinFor(b.id)} disabled={readiness?.blockedByInvalidRows || (readiness?.shortfallMinor ?? 0) > 0}>Approve & pay</Button>}
+                {b.status === 'PENDING_APPROVAL' && <Button size="sm" variant="ghost" onClick={() => cancel(b.id)}>Cancel</Button>}
+              </div>
+            </div>
+            <div className="grid cols-2">
+              <KV k="Rows" v={`${b.rowCount} (${b.validRows} valid, ${b.invalidRows} invalid)`} />
+              <KV k="Total + fees" v={`${money(b.totalMinor, b.currency)} + ${money(b.feeMinor, b.currency)}`} />
+              <KV k="Paid" v={`${b.paidRows} rows · ${money(b.paidMinor, b.currency)}`} />
+              <KV k="Approval" v={b.approvalMethod ? `${b.approvalMethod.replace('_', ' ')} · ${new Date(b.approvedAt).toLocaleString()}` : 'pending'} />
+            </div>
+            {readiness?.blockedByInvalidRows && <Alert kind="warning">{readiness.invalidRows} row(s) are invalid. Fix the file, or upload again with "Skip invalid rows".</Alert>}
+            {(readiness?.shortfallMinor ?? 0) > 0 && <Alert kind="error">Available balance is {money(readiness.shortfallMinor, b.currency)} short of the total with fees.</Alert>}
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table">
+                <thead><tr><th>#</th><th>To</th><th>Amount</th><th>Ref</th><th>Status</th></tr></thead>
+                <tbody>
+                  {b.rows.map((r: any) => (
+                    <tr key={r.id}>
+                      <td>{r.lineNo}</td>
+                      <td>{r.name ?? ''} <span className="sub-text">{r.method === 'wallet' ? r.destination.to : r.method === 'mobile_money' ? `${r.destination.operatorId} ${r.destination.phone}` : r.destination.bankName ?? r.destination.bankAccountId}</span></td>
+                      <td>{money(r.amountMinor, b.currency)}</td>
+                      <td>{r.reference ?? ''}</td>
+                      <td><StatusBadge status={r.status} />{r.error && <div className="sub-text" style={{ color: 'var(--danger)' }}>{r.error}</div>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+      <PinModal open={!!pinFor} onClose={() => setPinFor(null)} onSubmit={approve} loading={busy} title="Approve and pay this batch" summary={b ? `${b.validRows} payments · ${money(b.totalMinor + b.feeMinor, b.currency)} including fees. Rows run in order; a failed row never blocks the next.` : ''} />
+    </div>
+  );
+}

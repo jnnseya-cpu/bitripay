@@ -25,6 +25,13 @@ export function listApiKeys(userId: string): ApiKey[] {
 }
 
 export const API_KEY_SCOPES = [
+  'wallets:read',
+  'transfers:read',
+  'transfers:write',
+  'remittances:read',
+  'remittances:write',
+  'payouts:approve',
+  'ai:run',
   'payment_intents:read',
   'payment_intents:write',
   'checkout_sessions:write',

@@ -8,19 +8,14 @@ import { validate, wrap } from '../lib/http';
 import { requireAuth } from '../middleware/auth';
 import { hasPermission } from '../middleware/permissions';
 import { rateLimit } from '../middleware/rateLimit';
-import { agentsAvailable, startRun, listRuns, getRun, cancelRun, subscribe, getInstance, setInstance, listMemories, addMemory, deleteMemory, usageSummary, runtimeStatus, listApprovals } from '../services/assist/runtime';
+import { agentsAvailable, startRun, listRuns, getRun, cancelRun, subscribe, getInstance, setInstance, listMemories, addMemory, deleteMemory, usageSummary, runtimeStatus, listApprovals, publicRunView } from '../services/assist/runtime';
 import { toolCatalogue } from '../services/assist/tools';
 import { addonStatus, activateAddon, cancelAddon, setAutoRenew } from '../services/assist/addon';
 import { billingStatus, acceptConsent, disclosureText } from '../services/assist/billing';
 import { getClientIp } from '../lib/http';
 
 export const assistRouter = Router();
-/** Account holders never see a provider, a model, token counts or costs (rule 4); administrators keep the full view. */
-function publicRun<T extends Record<string, any>>(run: T, role: string): T {
-  if (role === 'admin') return run;
-  const { model: _m, provider: _p, tokensIn: _ti, tokensOut: _to, acu: _a, ...rest } = run as any;
-  return rest;
-}
+const publicRun = publicRunView;
 assistRouter.use(requireAuth);
 
 assistRouter.get('/agents', (req, res) => {

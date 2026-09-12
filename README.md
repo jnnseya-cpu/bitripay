@@ -589,6 +589,27 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
   promises settle in order with the failing one restoring the payer's balance and a replayed nonce refused; the locale
   chains for CD, GB, FR, KE and AE (RTL); the anchor, round-ups, ring-fencing, manual moves and the red plan.
 
+### Bulk payouts and the v1 account endpoints
+
+- **Bulk payouts (module 14)** (`services/bulkPayouts.ts`): a batch is uploaded as rows or CSV (`method, amount,
+  wallet, operator_id, phone, name, bank_name, account_name, account_number, country, swift, bank_account_id,
+  reference`; header row required, quoted fields, up to 5 000 rows). Every row is validated against the live
+  directories before anyone approves (recipient account, operator and payout availability, bank account currency,
+  amount), the batch shows totals and fees, and readiness reports the available balance after holds. Approval is
+  four-eyes (a different person, e.g. an administrator from the finance console) or step-up for the creator (PIN or
+  passkey); an API key uploads but never approves alone. Execution runs the rows in order through the same transfer
+  and payout engines as a single payment, one ledger transaction per row with an idempotency key, and reports
+  per-row outcomes (`PAID`, `FAILED` with the reason, `SKIPPED`). Webhook events `payout_batch.created` and
+  `payout_batch.executed`.
+- **v1 endpoints** (`routes/v1ext.ts`, all in the OpenAPI document): `GET /v1/wallets` (balance, available after
+  holds, held by kind), `POST /v1/transfers/quote` (the disclosed quote plus rails ranked by the smart router for the
+  chosen policy), `POST /v1/transfers` (idempotent), `GET /v1/transfers/{id}`, `GET /v1/remittances/quote`,
+  `POST /v1/remittances` (idempotent), `GET /v1/remittances`, `POST /v1/payouts/batches` and the batch lifecycle
+  (`columns`, list, get, `approve`, `cancel`), `POST /v1/ai/{agent}` (canonical agent names accepted, ACU-metered,
+  provider and model never disclosed) and `GET /v1/ai/runs/{id}`. New API key scopes: `wallets:read`,
+  `transfers:read|write`, `remittances:read|write`, `payouts:approve`, `ai:run`. Admin oversight and four-eyes
+  approval at `/api/admin/finops/payout-batches`.
+
 ### Public site, blog and SEO engine
 
 The marketing surface is **server-rendered by the API** so search engines, social previews and AI answer

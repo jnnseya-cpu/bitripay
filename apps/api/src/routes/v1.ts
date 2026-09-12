@@ -27,6 +27,7 @@ import { createEndpoint, getEndpoint, listEndpoints, updateEndpoint, deleteEndpo
 import { listApiKeys, createApiKey, revokeApiKey, API_KEY_SCOPES } from '../services/merchant';
 import { heldByKind } from '../services/finops/holds';
 import { validateSplits } from '../services/finops/splits';
+import { v1ExtRouter } from './v1ext';
 
 export const v1Router = Router();
 const merchantOnly = [requireAuth, requireRole('merchant', 'admin')];
@@ -332,6 +333,9 @@ const payoutSchema = z.object({
   ]),
   description: z.string().max(200).optional().nullable(),
 });
+// Contract §14 endpoints (wallets, transfers, remittances, payout batches, agents) mount before /payouts/:id so
+// /payouts/batches resolves to the batch resource.
+v1Router.use(v1ExtRouter);
 v1Router.post('/payouts', ...merchantOnly, requireScope('payouts:write'), writeLimit, (req, res) => {
   const b = validate(payoutSchema, req.body);
   const d = b.destination;

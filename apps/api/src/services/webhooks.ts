@@ -38,6 +38,8 @@ export const WEBHOOK_SCHEMA_VERSION = 1;
 
 /** Event catalogue (published on the developer portal and `GET /v1/webhook_events/types`). */
 export const WEBHOOK_EVENT_TYPES: { type: string; description: string }[] = [
+  { type: 'payout_batch.created', description: 'A bulk payout batch was uploaded and validated; it waits for approval.' },
+  { type: 'payout_batch.executed', description: 'A bulk payout batch ran: paid, partial or failed, with per-row outcomes on the batch.' },
   { type: 'payment_intent.created', description: 'An intent was created (API, QR, link, checkout session or USSD).' },
   { type: 'payment_intent.requires_action', description: 'The payer must authorise the payment (PIN, prompt, redirect).' },
   { type: 'payment_intent.processing', description: 'An attempt is in flight on a rail. Do not create a second payment.' },
