@@ -61,6 +61,8 @@ export interface PaymentAuth {
   req?: Pick<Request, 'headers' | 'body'> | null;
   /** A variable recurring payment mandate the account holder confirmed under step-up authenticates draws within its limits. */
   mandateId?: string | null;
+  /** A secret API key (server credential of the account) authenticates funding started by the account's own systems. */
+  apiKeyId?: string | null;
 }
 
 export interface PaymentView {
@@ -190,6 +192,7 @@ function resolveAuthentication(user: UserRow | null, auth: PaymentAuth | undefin
     return { method: gatewayProvider === 'sandbox' ? 'sandbox' : method === 'card' ? 'processor' : method === 'mobile_money' ? 'operator' : 'payer_bank', required: false };
   }
   if (auth?.mandateId) return { method: 'vrp_mandate', required: false };
+  if (auth?.apiKeyId) return { method: 'api_key', required: false };
   const token = (auth?.req?.headers?.['x-step-up-token'] as string | undefined) || auth?.req?.body?.stepUpToken;
   if (token && verifyStepUpToken(user, token)) return { method: 'passkey', required: false };
   if (auth?.pin) {

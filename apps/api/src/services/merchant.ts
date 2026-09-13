@@ -35,6 +35,8 @@ export const API_KEY_SCOPES = [
   'subscriptions:read',
   'subscriptions:write',
   'credit:read',
+  'routes:read',
+  'routes:write',
   'payment_intents:read',
   'payment_intents:write',
   'checkout_sessions:write',

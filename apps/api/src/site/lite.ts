@@ -13,6 +13,8 @@ import { findUserById, findUserByEmail, findUserByPhone, findUserByIdentifier, n
 import { listWallets } from '../services/wallets';
 import { listTransactions, calculateFee } from '../services/ledger';
 import { sendMoney } from '../services/transfers';
+import { quoteRemittance, sendRemittance } from '../services/remittance';
+import { listCurrencies } from '../services/currencies';
 import { createCashOutRequest, listCashRequests } from '../services/agents';
 import { buildStatement, statementCsv, statementPdf } from '../services/statements';
 import { assertPin, setPin } from '../services/auth';
@@ -30,7 +32,7 @@ const CSS = `body{font:16px/1.4 system-ui,Arial,sans-serif;margin:0;background:#
 
 function page(title: string, body: string, user?: UserRow | null) {
   const app = getAppSettings().appName || 'BitriPay';
-  const nav = user ? `<nav><a href="/lite/home">Home</a><a href="/lite/send">Send</a><a href="/lite/receive">Receive</a><a href="/lite/cash">Cash out</a><a href="/lite/history">History</a><a href="/lite/statement">Statement</a><a href="/lite/logout">Sign out</a></nav>` : '';
+  const nav = user ? `<nav><a href="/lite/home">Home</a><a href="/lite/send">Send</a><a href="/lite/remit">Abroad</a><a href="/lite/receive">Receive</a><a href="/lite/cash">Cash out</a><a href="/lite/history">History</a><a href="/lite/statement">Statement</a><a href="/lite/logout">Sign out</a></nav>` : '';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${e(title)} · ${e(app)} Lite</title><style>${CSS}</style></head><body><main><h1><img src="/brand/logo.svg" alt="${e(app)}" width="120" height="30" style="vertical-align:middle;height:30px;width:auto"> <span class="m">Lite</span></h1>${nav}${body}<p class="m">Lite works on any browser and slow connections. Full app: <a href="${config.webUrl}">${config.webUrl.replace(/^https?:\/\//, '')}</a> · USSD ${e(getChannelSettings().ussd.serviceCode)}</p></main></body></html>`;
 }
 function cookieOf(req: any): string | null {
@@ -155,6 +157,42 @@ liteRouter.post('/send', limit, (req, res) => {
     res.redirect('/lite/home?ok=' + encodeURIComponent(`Sent ${money(minor, cur.code)} to @${recipient.tag} (fee ${money(fee, cur.code)}). Ref ${tx.id.slice(0, 8).toUpperCase()}.`));
   } catch (err: any) {
     res.redirect('/lite/send?err=' + encodeURIComponent(err?.message ?? 'Could not send'));
+  }
+});
+/** Send abroad from the wallet: the recipient's BitriPay code, the amount you send and the currency they receive; the rate and fee are shown before the PIN. */
+liteRouter.get('/remit', (req, res) => {
+  const u = guard(req, res);
+  if (!u) return;
+  const ws = listWallets(u.id);
+  const from = String(req.query.from ?? ws[0]?.currency ?? 'USD').toUpperCase();
+  const to = String(req.query.to_currency ?? '').toUpperCase();
+  const amountStr = String(req.query.amount ?? '');
+  let quoteHtml = '';
+  if (amountStr && to) {
+    try {
+      const cur = getCurrency(from);
+      const q = quoteRemittance(Math.round(Number(amountStr.replace(',', '.')) * 10 ** cur.decimals), cur.code, to);
+      quoteHtml = `<div class="card"><div class="b">They receive ${money(q.targetAmount, q.targetCurrency)}</div><div class="m">Rate 1 ${e(q.sourceCurrency)} = ${q.rate.toFixed(4)} ${e(q.targetCurrency)} · fee ${money(q.fee, q.sourceCurrency)} · total ${money(q.total, q.sourceCurrency)}</div></div>`;
+    } catch (err: any) { quoteHtml = `<div class="card err">${e(err?.message ?? 'No quote')}</div>`; }
+  }
+  const curOpts = listCurrencies(true).map((c) => `<option value="${e(c.code)}"${c.code === to ? ' selected' : ''}>${e(c.code)} – ${e(c.name)}</option>`).join('');
+  res.send(page('Send abroad', `${flash(req.query)}${quoteHtml}<div class="card"><form method="get" action="/lite/remit"><label>Amount you send</label><input name="amount" inputmode="decimal" required value="${e(amountStr)}"><label>From wallet</label><select name="from">${ws.map((w) => `<option value="${e(w.currency)}"${w.currency === from ? ' selected' : ''}>${e(w.currency)} · ${money(w.balance, w.currency)}</option>`).join('')}</select><label>They receive in</label><select name="to_currency" required><option value="">choose…</option>${curOpts}</select><button type="submit">Show rate</button></form></div>${amountStr && to && !quoteHtml.includes('err') ? `<div class="card"><form method="post" action="/lite/remit"><input type="hidden" name="amount" value="${e(amountStr)}"><input type="hidden" name="from" value="${e(from)}"><input type="hidden" name="to_currency" value="${e(to)}"><label>Recipient (@code, phone or email, must have BitriPay)</label><input name="to" required><label>Their name</label><input name="name" required><label>Your PIN</label><input name="pin" type="password" inputmode="numeric" required><button type="submit">Send now</button></form></div>` : ''}`, u));
+});
+liteRouter.post('/remit', limit, (req, res) => {
+  const u = guard(req, res);
+  if (!u) return;
+  try {
+    const cur = getCurrency(String(req.body?.from ?? 'USD').toUpperCase());
+    const minor = Math.round(Number(String(req.body?.amount ?? '0').replace(',', '.')) * 10 ** cur.decimals);
+    if (!Number.isFinite(minor) || minor <= 0) throw new Error('Enter a valid amount');
+    assertPin(u, String(req.body?.pin ?? ''));
+    const to = String(req.body?.to ?? '').trim();
+    const recipient = findUserByIdentifier(to);
+    if (!recipient) throw new Error(`${to} was not found on BitriPay`);
+    const r = sendRemittance(u, { amount: minor, sourceCurrency: cur.code, targetCurrency: String(req.body?.to_currency ?? cur.code).toUpperCase(), payoutMethod: 'wallet', recipient: { name: String(req.body?.name ?? recipient.full_name), tag: recipient.tag, country: recipient.country ?? null } });
+    res.redirect('/lite/home?ok=' + encodeURIComponent(`Sent ${money(minor, cur.code)}; @${recipient.tag} receives ${money(r.targetAmount, r.targetCurrency)}. Ref ${String(r.id).slice(0, 8).toUpperCase()}.`));
+  } catch (err: any) {
+    res.redirect('/lite/remit?err=' + encodeURIComponent(err?.message ?? 'Could not send'));
   }
 });
 liteRouter.get('/receive', (req, res) => {

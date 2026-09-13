@@ -601,6 +601,17 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
   and payout engines as a single payment, one ledger transaction per row with an idempotency key, and reports
   per-row outcomes (`PAID`, `FAILED` with the reason, `SKIPPED`). Webhook events `payout_batch.created` and
   `payout_batch.executed`.
+- **Cross-border routes on the partner API** (`POST /v1/routes/quote`, `/v1/routes/payout-currencies`, `POST /v1/routes`,
+  list / get / receipt / cancel; tag *Cross-border routes*): the partner-API form of Move money and Remittance. Fund
+  from the wallet or **any card, bank or mobile money through a licensed processor**, deliver to a BitriPay wallet, a
+  QR code, **any bank account or mobile money number anywhere**, an agent, or the account's own wallet, **in the
+  currency the recipient will receive** (the payout-currencies call lists what the corridor, licence and liquidity
+  allow right now); rate, margin and every fee are fixed on the quote and the route reports every stage from quote to
+  settlement. `POST /v1/remittances` accepts a `source` (card / bank / mobile money) and a `mobile_money` payout
+  method, in which case it runs as a route. A secret API key authenticates funding started by the account's own
+  systems; a declined card fails the route cleanly with nothing paid out. Scopes `routes:read`, `routes:write`.
+- **BitriPay Lite** gains **Send abroad** (`/lite/remit`): amount, wallet, the currency the recipient receives, the
+  rate and fee shown before the PIN, for feature-phone browsers.
 - **v1 endpoints** (`routes/v1ext.ts`, all in the OpenAPI document): `GET /v1/wallets` (balance, available after
   holds, held by kind), `POST /v1/transfers/quote` (the disclosed quote plus rails ranked by the smart router for the
   chosen policy), `POST /v1/transfers` (idempotent), `GET /v1/transfers/{id}`, `GET /v1/remittances/quote`,

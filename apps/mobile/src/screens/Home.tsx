@@ -19,7 +19,6 @@ export function Home() {
     ['Send', '📤', t('nav.send'), 'transfers'],
     ['Move', '🔀', t('nav.move'), 'transfers'],
     ['AddMoney', '➕', t('nav.addMoney'), 'addMoney'],
-    ['Move', '🔀', t('nav.move'), 'transfers'],
     ['Requests', '🔗', t('nav.requests'), 'moneyRequests'],
     ['Withdraw', '🏦', t('nav.withdraw'), 'withdrawals'],
     ['Agents', '🏪', t('nav.agents'), 'agents'],
