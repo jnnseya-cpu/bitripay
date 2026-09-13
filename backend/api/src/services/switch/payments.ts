@@ -26,7 +26,7 @@ import { screenSanctions } from '../risk';
 import { emitEvent } from '../webhooks';
 import { createIntent, getIntentRow, startAttempt, finishAttempt, cancelIntent, reconcileOpenAttempt, listAttempts, intentView } from '../intents';
 import { getSwitchSettings } from './settings';
-import { getConnection, connectionForCountry, emissionGate, openIncident, type SwitchConnection } from './connections';
+import { getConnection, emissionGate, openIncident, type SwitchConnection } from './connections';
 import { getParticipant, serviceAvailability } from './participants';
 import { decideRoute, revalidateBeforeEmission, type RouteDecision } from './policy';
 import { adapterFor, SwitchTimeoutError, CapabilityNotAvailable, type ExternalObservation, type CanonicalPayment, type TransportEvidence } from './adapter';
@@ -402,7 +402,7 @@ export function createPayment(merchant: UserRow, apiClientId: string | null, bod
     throw new AppError(422, 'UNSUPPORTED_PRODUCT', `${body.product} is not available in the aggregator phase; only MERCHANT_PAYMENT is admitted`);
   }
   const currency = String(body.amount?.currency ?? settings.defaultCurrency).toUpperCase();
-  const cur = getCurrency(currency);
+  getCurrency(currency); // the currency must be enabled on the platform
   const valueStr = String(body.amount?.value_minor ?? '');
   if (!/^\d+$/.test(valueStr) || valueStr === '0') throw new AppError(400, 'INVALID_REQUEST', 'amount.value_minor must be a positive integer expressed as a string (no floating point)');
   const amountMinor = Number(valueStr);
@@ -610,7 +610,6 @@ function mirrorIntent(p: SwitchPaymentRow, outcome: 'start' | 'captured' | 'fail
  */
 export async function emitPayment(paymentId: string, ctx: { owner: string; fencingToken: number }): Promise<{ result: string; payment: SwitchPaymentView }> {
   const db = getDb();
-  const settings = getSwitchSettings();
   let p = getPaymentRow(paymentId);
   if (p.status !== 'READY') return { result: `skipped:${p.status}`, payment: paymentView(p) };
   const conn = getConnection(p.connection_id!);

@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import { generateKeyPairSync, sign as nodeSign, createPublicKey, verify as nodeVerify } from 'node:crypto';
 import { z } from 'zod';
-import { setupApp, registerUser, adminToken, checkerToken, fund } from './helpers';
+import { setupApp, registerUser, adminToken, fund } from './helpers';
 import { getDb } from '../db';
 import * as bitriqr from '@bitripay/bitriqr';
 import { promiseCanonical } from '../services/offline';

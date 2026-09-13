@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
-import { Alert, AmountInput, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, StatusBadge, TxRow, useAsync } from '../components/ui';
+import { Alert, AmountInput, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, TxRow, useAsync } from '../components/ui';
 import type { BankAccount, Transaction } from '@bitripay/shared';
 import { useNavigate } from 'react-router-dom';
 import { OperatorPicker } from './AddMoney';

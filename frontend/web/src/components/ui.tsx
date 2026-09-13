@@ -284,9 +284,9 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []) {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- callers pass their own dependency list
   }, deps);
   return { data, error, loading, reload: run, setData };
 }

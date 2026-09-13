@@ -7,7 +7,7 @@
  * exactly what was paid.
  */
 import { getDb } from '../db';
-import { uuid, now, shortCode } from '../lib/ids';
+import { now, shortCode } from '../lib/ids';
 import { badRequest, conflict, forbidden, notFound, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
 import { getCurrency } from './currencies';

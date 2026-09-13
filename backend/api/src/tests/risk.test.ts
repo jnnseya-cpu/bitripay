@@ -303,7 +303,7 @@ describe('agent intelligence', () => {
     const admin = await adminToken(app);
     const checker = await checkerToken(app);
     const agent = await registerUser(app, { role: 'agent', tag: 'intelagent', businessName: 'Intel Agent', country: 'CD' });
-    const c1 = await registerUser(app, { tag: 'intelcust1' });
+    await registerUser(app, { tag: 'intelcust1' });
     await fund(app, agent.user.id, '100.00');
     for (const amt of ['30.00', '30.00']) expect((await request(app).post('/api/agents/me/cash-in').set(agent.auth).send({ customer: 'intelcust1', amount: amt, currency: 'USD', pin: '1234' })).status).toBe(201);
     const float = await request(app).get('/api/risk/agents/me/float').set(agent.auth);

@@ -82,7 +82,7 @@ export interface ParticipantInput {
 /** Create or revise a participant. A revision bumps the version and returns to PENDING until approved. */
 export function upsertParticipant(input: ParticipantInput, authorId: string | null): Participant {
   const db = getDb();
-  if (!/^[A-Z0-9_\-]{3,32}$/.test(input.id)) throw badRequest('Participant id must be the official code (A-Z, 0-9, _ -)', 'invalid_participant_id');
+  if (!/^[A-Z0-9_-]{3,32}$/.test(input.id)) throw badRequest('Participant id must be the official code (A-Z, 0-9, _ -)', 'invalid_participant_id');
   for (const s of input.services) if (!(SWITCH_PRODUCTS as readonly string[]).includes(s)) throw badRequest(`Unknown service ${s}`, 'invalid_service');
   if (input.source === 'OFFICIAL' && !input.evidenceRef) throw badRequest('Official entries need the signed directory/file reference', 'evidence_required');
   const existing = db.prepare('SELECT * FROM participants WHERE id = ?').get(input.id) as any;

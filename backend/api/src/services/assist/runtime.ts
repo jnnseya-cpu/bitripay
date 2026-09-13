@@ -619,7 +619,7 @@ function offlinePlan(state: RunState, input: string, context: Record<string, unk
   return { plan: [], note: 'I could not match that to something I can do offline.' };
 }
 
-function describe(tool: string, input: any, result: any, user: UserRow): string {
+function describe(tool: string, input: any, result: any, _user: UserRow): string {
   if (result?.error === 'denied') return `I am not allowed to use ${tool} here: ${result.reason}`;
   if (result?.status === 'awaiting_approval') return `Queued for a second administrator: ${result.summary}. Nothing changes until they approve it.`;
   if (result?.error) return `${tool} did not work: ${result.message ?? result.reason ?? result.error}.`;

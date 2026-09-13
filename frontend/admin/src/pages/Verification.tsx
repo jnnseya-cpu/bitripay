@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, StepUpButton, Table, Textarea, UserCell, fmtDate, useAsync } from '../components/ui';
+import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, StepUpButton, Table, Textarea, UserCell, fmtDate, useAsync } from '../components/ui';
 
 const STAGE_KIND: Record<string, 'success' | 'warning' | 'danger' | 'primary' | undefined> = { SETTLED: 'success', CONFIRMED: 'success', MANUAL_REVIEW: 'warning', MISMATCHED: 'danger', DUPLICATE: 'danger', DISPUTED: 'danger', REJECTED: 'danger', EXPIRED: undefined, VERIFYING: 'primary', EVIDENCE_RECEIVED: 'primary' };
 const Stage = ({ stage, label }: { stage: string; label?: string }) => <Chip kind={STAGE_KIND[stage]}>{label ?? stage.toLowerCase().replace(/_/g, ' ')}</Chip>;

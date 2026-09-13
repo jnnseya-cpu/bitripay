@@ -10,7 +10,7 @@ type Agent = PublicUser & { commissionBps: number };
 
 export function Agents() {
   const t = useT();
-  const { wallets, money, toast, refreshWallets, user } = useStore();
+  const { wallets, money, toast, user } = useStore();
   const [params] = useSearchParams();
   const [q, setQ] = useState('');
   const dq = useDebounce(q, 300);

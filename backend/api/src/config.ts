@@ -83,6 +83,5 @@ export const config = {
 };
 
 if (config.isProduction && (config.jwtSecret.startsWith('dev-') || config.appSecret.startsWith('dev-'))) {
-  // eslint-disable-next-line no-console
   console.warn('[config] WARNING: JWT_SECRET / APP_SECRET are using insecure defaults in production!');
 }

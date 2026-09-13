@@ -6,8 +6,7 @@
  */
 import { getDb } from '../db';
 import { uuid, now } from '../lib/ids';
-import { parseJson } from '../lib/json';
-import { badRequest, notFound } from '../lib/errors';
+import { badRequest } from '../lib/errors';
 import { config } from '../config';
 import { getSeoSettings, getSiteSettingsSafe, type SeoSettings } from './settings';
 import { escapeHtml } from './markdown';

@@ -7,7 +7,7 @@
  */
 import { getDb } from '../db';
 import { now, shortCode, uuid } from '../lib/ids';
-import { badRequest, conflict, forbidden, notFound, unprocessable } from '../lib/errors';
+import { badRequest, conflict, notFound, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
 import { encrypt, decrypt } from '../lib/crypto';
 import { config } from '../config';

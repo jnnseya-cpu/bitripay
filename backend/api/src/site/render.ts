@@ -102,7 +102,7 @@ export const FOOTER_LINKS = {
   ],
 };
 
-export function layout(meta: Meta, body: string, opts: { wide?: boolean } = {}): string {
+export function layout(meta: Meta, body: string, _opts: { wide?: boolean } = {}): string {
   const seo = getSeoSettings();
   const site = getSiteSettingsSafe();
   const url = absoluteUrl(meta.path);

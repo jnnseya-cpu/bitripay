@@ -46,7 +46,7 @@ export function Remittance() {
       setLoading(false);
     }
   };
-  const useRecipient = (r: any) => {
+  const pickRecipient = (r: any) => {
     setRec({ name: r.name, country: r.country || '', phone: r.phone || '', email: r.email || '', tag: r.tag || '', bankName: r.bankName || '', accountNumber: r.accountNumber || '', swift: '', idNumber: '', address: '' });
     setMethod(r.payoutMethod);
     if (r.currency) setTo(r.currency);
@@ -88,7 +88,7 @@ export function Remittance() {
             <h3>Recipient</h3>
             {recipients.data && recipients.data.items.length > 0 && (
               <Field label="Saved recipients">
-                <div className="row wrap">{recipients.data.items.map((r) => <span key={r.id} className="chip clickable" onClick={() => useRecipient(r)}>{r.name}</span>)}</div>
+                <div className="row wrap">{recipients.data.items.map((r) => <span key={r.id} className="chip clickable" onClick={() => pickRecipient(r)}>{r.name}</span>)}</div>
               </Field>
             )}
             <Field label="Full name"><Input value={rec.name} onChange={(e) => setRec({ ...rec, name: e.target.value })} /></Field>
@@ -139,7 +139,7 @@ export function Remittance() {
                   <div className="main-text">{r.name}</div>
                   <div className="sub-text">{r.payoutMethod.replace('_', ' ')} · {r.bankName || r.tag || r.phone || r.email} · {r.country}</div>
                 </div>
-                <Button size="sm" onClick={() => useRecipient(r)}>Send</Button>
+                <Button size="sm" onClick={() => pickRecipient(r)}>Send</Button>
                 <Button size="sm" variant="ghost" onClick={() => api.del(`/api/recipients/${r.id}`).then(recipients.reload)}>Remove</Button>
               </div>
             ))}

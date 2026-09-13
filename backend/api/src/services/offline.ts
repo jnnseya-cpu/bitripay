@@ -15,7 +15,7 @@ import { getDb } from '../db';
 import { now, uuid } from '../lib/ids';
 import { sha256 } from '../lib/crypto';
 import { parseJson } from '../lib/json';
-import { badRequest, conflict, forbidden, notFound, unprocessable } from '../lib/errors';
+import { badRequest, forbidden, unprocessable } from '../lib/errors';
 import { getSetting } from './settings';
 import { getCurrency, toBase } from './currencies';
 import { findUserById, findUserByIdentifier, type UserRow } from './users';

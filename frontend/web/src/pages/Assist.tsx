@@ -67,6 +67,7 @@ export function Assist() {
     if (!agent) return;
     api.get<{ items: Run[] }>(`/api/assist/runs?agent=${agent.key}&limit=12`).then((r) => setRuns(r.items.reverse())).catch(() => setRuns([]));
     setLive(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when the selected agent changes
   }, [agent?.key]);
   useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [runs, live?.text, live?.actions.length]);
   useEffect(() => () => abort.current?.abort(), []);

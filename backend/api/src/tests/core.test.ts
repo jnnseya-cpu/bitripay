@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
-import { setupApp, registerUser, adminToken, fund, manualConfirm, decideWithdrawal } from './helpers';
+import { setupApp, registerUser, adminToken, fund, decideWithdrawal } from './helpers';
 
 let app: ReturnType<typeof setupApp>;
 beforeAll(() => {
@@ -184,7 +184,7 @@ describe('deposits & checkout via sandbox gateway', () => {
     const self = await request(app).post(`/api/admin/verifications/${alone.body.verification.id}/approve`).set(admin.auth).send({ pin: admin.pin });
     expect(self.status).toBe(403);
     expect(self.body.error.code).toBe('maker_checker');
-    let wallets0 = await request(app).get('/api/wallets').set(a.auth);
+    const wallets0 = await request(app).get('/api/wallets').set(a.auth);
     expect(wallets0.body.items[0].balance).toBe(0); // nothing credited until approved
     const checker = await (await import('./helpers')).checkerToken(app);
     const confirm = await request(app).post(`/api/admin/verifications/${alone.body.verification.id}/approve`).set(checker.auth).send({ pin: checker.pin });

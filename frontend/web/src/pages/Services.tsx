@@ -173,7 +173,7 @@ export function Topup() {
 
 export function GiftCards() {
   const t = useT();
-  const { money, toast, refreshWallets } = useStore();
+  const { money, refreshWallets } = useStore();
   const products = useAsync(() => api.get<{ items: any[] }>('/api/gift-cards/products'), []);
   const mine = useAsync(() => api.get<{ items: any[] }>('/api/gift-cards'), []);
   const [sel, setSel] = useState<any>(null);

@@ -85,7 +85,7 @@ export function proposeVerification(user: UserRow, paymentId: string, input: { a
     if (user.role !== 'admin' || !hasPermission(user as any, 'issuance')) throw forbidden('Only administrators with the issuance permission can create e-money', 'permission_denied');
     const p = input.payload as IssuancePayload | undefined;
     if (!p || !['credit', 'debit'].includes(p.direction) || !Number.isInteger(p.amount) || p.amount <= 0 || !p.currency || !p.reason) throw badRequest('Issuance payload needs direction, amount, currency and reason', 'validation_error');
-    if (!p.poolId) findUserById(paymentId) ?? (() => { throw badRequest('Target user not found'); })();
+    if (!p.poolId && !findUserById(paymentId)) throw badRequest('Target user not found');
     // The reserve rule is checked when the request is made and again when it is executed: a maker cannot queue an unbacked amount.
     validateIssuanceRequest(p);
   } else if (subjectType === 'reserve_funding') {

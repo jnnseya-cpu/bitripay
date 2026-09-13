@@ -39,7 +39,6 @@ export function computeReadiness(userId: string): Readiness {
     if (t.receiver_user_id === userId && t.sender_user_id !== userId && INCOME_TYPES.has(t.type)) { income += base; monthly[m].income += base; }
     if (t.sender_user_id === userId && t.receiver_user_id !== userId && SPEND_TYPES.has(t.type)) { spend += base + toBase(t.fee ?? 0, t.currency); monthly[m].spend += base; if (t.type === 'bill_payment' || t.type === 'subscription' || t.type === 'mobile_topup') bills += 1; }
   }
-  const months = Object.keys(monthly).length;
   const monthsWithIncome = Object.values(monthly).filter((m) => m.income > 0).length;
   const elapsedMonths = Math.max(1, Math.min(6, Math.ceil((Date.now() - Date.parse(user.created_at)) / (30 * 86_400_000))));
   const saved = (db.prepare("SELECT COALESCE(SUM(CASE WHEN kind IN ('anchor', 'round_up', 'manual') THEN amount_minor ELSE 0 END), 0) s, COALESCE(SUM(CASE WHEN kind = 'withdrawal' THEN -amount_minor ELSE 0 END), 0) w FROM savings_movements WHERE user_id = ? AND created_at >= ?").get(userId, since) as any);

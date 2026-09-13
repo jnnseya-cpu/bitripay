@@ -5,6 +5,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 step() { printf '\n\033[1;34m== %s\033[0m\n' "$*"; }
 
+step "lint (backend, frontend, shared)"
+npm run lint
+
 step "shared: build"
 npm run build:shared
 step "shared: tests (core, bitriqr, sdk-node)"

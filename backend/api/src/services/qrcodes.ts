@@ -14,7 +14,7 @@ import type { UserRow } from './users';
 import { findUserById, findUserByTag } from './users';
 import { getCurrency } from './currencies';
 import { merchantSigningKey, signWithKey, verifyWithKey } from './keys';
-import { recordEvent, type Actor } from './events';
+import { recordEvent } from './events';
 import { countryCapabilities } from './capabilities';
 import { createIntent, getIntentRow, intentView, discoverMethods, merchantIdentity, setIntentAmount, type IntentRow, type CreateIntentInput } from './intents';
 import { fromMinor } from '@bitripay/shared';

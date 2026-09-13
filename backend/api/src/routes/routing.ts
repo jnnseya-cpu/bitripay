@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/auth';
 import { assertPin } from '../services/auth';
 import { getCurrency } from '../services/currencies';
 import { toMinor } from '@bitripay/shared';
-import { createRoute, getRoute, listRoutes, previewDestination, quoteRoute, refreshRoute, retryRoute, cancelRoute, routeReceipt, payoutCurrencyOptions, confirmPayoutCurrency, consentView, defaultTargetCurrency } from '../services/routing';
+import { createRoute, getRoute, listRoutes, previewDestination, quoteRoute, refreshRoute, retryRoute, cancelRoute, routeReceipt, payoutCurrencyOptions, confirmPayoutCurrency, defaultTargetCurrency } from '../services/routing';
 import { listCorridors } from '../services/corridors';
 import { getComplianceSettings } from '../services/settings';
 import { ROUTE_STAGE_LABELS } from '../services/routeLifecycle';

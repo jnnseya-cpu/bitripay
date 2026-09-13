@@ -243,7 +243,7 @@ describe('settlement engine', () => {
   it('closes cycles net of fees, refunds, splits and holds, issues hashed statements, and pays through the withdrawal workflow', async () => {
     const admin = await adminToken(app);
     const m = await registerUser(app, { role: 'merchant', businessName: 'Settled Shop', country: 'CD' });
-    const partner = await registerUser(app, { tag: 'settlepartner' });
+    await registerUser(app, { tag: 'settlepartner' });
     const payer = await registerUser(app);
     await fund(app, payer.user.id, '200.00');
     const profile = await request(app).post('/api/v1/settlement_profiles').set(m.auth).send({ currency: 'USD', schedule: 'T1', cutoff_hour_utc: 0, destination: { method: 'wallet' }, auto: true });

@@ -12,7 +12,7 @@ import { uuid, now } from '../lib/ids';
 import { parseJson } from '../lib/json';
 import { badRequest, notFound } from '../lib/errors';
 import { getCurrency } from './currencies';
-import { getUserById, usersById, type UserRow } from './users';
+import { usersById, type UserRow } from './users';
 import { getUserWallet } from './wallets';
 import { classifyBalance } from './emoney';
 import { config } from '../config';

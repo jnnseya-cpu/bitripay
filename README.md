@@ -192,6 +192,8 @@ maintenance mode, admin profile & 2FA, dark mode.
 
 ## Quick start
 
+Engineer onboarding lives in [docs/DEVELOPER.md](docs/DEVELOPER.md) (run, verify, sandbox test data, partner API, where things live, how to add a processor / rail / agent / endpoint / page / migration).
+
 Requirements: Node.js 20+ (22 recommended).
 
 ```bash

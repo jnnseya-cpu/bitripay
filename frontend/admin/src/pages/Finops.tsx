@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
+import { Alert, Button, ConfirmButton, Field, Input, KV, PageHeader, Select, StatusBadge, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
 
 /** Finance operations: versioned fee schedules, settlement obligations, disputes, holds, commissions and the processor reconciliation workbench. */
 export function Finops() {
@@ -108,7 +108,7 @@ function Commissions({ money }: { money: (m: number, c: string) => string }) {
   return (
     <div className="card">
       <div className="row mb"><Input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ width: 180 }} /><span className="small muted">platform share {data.data?.settings?.platformShareBps ?? 0} bps · onboarding {data.data?.settings?.onboardingFeeMinor}</span></div>
-      <Table head={['Agent', 'Kind', 'Currency', 'Count', 'Earned', 'Platform share']} rows={(data.data?.rows ?? []).map((r: any, i: number) => [<span className="tiny">{r.agentUserId}</span>, r.kind, r.currency, r.count, money(r.amountMinor, r.currency), money(r.platformShareMinor, r.currency)])} empty="No commissions this period" />
+      <Table head={['Agent', 'Kind', 'Currency', 'Count', 'Earned', 'Platform share']} rows={(data.data?.rows ?? []).map((r: any, _i: number) => [<span className="tiny">{r.agentUserId}</span>, r.kind, r.currency, r.count, money(r.amountMinor, r.currency), money(r.platformShareMinor, r.currency)])} empty="No commissions this period" />
     </div>
   );
 }

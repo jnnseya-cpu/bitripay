@@ -413,7 +413,7 @@ export function quoteRoute(amount: number, currency: string, targetCurrency: str
   const t = getCurrency(targetCurrency);
   const fundingFeeType = sourceMethod === 'card' ? 'card_deposit' : sourceMethod === 'mobile_money' ? 'mobile_money_deposit' : sourceMethod === 'bank' ? 'bank_deposit' : null;
   const fundingFee = fundingFeeType ? calculateFee(fundingFeeType, amount, c.code) : 0;
-  let available = amount - fundingFee;
+  const available = amount - fundingFee;
   let exchangeFee = 0;
   let rate = 1;
   let converted = available;

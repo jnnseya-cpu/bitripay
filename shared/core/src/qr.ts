@@ -97,7 +97,7 @@ export function decodeQr(content: string): QrPayload | null {
         query = url.search.slice(1);
       } else {
         // Accept hosted checkout / profile links: /pay/<code>, /checkout/<code>, /u/<tag>
-        const m = url.pathname.match(/\/(pay|checkout|u|agent)\/([A-Za-z0-9_\-]+)\/?$/);
+        const m = url.pathname.match(/\/(pay|checkout|u|agent)\/([A-Za-z0-9_-]+)\/?$/);
         if (m) {
           const type: QrType = m[1] === 'u' ? 'u' : m[1] === 'agent' ? 'ag' : 'pr';
           const payload: QrPayload = { type, id: m[2] };

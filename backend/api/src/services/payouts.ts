@@ -22,7 +22,7 @@ import { sendSms } from './messaging';
 import { getOperator } from './momo';
 import { getComplianceSettings, getGatewayControls } from './settings';
 import { recordEvent, listEvents, type Actor } from './events';
-import { authenticateDevice, bumpDeviceRisk, getDevice, parseEvidenceText, storeEvidence, listEvidence, type EvidenceDevice, type IngestInput } from './evidence';
+import { authenticateDevice, bumpDeviceRisk, parseEvidenceText, storeEvidence, listEvidence, type EvidenceDevice, type IngestInput } from './evidence';
 import { selectPayoutAccount, getPayoutAccount, debitFloatForPayout, type PayoutAccount } from './liquidity';
 import { ensureCorridor, type Corridor } from './corridors';
 import { normalizePhoneDigits } from './risk';

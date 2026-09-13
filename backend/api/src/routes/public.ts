@@ -74,7 +74,7 @@ publicRouter.post(
 );
 publicRouter.get('/mobile-money-operators', (req, res) => res.json({ items: listMomoOperators({ country: req.query.country ? String(req.query.country) : null }) }));
 publicRouter.get('/currencies', (req, res) => res.json({ items: listCurrencies(req.query.all !== '1') }));
-publicRouter.get('/pages', (_req, res) => res.json({ items: listPages().map(({ content, ...p }) => p) }));
+publicRouter.get('/pages', (_req, res) => res.json({ items: listPages().map(({ content: _content, ...p }) => p) }));
 publicRouter.get('/pages/:slug', (req, res) => res.json(getPage(String(req.params.slug))));
 publicRouter.get('/translations/:lang', (req, res) => res.json({ lang: String(String(req.params.lang)), overrides: getTranslationOverrides(String(req.params.lang)) }));
 

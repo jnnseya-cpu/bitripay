@@ -1,8 +1,6 @@
 /** Launch articles: written for the people BitriPay serves, with real structure, FAQs and public references. */
 import type { PostInput } from '../services/blog';
 
-const ed = 'BitriPay Editorial';
-
 export const DEFAULT_ARTICLES: PostInput[] = [
   {
     title: 'How to get paid by QR code when you sell at the market',

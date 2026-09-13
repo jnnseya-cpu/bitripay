@@ -9,7 +9,7 @@ import request from 'supertest';
 import { setupApp, registerUser, adminToken, checkerToken } from './helpers';
 import { getDb } from '../db';
 import { setSetting } from '../services/settings';
-import { dispatchOutbox, emitPayment, acquireLease, recoverUncertainEmissions, getPaymentRow, paymentTimeline, listLinkedOperations, refundable, cancelPayment } from '../services/switch/payments';
+import { dispatchOutbox, emitPayment, acquireLease, recoverUncertainEmissions, getPaymentRow, paymentTimeline, listLinkedOperations, refundable } from '../services/switch/payments';
 import { simulatorFor } from '../services/switch/adapter';
 import { getConnection, setCertificate, setLinkState, emissionGate, certificateAlerts, upsertConnection } from '../services/switch/connections';
 import { setParticipantStatus, getParticipant } from '../services/switch/participants';

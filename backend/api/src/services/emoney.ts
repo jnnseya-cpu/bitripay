@@ -21,7 +21,7 @@ import { badRequest, conflict, forbidden, notFound, unprocessable } from '../lib
 import { getCurrency } from './currencies';
 import { getComplianceSettings, getEmoneySettings } from './settings';
 import { recordEvent, type Actor } from './events';
-import { createUser, findUserById, getSystemUser, toPublicUser, type UserRow } from './users';
+import { createUser, findUserById, toPublicUser, type UserRow } from './users';
 import { ensureWallet, getUserWallet, getWallet, type WalletRow } from './wallets';
 import { postTransaction, type TransactionRow } from './ledger';
 import { notify } from './notifications';

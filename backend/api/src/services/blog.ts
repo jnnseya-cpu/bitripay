@@ -6,7 +6,7 @@
 import { getDb } from '../db';
 import { uuid, now } from '../lib/ids';
 import { parseJson } from '../lib/json';
-import { badRequest, conflict, notFound } from '../lib/errors';
+import { badRequest, notFound } from '../lib/errors';
 import { renderMarkdown, readingMinutes, slugify, escapeHtml, type Heading } from './markdown';
 import { applyDynamicLinks, listLinkRules, absoluteUrl, faqJsonLd, breadcrumbJsonLd, siteUrl, getSeoSettingsCached, type LinkRule } from './seoHelpers';
 import { recordEvent, type Actor } from './events';

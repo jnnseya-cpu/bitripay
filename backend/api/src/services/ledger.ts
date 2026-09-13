@@ -22,7 +22,7 @@ import { badRequest, conflict, forbidden, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
 import type { Transaction, TransactionStatus, TransactionType, PublicUser } from '@bitripay/shared';
 import { applyBps } from '@bitripay/shared';
-import { getFees, getLimits } from './settings';
+import { getLimits } from './settings';
 import { fromBase, toBase } from './currencies';
 import { resolveFeeRule, type FeeContext } from './finops/fees';
 import { enforceTierLimits } from './risk/kycTiers';
