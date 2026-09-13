@@ -53,9 +53,9 @@
 
 | Surface | As built | BitriPay OS extension |
 |---|---|---|
-| Customer web (`apps/web`) | React 19, Vite, SSR-rendered marketing/blog/legal pages, cinematic landing, statements, currency-consent flow | Command Centre route (`/assist`) with streaming chat, task cards, approvals inbox, voice input (Web Speech API with server fallback), "explain this" on every transaction |
-| Admin (`apps/admin`) | Treasury, e-money, corridors, users, SEO, approvals, loud alerts | Super Control Centre (section 14): agent registry, policy editor, budget dashboards, incident room, model routing, kill switches |
-| Mobile (`apps/mobile`) | Expo SDK 53, passkeys/biometrics, loud alerts, statements | Voice-first assistant, offline task queue, USSD-style fallback menus for low-end devices |
+| Customer web (`frontend/web`) | React 19, Vite, SSR-rendered marketing/blog/legal pages, cinematic landing, statements, currency-consent flow | Command Centre route (`/assist`) with streaming chat, task cards, approvals inbox, voice input (Web Speech API with server fallback), "explain this" on every transaction |
+| Admin (`frontend/admin`) | Treasury, e-money, corridors, users, SEO, approvals, loud alerts | Super Control Centre (section 14): agent registry, policy editor, budget dashboards, incident room, model routing, kill switches |
+| Mobile (`frontend/mobile`) | Expo SDK 53, passkeys/biometrics, loud alerts, statements | Voice-first assistant, offline task queue, USSD-style fallback menus for low-end devices |
 | Payout device / SMS forwarder | Signed evidence capture, alarm on queue | Device health telemetry to System Health Agent, remote config |
 | Developer Centre | Merchant gateway settings | Interactive docs (OpenAPI-driven), sandbox event simulator, SDK downloads, usage graphs |
 

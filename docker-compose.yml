@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: backend/api/Dockerfile
     environment:
       NODE_ENV: production
       PORT: 4000
@@ -21,7 +21,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: frontend/web/Dockerfile
     ports:
       - "8080:80"
     depends_on:
@@ -29,7 +29,7 @@ services:
   admin:
     build:
       context: .
-      dockerfile: apps/admin/Dockerfile
+      dockerfile: frontend/admin/Dockerfile
     ports:
       - "8081:80"
     depends_on:

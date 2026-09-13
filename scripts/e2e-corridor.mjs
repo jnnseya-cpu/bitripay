@@ -8,7 +8,7 @@ const j = async (method, path, body, token, headers = {}) => {
   const r = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers }, body: body ? JSON.stringify(body) : undefined });
   return { status: r.status, body: await r.json().catch(() => ({})) };
 };
-const demo = JSON.parse(fs.readFileSync('apps/api/data/demo-payout-device.json', 'utf8'));
+const demo = JSON.parse(fs.readFileSync('backend/api/data/demo-payout-device.json', 'utf8'));
 const pk = createPrivateKey(demo.privateKeyPem);
 const devHeaders = (method, path) => { const ts = new Date().toISOString(); return { 'X-Device-Id': demo.deviceId, 'X-Device-Timestamp': ts, 'X-Device-Signature': sign(null, Buffer.from([demo.deviceId, ts, method, path].join('\n')), pk).toString('base64') }; };
 // setup: admin + checker PINs; alice KYC verified (card-funded payouts otherwise hold for review)

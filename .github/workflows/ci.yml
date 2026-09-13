@@ -1,0 +1,19 @@
+name: verify
+on:
+  push:
+  pull_request:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: SKIP_MOBILE=1 npm run verify
+      - name: mobile and payout device typecheck
+        run: |
+          (cd frontend/mobile && npm ci && npm run typecheck)
+          (cd frontend/payout-device && npm ci && npm run typecheck && npm test)

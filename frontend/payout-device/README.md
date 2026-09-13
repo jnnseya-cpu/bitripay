@@ -9,7 +9,7 @@ run as a **SMS collector** (kind `collection`) on a merchant SIM that receives c
 
 ## What it does
 
-| Step | Device | Server (`apps/api`) |
+| Step | Device | Server (`backend/api`) |
 | --- | --- | --- |
 | Enrol | Agent signs in once, picks the payout account they operate, the app generates an Ed25519 key in the keystore-backed secure store and registers the public key + SIM identity (`POST /api/evidence/devices`, kind `payout`). The agent token is discarded. | Agents may only enrol devices on accounts they operate (`payout_not_yours`); a payout device must declare its SIM (`sim_identity_required`). |
 | Queue | Polls `GET /api/payouts/device/queue` every 10 s with device-signed headers. | Returns `QUEUED` / `IN_PROGRESS` instructions for that payout account only. |
@@ -44,7 +44,7 @@ The native module has not been compiled in this repository's CI container (no An
 with Android Studio / SDK 34+ and JDK 17, or with EAS:
 
 ```bash
-cd apps/payout-device
+cd frontend/payout-device
 npm install
 npx expo prebuild --platform android      # applies modules/sms-receiver/app.plugin.js
 npx expo run:android                       # or: eas build -p android --profile production

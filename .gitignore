@@ -13,3 +13,6 @@ data/
 coverage/
 *.log
 .vite/
+
+# live smoke output
+shots/smoke/

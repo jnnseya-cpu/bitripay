@@ -7,13 +7,31 @@ with API & webhooks**, and a **WooCommerce plugin**.
 
 ```
 bitripay/
-├── apps/api        Node.js + Express + SQLite REST API (double-entry ledger, auth, gateways, admin)
-├── apps/web        React web app for users, merchants and agents + hosted checkout + landing site
-├── apps/admin      React admin panel
-├── apps/mobile     Expo (React Native) app for users, merchants and agents
-├── packages/shared Shared types, money math, QR codec, all ISO countries & currencies, i18n dictionaries
-└── integrations/woocommerce-bitripay  WordPress / WooCommerce payment gateway plugin
+├── backend/
+│   └── api                Node.js + Express + SQLite REST API: double-entry ledger, auth, gateways, switch,
+│                          finance operations, risk & compliance, intelligence, partner API v1, admin API,
+│                          BitriPay Lite (no-JavaScript site), USSD/SMS channels
+├── frontend/
+│   ├── web                React web app for users, merchants and agents + hosted checkout + landing site (PWA)
+│   ├── admin              React admin console
+│   ├── mobile             Expo (React Native) app for users, merchants and agents (offline-signed payments)
+│   └── payout-device      Expo (Android) payout device & SMS forwarder for prefunded mobile-money SIMs
+├── shared/
+│   ├── core               @bitripay/shared: types, money math, QR codec, ISO countries & currencies, i18n
+│   ├── bitriqr            @bitripay/bitriqr: EMVCo QR + signed BitriPay extension (encode, decode, sign, verify)
+│   ├── sdk-node           @bitripay/sdk (Node / TypeScript partner SDK)
+│   ├── sdk-php            bitripay/sdk (PHP partner SDK)
+│   └── sdk-python         bitripay (Python partner SDK)
+├── integrations/
+│   └── woocommerce-bitripay   WordPress / WooCommerce payment gateway plugin
+├── docs/                  Operating-system dossier and verification report
+└── scripts/               Playwright smoke flows and the full verification run
 ```
+
+Backend, frontend and shared code only meet through the published packages (`@bitripay/shared`,
+`@bitripay/bitriqr`) and the HTTP API: no frontend imports backend code, and the backend never imports
+a frontend. `npm run verify` builds and tests all three layers from a clean checkout (see
+[docs/VERIFICATION.md](docs/VERIFICATION.md)).
 
 ## Features
 
@@ -178,7 +196,7 @@ Requirements: Node.js 20+ (22 recommended).
 
 ```bash
 npm install
-cp apps/api/.env.example apps/api/.env      # optional – defaults work for local development
+cp backend/api/.env.example backend/api/.env      # optional – defaults work for local development
 npm run dev                                  # API :4000, web app :5173, admin :5174
 ```
 
@@ -204,7 +222,7 @@ and returned as `devCode` (never in production).
 
 ### Landing page
 
-`apps/web/src/pages/Landing.tsx` is the public home page: a canvas-drawn cinematic hero with real
+`frontend/web/src/pages/Landing.tsx` is the public home page: a canvas-drawn cinematic hero with real
 product screenshots in a device frame, the three people the product is designed around, the money
 lifecycle, product pillars, the safeguarding rule, merchant and agent sections, an FAQ (also emitted as
 JSON-LD) and the latest articles. Its styles are self-contained in `landing.css`.
@@ -212,7 +230,7 @@ JSON-LD) and the latest articles. Its styles are self-contained in `landing.css`
 ### Run the mobile app
 
 ```bash
-cd apps/mobile
+cd frontend/mobile
 npm install
 # point the app at your API (edit app.json → expo.extra.apiUrl / webUrl, use your LAN IP for a device)
 npx expo start
@@ -224,14 +242,14 @@ configured in `app.json`.
 
 ### Run the Android payout device / SMS forwarder
 
-`apps/payout-device` is the app for the phone that holds a merchant or agent SIM: it enrols with a
+`frontend/payout-device` is the app for the phone that holds a merchant or agent SIM: it enrols with a
 device-generated Ed25519 key, polls its payout queue with signed requests, dials the operator USSD
 menu, and signs and forwards every operator confirmation SMS the instant it arrives (a native
 `SMS_RECEIVED` receiver, `modules/sms-receiver`). Its protocol is unit-tested in Node against the
 API's own verifier.
 
 ```bash
-cd apps/payout-device
+cd frontend/payout-device
 npm install
 npm test                                   # protocol interop + forwarder tests
 npx expo prebuild --platform android       # applies the sms-receiver config plugin
@@ -239,7 +257,7 @@ npx expo run:android                       # needs Android SDK 34+ / JDK 17, or 
 ```
 
 The native module was not compiled in this repository's build container (no Android SDK); see
-`apps/payout-device/README.md` for permissions, distribution (managed / enterprise, not the public
+`frontend/payout-device/README.md` for permissions, distribution (managed / enterprise, not the public
 Play store) and operating notes.
 
 ### Tests
@@ -260,7 +278,7 @@ npm run typecheck # TypeScript across api, web and admin
 
 ## Brand
 
-The system, product and brand name is **BitriPay**. The brand kit lives in `apps/api/public/brand/` and is served at
+The system, product and brand name is **BitriPay**. The brand kit lives in `backend/api/public/brand/` and is served at
 `/brand/*` by the API (proxied by the web and admin apps):
 
 | File | Use |
@@ -269,18 +287,18 @@ The system, product and brand name is **BitriPay**. The brand kit lives in `apps
 | `logo-white.svg` | White wordmark for dark backgrounds (landing header, splash) |
 | `mark.svg`, `favicon.svg` | The chevron and dots on an indigo tile: favicons, app icon |
 
-Colours are exported once from `packages/shared/src/brand.ts` (`BRAND`) and mirrored in every theme: indigo
+Colours are exported once from `shared/core/src/brand.ts` (`BRAND`) and mirrored in every theme: indigo
 `#2E2A7B` (primary), dots `#1A8ED8 → #1F5EAE`, green `#12A34B` (success), orange `#F49D1F` (warning/accent), ink
-`#161832`, paper `#F6F6FB`. Mobile PNGs (`apps/mobile/assets/icon.png`, `adaptive-icon.png`, `splash.png`,
+`#161832`, paper `#F6F6FB`. Mobile PNGs (`frontend/mobile/assets/icon.png`, `adaptive-icon.png`, `splash.png`,
 `logo.png`, `logo-white.png`) are rendered from the SVGs.
 
 The wordmark in the repository is a vector recreation of the original artwork. To use the original file exactly,
-drop it in as `apps/api/public/brand/logo.svg` (or set Admin → Web, SEO & app settings → logo URL to a hosted
+drop it in as `backend/api/public/brand/logo.svg` (or set Admin → Web, SEO & app settings → logo URL to a hosted
 image) and re-render the mobile PNGs; nothing else needs to change.
 
 ## Configuration
 
-All configuration lives in `apps/api/.env` (see `.env.example`). Everything except secrets can also
+All configuration lives in `backend/api/.env` (see `.env.example`). Everything except secrets can also
 be changed at runtime in the admin panel and is stored in the database:
 
 - **Gateways** (`Admin → Deposit / payment gateways`): enable providers and paste credentials.
@@ -380,7 +398,7 @@ around the national switch. The gateway is built so the team can develop, test a
 switch protocol: the adapter is abstract, the **simulator** (labelled `SIMULATION`, fictitious institutions only)
 exercises every branch, and a real connector cannot be enabled until it is certified.
 
-**Objects and rules** (services under `apps/api/src/services/switch/`)
+**Objects and rules** (services under `backend/api/src/services/switch/`)
 
 | Piece | What it does |
 | --- | --- |
@@ -558,8 +576,8 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
   codes, analytics, printable sheets, institution registration and DD codes), **Developer portal** (scoped keys,
   webhook endpoints, deliveries and replay, events, sandbox, OpenAPI, SDK snippets, error catalogue); admin
   consoles **National switch & rails**, **Finance operations**, **Risk & compliance**, **Intelligence**.
-- **SDKs and docs**: `packages/sdk-node` (`@bitripay/sdk`, zero dependencies, typed resources, webhook
-  verification), `packages/sdk-php` (`bitripay/sdk`), `packages/sdk-python` (`bitripay`); the OpenAPI 3.1 document
+- **SDKs and docs**: `shared/sdk-node` (`@bitripay/sdk`, zero dependencies, typed resources, webhook
+  verification), `shared/sdk-php` (`bitripay/sdk`), `shared/sdk-python` (`bitripay`); the OpenAPI 3.1 document
   at `/api/v1/openapi.json` is generated from the same operation table the portal shows.
 
 ### Savings, wellbeing and locale resolution
@@ -671,7 +689,7 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
 
 ### Mobile: offline payments and savings
 
-- **Offline-native on the phone** (`apps/mobile/src/lib/offline.ts`, screen **Offline payments**): an Ed25519 subkey
+- **Offline-native on the phone** (`frontend/mobile/src/lib/offline.ts`, screen **Offline payments**): an Ed25519 subkey
   generated on the device (tweetnacl, secret half in the secure store, only the public half registered as SPKI),
   a monotonic counter, prefetched merchant nonces, merchant-side signed offline BitriQR codes without network, and a
   payer-side queue of promises signed on the phone (SHA-256 hash and canonical string identical to the API's). The
@@ -870,10 +888,10 @@ Cart/Checkout blocks and HPOS.
 docker compose up --build      # api :4000, web :8080, admin :8081
 ```
 
-Or build manually: `npm run build` then `node apps/api/dist/index.js` and serve `apps/web/dist` and
-`apps/admin/dist` as static sites (both proxy `/api` and `/v1` to the API; set `VITE_API_URL` at build
+Or build manually: `npm run build` then `node backend/api/dist/index.js` and serve `frontend/web/dist` and
+`frontend/admin/dist` as static sites (both proxy `/api` and `/v1` to the API; set `VITE_API_URL` at build
 time to use an absolute API URL instead). Set strong `JWT_SECRET` and `APP_SECRET`, `WEB_URL`,
-`ADMIN_URL`, `API_URL`, and mount `apps/api/data` (SQLite, WAL mode) on persistent storage.
+`ADMIN_URL`, `API_URL`, and mount `backend/api/data` (SQLite, WAL mode) on persistent storage.
 The data layer is plain SQL through a thin adapter, so migrating to PostgreSQL is straightforward.
 
 ## Security notes

@@ -74,7 +74,7 @@ if (listPayoutAccounts().length === 0) {
   const senegal = createPayoutAccount({ rail: 'mobile_money', operatorId: 'orange_sn', country: 'SN', currency: 'XOF', label: 'Orange Money Senegal – merchant SIM', msisdn: '+221770000100' }, { type: 'system' });
   prefundAccount(senegal.id, 2_000_000, { reference: 'SEED-PREFUND-XOF', note: 'Demo prefunding' }, admin);
   if (!listDevices().some((d) => d.kind === 'payout')) {
-    // Demo payout device: the private key is written to apps/api/data/demo-payout-device.json for the smoke test / a forwarder simulator. Never ship this.
+    // Demo payout device: the private key is written to backend/api/data/demo-payout-device.json for the smoke test / a forwarder simulator. Never ship this.
     const { publicKey, privateKey } = generateKeyPairSync('ed25519');
     const device = registerDevice(admin, { name: 'Demo Android payout device (Kinshasa)', publicKey: publicKey.export({ type: 'spki', format: 'pem' }).toString(), operatorIds: ['orange_cd'], kind: 'payout', simMsisdn: '+243890000100', simIccid: '8924300000000000100', agentUserId: drcAgent.id, payoutAccountId: orange.id }, admin.id);
     const out = path.join(path.dirname(process.env.DATABASE_PATH || './data/bitripay.db'), 'demo-payout-device.json');
