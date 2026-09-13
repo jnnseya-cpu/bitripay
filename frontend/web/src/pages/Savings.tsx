@@ -20,26 +20,65 @@ export function Savings() {
   const s = overview.data?.settings;
   const goals: any[] = overview.data?.goals ?? [];
   const wb = overview.data?.wellbeing;
-  const saveSettings = (patch: Record<string, unknown>) => api.put<any>('/api/savings/settings', patch).then(() => { overview.reload(); toast('Savings settings saved', 'success'); }).catch(err);
+  const saveSettings = (patch: Record<string, unknown>) =>
+    api
+      .put<any>('/api/savings/settings', patch)
+      .then(() => {
+        overview.reload();
+        toast('Savings settings saved', 'success');
+      })
+      .catch(err);
   const createGoal = () => {
     if (!goalForm.name.trim()) return toast('Give the goal a name', 'error');
-    api.post<any>('/api/savings/goals', { name: goalForm.name, currency: goalForm.currency, target: goalForm.target || null, deadline: goalForm.deadline ? new Date(goalForm.deadline).toISOString() : null }).then(() => { setGoalForm({ ...goalForm, name: '', target: '', deadline: '' }); overview.reload(); toast('Goal created', 'success'); }).catch(err);
+    api
+      .post<any>('/api/savings/goals', {
+        name: goalForm.name,
+        currency: goalForm.currency,
+        target: goalForm.target || null,
+        deadline: goalForm.deadline ? new Date(goalForm.deadline).toISOString() : null,
+      })
+      .then(() => {
+        setGoalForm({ ...goalForm, name: '', target: '', deadline: '' });
+        overview.reload();
+        toast('Goal created', 'success');
+      })
+      .catch(err);
   };
   const submitMove = () => {
     if (!move) return;
     setBusy(true);
-    api.post<any>(`/api/savings/goals/${move.goal.id}/${move.dir}`, { amount }).then(() => { setMove(null); setAmount(''); overview.reload(); refreshWallets(); toast(move.dir === 'contribute' ? 'Set aside' : 'Released to your balance', 'success'); }).catch(err).finally(() => setBusy(false));
+    api
+      .post<any>(`/api/savings/goals/${move.goal.id}/${move.dir}`, { amount })
+      .then(() => {
+        setMove(null);
+        setAmount('');
+        overview.reload();
+        refreshWallets();
+        toast(move.dir === 'contribute' ? 'Set aside' : 'Released to your balance', 'success');
+      })
+      .catch(err)
+      .finally(() => setBusy(false));
   };
   const closeGoal = (g: any) => {
     if (!confirm(`Close "${g.name}"? Everything set aside goes back to your spendable balance.`)) return;
-    api.del<any>(`/api/savings/goals/${g.id}`).then(() => { overview.reload(); refreshWallets(); toast('Goal closed', 'success'); }).catch(err);
+    api
+      .del<any>(`/api/savings/goals/${g.id}`)
+      .then(() => {
+        overview.reload();
+        refreshWallets();
+        toast('Goal closed', 'success');
+      })
+      .catch(err);
   };
   const stateKind = (st: string) => (st === 'green' ? 'success' : st === 'amber' ? 'warning' : 'danger');
   const setAside = goals.reduce((acc: Record<string, number>, g) => ({ ...acc, [g.currency]: (acc[g.currency] ?? 0) + g.savedMinor }), {});
 
   return (
     <div>
-      <PageHeader title={t('nav.savings')} subtitle="Money you set aside stays in your wallet but cannot be spent by accident. The anchor puts at least 10% of everything you receive into your goal; round-ups sweep the change of every payment." />
+      <PageHeader
+        title={t('nav.savings')}
+        subtitle="Money you set aside stays in your wallet but cannot be spent by accident. The anchor puts at least 10% of everything you receive into your goal; round-ups sweep the change of every payment."
+      />
       {overview.error && <Alert kind="error">{overview.error}</Alert>}
       <div className="grid cols-2">
         <div className="card">
@@ -63,13 +102,18 @@ export function Savings() {
                   {c.plan && (
                     <Alert kind={c.state === 'red' ? 'error' : 'warning'}>
                       <div>{c.plan.message}</div>
-                      <div style={{ marginTop: 6 }}>Set aside <strong>{money(c.plan.weeklySavingMinor, c.currency)}</strong> a week.{c.plan.cutFrom.length > 0 && <> Trim: {c.plan.cutFrom.map((x: any) => `${x.type.replace(/_/g, ' ')} by ${money(x.reduceByMinor, c.currency)}`).join(', ')}.</>}</div>
+                      <div style={{ marginTop: 6 }}>
+                        Set aside <strong>{money(c.plan.weeklySavingMinor, c.currency)}</strong> a week.
+                        {c.plan.cutFrom.length > 0 && <> Trim: {c.plan.cutFrom.map((x: any) => `${x.type.replace(/_/g, ' ')} by ${money(x.reduceByMinor, c.currency)}`).join(', ')}.</>}
+                      </div>
                     </Alert>
                   )}
                 </div>
               ))}
             </>
-          ) : <div className="sub-text">Loading…</div>}
+          ) : (
+            <div className="sub-text">Loading…</div>
+          )}
         </div>
         <div className="card">
           <h3>Automatic saving</h3>
@@ -81,7 +125,11 @@ export function Savings() {
               </label>
               <Field label="Anchor share" hint={`Never below ${overview.data.minimumAnchorBps / 100}%; at most 50%.`}>
                 <Select value={s.anchorBps} onChange={(e) => saveSettings({ anchorBps: Number(e.target.value) })}>
-                  {[1000, 1500, 2000, 2500, 3000, 4000, 5000].map((b) => <option key={b} value={b}>{b / 100}%</option>)}
+                  {[1000, 1500, 2000, 2500, 3000, 4000, 5000].map((b) => (
+                    <option key={b} value={b}>
+                      {b / 100}%
+                    </option>
+                  ))}
                 </Select>
               </Field>
               <label className="row" style={{ gap: 8, alignItems: 'center' }}>
@@ -98,10 +146,21 @@ export function Savings() {
               <Field label="Default goal">
                 <Select value={s.defaultGoalId ?? ''} onChange={(e) => saveSettings({ defaultGoalId: e.target.value || null })}>
                   <option value="">— none —</option>
-                  {goals.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.currency})</option>)}
+                  {goals.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} ({g.currency})
+                    </option>
+                  ))}
                 </Select>
               </Field>
-              {Object.keys(setAside).length > 0 && <div className="sub-text">Set aside: {Object.entries(setAside).map(([c, m]) => money(m as number, c)).join(' · ')}</div>}
+              {Object.keys(setAside).length > 0 && (
+                <div className="sub-text">
+                  Set aside:{' '}
+                  {Object.entries(setAside)
+                    .map(([c, m]) => money(m as number, c))
+                    .join(' · ')}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -113,40 +172,101 @@ export function Savings() {
           <div key={g.id} className="list-item" style={{ display: 'block' }}>
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div className="main-text">{g.name} {g.status === 'REACHED' && <Chip kind="success">reached</Chip>}</div>
-                <div className="sub-text">{money(g.savedMinor, g.currency)}{g.targetMinor > 0 && <> of {money(g.targetMinor, g.currency)}</>}{g.deadline && <> · by {new Date(g.deadline).toLocaleDateString()}</>}</div>
+                <div className="main-text">
+                  {g.name} {g.status === 'REACHED' && <Chip kind="success">reached</Chip>}
+                </div>
+                <div className="sub-text">
+                  {money(g.savedMinor, g.currency)}
+                  {g.targetMinor > 0 && <> of {money(g.targetMinor, g.currency)}</>}
+                  {g.deadline && <> · by {new Date(g.deadline).toLocaleDateString()}</>}
+                </div>
               </div>
               <div className="row" style={{ gap: 6 }}>
-                <Button size="sm" onClick={() => { setMove({ goal: g, dir: 'contribute' }); setAmount(''); }}>Set aside</Button>
-                <Button size="sm" variant="secondary" disabled={g.savedMinor <= 0} onClick={() => { setMove({ goal: g, dir: 'withdraw' }); setAmount(''); }}>Release</Button>
-                <Button size="sm" variant="ghost" onClick={() => closeGoal(g)}>Close</Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setMove({ goal: g, dir: 'contribute' });
+                    setAmount('');
+                  }}
+                >
+                  Set aside
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={g.savedMinor <= 0}
+                  onClick={() => {
+                    setMove({ goal: g, dir: 'withdraw' });
+                    setAmount('');
+                  }}
+                >
+                  Release
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => closeGoal(g)}>
+                  Close
+                </Button>
               </div>
             </div>
-            {g.targetMinor > 0 && <div className="progress" style={{ marginTop: 8 }}><div style={{ width: `${Math.round(g.progress * 100)}%` }} /></div>}
+            {g.targetMinor > 0 && (
+              <div className="progress" style={{ marginTop: 8 }}>
+                <div style={{ width: `${Math.round(g.progress * 100)}%` }} />
+              </div>
+            )}
             <div className="sub-text" style={{ marginTop: 4 }}>
-              {g.projection.weeklyPaceMinor > 0 ? <>Pace {money(g.projection.weeklyPaceMinor, g.currency)} a week{g.projection.weeksToTarget !== null && g.projection.weeksToTarget > 0 && <> · about {g.projection.weeksToTarget} weeks to go</>}{g.projection.onTrack === false && <> · <span style={{ color: 'var(--danger)' }}>behind the deadline</span></>}</> : 'No contributions in the last four weeks.'}
+              {g.projection.weeklyPaceMinor > 0 ? (
+                <>
+                  Pace {money(g.projection.weeklyPaceMinor, g.currency)} a week
+                  {g.projection.weeksToTarget !== null && g.projection.weeksToTarget > 0 && <> · about {g.projection.weeksToTarget} weeks to go</>}
+                  {g.projection.onTrack === false && (
+                    <>
+                      {' '}
+                      · <span style={{ color: 'var(--danger)' }}>behind the deadline</span>
+                    </>
+                  )}
+                </>
+              ) : (
+                'No contributions in the last four weeks.'
+              )}
             </div>
           </div>
         ))}
         <h4 style={{ marginTop: 16 }}>New goal</h4>
         <div className="grid cols-2">
-          <Field label="Name"><Input value={goalForm.name} onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} placeholder="School fees, a moto, stock for the shop…" /></Field>
+          <Field label="Name">
+            <Input value={goalForm.name} onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} placeholder="School fees, a moto, stock for the shop…" />
+          </Field>
           <Field label="Currency">
             <Select value={goalForm.currency} onChange={(e) => setGoalForm({ ...goalForm, currency: e.target.value })}>
-              {wallets.map((w) => <option key={w.currency} value={w.currency}>{w.currency}</option>)}
+              {wallets.map((w) => (
+                <option key={w.currency} value={w.currency}>
+                  {w.currency}
+                </option>
+              ))}
             </Select>
           </Field>
-          <Field label="Target (optional)"><Input inputMode="decimal" value={goalForm.target} onChange={(e) => setGoalForm({ ...goalForm, target: e.target.value })} placeholder="0.00" /></Field>
-          <Field label="Deadline (optional)"><Input type="date" value={goalForm.deadline} onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })} /></Field>
+          <Field label="Target (optional)">
+            <Input inputMode="decimal" value={goalForm.target} onChange={(e) => setGoalForm({ ...goalForm, target: e.target.value })} placeholder="0.00" />
+          </Field>
+          <Field label="Deadline (optional)">
+            <Input type="date" value={goalForm.deadline} onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })} />
+          </Field>
         </div>
         <Button onClick={createGoal}>Create goal</Button>
       </div>
       <Modal open={!!move} onClose={() => setMove(null)} title={move?.dir === 'contribute' ? `Set aside into ${move?.goal.name}` : `Release from ${move?.goal.name}`}>
         {move && (
           <>
-            <p className="sub-text">{move.dir === 'contribute' ? 'The amount stays in your wallet but is ring-fenced: it cannot be spent until you release it.' : `Up to ${money(move.goal.savedMinor, move.goal.currency)} can go back to your spendable balance.`}</p>
-            <Field label={`Amount (${move.goal.currency})`}><Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" autoFocus /></Field>
-            <Button block loading={busy} onClick={submitMove}>{move.dir === 'contribute' ? 'Set aside' : 'Release'}</Button>
+            <p className="sub-text">
+              {move.dir === 'contribute'
+                ? 'The amount stays in your wallet but is ring-fenced: it cannot be spent until you release it.'
+                : `Up to ${money(move.goal.savedMinor, move.goal.currency)} can go back to your spendable balance.`}
+            </p>
+            <Field label={`Amount (${move.goal.currency})`}>
+              <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" autoFocus />
+            </Field>
+            <Button block loading={busy} onClick={submitMove}>
+              {move.dir === 'contribute' ? 'Set aside' : 'Release'}
+            </Button>
           </>
         )}
       </Modal>

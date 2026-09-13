@@ -47,7 +47,9 @@ const evidenceSchema = z.object({
  */
 export const payoutsRouter = Router();
 
-payoutsRouter.get('/device/queue', deviceAuth, (req, res) => res.json({ device: { id: req.device!.id, name: req.device!.name, payoutAccountId: req.device!.payoutAccountId }, items: queueFor({ device: req.device }) }));
+payoutsRouter.get('/device/queue', deviceAuth, (req, res) =>
+  res.json({ device: { id: req.device!.id, name: req.device!.name, payoutAccountId: req.device!.payoutAccountId }, items: queueFor({ device: req.device }) }),
+);
 payoutsRouter.post('/device/:id/claim', deviceAuth, (req, res) => res.json({ payout: claimPayout(String(req.params.id), { device: req.device }) }));
 payoutsRouter.post('/device/:id/release', deviceAuth, (req, res) => {
   const body = validate(z.object({ reason: z.string().min(2).max(300) }), req.body);
@@ -67,7 +69,25 @@ payoutsRouter.post(
 payoutsRouter.use('/agent', requireAuth, requireRole('agent', 'admin'));
 payoutsRouter.get('/agent/queue', (req, res) => res.json({ items: queueFor({ agent: req.user }) }));
 /** Payout accounts this agent operates – the device app picks one at enrolment. */
-payoutsRouter.get('/agent/accounts', (req, res) => res.json({ items: listPayoutAccounts({ status: null }).filter((a) => a.agent?.id === req.user!.id || req.user!.role === 'admin').map((a) => ({ id: a.id, label: a.label, rail: a.rail, operatorId: a.operatorId, operatorName: a.operatorName, country: a.country, currency: a.currency, msisdn: a.msisdn, simIccid: a.simIccid, deviceId: a.deviceId, status: a.status })) }));
+payoutsRouter.get('/agent/accounts', (req, res) =>
+  res.json({
+    items: listPayoutAccounts({ status: null })
+      .filter((a) => a.agent?.id === req.user!.id || req.user!.role === 'admin')
+      .map((a) => ({
+        id: a.id,
+        label: a.label,
+        rail: a.rail,
+        operatorId: a.operatorId,
+        operatorName: a.operatorName,
+        country: a.country,
+        currency: a.currency,
+        msisdn: a.msisdn,
+        simIccid: a.simIccid,
+        deviceId: a.deviceId,
+        status: a.status,
+      })),
+  }),
+);
 payoutsRouter.get('/agent/history', (req, res) => res.json(listPayouts({ agentUserId: req.user!.id, pageSize: 50 })));
 payoutsRouter.post('/agent/:id/claim', (req, res) => res.json({ payout: claimPayout(String(req.params.id), { agent: req.user }) }));
 payoutsRouter.post('/agent/:id/release', (req, res) => {
@@ -80,8 +100,22 @@ payoutsRouter.post('/agent/:id/evidence', (req, res) => {
   const p = getPayout(String(req.params.id));
   const acc = p.payoutAccountId ? getPayoutAccount(p.payoutAccountId) : null;
   if (p.agent?.id !== req.user!.id && acc?.agent?.id !== req.user!.id && req.user!.role !== 'admin') throw forbidden('This payout is not assigned to you', 'payout_not_yours');
-  const r = submitPayoutEvidence(p.id, { source: 'manual', text: body.text, operatorId: body.operatorId ?? p.operatorId, from: 'agent', receivedAt: new Date().toISOString(), actor: { type: 'agent', id: req.user!.id } });
+  const r = submitPayoutEvidence(p.id, {
+    source: 'manual',
+    text: body.text,
+    operatorId: body.operatorId ?? p.operatorId,
+    from: 'agent',
+    receivedAt: new Date().toISOString(),
+    actor: { type: 'agent', id: req.user!.id },
+  });
   let verification = null;
-  if (body.externalRef) verification = proposeVerification(req.user!, p.id, { subjectType: 'payout', action: 'confirm', note: `Agent-entered confirmation: ${body.text.slice(0, 200)}`, externalRef: body.externalRef, evidenceId: r.evidenceId });
+  if (body.externalRef)
+    verification = proposeVerification(req.user!, p.id, {
+      subjectType: 'payout',
+      action: 'confirm',
+      note: `Agent-entered confirmation: ${body.text.slice(0, 200)}`,
+      externalRef: body.externalRef,
+      evidenceId: r.evidenceId,
+    });
   res.status(201).json({ payout: getPayout(p.id), evidence: { id: r.evidenceId, outcome: r.outcome, reasons: r.reasons }, verification });
 });

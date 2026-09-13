@@ -41,7 +41,10 @@ export const manualMomoProvider: GatewayProvider = {
       status: 'pending',
       next: {
         type: 'bank_instructions',
-        message: op.instructions || ctx.credentials.defaultInstructions || `Open ${op.name}${op.ussd ? ` (dial ${op.ussd})` : ''}, send exactly ${amountMajor} ${ctx.currency} to ${op.collectionNumber} and use ${reference} as the reference/note. Then enter the transaction ID below. Your wallet is credited as soon as the payment is confirmed.`,
+        message:
+          op.instructions ||
+          ctx.credentials.defaultInstructions ||
+          `Open ${op.name}${op.ussd ? ` (dial ${op.ussd})` : ''}, send exactly ${amountMajor} ${ctx.currency} to ${op.collectionNumber} and use ${reference} as the reference/note. Then enter the transaction ID below. Your wallet is credited as soon as the payment is confirmed.`,
         instructions,
       },
     };

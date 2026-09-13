@@ -21,18 +21,25 @@ beforeAll(() => {
   app = setupApp();
   getDb().prepare("UPDATE currencies SET enabled = 1 WHERE code IN ('CDF', 'USD', 'GBP', 'EUR', 'KES', 'AED')").run();
 });
-const balanceOf = async (auth: Record<string, string>, currency = 'USD') => ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
+const balanceOf = async (auth: Record<string, string>, currency = 'USD') =>
+  ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
 // deterministic pseudo-random so a failure can be replayed
 function rng(seed: number) {
   let s = seed >>> 0;
-  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32; };
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 2 ** 32;
+  };
 }
 
 describe('ledger under load', () => {
   it('stays zero-sum per currency and every wallet equals its derived balance after thousands of randomised postings', async () => {
     const users = [] as Awaited<ReturnType<typeof registerUser>>[];
     for (let i = 0; i < 6; i += 1) users.push(await registerUser(app));
-    for (const u of users) { await fund(app, u.user.id, '500.00', 'USD'); await fund(app, u.user.id, '300.00', 'GBP'); }
+    for (const u of users) {
+      await fund(app, u.user.id, '500.00', 'USD');
+      await fund(app, u.user.id, '300.00', 'GBP');
+    }
     const rand = rng(20260912);
     const currencies = ['USD', 'GBP'];
     let posted = 0;
@@ -49,7 +56,18 @@ describe('ledger under load', () => {
       const receiveCurrency = cross ? currencies.find((c) => c !== currency)! : currency;
       const toWallet = ensureWallet(b.user.id, receiveCurrency);
       try {
-        postTransaction({ type: 'transfer', amount, fee: calculateFee('transfer', amount, currency), currency, fromWalletId: fromWallet.id, toWalletId: toWallet.id, senderUserId: a.user.id, receiverUserId: b.user.id, ...(cross ? { receiveCurrency, receiveAmount: Math.max(1, Math.round(amount * 0.8)) } : {}), note: `load ${i}` });
+        postTransaction({
+          type: 'transfer',
+          amount,
+          fee: calculateFee('transfer', amount, currency),
+          currency,
+          fromWalletId: fromWallet.id,
+          toWalletId: toWallet.id,
+          senderUserId: a.user.id,
+          receiverUserId: b.user.id,
+          ...(cross ? { receiveCurrency, receiveAmount: Math.max(1, Math.round(amount * 0.8)) } : {}),
+          note: `load ${i}`,
+        });
         posted += 1;
         if (cross) conversions += 1;
       } catch (err: any) {
@@ -67,10 +85,12 @@ describe('ledger under load', () => {
     expect(recon.ok).toBe(true);
     expect(recon.transactionsChecked).toBeGreaterThanOrEqual(posted);
     // 2. zero-sum per currency across the whole ledger: debits == credits
-    const sums = getDb().prepare("SELECT w.currency, SUM(CASE WHEN e.direction = 'debit' THEN e.amount ELSE -e.amount END) net FROM ledger_entries e JOIN wallets w ON w.id = e.wallet_id GROUP BY w.currency").all() as { currency: string; net: number }[];
+    const sums = getDb()
+      .prepare("SELECT w.currency, SUM(CASE WHEN e.direction = 'debit' THEN e.amount ELSE -e.amount END) net FROM ledger_entries e JOIN wallets w ON w.id = e.wallet_id GROUP BY w.currency")
+      .all() as { currency: string; net: number }[];
     for (const s of sums) expect(s.net, s.currency).toBe(0);
     // 3. no user wallet went negative
-    const negative = getDb().prepare("SELECT COUNT(*) c FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.is_system = 0 AND w.balance < 0").get() as { c: number };
+    const negative = getDb().prepare('SELECT COUNT(*) c FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.is_system = 0 AND w.balance < 0').get() as { c: number };
     expect(negative.c).toBe(0);
     // 4. the API reports the same figures as the ledger
     for (const u of users) expect(await balanceOf(u.auth, 'USD')).toBe(getUserWallet(u.user.id, 'USD').balance);
@@ -82,7 +102,10 @@ describe('offline batch', () => {
     const m = await registerUser(app, { role: 'merchant', businessName: 'Marché Central', country: 'CD' });
     const payer = await registerUser(app);
     await fund(app, payer.user.id, '60.00');
-    const key = () => { const { publicKey, privateKey } = generateKeyPairSync('ed25519'); return { publicKey: publicKey.export({ type: 'spki', format: 'der' }).toString('base64'), sign: (p: string) => Buffer.from(nodeSign(null, Buffer.from(p), privateKey)).toString('base64') }; };
+    const key = () => {
+      const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+      return { publicKey: publicKey.export({ type: 'spki', format: 'der' }).toString('base64'), sign: (p: string) => Buffer.from(nodeSign(null, Buffer.from(p), privateKey)).toString('base64') };
+    };
     const mk = key();
     const pk = key();
     const mDev = await request(app).post('/api/v1/offline/devices').set(m.auth).send({ deviceId: 'till-01', publicKey: mk.publicKey });
@@ -92,7 +115,14 @@ describe('offline batch', () => {
     // a busy market: fifty sales in one sync is normal volume, so the velocity thresholds are set for it by the platform
     const admin = await adminToken(app);
     expect((await request(app).put('/api/admin/settings/risk').set(admin.auth).send({ maxTxPerHour: 500, maxTxPerDay: 2000 })).status).toBe(200);
-    expect((await request(app).put('/api/admin/risk/fraud/settings').set(admin.auth).send({ velocityThresholds: { hour: 500, day: 2000, week: 5000 } })).status).toBe(200);
+    expect(
+      (
+        await request(app)
+          .put('/api/admin/risk/fraud/settings')
+          .set(admin.auth)
+          .send({ velocityThresholds: { hour: 500, day: 2000, week: 5000 } })
+      ).status,
+    ).toBe(200);
     const nonces = (await request(app).post('/api/v1/offline/nonces').set(m.auth).send({ count: 50 })).body.data as { nonce: string; expiresAt: string }[];
     expect(nonces).toHaveLength(50);
     const promise = (i: number, amountMinor: number, counter: number, nonce = nonces[i]) => {
@@ -110,12 +140,17 @@ describe('offline batch', () => {
     expect(sync.body.results[45].reason).toBe('insufficient_funds');
     expect(sync.body.results[45].restoreMinor).toBe(2000);
     // settled in submission order: the ledger holds them in counter order
-    const refs = getDb().prepare("SELECT reference FROM offline_promises WHERE payer_user_id = ? AND sync_state = 'SETTLED' ORDER BY synced_at, payer_device_counter").all(payer.user.id) as { reference: string }[];
+    const refs = getDb().prepare("SELECT reference FROM offline_promises WHERE payer_user_id = ? AND sync_state = 'SETTLED' ORDER BY synced_at, payer_device_counter").all(payer.user.id) as {
+      reference: string;
+    }[];
     expect(refs.map((r) => r.reference)).toEqual(batch.filter((_, i) => i !== 45).map((p) => p.reference));
     expect(await balanceOf(payer.auth)).toBe(6000 - 49 * 100);
     expect(await balanceOf(m.auth)).toBe(49 * (100 - calculateFee('qr_payment', 100, 'USD')));
     // replays: the same promise is a duplicate, the same nonce under a new counter is refused and restores the payer's view
-    const replay = await request(app).post('/api/v1/offline/sync').set(payer.auth).send({ promises: [batch[3], promise(3, 100, 51)] });
+    const replay = await request(app)
+      .post('/api/v1/offline/sync')
+      .set(payer.auth)
+      .send({ promises: [batch[3], promise(3, 100, 51)] });
     expect(replay.body.results.map((r: any) => r.state)).toEqual(['DUPLICATE', 'REJECTED']);
     expect(replay.body.results[1].reason).toBe('nonce_replayed');
     expect(replay.body.results[1].restoreMinor).toBe(100);
@@ -193,7 +228,10 @@ describe('savings anchor, round-ups and wellbeing', () => {
     const balance = await balanceOf(saver.auth);
     expect(balance).toBe(10000 - 1230 - fee);
     const available = balance - 1070;
-    const tooMuch = await request(app).post('/api/transfers').set(saver.auth).send({ to: payer.user.tag, amount: ((available + 50) / 100).toFixed(2), currency: 'USD', pin: '1234' });
+    const tooMuch = await request(app)
+      .post('/api/transfers')
+      .set(saver.auth)
+      .send({ to: payer.user.tag, amount: ((available + 50) / 100).toFixed(2), currency: 'USD', pin: '1234' });
     expect(tooMuch.status, JSON.stringify(tooMuch.body)).toBe(422);
     expect(tooMuch.body.error.code).toBe('insufficient_funds');
     expect(tooMuch.body.error.details?.held).toBe(1070);

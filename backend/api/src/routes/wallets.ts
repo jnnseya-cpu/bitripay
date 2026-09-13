@@ -6,7 +6,7 @@ import { buildStatement, statementCsv, statementPdf, listStatements } from '../s
 import { audit } from '../services/audit';
 import { requireAuth } from '../middleware/auth';
 import { listWallets, toWallet, ensureWallet } from '../services/wallets';
-import { getTransaction, listTransactions, toTransaction , calculateFee } from '../services/ledger';
+import { getTransaction, listTransactions, toTransaction, calculateFee } from '../services/ledger';
 import { exchange } from '../services/transfers';
 import { getCurrency, listCurrencies } from '../services/currencies';
 import { fxDisclosure } from '../services/fx';
@@ -92,7 +92,9 @@ walletsRouter.get('/transactions/:id', (req, res) => {
     transaction: toTransaction(tx, req.user!.id, users),
     sender: users.get(tx.sender_user_id!) ?? null,
     receiver: users.get(tx.receiver_user_id!) ?? null,
-    entries: ledger.filter((e) => mine.includes(e.wallet_id) || req.user!.role === 'admin').map((e) => ({ direction: e.direction, amount: e.amount, balanceAfter: e.balance_after, walletId: e.wallet_id, createdAt: e.created_at })),
+    entries: ledger
+      .filter((e) => mine.includes(e.wallet_id) || req.user!.role === 'admin')
+      .map((e) => ({ direction: e.direction, amount: e.amount, balanceAfter: e.balance_after, walletId: e.wallet_id, createdAt: e.created_at })),
   });
 });
 
@@ -100,8 +102,20 @@ walletsRouter.get('/transactions/:id', (req, res) => {
 walletsRouter.get('/summary', (req, res) => {
   const since = new Date(Date.now() - 30 * 86400_000).toISOString();
   const db = getDb();
-  const inflow = db.prepare("SELECT currency, COALESCE(SUM(COALESCE(receive_amount, amount)),0) s, COUNT(*) c FROM transactions WHERE receiver_user_id = ? AND sender_user_id != receiver_user_id AND status = 'completed' AND created_at >= ? GROUP BY currency").all(req.user!.id, since);
-  const outflow = db.prepare("SELECT currency, COALESCE(SUM(amount + fee),0) s, COUNT(*) c FROM transactions WHERE sender_user_id = ? AND sender_user_id != receiver_user_id AND status IN ('completed','pending') AND created_at >= ? GROUP BY currency").all(req.user!.id, since);
-  const daily = db.prepare("SELECT substr(created_at,1,10) day, SUM(CASE WHEN receiver_user_id = ? THEN COALESCE(receive_amount, amount) ELSE 0 END) inflow, SUM(CASE WHEN sender_user_id = ? THEN amount + fee ELSE 0 END) outflow, currency FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND status = 'completed' AND created_at >= ? GROUP BY day, currency ORDER BY day").all(req.user!.id, req.user!.id, req.user!.id, req.user!.id, since);
+  const inflow = db
+    .prepare(
+      "SELECT currency, COALESCE(SUM(COALESCE(receive_amount, amount)),0) s, COUNT(*) c FROM transactions WHERE receiver_user_id = ? AND sender_user_id != receiver_user_id AND status = 'completed' AND created_at >= ? GROUP BY currency",
+    )
+    .all(req.user!.id, since);
+  const outflow = db
+    .prepare(
+      "SELECT currency, COALESCE(SUM(amount + fee),0) s, COUNT(*) c FROM transactions WHERE sender_user_id = ? AND sender_user_id != receiver_user_id AND status IN ('completed','pending') AND created_at >= ? GROUP BY currency",
+    )
+    .all(req.user!.id, since);
+  const daily = db
+    .prepare(
+      "SELECT substr(created_at,1,10) day, SUM(CASE WHEN receiver_user_id = ? THEN COALESCE(receive_amount, amount) ELSE 0 END) inflow, SUM(CASE WHEN sender_user_id = ? THEN amount + fee ELSE 0 END) outflow, currency FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND status = 'completed' AND created_at >= ? GROUP BY day, currency ORDER BY day",
+    )
+    .all(req.user!.id, req.user!.id, req.user!.id, req.user!.id, since);
   res.json({ wallets: listWallets(req.user!.id).map((w) => toWallet(w)), inflow, outflow, daily });
 });

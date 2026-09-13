@@ -18,7 +18,12 @@ function loadMigrations(): { name: string; sql: string }[] {
 
 export function migrate(database: Db) {
   database.exec(`CREATE TABLE IF NOT EXISTS migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, applied_at TEXT NOT NULL)`);
-  const applied = new Set(database.prepare('SELECT name FROM migrations').all().map((r: any) => r.name as string));
+  const applied = new Set(
+    database
+      .prepare('SELECT name FROM migrations')
+      .all()
+      .map((r: any) => r.name as string),
+  );
   for (const m of loadMigrations()) {
     if (applied.has(m.name)) continue;
     database.transaction(() => {

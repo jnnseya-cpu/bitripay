@@ -16,7 +16,6 @@ export function setLoudEnabled(on: boolean) {
 async function load() {
   if (sound) return sound;
   await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false, shouldDuckAndroid: false });
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { sound: s } = await Audio.Sound.createAsync(require('../../assets/sounds/loud_alert.wav'), { volume: 1.0 });
   sound = s;
   return s;

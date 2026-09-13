@@ -22,7 +22,14 @@ webhooksRouter.post(
         if (!creds.smsSecret || !secret || !safeEqual(secret, creds.smsSecret)) return res.status(400).json({ received: false, error: 'Invalid secret' });
         const text = String(req.body?.text ?? req.body?.message ?? '');
         if (!text) return res.status(400).json({ received: false, error: 'text is required' });
-        const ev = ingestEvidence({ source: 'shared_secret', text, from: req.body?.from ? String(req.body.from) : null, operatorId: req.body?.operatorId ? String(req.body.operatorId) : null, receivedAt: req.body?.receivedAt ? String(req.body.receivedAt) : null, actor: { type: 'device', id: `shared_secret:${gateway.id}` } });
+        const ev = ingestEvidence({
+          source: 'shared_secret',
+          text,
+          from: req.body?.from ? String(req.body.from) : null,
+          operatorId: req.body?.operatorId ? String(req.body.operatorId) : null,
+          receivedAt: req.body?.receivedAt ? String(req.body.receivedAt) : null,
+          actor: { type: 'device', id: `shared_secret:${gateway.id}` },
+        });
         return res.json({ received: true, handled: ev.paymentId ? 1 : 0, evidence: { id: ev.id, outcome: ev.outcome, confidence: ev.confidence, reasons: ev.reasons, paymentId: ev.paymentId } });
       }
       const result = await handleGatewayWebhook(id, req);

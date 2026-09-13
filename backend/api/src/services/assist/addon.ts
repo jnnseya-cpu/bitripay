@@ -5,7 +5,7 @@
  */
 import { getDb } from '../../db';
 import { uuid, now } from '../../lib/ids';
-import { AppError, badRequest, unprocessable } from '../../lib/errors';
+import { badRequest, unprocessable } from '../../lib/errors';
 import { formatMoney } from '@bitripay/shared';
 import type { UserRow } from '../users';
 import { getSystemUser, findUserById } from '../users';
@@ -29,10 +29,21 @@ export interface SubscriptionView {
   cancelledAt: string | null;
   renewals: number;
 }
-const toView = (r: any): SubscriptionView => ({ id: r.id, status: r.status, currency: r.currency, amount: r.amount, periodDays: r.period_days, autoRenew: !!r.auto_renew, startedAt: r.started_at, expiresAt: r.expires_at, cancelledAt: r.cancelled_at, renewals: r.renewals });
+const toView = (r: any): SubscriptionView => ({
+  id: r.id,
+  status: r.status,
+  currency: r.currency,
+  amount: r.amount,
+  periodDays: r.period_days,
+  autoRenew: !!r.auto_renew,
+  startedAt: r.started_at,
+  expiresAt: r.expires_at,
+  cancelledAt: r.cancelled_at,
+  renewals: r.renewals,
+});
 
 export function currentSubscription(userId: string): SubscriptionView | null {
-  const r = getDb().prepare("SELECT * FROM agent_subscriptions WHERE user_id = ? ORDER BY expires_at DESC LIMIT 1").get(userId) as any;
+  const r = getDb().prepare('SELECT * FROM agent_subscriptions WHERE user_id = ? ORDER BY expires_at DESC LIMIT 1').get(userId) as any;
   return r ? toView(r) : null;
 }
 export function hasActiveAddon(user: UserRow): boolean {
@@ -67,23 +78,36 @@ export function addonStatus(user: UserRow) {
   const runs = (getDb().prepare('SELECT COUNT(*) c FROM agent_runs WHERE user_id = ? AND created_at >= ?').get(user.id, `${month}-01T00:00:00.000Z`) as any).c as number;
   const prices = listWallets(user.id).map((w) => priceIn(w.currency));
   if (!prices.length) prices.push(priceIn(s.priceCurrency));
-  return { required: s.enabled && user.role !== 'admin', active, subscription: sub, periodDays: s.periodDays, prices, freeRuns: s.freeRuns, freeRunsLeft: Math.max(0, s.freeRuns - runs), autoRenewDefault: s.autoRenew };
+  return {
+    required: s.enabled && user.role !== 'admin',
+    active,
+    subscription: sub,
+    periodDays: s.periodDays,
+    prices,
+    freeRuns: s.freeRuns,
+    freeRunsLeft: Math.max(0, s.freeRuns - runs),
+    autoRenewDefault: s.autoRenew,
+  };
 }
 
 /** Throws unless the account holder may start a run (active add-on, free run left, administrator, or add-on switched off). */
-export function assertAddon(user: UserRow) {
-  const st = addonStatus(user);
-  if (!st.required || st.active) return;
-  if (st.freeRunsLeft > 0) return;
-  throw new AppError(402, 'addon_required', `Activate the command centre add-on (${st.prices[0]?.formatted ?? ''} for ${st.periodDays} days) to keep using your agents. Everything else in BitriPay works as usual.`);
-}
-
 function charge(user: UserRow, currency: string, amount: number, periodDays: number, renewal: boolean) {
   const cur = getCurrency(currency);
   const wallet = getUserWallet(user.id, cur.code);
   if (wallet.balance < amount) throw unprocessable(`Insufficient balance: the add-on costs ${formatMoney(amount, cur)}`, 'insufficient_funds');
   const fees = getSystemUser('fees');
-  return postTransaction({ type: 'subscription', amount, fee: 0, currency: cur.code, fromWalletId: wallet.id, toWalletId: ensureWallet(fees.id, cur.code).id, senderUserId: user.id, receiverUserId: fees.id, note: `Command centre add-on · ${periodDays} days${renewal ? ' (renewal)' : ''}`, metadata: { addon: 'assist', periodDays, renewal } });
+  return postTransaction({
+    type: 'subscription',
+    amount,
+    fee: 0,
+    currency: cur.code,
+    fromWalletId: wallet.id,
+    toWalletId: ensureWallet(fees.id, cur.code).id,
+    senderUserId: user.id,
+    receiverUserId: fees.id,
+    note: `Command centre add-on · ${periodDays} days${renewal ? ' (renewal)' : ''}`,
+    metadata: { addon: 'assist', periodDays, renewal },
+  });
 }
 
 /** Activate (or extend) the add-on by paying one period from the chosen wallet. Needs the transaction PIN or a step-up token. */
@@ -101,12 +125,29 @@ export function activateAddon(user: UserRow, currency: string, pin: string | und
     const expires = new Date(base.getTime() + s.periodDays * 86400_000).toISOString();
     const renew = (autoRenew ?? s.autoRenew) ? 1 : 0;
     if (existing && existing.status === 'active' && existing.expiresAt > now()) {
-      db.prepare('UPDATE agent_subscriptions SET expires_at = ?, auto_renew = ?, last_transaction_id = ?, renewals = renewals + 1, updated_at = ? WHERE id = ?').run(expires, renew, tx.id, now(), existing.id);
+      db.prepare('UPDATE agent_subscriptions SET expires_at = ?, auto_renew = ?, last_transaction_id = ?, renewals = renewals + 1, updated_at = ? WHERE id = ?').run(
+        expires,
+        renew,
+        tx.id,
+        now(),
+        existing.id,
+      );
     } else {
-      db.prepare('INSERT INTO agent_subscriptions (id, user_id, status, currency, amount, period_days, auto_renew, started_at, expires_at, last_transaction_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(uuid(), user.id, 'active', price.currency, price.amount, s.periodDays, renew, now(), expires, tx.id, now(), now());
+      db.prepare(
+        'INSERT INTO agent_subscriptions (id, user_id, status, currency, amount, period_days, auto_renew, started_at, expires_at, last_transaction_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(uuid(), user.id, 'active', price.currency, price.amount, s.periodDays, renew, now(), expires, tx.id, now(), now());
     }
-    recordEvent('admin', user.id, 'assist.addon.activated', { type: user.role === 'admin' ? 'admin' : 'user', id: user.id }, { currency: price.currency, amount: price.amount, periodDays: s.periodDays, transactionId: tx.id });
-    notify(user.id, 'Command centre activated', `Your agents are active until ${expires.slice(0, 10)}. ${price.formatted} was taken from your ${price.currency} wallet.`, { kind: 'agent', transactionId: tx.id });
+    recordEvent(
+      'admin',
+      user.id,
+      'assist.addon.activated',
+      { type: user.role === 'admin' ? 'admin' : 'user', id: user.id },
+      { currency: price.currency, amount: price.amount, periodDays: s.periodDays, transactionId: tx.id },
+    );
+    notify(user.id, 'Command centre activated', `Your agents are active until ${expires.slice(0, 10)}. ${price.formatted} was taken from your ${price.currency} wallet.`, {
+      kind: 'agent',
+      transactionId: tx.id,
+    });
     return currentSubscription(user.id)!;
   })();
 }
@@ -115,14 +156,16 @@ export function activateAddon(user: UserRow, currency: string, pin: string | und
 export function cancelAddon(user: UserRow): SubscriptionView | null {
   const sub = currentSubscription(user.id);
   if (!sub) return null;
-  getDb().prepare("UPDATE agent_subscriptions SET auto_renew = 0, cancelled_at = COALESCE(cancelled_at, ?), updated_at = ? WHERE id = ?").run(now(), now(), sub.id);
+  getDb().prepare('UPDATE agent_subscriptions SET auto_renew = 0, cancelled_at = COALESCE(cancelled_at, ?), updated_at = ? WHERE id = ?').run(now(), now(), sub.id);
   recordEvent('admin', user.id, 'assist.addon.cancelled', { type: 'user', id: user.id }, { subscriptionId: sub.id });
   return currentSubscription(user.id);
 }
 export function setAutoRenew(user: UserRow, on: boolean): SubscriptionView | null {
   const sub = currentSubscription(user.id);
   if (!sub) return null;
-  getDb().prepare('UPDATE agent_subscriptions SET auto_renew = ?, cancelled_at = ?, updated_at = ? WHERE id = ?').run(on ? 1 : 0, on ? null : now(), now(), sub.id);
+  getDb()
+    .prepare('UPDATE agent_subscriptions SET auto_renew = ?, cancelled_at = ?, updated_at = ? WHERE id = ?')
+    .run(on ? 1 : 0, on ? null : now(), now(), sub.id);
   return currentSubscription(user.id);
 }
 
@@ -145,12 +188,23 @@ export function renewSubscriptions(): { renewed: number; expired: number } {
         const price = priceIn(r.currency);
         const tx = charge(user, price.currency, price.amount, s.periodDays, true);
         const expires = new Date(Date.now() + s.periodDays * 86400_000).toISOString();
-        db.prepare('UPDATE agent_subscriptions SET expires_at = ?, amount = ?, last_transaction_id = ?, renewals = renewals + 1, updated_at = ? WHERE id = ?').run(expires, price.amount, tx.id, now(), r.id);
-        notify(user.id, 'Command centre renewed', `${price.formatted} was taken from your ${price.currency} wallet. Active until ${expires.slice(0, 10)}. Cancel any time in the command centre.`, { kind: 'agent', transactionId: tx.id });
+        db.prepare('UPDATE agent_subscriptions SET expires_at = ?, amount = ?, last_transaction_id = ?, renewals = renewals + 1, updated_at = ? WHERE id = ?').run(
+          expires,
+          price.amount,
+          tx.id,
+          now(),
+          r.id,
+        );
+        notify(user.id, 'Command centre renewed', `${price.formatted} was taken from your ${price.currency} wallet. Active until ${expires.slice(0, 10)}. Cancel any time in the command centre.`, {
+          kind: 'agent',
+          transactionId: tx.id,
+        });
         renewed++;
         continue;
       } catch (e: any) {
-        notify(user.id, 'Command centre paused', `We could not renew your add-on (${e?.message ?? 'payment failed'}). Everything else keeps working; activate again whenever you like.`, { kind: 'agent' });
+        notify(user.id, 'Command centre paused', `We could not renew your add-on (${e?.message ?? 'payment failed'}). Everything else keeps working; activate again whenever you like.`, {
+          kind: 'agent',
+        });
       }
     } else if (s.enabled) notify(user.id, 'Command centre ended', 'Your add-on period has ended. Everything else keeps working; activate again whenever you like.', { kind: 'agent' });
     db.prepare("UPDATE agent_subscriptions SET status = 'expired', updated_at = ? WHERE id = ?").run(now(), r.id);

@@ -36,7 +36,21 @@ export function fxDisclosure(from: string, to: string, userId?: string | null, p
   const t = getCurrency(to, false);
   const app = getAppSettings();
   const fx = getFxSettings();
-  if (f.code === t.code) return { sourceCurrency: f.code, targetCurrency: t.code, midRate: 1, rate: 1, markupBps: 0, provider: 'none', providerLabel: 'Same currency', rateTimestamp: null, stale: false, guaranteed: true, expiresAt: null, quoteId: null };
+  if (f.code === t.code)
+    return {
+      sourceCurrency: f.code,
+      targetCurrency: t.code,
+      midRate: 1,
+      rate: 1,
+      markupBps: 0,
+      provider: 'none',
+      providerLabel: 'Same currency',
+      rateTimestamp: null,
+      stale: false,
+      guaranteed: true,
+      expiresAt: null,
+      quoteId: null,
+    };
   const midRate = exchangeRate(f, t);
   const markupBps = app.exchangeMarginBps;
   const rate = midRate * (1 - markupBps / 10000);
@@ -49,18 +63,54 @@ export function fxDisclosure(from: string, to: string, userId?: string | null, p
   const oldest = timestamps.length ? timestamps.map((x) => new Date(x).getTime()).reduce((a, b) => Math.min(a, b)) : null;
   const tooOld = oldest !== null && Date.now() - oldest > fx.maxRateAgeHours * 3600_000;
   const stale = manual || tooOld;
-  const provider = testRates ? legs.find((c) => c.rateSource.startsWith('test_rates'))!.rateSource : imported ? imported : manual ? 'administrator-approved' : legs[0]?.rateSource ?? 'manual';
-  const providerLabel = testRates ? `Versioned test rates (${provider}) – NOT live market rates` : imported ? `Administrator-imported rate batch ${imported.replace('import_', '')} – NOT live` : manual ? 'Administrator-approved rate (not a live market rate)' : tooOld ? `Live rate from ${provider} (stale)` : `Live rate from ${provider}`;
+  const provider = testRates ? legs.find((c) => c.rateSource.startsWith('test_rates'))!.rateSource : imported ? imported : manual ? 'administrator-approved' : (legs[0]?.rateSource ?? 'manual');
+  const providerLabel = testRates
+    ? `Versioned test rates (${provider}) – NOT live market rates`
+    : imported
+      ? `Administrator-imported rate batch ${imported.replace('import_', '')} – NOT live`
+      : manual
+        ? 'Administrator-approved rate (not a live market rate)'
+        : tooOld
+          ? `Live rate from ${provider} (stale)`
+          : `Live rate from ${provider}`;
   const guaranteed = !stale && fx.guaranteedQuotes;
   const expiresAt = guaranteed ? new Date(Date.now() + fx.quoteTtlSeconds * 1000).toISOString() : null;
   let quoteId: string | null = null;
   if (persist) {
     quoteId = uuid();
     getDb()
-      .prepare('INSERT INTO fx_quotes (id, user_id, from_currency, to_currency, mid_rate, rate, markup_bps, provider, rate_timestamp, guaranteed, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(quoteId, userId ?? null, f.code, t.code, midRate, rate, markupBps, provider, oldest ? new Date(oldest).toISOString() : null, guaranteed ? 1 : 0, expiresAt ?? new Date(Date.now() + fx.quoteTtlSeconds * 1000).toISOString(), now());
+      .prepare(
+        'INSERT INTO fx_quotes (id, user_id, from_currency, to_currency, mid_rate, rate, markup_bps, provider, rate_timestamp, guaranteed, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        quoteId,
+        userId ?? null,
+        f.code,
+        t.code,
+        midRate,
+        rate,
+        markupBps,
+        provider,
+        oldest ? new Date(oldest).toISOString() : null,
+        guaranteed ? 1 : 0,
+        expiresAt ?? new Date(Date.now() + fx.quoteTtlSeconds * 1000).toISOString(),
+        now(),
+      );
   }
-  return { sourceCurrency: f.code, targetCurrency: t.code, midRate, rate, markupBps, provider, providerLabel, rateTimestamp: oldest ? new Date(oldest).toISOString() : null, stale, guaranteed, expiresAt, quoteId };
+  return {
+    sourceCurrency: f.code,
+    targetCurrency: t.code,
+    midRate,
+    rate,
+    markupBps,
+    provider,
+    providerLabel,
+    rateTimestamp: oldest ? new Date(oldest).toISOString() : null,
+    stale,
+    guaranteed,
+    expiresAt,
+    quoteId,
+  };
 }
 
 export interface LockedQuote {

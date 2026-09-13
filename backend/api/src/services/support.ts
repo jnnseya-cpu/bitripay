@@ -28,7 +28,16 @@ export function createTicket(user: UserRow, input: { subject: string; category?:
   if (!getModules().support) throw unprocessable('Support tickets are currently disabled', 'module_disabled');
   const db = getDb();
   const id = uuid();
-  db.prepare('INSERT INTO support_tickets (id, user_id, subject, category, priority, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, user.id, input.subject.trim(), input.category || 'general', input.priority || 'normal', 'open', now(), now());
+  db.prepare('INSERT INTO support_tickets (id, user_id, subject, category, priority, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id,
+    user.id,
+    input.subject.trim(),
+    input.category || 'general',
+    input.priority || 'normal',
+    'open',
+    now(),
+    now(),
+  );
   db.prepare('INSERT INTO support_messages (id, ticket_id, sender_id, is_admin, body, created_at) VALUES (?, ?, ?, 0, ?, ?)').run(uuid(), id, user.id, input.body.trim(), now());
   return getTicket(id, user);
 }
@@ -90,7 +99,14 @@ export function sendChat(user: UserRow, body: string, targetUserId?: string) {
   const conversationUserId = isAdmin ? targetUserId : user.id;
   if (!conversationUserId) throw notFound('Conversation not found');
   const id = uuid();
-  db.prepare('INSERT INTO chat_messages (id, user_id, sender_id, is_admin, body, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)').run(id, conversationUserId, user.id, isAdmin ? 1 : 0, body.trim().slice(0, 2000), now());
+  db.prepare('INSERT INTO chat_messages (id, user_id, sender_id, is_admin, body, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+    id,
+    conversationUserId,
+    user.id,
+    isAdmin ? 1 : 0,
+    body.trim().slice(0, 2000),
+    now(),
+  );
   if (isAdmin) notify(conversationUserId, 'New message from support', body.trim().slice(0, 120), { kind: 'chat' });
   return chatMessage(db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(id));
 }

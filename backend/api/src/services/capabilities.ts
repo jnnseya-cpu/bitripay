@@ -41,14 +41,67 @@ export interface CountryCapabilities {
 export const PURPOSE_CODES = ['GENERAL_MERCHANT', 'SCHOOL', 'HEALTH', 'RENT', 'UTILITY', 'CONSTRUCTION', 'GOVERNMENT_FEE', 'TAX', 'DONATION', 'REMITTANCE', 'TRANSPORT', 'MARKET'] as const;
 
 const DEFAULTS: Record<string, Partial<CountryCapabilities>> = {
-  CD: { wallet: true, cardCollection: true, bankPayout: true, mobileMoney: true, agentCashOut: true, crossBorder: true, bitcoin: false, stablecoin: false, settlementCurrencies: ['CDF', 'USD'], collectionCurrencies: ['CDF', 'USD'], requiredDisclosures: ['fees', 'fx_rate', 'safeguarding'], nationalSwitch: { required: true, connector: 'NATIONAL_SWITCH_CD' }, licencePhase: 'aggregator' },
+  CD: {
+    wallet: true,
+    cardCollection: true,
+    bankPayout: true,
+    mobileMoney: true,
+    agentCashOut: true,
+    crossBorder: true,
+    bitcoin: false,
+    stablecoin: false,
+    settlementCurrencies: ['CDF', 'USD'],
+    collectionCurrencies: ['CDF', 'USD'],
+    requiredDisclosures: ['fees', 'fx_rate', 'safeguarding'],
+    nationalSwitch: { required: true, connector: 'NATIONAL_SWITCH_CD' },
+    licencePhase: 'aggregator',
+  },
   KE: { wallet: true, cardCollection: true, bankPayout: true, mobileMoney: true, agentCashOut: true, crossBorder: true, settlementCurrencies: ['KES', 'USD'], collectionCurrencies: ['KES'] },
   NG: { wallet: true, cardCollection: true, bankPayout: true, mobileMoney: false, agentCashOut: true, crossBorder: true, settlementCurrencies: ['NGN', 'USD'], collectionCurrencies: ['NGN'] },
   UG: { wallet: true, cardCollection: true, bankPayout: true, mobileMoney: true, agentCashOut: true, crossBorder: true, settlementCurrencies: ['UGX', 'USD'], collectionCurrencies: ['UGX'] },
-  GB: { wallet: true, cardCollection: true, bankPayout: true, mobileMoney: false, agentCashOut: false, crossBorder: true, settlementCurrencies: ['GBP', 'EUR', 'USD'], collectionCurrencies: ['GBP'], requiredDisclosures: ['fees', 'fx_rate', 'safeguarding', 'complaints'] },
-  FR: { wallet: true, cardCollection: true, bankPayout: true, mobileMoney: false, agentCashOut: false, crossBorder: true, settlementCurrencies: ['EUR'], collectionCurrencies: ['EUR'], requiredDisclosures: ['fees', 'fx_rate', 'safeguarding', 'complaints'] },
+  GB: {
+    wallet: true,
+    cardCollection: true,
+    bankPayout: true,
+    mobileMoney: false,
+    agentCashOut: false,
+    crossBorder: true,
+    settlementCurrencies: ['GBP', 'EUR', 'USD'],
+    collectionCurrencies: ['GBP'],
+    requiredDisclosures: ['fees', 'fx_rate', 'safeguarding', 'complaints'],
+  },
+  FR: {
+    wallet: true,
+    cardCollection: true,
+    bankPayout: true,
+    mobileMoney: false,
+    agentCashOut: false,
+    crossBorder: true,
+    settlementCurrencies: ['EUR'],
+    collectionCurrencies: ['EUR'],
+    requiredDisclosures: ['fees', 'fx_rate', 'safeguarding', 'complaints'],
+  },
 };
-const BASE: CountryCapabilities = { country: '', wallet: true, cardCollection: false, bankPayout: false, mobileMoney: false, agentCashOut: false, crossBorder: false, bitcoin: false, stablecoin: false, kycProvider: null, settlementCurrencies: [], collectionCurrencies: [], maxPerTransaction: 0, requiredDisclosures: ['fees'], purposeCodes: [...PURPOSE_CODES], nationalSwitch: { required: false, connector: null }, licencePhase: 'full', notes: null };
+const BASE: CountryCapabilities = {
+  country: '',
+  wallet: true,
+  cardCollection: false,
+  bankPayout: false,
+  mobileMoney: false,
+  agentCashOut: false,
+  crossBorder: false,
+  bitcoin: false,
+  stablecoin: false,
+  kycProvider: null,
+  settlementCurrencies: [],
+  collectionCurrencies: [],
+  maxPerTransaction: 0,
+  requiredDisclosures: ['fees'],
+  purposeCodes: [...PURPOSE_CODES],
+  nationalSwitch: { required: false, connector: null },
+  licencePhase: 'full',
+  notes: null,
+};
 
 export function countryCapabilities(country: string | null | undefined): CountryCapabilities {
   const code = (country ?? '').toUpperCase();
@@ -60,7 +113,9 @@ export function setCountryCapabilities(country: string, patch: Partial<CountryCa
   const code = country.toUpperCase();
   const current = countryCapabilities(code);
   const next = { ...current, ...patch, country: code };
-  getDb().prepare('INSERT INTO country_capabilities (country, config, updated_at) VALUES (?, ?, ?) ON CONFLICT(country) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at').run(code, JSON.stringify(next), now());
+  getDb()
+    .prepare('INSERT INTO country_capabilities (country, config, updated_at) VALUES (?, ?, ?) ON CONFLICT(country) DO UPDATE SET config = excluded.config, updated_at = excluded.updated_at')
+    .run(code, JSON.stringify(next), now());
   return next;
 }
 export function listCountryCapabilities(): CountryCapabilities[] {

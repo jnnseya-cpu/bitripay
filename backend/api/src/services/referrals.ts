@@ -32,7 +32,12 @@ function payRewards(referee: UserRow, trigger: 'registration' | 'first_deposit')
         tx.id,
         now(),
       );
-      notify(current.id, 'Referral reward earned', `You earned ${formatMoney(amount, base)} of promotional credit for a level ${level} referral (@${referee.tag}). It covers your BitriPay fees and cannot be withdrawn.`, { kind: 'referral', transactionId: tx.id });
+      notify(
+        current.id,
+        'Referral reward earned',
+        `You earned ${formatMoney(amount, base)} of promotional credit for a level ${level} referral (@${referee.tag}). It covers your BitriPay fees and cannot be withdrawn.`,
+        { kind: 'referral', transactionId: tx.id },
+      );
     }
     current = current.referred_by ? findUserById(current.referred_by) : undefined;
     level += 1;
@@ -46,7 +51,11 @@ export function onUserRegistered(user: UserRow) {
 export function onDepositCompleted(userId: string) {
   const user = findUserById(userId);
   if (!user?.referred_by) return;
-  const count = (getDb().prepare("SELECT COUNT(*) c FROM transactions WHERE receiver_user_id = ? AND status = 'completed' AND type IN ('card_deposit','bank_deposit','mobile_money_deposit','agent_cash_in')").get(userId) as any).c;
+  const count = (
+    getDb()
+      .prepare("SELECT COUNT(*) c FROM transactions WHERE receiver_user_id = ? AND status = 'completed' AND type IN ('card_deposit','bank_deposit','mobile_money_deposit','agent_cash_in')")
+      .get(userId) as any
+  ).c;
   if (count === 1) payRewards(user, 'first_deposit');
 }
 

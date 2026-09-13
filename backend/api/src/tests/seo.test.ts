@@ -79,7 +79,10 @@ describe('content agent and editing', () => {
     const status = await request(app).get('/api/admin/seo').set(admin.auth);
     expect(status.body.agent.mode).toBe('fallback');
     expect(status.body.agent.keyConfigured).toBe(false);
-    const draft = await request(app).post('/api/admin/seo/agent/draft').set(admin.auth).send({ topic: 'How to pay school fees with mobile money', keywords: ['pay school fees mobile money', 'school fees payment app'] });
+    const draft = await request(app)
+      .post('/api/admin/seo/agent/draft')
+      .set(admin.auth)
+      .send({ topic: 'How to pay school fees with mobile money', keywords: ['pay school fees mobile money', 'school fees payment app'] });
     expect(draft.status, JSON.stringify(draft.body)).toBe(201);
     expect(draft.body.post.status).toBe('review'); // never auto-published
     expect(draft.body.post.source).toBe('agent');
@@ -96,7 +99,10 @@ describe('content agent and editing', () => {
     const social = await request(app).post(`/api/admin/seo/agent/social/${draft.body.post.id}`).set(admin.auth);
     expect(social.body.social.whatsapp).toContain(draft.body.post.slug);
     // editor publishes; the article is now served, and its keywords become dynamic links from other posts
-    const pub = await request(app).patch(`/api/admin/blog/posts/${draft.body.post.id}`).set(admin.auth).send({ status: 'published', metaDescription: 'Pay school fees from your phone with mobile money: steps, fees and what to check before you send.' });
+    const pub = await request(app)
+      .patch(`/api/admin/blog/posts/${draft.body.post.id}`)
+      .set(admin.auth)
+      .send({ status: 'published', metaDescription: 'Pay school fees from your phone with mobile money: steps, fees and what to check before you send.' });
     expect(pub.status).toBe(200);
     const live = await request(app).get(`/blog/${draft.body.post.slug}`);
     expect(live.status).toBe(200);
@@ -107,16 +113,34 @@ describe('content agent and editing', () => {
 
   it('lets editors create posts, manage link rules and register partner backlinks', async () => {
     const admin = await adminToken(app);
-    const created = await request(app).post('/api/admin/blog/posts').set(admin.auth).send({ title: 'Airtime top-up from your wallet', bodyMd: '## Why\n\nBuy airtime for any network from your balance, with fees shown first.\n\n## How\n\n1. Open Services.\n2. Choose Mobile top-up.', tags: ['airtime'], keywords: ['buy airtime from wallet'], status: 'published' });
+    const created = await request(app)
+      .post('/api/admin/blog/posts')
+      .set(admin.auth)
+      .send({
+        title: 'Airtime top-up from your wallet',
+        bodyMd: '## Why\n\nBuy airtime for any network from your balance, with fees shown first.\n\n## How\n\n1. Open Services.\n2. Choose Mobile top-up.',
+        tags: ['airtime'],
+        keywords: ['buy airtime from wallet'],
+        status: 'published',
+      });
     expect(created.status).toBe(201);
-    const rule = await request(app).put('/api/admin/seo/rules/new').set(admin.auth).send({ keyword: 'airtime', url: `/blog/${created.body.post.slug}`, title: 'Airtime top-up guide' });
+    const rule = await request(app)
+      .put('/api/admin/seo/rules/new')
+      .set(admin.auth)
+      .send({ keyword: 'airtime', url: `/blog/${created.body.post.slug}`, title: 'Airtime top-up guide' });
     expect(rule.status).toBe(200);
     const page = await request(app).get('/blog/moto-taxi-riders-collect-fares-without-cash');
     expect(page.text).toContain(`href="/blog/${created.body.post.slug}"`);
-    const bl = await request(app).put('/api/admin/seo/backlinks/new').set(admin.auth).send({ direction: 'partner', sourceUrl: 'https://partner-directory.example/fintech', targetUrl: 'https://bitripay.app/', anchor: 'BitriPay', status: 'pending', notes: 'Listing requested' });
+    const bl = await request(app)
+      .put('/api/admin/seo/backlinks/new')
+      .set(admin.auth)
+      .send({ direction: 'partner', sourceUrl: 'https://partner-directory.example/fintech', targetUrl: 'https://bitripay.app/', anchor: 'BitriPay', status: 'pending', notes: 'Listing requested' });
     expect(bl.status).toBe(200);
     expect(bl.body.backlink.sourceDomain).toBe('partner-directory.example');
-    const settings = await request(app).put('/api/admin/seo/settings').set(admin.auth).send({ indexNowKey: 'abc123def456', agent: { apiKey: 'sk-ant-test-key' } });
+    const settings = await request(app)
+      .put('/api/admin/seo/settings')
+      .set(admin.auth)
+      .send({ indexNowKey: 'abc123def456', agent: { apiKey: 'sk-ant-test-key' } });
     expect(settings.status).toBe(200);
     expect(settings.body.settings.agent.apiKey).toBe('••••••••');
     expect(settings.body.agent.keyConfigured).toBe(true);

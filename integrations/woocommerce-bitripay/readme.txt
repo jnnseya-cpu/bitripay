@@ -20,9 +20,9 @@ Accept QR code, wallet, card, mobile money and virtual card payments through Bit
 
 == Installation ==
 1. Upload the `woocommerce-bitripay` folder to `/wp-content/plugins/` and activate it.
-2. WooCommerce → Settings → Payments → BitriPay: enter your API URL and a merchant API key (bp_live_…).
+2. WooCommerce → Settings → Payments → BitriPay: enter your API URL and a merchant API key (sk_live_…).
 3. In the BitriPay merchant dashboard → Payment gateway → Webhooks set the URL to `https://yourstore.com/?wc-api=bitripay` and paste the signing secret into the plugin settings.
-4. Choose accepted methods, save, and place a test order using a bp_test_ key with the sandbox gateway.
+4. Choose accepted methods, save, and place a test order using a sk_test_ key with the sandbox gateway.
 
 == Changelog ==
 = 1.0.0 =

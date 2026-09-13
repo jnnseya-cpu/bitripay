@@ -15,14 +15,29 @@ export const adminGrowthRouter = Router();
 const r = adminGrowthRouter;
 r.get('/fx', requirePermission('treasury'), (_req, res) => {
   const db = getDb();
-  const book = db.prepare("SELECT from_currency, to_currency, COUNT(*) n, SUM(amount_minor) amount, SUM(receive_minor) receive, MIN(settle_on) next_settle FROM fx_forwards WHERE status = 'LOCKED' GROUP BY from_currency, to_currency").all();
-  const forwards = db.prepare("SELECT f.*, u.full_name, u.tag FROM fx_forwards f JOIN users u ON u.id = f.user_id ORDER BY f.created_at DESC LIMIT 200").all();
+  const book = db
+    .prepare(
+      "SELECT from_currency, to_currency, COUNT(*) n, SUM(amount_minor) amount, SUM(receive_minor) receive, MIN(settle_on) next_settle FROM fx_forwards WHERE status = 'LOCKED' GROUP BY from_currency, to_currency",
+    )
+    .all();
+  const forwards = db.prepare('SELECT f.*, u.full_name, u.tag FROM fx_forwards f JOIN users u ON u.id = f.user_id ORDER BY f.created_at DESC LIMIT 200').all();
   const alerts = db.prepare('SELECT status, COUNT(*) c FROM fx_alerts GROUP BY status').all();
   const rules = db.prepare('SELECT kind, status, COUNT(*) c, SUM(converted_minor) converted FROM fx_auto_rules GROUP BY kind, status').all();
   res.json({ settings: getForwardSettings(), book, forwards, alerts, rules });
 });
 r.put('/fx/settings', requirePermission('settings'), (req, res) => {
-  const b = validate(z.object({ enabled: z.boolean().optional(), forwardBps: z.number().int().min(0).max(2000).optional(), maxTenorDays: z.number().int().min(1).max(365).optional(), maxPerForwardBase: z.number().int().min(0).optional(), maxOpenPerAccountBase: z.number().int().min(0).optional(), maxOpenTotalBase: z.number().int().min(0).optional(), graceDays: z.number().int().min(0).max(30).optional() }), req.body);
+  const b = validate(
+    z.object({
+      enabled: z.boolean().optional(),
+      forwardBps: z.number().int().min(0).max(2000).optional(),
+      maxTenorDays: z.number().int().min(1).max(365).optional(),
+      maxPerForwardBase: z.number().int().min(0).optional(),
+      maxOpenPerAccountBase: z.number().int().min(0).optional(),
+      maxOpenTotalBase: z.number().int().min(0).optional(),
+      graceDays: z.number().int().min(0).max(30).optional(),
+    }),
+    req.body,
+  );
   setSetting('fxForwards', { ...getSetting<any>('fxForwards', {}), ...b });
   audit(req.user!.id, 'fx.forwards.settings', 'settings', 'fxForwards', b);
   res.json({ settings: getForwardSettings() });
@@ -42,11 +57,17 @@ r.post('/credit/run', requirePermission('compliance'), (req, res) => {
   audit(req.user!.id, 'credit.readiness.batch', 'jobs', 'credit', out);
   res.json(out);
 });
-r.get('/billing', requirePermission('transactions'), (req, res) => res.json({ subscriptions: listSubscriptions({ status: req.query.status ? String(req.query.status) : null, limit: 200 }), invoices: listInvoices({ limit: 200 }) }));
-r.post('/billing/run', requirePermission('transactions'), wrap(async (req, res) => {
-  const out = await runBilling();
-  audit(req.user!.id, 'billing.run', 'jobs', 'billing', out);
-  res.json(out);
-}));
+r.get('/billing', requirePermission('transactions'), (req, res) =>
+  res.json({ subscriptions: listSubscriptions({ status: req.query.status ? String(req.query.status) : null, limit: 200 }), invoices: listInvoices({ limit: 200 }) }),
+);
+r.post(
+  '/billing/run',
+  requirePermission('transactions'),
+  wrap(async (req, res) => {
+    const out = await runBilling();
+    audit(req.user!.id, 'billing.run', 'jobs', 'billing', out);
+    res.json(out);
+  }),
+);
 
 r.get('/open-banking', requirePermission('transactions'), (req, res) => res.json(listAllLinksAdmin({ limit: Number(req.query.limit) || 200 })));

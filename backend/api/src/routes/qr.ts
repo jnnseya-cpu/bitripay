@@ -60,11 +60,31 @@ qrRouter.post(
       if (r.kind === 'intent' && r.intent?.paymentRequestCode) {
         const row = getPaymentRequestByCode(r.intent.paymentRequestCode);
         const info = checkoutInfo(row.code);
-        return res.json({ kind: 'payment_request', payload, paymentRequest: toPaymentRequest(row), merchant: { ...info.merchant, verified: r.merchant?.verified ?? false, location: r.merchant?.location ?? null }, methods: info.methods, trust: r.trust, intent: { id: r.intent.id, status: r.intent.status, purposeCode: r.purposeCode, reference: r.reference, expiresAt: r.expiresAt }, disclosures: r.disclosures });
+        return res.json({
+          kind: 'payment_request',
+          payload,
+          paymentRequest: toPaymentRequest(row),
+          merchant: { ...info.merchant, verified: r.merchant?.verified ?? false, location: r.merchant?.location ?? null },
+          methods: info.methods,
+          trust: r.trust,
+          intent: { id: r.intent.id, status: r.intent.status, purposeCode: r.purposeCode, reference: r.reference, expiresAt: r.expiresAt },
+          disclosures: r.disclosures,
+        });
       }
       const merchant = findUserByTag(r.merchant!.tag);
       if (!merchant) throw notFound('Merchant not found', 'user_not_found');
-      return res.json({ kind: 'bitriqr', payload, user: { ...toPublicUser(merchant), verified: r.merchant?.verified ?? false, location: r.merchant?.location ?? null }, qrId: r.qr?.id ?? null, amount: r.amount != null && r.currency ? String(r.amount / 10 ** getCurrency(r.currency, false).decimals) : null, currency: r.currency, note: r.reference ?? null, purposeCode: r.purposeCode, trust: r.trust, disclosures: r.disclosures });
+      return res.json({
+        kind: 'bitriqr',
+        payload,
+        user: { ...toPublicUser(merchant), verified: r.merchant?.verified ?? false, location: r.merchant?.location ?? null },
+        qrId: r.qr?.id ?? null,
+        amount: r.amount != null && r.currency ? String(r.amount / 10 ** getCurrency(r.currency, false).decimals) : null,
+        currency: r.currency,
+        note: r.reference ?? null,
+        purposeCode: r.purposeCode,
+        trust: r.trust,
+        disclosures: r.disclosures,
+      });
     }
     if (payload.type === 'pr') {
       const row = getPaymentRequestByCode(payload.id);
@@ -73,6 +93,13 @@ qrRouter.post(
     }
     const user = findUserByTag(payload.id);
     if (!user || user.is_system || user.status !== 'active') throw notFound('User not found', 'user_not_found');
-    res.json({ kind: payload.type === 'ag' ? 'agent' : payload.type === 'm' ? 'merchant' : 'user', payload, user: toPublicUser(user), amount: payload.amount ?? null, currency: payload.currency ?? null, note: payload.note ?? null });
+    res.json({
+      kind: payload.type === 'ag' ? 'agent' : payload.type === 'm' ? 'merchant' : 'user',
+      payload,
+      user: toPublicUser(user),
+      amount: payload.amount ?? null,
+      currency: payload.currency ?? null,
+      note: payload.note ?? null,
+    });
   }),
 );

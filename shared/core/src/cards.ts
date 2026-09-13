@@ -55,7 +55,10 @@ export function maskCardNumber(number: string): string {
 }
 
 export function formatCardNumber(number: string): string {
-  return number.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim();
+  return number
+    .replace(/\D/g, '')
+    .replace(/(.{4})/g, '$1 ')
+    .trim();
 }
 
 export function isExpiryValid(month: number, year: number, now = new Date()): boolean {

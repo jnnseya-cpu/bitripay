@@ -23,11 +23,26 @@ async function flush() {
 }
 export function registerPwa() {
   if (typeof window === 'undefined') return;
-  window.addEventListener('online', () => { pwaState.online = true; notify(); void flush(); });
-  window.addEventListener('offline', () => { pwaState.online = false; notify(); });
-  void offlineQueue.lastSync().then((v) => { pwaState.lastSync = v; notify(); }).catch(() => undefined);
+  window.addEventListener('online', () => {
+    pwaState.online = true;
+    notify();
+    void flush();
+  });
+  window.addEventListener('offline', () => {
+    pwaState.online = false;
+    notify();
+  });
+  void offlineQueue
+    .lastSync()
+    .then((v) => {
+      pwaState.lastSync = v;
+      notify();
+    })
+    .catch(() => undefined);
   if ('serviceWorker' in navigator && import.meta.env.PROD) {
     navigator.serviceWorker.register('/sw.js').catch(() => undefined);
-    navigator.serviceWorker.addEventListener('message', (ev) => { if (ev.data?.type === 'sync-offline-promises') void flush(); });
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+      if (ev.data?.type === 'sync-offline-promises') void flush();
+    });
   }
 }

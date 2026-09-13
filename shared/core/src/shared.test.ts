@@ -3,6 +3,15 @@ import assert from 'node:assert/strict';
 import { toMinor, fromMinor, formatMoney, convertMinor, applyBps } from './money.ts';
 import { encodeQr, decodeQr, encodeQrLink } from './qr.ts';
 import { luhnCheck, luhnCheckDigit, detectCardBrand, isExpiryValid } from './cards.ts';
+import { normalizePhone, nationalSignificant, samePhone } from './phone.ts';
+import { en } from './locales/en.ts';
+import { fr } from './locales/fr.ts';
+import { es } from './locales/es.ts';
+import { pt } from './locales/pt.ts';
+import { ar } from './locales/ar.ts';
+import { sw } from './locales/sw.ts';
+import { hi } from './locales/hi.ts';
+import { bn } from './locales/bn.ts';
 
 test('money conversion round trips', () => {
   assert.equal(toMinor('12.50', 2), 1250);
@@ -51,4 +60,35 @@ test('card helpers', () => {
   assert.equal(detectCardBrand('6273110000000012'), 'bitripay');
   assert.ok(isExpiryValid(12, 2099));
   assert.ok(!isExpiryValid(1, 2000));
+});
+
+test('every built-in locale carries every English key, no orphan keys and the same placeholders', () => {
+  const LOCALES: Record<string, Record<string, string>> = { en, fr, es, pt, ar, sw, hi, bn };
+  const keys = Object.keys(en);
+  const placeholders = (v: string) => (v.match(/\{\w+\}/g) ?? []).sort();
+  for (const [lang, dict] of Object.entries(LOCALES)) {
+    const missing = keys.filter((k) => !(k in dict));
+    const extra = Object.keys(dict).filter((k) => !(k in en));
+    assert.deepEqual(missing, [], `${lang} is missing ${missing.join(', ')}`);
+    assert.deepEqual(extra, [], `${lang} has keys unknown to en: ${extra.join(', ')}`);
+    for (const [k, v] of Object.entries(dict)) {
+      assert.ok(v.trim().length > 0, `${lang}.${k} is empty`);
+      assert.deepEqual(placeholders(v), placeholders(en[k]), `${lang}.${k} placeholders differ from en`);
+    }
+  }
+  assert.equal(fr['nav.statements'], 'Relevés');
+});
+
+test('phone normalisation is shared and prefix-tolerant', () => {
+  assert.equal(normalizePhone(' +243 (0)81 234-5678 '), '+2430812345678');
+  assert.equal(normalizePhone('00243812345678'), '+243812345678');
+  assert.equal(normalizePhone('243812345678'), '+243812345678');
+  assert.equal(normalizePhone('+'), null);
+  assert.equal(normalizePhone(''), null);
+  assert.equal(nationalSignificant('+243 812 345 678'), '812345678');
+  assert.equal(nationalSignificant('0812345678'), '812345678');
+  assert.equal(nationalSignificant('1234567'), null);
+  assert.ok(samePhone('+243812345678', '0812345678'));
+  assert.ok(!samePhone('+243812345678', '+243812345679'));
+  assert.ok(!samePhone(null, '0812345678'));
 });

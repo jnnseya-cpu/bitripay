@@ -13,16 +13,25 @@ import { runBilling, DUNNING_DAYS } from '../services/billing';
 import { computeReadiness } from '../services/creditReadiness';
 
 let app: ReturnType<typeof setupApp>;
-beforeAll(() => { app = setupApp(); });
-const balanceOf = async (auth: Record<string, string>, currency = 'USD') => ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
+beforeAll(() => {
+  app = setupApp();
+});
+const balanceOf = async (auth: Record<string, string>, currency = 'USD') =>
+  ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
 const tomorrow = (days = 1) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 
 describe('FX engine tools', () => {
   it('fires rate alerts once when the reference rate crosses the target', async () => {
     const u = await registerUser(app);
     const mid = currentRate('USD', 'EUR').midRate;
-    const hit = await request(app).post('/api/fx-tools/alerts').set(u.auth).send({ baseCurrency: 'USD', quoteCurrency: 'EUR', direction: 'above', targetRate: mid * 0.9 });
-    const wait = await request(app).post('/api/fx-tools/alerts').set(u.auth).send({ baseCurrency: 'USD', quoteCurrency: 'EUR', direction: 'above', targetRate: mid * 1.5, note: 'sell dollars' });
+    const hit = await request(app)
+      .post('/api/fx-tools/alerts')
+      .set(u.auth)
+      .send({ baseCurrency: 'USD', quoteCurrency: 'EUR', direction: 'above', targetRate: mid * 0.9 });
+    const wait = await request(app)
+      .post('/api/fx-tools/alerts')
+      .set(u.auth)
+      .send({ baseCurrency: 'USD', quoteCurrency: 'EUR', direction: 'above', targetRate: mid * 1.5, note: 'sell dollars' });
     expect(hit.status, JSON.stringify(hit.body)).toBe(201);
     expect(wait.status).toBe(201);
     expect((await request(app).post('/api/fx-tools/alerts').set(u.auth).send({ baseCurrency: 'USD', quoteCurrency: 'USD', direction: 'above', targetRate: 1 })).status).toBe(400);
@@ -51,7 +60,9 @@ describe('FX engine tools', () => {
     expect((await request(app).post('/api/fx-tools/rules').set(b.auth).send({ fromCurrency: 'USD', toCurrency: 'EUR', kind: 'on_receipt', shareBps: 5000 })).status).toBe(403);
     const rule = await request(app).post('/api/fx-tools/rules').set(b.auth).send({ fromCurrency: 'USD', toCurrency: 'EUR', kind: 'on_receipt', shareBps: 5000, pin: '1234' });
     expect(rule.status, JSON.stringify(rule.body)).toBe(201);
-    expect((await request(app).post('/api/fx-tools/rules').set(b.auth).send({ fromCurrency: 'USD', toCurrency: 'EUR', kind: 'on_receipt', shareBps: 2000, pin: '1234' })).body.error.code).toBe('rule_exists');
+    expect((await request(app).post('/api/fx-tools/rules').set(b.auth).send({ fromCurrency: 'USD', toCurrency: 'EUR', kind: 'on_receipt', shareBps: 2000, pin: '1234' })).body.error.code).toBe(
+      'rule_exists',
+    );
     const t = await request(app).post('/api/transfers').set(a.auth).send({ to: b.user.tag, amount: '100.00', currency: 'USD', pin: '1234' });
     expect(t.status).toBe(201);
     const eur = await balanceOf(b.auth, 'EUR');
@@ -86,15 +97,32 @@ describe('FX engine tools', () => {
   it('locks a forward rate with the money ring-fenced, settles at the locked rate whatever the market does, and caps tenor', async () => {
     const u = await registerUser(app);
     await fund(app, u.user.id, '300.00');
-    const q = await request(app).get(`/api/fx-tools/forwards/quote?from=USD&to=EUR&amount=200&settleOn=${tomorrow(5)}`).set(u.auth);
+    const q = await request(app)
+      .get(`/api/fx-tools/forwards/quote?from=USD&to=EUR&amount=200&settleOn=${tomorrow(5)}`)
+      .set(u.auth);
     expect(q.status, JSON.stringify(q.body)).toBe(200);
     const spot = currentRate('USD', 'EUR');
     expect(q.body.rate).toBeLessThan(spot.rate);
     expect(q.body.rate).toBeCloseTo(spot.rate * (1 - q.body.forwardBps / 10_000), 8);
     expect(q.body.disclosure).toMatch(/forward margin/);
-    expect((await request(app).get(`/api/fx-tools/forwards/quote?from=USD&to=EUR&amount=200&settleOn=${tomorrow(90)}`).set(u.auth)).body.error.code).toBe('tenor_too_long');
-    expect((await request(app).get(`/api/fx-tools/forwards/quote?from=USD&to=EUR&amount=200&settleOn=${tomorrow(0)}`).set(u.auth)).body.error.code).toBe('invalid_date');
-    const locked = await request(app).post('/api/fx-tools/forwards').set(u.auth).send({ fromCurrency: 'USD', toCurrency: 'EUR', amount: '200.00', settleOn: tomorrow(5), pin: '1234' });
+    expect(
+      (
+        await request(app)
+          .get(`/api/fx-tools/forwards/quote?from=USD&to=EUR&amount=200&settleOn=${tomorrow(90)}`)
+          .set(u.auth)
+      ).body.error.code,
+    ).toBe('tenor_too_long');
+    expect(
+      (
+        await request(app)
+          .get(`/api/fx-tools/forwards/quote?from=USD&to=EUR&amount=200&settleOn=${tomorrow(0)}`)
+          .set(u.auth)
+      ).body.error.code,
+    ).toBe('invalid_date');
+    const locked = await request(app)
+      .post('/api/fx-tools/forwards')
+      .set(u.auth)
+      .send({ fromCurrency: 'USD', toCurrency: 'EUR', amount: '200.00', settleOn: tomorrow(5), pin: '1234' });
     expect(locked.status, JSON.stringify(locked.body)).toBe(201);
     const f = locked.body.forward;
     expect(f.status).toBe('LOCKED');
@@ -120,7 +148,10 @@ describe('FX engine tools', () => {
     expect(usdLeft).toBeLessThan(30000 - 5000 - 20000 + 1);
     expect((getDb().prepare("SELECT COUNT(*) c FROM holds WHERE ref_type = 'fx_forward' AND ref_id = ? AND status = 'ACTIVE'").get(f.id) as any).c).toBe(0);
     // a second forward can be cancelled, releasing the hold; the daily job leaves it alone
-    const second = await request(app).post('/api/fx-tools/forwards').set(u.auth).send({ fromCurrency: 'USD', toCurrency: 'EUR', amount: '10.00', settleOn: tomorrow(2), pin: '1234' });
+    const second = await request(app)
+      .post('/api/fx-tools/forwards')
+      .set(u.auth)
+      .send({ fromCurrency: 'USD', toCurrency: 'EUR', amount: '10.00', settleOn: tomorrow(2), pin: '1234' });
     expect(second.status).toBe(201);
     expect(runForwards()).toEqual({ settled: 0, expired: 0 });
     const cancelled = await request(app).post(`/api/fx-tools/forwards/${second.body.forward.id}/cancel`).set(u.auth);
@@ -148,7 +179,9 @@ describe('credit readiness', () => {
     await request(app).put('/api/savings/settings').set(saver.auth).send({ autoAnchor: true, anchorBps: 1500 });
     await request(app).post('/api/transfers').set(payer.auth).send({ to: saver.user.tag, amount: '300.00', currency: 'USD', pin: '1234' });
     await request(app).post('/api/transfers').set(saver.auth).send({ to: payer.user.tag, amount: '40.00', currency: 'USD', pin: '1234' });
-    getDb().prepare("UPDATE users SET created_at = ? WHERE id = ?").run(new Date(Date.now() - 120 * 86_400_000).toISOString(), saver.user.id);
+    getDb()
+      .prepare('UPDATE users SET created_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 120 * 86_400_000).toISOString(), saver.user.id);
     const r1 = computeReadiness(saver.user.id);
     expect(r1.score).toBeGreaterThan(r0.score + 150);
     expect(r1.signals.find((s) => s.key === 'savings')!.points).toBeGreaterThan(0);
@@ -157,7 +190,10 @@ describe('credit readiness', () => {
     void goal;
     // consent: the lender reads the signal with a key holding credit:read; revocation closes the door
     const lender = await registerUser(app, { role: 'merchant', businessName: 'Kivu Microfinance', country: 'CD' });
-    const key = await request(app).post('/api/v1/api_keys').set(lender.auth).send({ label: 'scoring', mode: 'test', kind: 'restricted', scopes: ['credit:read'] });
+    const key = await request(app)
+      .post('/api/v1/api_keys')
+      .set(lender.auth)
+      .send({ label: 'scoring', mode: 'test', kind: 'restricted', scopes: ['credit:read'] });
     const k = { Authorization: `Bearer ${key.body.secret}` };
     expect((await request(app).post('/api/credit/consents').set(saver.auth).send({ lenderName: 'Kivu Microfinance', purpose: 'stock loan' })).status).toBe(403); // step-up
     const consent = await request(app).post('/api/credit/consents').set(saver.auth).send({ lenderName: 'Kivu Microfinance', purpose: 'stock loan', days: 30, pin: '1234' });
@@ -182,7 +218,10 @@ describe('subscriptions and billing', () => {
     const m = await registerUser(app, { role: 'merchant', businessName: 'Kinshasa Fibre', country: 'CD' });
     const c = await registerUser(app);
     await fund(app, c.user.id, '40.00');
-    const plan = await request(app).post('/api/v1/plans').set(m.auth).send({ name: 'Home 20 Mbps', currency: 'USD', amount_minor: 1000, interval: 'month', tax_bps: 1600, tax_label: 'VAT', usage_unit: 'GB', usage_price_minor: 50 });
+    const plan = await request(app)
+      .post('/api/v1/plans')
+      .set(m.auth)
+      .send({ name: 'Home 20 Mbps', currency: 'USD', amount_minor: 1000, interval: 'month', tax_bps: 1600, tax_label: 'VAT', usage_unit: 'GB', usage_price_minor: 50 });
     expect(plan.status, JSON.stringify(plan.body)).toBe(201);
     const code = plan.body.plan.code;
     expect((await request(app).get(`/api/billing/plans/${code}`).set(c.auth)).body.plan.amountMinor).toBe(1000);

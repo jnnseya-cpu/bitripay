@@ -36,20 +36,40 @@ export function Dashboard() {
       <div className="grid cols-3">
         <div className="card balance-card" style={{ gridColumn: 'span 2' }}>
           <div className="stat">
-            <span className="label">{t('dash.totalBalance')} ({base})</span>
+            <span className="label">
+              {t('dash.totalBalance')} ({base})
+            </span>
             <span className="value">{money(total, base)}</span>
           </div>
           <div className="row wrap mt-sm">
             {wallets.map((w) => (
-              <span key={w.id} className={`chip ${w.frozen ? 'danger' : ''}`} title={w.classification?.label}>{money(w.balance, w.currency)}{w.frozen ? ' · frozen' : ''}{(w.promoBalance ?? 0) > 0 ? <span className="tiny muted"> +{money(w.promoBalance ?? 0, w.currency)} promo</span> : null}</span>
+              <span key={w.id} className={`chip ${w.frozen ? 'danger' : ''}`} title={w.classification?.label}>
+                {money(w.balance, w.currency)}
+                {w.frozen ? ' · frozen' : ''}
+                {(w.promoBalance ?? 0) > 0 ? <span className="tiny muted"> +{money(w.promoBalance ?? 0, w.currency)} promo</span> : null}
+              </span>
             ))}
-            <Link to="/app/exchange" className="chip" style={{ textDecoration: 'none' }}>+ {t('nav.exchange')}</Link>
+            <Link to="/app/exchange" className="chip" style={{ textDecoration: 'none' }}>
+              + {t('nav.exchange')}
+            </Link>
           </div>
-          {wallets[0]?.classification && <div className="tiny mt-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>{wallets[0].classification.class === 'sandbox' ? '🧪 Sandbox balances – no real-world value.' : `${wallets[0].classification.label} · issued by ${wallets[0].classification.issuer} · ${wallets[0].classification.backing}.`}{wallets.some((w) => (w.promoBalance ?? 0) > 0) ? ' Promotional credit covers BitriPay fees only and cannot be withdrawn.' : ''} <Link to="/app/statements" style={{ color: '#fff', textDecoration: 'underline' }}>Statements →</Link></div>}
+          {wallets[0]?.classification && (
+            <div className="tiny mt-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              {wallets[0].classification.class === 'sandbox'
+                ? '🧪 Sandbox balances – no real-world value.'
+                : `${wallets[0].classification.label} · issued by ${wallets[0].classification.issuer} · ${wallets[0].classification.backing}.`}
+              {wallets.some((w) => (w.promoBalance ?? 0) > 0) ? ' Promotional credit covers BitriPay fees only and cannot be withdrawn.' : ''}{' '}
+              <Link to="/app/statements" style={{ color: '#fff', textDecoration: 'underline' }}>
+                Statements →
+              </Link>
+            </div>
+          )}
         </div>
         <div className="card center">
           <QrImage value={`${config?.webUrl ?? ''}/q?v=1&t=${user?.role === 'merchant' ? 'm' : user?.role === 'agent' ? 'ag' : 'u'}&id=${user?.tag}`} size={140} />
-          <div className="small muted mt-sm">Your receive code · <Link to="/app/receive">enlarge</Link></div>
+          <div className="small muted mt-sm">
+            Your receive code · <Link to="/app/receive">enlarge</Link>
+          </div>
         </div>
       </div>
       <h3 className="mt">{t('dash.quickActions')}</h3>
@@ -64,7 +84,9 @@ export function Dashboard() {
       <div className="card mt">
         <div className="card-title">
           <h3>{t('dash.recent')}</h3>
-          <Link to="/app/transactions" className="small">{t('dash.viewAll')} →</Link>
+          <Link to="/app/transactions" className="small">
+            {t('dash.viewAll')} →
+          </Link>
         </div>
         <div className="list">
           {tx.data?.items.length === 0 && <Empty icon="💸" />}

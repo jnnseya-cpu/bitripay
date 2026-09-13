@@ -7,6 +7,7 @@ import { sha256 } from '../lib/crypto';
 import { now } from '../lib/ids';
 import { getAppSettings } from '../services/settings';
 import type { Role } from '@bitripay/shared';
+import type { ApiKeyScope } from '../services/merchant';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -101,7 +102,7 @@ export function requireMfaToken(req: Request, _res: Response, next: NextFunction
  * Scope check for API-key callers. Sessions (JWT) carry every scope; secret keys carry `*`; restricted keys must list
  * the scope; publishable keys only pass for scopes they were issued with (public intent reads).
  */
-export function requireScope(...scopes: string[]) {
+export function requireScope(...scopes: ApiKeyScope[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (req.authVia !== 'api_key') return next();
     const held = req.apiKeyScopes ?? ['*'];

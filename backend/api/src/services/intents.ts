@@ -29,7 +29,27 @@ import { applySplits } from './finops/splits';
 import { assertKybIfRequired } from './risk/kycTiers';
 import { publish } from './bus';
 
-export const INTENT_STATES = ['CREATED', 'REQUIRES_PAYMENT_METHOD', 'ROUTING', 'REQUIRES_CUSTOMER_ACTION', 'PROCESSING', 'AUTHORISED', 'CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED', 'FAILED', 'EXPIRED', 'CANCELLED', 'PARTIALLY_REFUNDED', 'REFUNDED', 'DISPUTED', 'REVERSED', 'UNDER_REVIEW', 'UNKNOWN_PROVIDER_STATE', 'AMBIGUOUS'] as const;
+export const INTENT_STATES = [
+  'CREATED',
+  'REQUIRES_PAYMENT_METHOD',
+  'ROUTING',
+  'REQUIRES_CUSTOMER_ACTION',
+  'PROCESSING',
+  'AUTHORISED',
+  'CAPTURED',
+  'SETTLEMENT_PENDING',
+  'SETTLED',
+  'FAILED',
+  'EXPIRED',
+  'CANCELLED',
+  'PARTIALLY_REFUNDED',
+  'REFUNDED',
+  'DISPUTED',
+  'REVERSED',
+  'UNDER_REVIEW',
+  'UNKNOWN_PROVIDER_STATE',
+  'AMBIGUOUS',
+] as const;
 export type IntentState = (typeof INTENT_STATES)[number];
 export const TERMINAL_INTENT_STATES: IntentState[] = ['SETTLED', 'FAILED', 'EXPIRED', 'CANCELLED', 'REFUNDED', 'REVERSED'];
 
@@ -141,7 +161,22 @@ export interface IntentView {
   updatedAt: string;
 }
 
-const toAttempt = (r: any): AttemptView => ({ id: r.id, seq: r.seq, methodClass: r.method_class, rail: r.rail, connector: r.connector, operatorId: r.operator_id, providerRef: r.provider_ref, gatewayPaymentId: r.gateway_payment_id, transactionId: r.transaction_id, status: r.status, failureCategory: r.failure_category, error: r.error, startedAt: r.started_at, finishedAt: r.finished_at });
+const toAttempt = (r: any): AttemptView => ({
+  id: r.id,
+  seq: r.seq,
+  methodClass: r.method_class,
+  rail: r.rail,
+  connector: r.connector,
+  operatorId: r.operator_id,
+  providerRef: r.provider_ref,
+  gatewayPaymentId: r.gateway_payment_id,
+  transactionId: r.transaction_id,
+  status: r.status,
+  failureCategory: r.failure_category,
+  error: r.error,
+  startedAt: r.started_at,
+  finishedAt: r.finished_at,
+});
 
 export function getIntentRow(id: string): IntentRow {
   const r = getDb().prepare('SELECT * FROM payment_intents WHERE id = ?').get(id) as IntentRow | undefined;
@@ -218,9 +253,41 @@ function eventState(to: IntentState): string | null {
 }
 
 /** Append to the payment event store (append-only; the ledger link is asserted by Guardian). */
-export function appendPaymentEvent(input: { intentId: string | null; attemptId?: string | null; state: string; source: string; direction: 'in' | 'out' | 'internal'; amountMinor: number; currency: string; transactionId?: string | null; counterparty?: Record<string, unknown> | null; evidence?: unknown[]; payload?: Record<string, unknown>; occurredAt?: string }) {
+export function appendPaymentEvent(input: {
+  intentId: string | null;
+  attemptId?: string | null;
+  state: string;
+  source: string;
+  direction: 'in' | 'out' | 'internal';
+  amountMinor: number;
+  currency: string;
+  transactionId?: string | null;
+  counterparty?: Record<string, unknown> | null;
+  evidence?: unknown[];
+  payload?: Record<string, unknown>;
+  occurredAt?: string;
+}) {
   const id = uuid();
-  getDb().prepare('INSERT INTO payment_events (event_id, occurred_at, recorded_at, source, direction, state, intent_id, attempt_id, amount_minor, currency, counterparty, evidence, payload, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, input.occurredAt ?? now(), now(), input.source, input.direction, input.state, input.intentId, input.attemptId ?? null, input.amountMinor, input.currency, input.counterparty ? JSON.stringify(input.counterparty) : null, JSON.stringify(input.evidence ?? []), JSON.stringify(input.payload ?? {}), input.transactionId ?? null);
+  getDb()
+    .prepare(
+      'INSERT INTO payment_events (event_id, occurred_at, recorded_at, source, direction, state, intent_id, attempt_id, amount_minor, currency, counterparty, evidence, payload, transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    )
+    .run(
+      id,
+      input.occurredAt ?? now(),
+      now(),
+      input.source,
+      input.direction,
+      input.state,
+      input.intentId,
+      input.attemptId ?? null,
+      input.amountMinor,
+      input.currency,
+      input.counterparty ? JSON.stringify(input.counterparty) : null,
+      JSON.stringify(input.evidence ?? []),
+      JSON.stringify(input.payload ?? {}),
+      input.transactionId ?? null,
+    );
   return id;
 }
 
@@ -232,12 +299,29 @@ export function transitionIntent(id: string, to: IntentState, actor: Actor, deta
     if (!TRANSITIONS[r.status].includes(to)) throw conflict(`Payment intent cannot move from ${r.status} to ${to}`, 'invalid_intent_transition');
     const extra: string[] = [];
     const params: unknown[] = [to, now()];
-    if (to === 'AMBIGUOUS' || to === 'UNKNOWN_PROVIDER_STATE') { extra.push('ambiguous_since = COALESCE(ambiguous_since, ?)'); params.push(now()); }
-    if (to === 'CAPTURED') { extra.push('succeeded_at = ?'); params.push(now()); }
+    if (to === 'AMBIGUOUS' || to === 'UNKNOWN_PROVIDER_STATE') {
+      extra.push('ambiguous_since = COALESCE(ambiguous_since, ?)');
+      params.push(now());
+    }
+    if (to === 'CAPTURED') {
+      extra.push('succeeded_at = ?');
+      params.push(now());
+    }
     db.prepare(`UPDATE payment_intents SET status = ?, updated_at = ?${extra.length ? `, ${extra.join(', ')}` : ''} WHERE id = ?`).run(...params, id);
     recordEvent('payment', id, `intent.${to.toLowerCase()}`, actor, { from: r.status, to, ...details });
     const es = eventState(to);
-    if (es && es !== eventState(r.status)) appendPaymentEvent({ intentId: id, attemptId: (details.attemptId as string) ?? null, state: es, source: String(details.source ?? actor.type), direction: 'in', amountMinor: r.amount_minor ?? 0, currency: r.currency, transactionId: (details.transactionId as string) ?? r.transaction_id ?? null, payload: { from: r.status, to } });
+    if (es && es !== eventState(r.status))
+      appendPaymentEvent({
+        intentId: id,
+        attemptId: (details.attemptId as string) ?? null,
+        state: es,
+        source: String(details.source ?? actor.type),
+        direction: 'in',
+        amountMinor: r.amount_minor ?? 0,
+        currency: r.currency,
+        transactionId: (details.transactionId as string) ?? r.transaction_id ?? null,
+        payload: { from: r.status, to },
+      });
     return getIntentRow(id);
   })();
 }
@@ -277,7 +361,8 @@ export function createIntent(merchant: UserRow, input: CreateIntentInput): { row
   const cur = getCurrency(input.currency);
   if (input.amountMinor != null && (!Number.isInteger(input.amountMinor) || input.amountMinor <= 0)) throw badRequest('Amount must be a positive integer in minor units', 'invalid_amount');
   const caps = countryCapabilities(merchant.country);
-  if (caps.collectionCurrencies.length && !caps.collectionCurrencies.includes(cur.code) && merchant.country) throw badRequest(`${cur.code} cannot be collected in ${merchant.country}`, 'currency_not_collectable');
+  if (caps.collectionCurrencies.length && !caps.collectionCurrencies.includes(cur.code) && merchant.country)
+    throw badRequest(`${cur.code} cannot be collected in ${merchant.country}`, 'currency_not_collectable');
   if (input.purposeCode && !caps.purposeCodes.includes(input.purposeCode)) throw badRequest('Unsupported purpose code', 'invalid_purpose');
   const db = getDb();
   if (input.idemKey) {
@@ -291,11 +376,65 @@ export function createIntent(merchant: UserRow, input: CreateIntentInput): { row
   const rails = (input.rails?.length ? input.rails : DEFAULT_RAILS).map((r) => r.toLowerCase());
   return db.transaction(() => {
     // Execution object: the payment request that the wallet, QR and hosted checkout flows already settle.
-    const request = createPaymentRequest(merchant, { kind: input.source === 'link' ? 'link' : 'qr', amount: input.amountMinor ?? null, currency: cur.code, description: input.description ?? input.reference ?? null, expiresInMinutes: minutes > 0 ? minutes : null, successUrl: input.successUrl ?? null, cancelUrl: input.cancelUrl ?? null, allowedMethods: input.allowedMethods ?? [], metadata: { ...(input.metadata ?? {}), intentId: id, purposeCode: input.purposeCode ?? null, reference: input.reference ?? null } });
-    db.prepare('INSERT INTO payment_intents (id, organisation_id, merchant_user_id, amount_minor, currency, capture_method, method_policy, rails, reference, description, purpose_code, status, source, qr_id, payment_request_id, location_id, terminal_id, customer_user_id, customer_msisdn, customer_country, settlement_profile_id, client_secret_hash, idem_key, metadata, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, null, merchant.id, input.amountMinor ?? null, cur.code, input.captureMethod ?? 'automatic', input.methodPolicy ?? 'smart', JSON.stringify(rails), input.reference ?? null, input.description ?? null, input.purposeCode ?? null, input.amountMinor ? 'REQUIRES_PAYMENT_METHOD' : 'CREATED', input.source ?? 'api', input.qrId ?? null, request.id, input.locationId ?? null, input.terminalId ?? null, input.customerUserId ?? null, input.customerMsisdn ?? null, input.customerCountry ?? null, input.settlementProfileId ?? null, sha256(secret), input.idemKey ?? null, JSON.stringify(input.metadata ?? {}), expiresAt, now(), now());
+    const request = createPaymentRequest(merchant, {
+      kind: input.source === 'link' ? 'link' : 'qr',
+      amount: input.amountMinor ?? null,
+      currency: cur.code,
+      description: input.description ?? input.reference ?? null,
+      expiresInMinutes: minutes > 0 ? minutes : null,
+      successUrl: input.successUrl ?? null,
+      cancelUrl: input.cancelUrl ?? null,
+      allowedMethods: input.allowedMethods ?? [],
+      metadata: { ...(input.metadata ?? {}), intentId: id, purposeCode: input.purposeCode ?? null, reference: input.reference ?? null },
+    });
+    db.prepare(
+      'INSERT INTO payment_intents (id, organisation_id, merchant_user_id, amount_minor, currency, capture_method, method_policy, rails, reference, description, purpose_code, status, source, qr_id, payment_request_id, location_id, terminal_id, customer_user_id, customer_msisdn, customer_country, settlement_profile_id, client_secret_hash, idem_key, metadata, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      id,
+      null,
+      merchant.id,
+      input.amountMinor ?? null,
+      cur.code,
+      input.captureMethod ?? 'automatic',
+      input.methodPolicy ?? 'smart',
+      JSON.stringify(rails),
+      input.reference ?? null,
+      input.description ?? null,
+      input.purposeCode ?? null,
+      input.amountMinor ? 'REQUIRES_PAYMENT_METHOD' : 'CREATED',
+      input.source ?? 'api',
+      input.qrId ?? null,
+      request.id,
+      input.locationId ?? null,
+      input.terminalId ?? null,
+      input.customerUserId ?? null,
+      input.customerMsisdn ?? null,
+      input.customerCountry ?? null,
+      input.settlementProfileId ?? null,
+      sha256(secret),
+      input.idemKey ?? null,
+      JSON.stringify(input.metadata ?? {}),
+      expiresAt,
+      now(),
+      now(),
+    );
     db.prepare('UPDATE payment_requests SET intent_id = ? WHERE id = ?').run(id, request.id);
-    recordEvent('payment', id, 'intent.created', { type: merchant.role === 'admin' ? 'admin' : 'merchant', id: merchant.id }, { amount: input.amountMinor ?? null, currency: cur.code, source: input.source ?? 'api', purpose: input.purposeCode ?? null });
-    appendPaymentEvent({ intentId: id, state: 'INITIATED', source: input.source ?? 'api', direction: 'in', amountMinor: input.amountMinor ?? 0, currency: cur.code, payload: { reference: input.reference ?? null } });
+    recordEvent(
+      'payment',
+      id,
+      'intent.created',
+      { type: merchant.role === 'admin' ? 'admin' : 'merchant', id: merchant.id },
+      { amount: input.amountMinor ?? null, currency: cur.code, source: input.source ?? 'api', purpose: input.purposeCode ?? null },
+    );
+    appendPaymentEvent({
+      intentId: id,
+      state: 'INITIATED',
+      source: input.source ?? 'api',
+      direction: 'in',
+      amountMinor: input.amountMinor ?? 0,
+      currency: cur.code,
+      payload: { reference: input.reference ?? null },
+    });
     return { row: getIntentRow(id), clientSecret: secret };
   })();
 }
@@ -315,7 +454,11 @@ export function setIntentAmount(id: string, amountMinor: number, actor: Actor): 
 }
 
 /** One attempt in flight at a time: a second attempt is blocked until the first resolves (never double-push). */
-export function startAttempt(intentId: string, input: { methodClass: string; rail?: string | null; connector?: string | null; operatorId?: string | null; gatewayPaymentId?: string | null; providerRef?: string | null }, actor: Actor): AttemptView {
+export function startAttempt(
+  intentId: string,
+  input: { methodClass: string; rail?: string | null; connector?: string | null; operatorId?: string | null; gatewayPaymentId?: string | null; providerRef?: string | null },
+  actor: Actor,
+): AttemptView {
   assertMoneyMovementAllowed('attempt');
   const db = getDb();
   return db.transaction(() => {
@@ -330,10 +473,17 @@ export function startAttempt(intentId: string, input: { methodClass: string; rai
     if (open) throw conflict(`Attempt ${open.id} is still ${open.status.toLowerCase()}; a new attempt is blocked until it resolves`, 'attempt_in_flight');
     const seq = ((db.prepare('SELECT MAX(seq) m FROM payment_attempts WHERE intent_id = ?').get(intentId) as any).m ?? 0) + 1;
     const id = `pa_${shortCode(16).toLowerCase()}`;
-    db.prepare('INSERT INTO payment_attempts (id, intent_id, seq, method_class, rail, connector, operator_id, provider_ref, gateway_payment_id, status, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, intentId, seq, input.methodClass, input.rail ?? null, input.connector ?? null, input.operatorId ?? null, input.providerRef ?? null, input.gatewayPaymentId ?? null, 'PROCESSING', now());
+    db.prepare(
+      'INSERT INTO payment_attempts (id, intent_id, seq, method_class, rail, connector, operator_id, provider_ref, gateway_payment_id, status, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(id, intentId, seq, input.methodClass, input.rail ?? null, input.connector ?? null, input.operatorId ?? null, input.providerRef ?? null, input.gatewayPaymentId ?? null, 'PROCESSING', now());
     if (input.connector) db.prepare('UPDATE payment_intents SET route_connector = ?, updated_at = ? WHERE id = ?').run(input.connector, now(), intentId);
     if (r.status !== 'PROCESSING') {
-      if (r.status === 'REQUIRES_PAYMENT_METHOD' || r.status === 'ROUTING' || r.status === 'UNDER_REVIEW') transitionIntent(intentId, input.methodClass === 'wallet' ? 'PROCESSING' : 'REQUIRES_CUSTOMER_ACTION', actor, { attemptId: id, methodClass: input.methodClass, connector: input.connector ?? null });
+      if (r.status === 'REQUIRES_PAYMENT_METHOD' || r.status === 'ROUTING' || r.status === 'UNDER_REVIEW')
+        transitionIntent(intentId, input.methodClass === 'wallet' ? 'PROCESSING' : 'REQUIRES_CUSTOMER_ACTION', actor, {
+          attemptId: id,
+          methodClass: input.methodClass,
+          connector: input.connector ?? null,
+        });
       else if (r.status === 'REQUIRES_CUSTOMER_ACTION') transitionIntent(intentId, 'PROCESSING', actor, { attemptId: id });
     }
     recordEvent('payment', intentId, 'attempt.started', actor, { attemptId: id, seq, methodClass: input.methodClass, connector: input.connector ?? null });
@@ -341,23 +491,40 @@ export function startAttempt(intentId: string, input: { methodClass: string; rai
   })();
 }
 
-export function attemptForGatewayPayment(gatewayPaymentId: string): AttemptView | null {
-  const r = getDb().prepare('SELECT * FROM payment_attempts WHERE gateway_payment_id = ?').get(gatewayPaymentId);
-  return r ? toAttempt(r) : null;
-}
-
 /** Resolve an attempt from an authoritative outcome and move the intent accordingly. Never called from a screen. */
-export function finishAttempt(attemptId: string, outcome: 'CAPTURED' | 'AUTHORISED' | 'FAILED' | 'UNKNOWN' | 'ABANDONED', details: { failureCategory?: string | null; error?: string | null; providerRef?: string | null; transactionId?: string | null; gatewayPaymentId?: string | null; source?: string }, actor: Actor): { attempt: AttemptView; intent: IntentRow } {
+export function finishAttempt(
+  attemptId: string,
+  outcome: 'CAPTURED' | 'AUTHORISED' | 'FAILED' | 'UNKNOWN' | 'ABANDONED',
+  details: { failureCategory?: string | null; error?: string | null; providerRef?: string | null; transactionId?: string | null; gatewayPaymentId?: string | null; source?: string },
+  actor: Actor,
+): { attempt: AttemptView; intent: IntentRow } {
   const db = getDb();
   return db.transaction(() => {
     const a = db.prepare('SELECT * FROM payment_attempts WHERE id = ?').get(attemptId) as any;
     if (!a) throw notFound('Attempt not found', 'attempt_not_found');
     if (['CAPTURED', 'FAILED', 'ABANDONED'].includes(a.status) && a.status === outcome) return { attempt: toAttempt(a), intent: getIntentRow(a.intent_id) };
-    db.prepare('UPDATE payment_attempts SET status = ?, failure_category = ?, error = ?, provider_ref = COALESCE(?, provider_ref), transaction_id = COALESCE(?, transaction_id), gateway_payment_id = COALESCE(?, gateway_payment_id), finished_at = ? WHERE id = ?').run(outcome, details.failureCategory ?? null, details.error ?? null, details.providerRef ?? null, details.transactionId ?? null, details.gatewayPaymentId ?? null, outcome === 'UNKNOWN' || outcome === 'AUTHORISED' ? null : now(), attemptId);
+    db.prepare(
+      'UPDATE payment_attempts SET status = ?, failure_category = ?, error = ?, provider_ref = COALESCE(?, provider_ref), transaction_id = COALESCE(?, transaction_id), gateway_payment_id = COALESCE(?, gateway_payment_id), finished_at = ? WHERE id = ?',
+    ).run(
+      outcome,
+      details.failureCategory ?? null,
+      details.error ?? null,
+      details.providerRef ?? null,
+      details.transactionId ?? null,
+      details.gatewayPaymentId ?? null,
+      outcome === 'UNKNOWN' || outcome === 'AUTHORISED' ? null : now(),
+      attemptId,
+    );
     const r = getIntentRow(a.intent_id);
     let intent = r;
     if (outcome === 'CAPTURED') {
-      if (details.transactionId) db.prepare('UPDATE payment_intents SET transaction_id = ?, gateway_payment_id = COALESCE(?, gateway_payment_id), updated_at = ? WHERE id = ?').run(details.transactionId, details.gatewayPaymentId ?? null, now(), r.id);
+      if (details.transactionId)
+        db.prepare('UPDATE payment_intents SET transaction_id = ?, gateway_payment_id = COALESCE(?, gateway_payment_id), updated_at = ? WHERE id = ?').run(
+          details.transactionId,
+          details.gatewayPaymentId ?? null,
+          now(),
+          r.id,
+        );
       if (details.transactionId) db.prepare('UPDATE transactions SET intent_id = ? WHERE id = ?').run(r.id, details.transactionId);
       if (r.status !== 'CAPTURED' && r.status !== 'SETTLEMENT_PENDING' && r.status !== 'SETTLED') {
         if (!TRANSITIONS[r.status].includes('CAPTURED')) transitionIntent(r.id, 'PROCESSING', actor, { attemptId });
@@ -377,26 +544,46 @@ export function finishAttempt(attemptId: string, outcome: 'CAPTURED' | 'AUTHORIS
     } else if (outcome === 'AUTHORISED') {
       intent = transitionIntent(r.id, 'AUTHORISED', actor, { attemptId });
     } else if (outcome === 'UNKNOWN') {
-      intent = transitionIntent(r.id, r.status === 'PROCESSING' || r.status === 'REQUIRES_CUSTOMER_ACTION' ? 'AMBIGUOUS' : 'UNKNOWN_PROVIDER_STATE', actor, { attemptId, reason: details.error ?? 'provider outcome unknown' });
-      publish('attempt.unknown', { intentId: r.id, attemptId, connector: a.connector, method: a.method_class, amountMinor: r.amount_minor, currency: r.currency, error: details.error ?? null }, { aggregateId: r.id, tenantId: r.merchant_user_id });
+      intent = transitionIntent(r.id, r.status === 'PROCESSING' || r.status === 'REQUIRES_CUSTOMER_ACTION' ? 'AMBIGUOUS' : 'UNKNOWN_PROVIDER_STATE', actor, {
+        attemptId,
+        reason: details.error ?? 'provider outcome unknown',
+      });
+      publish(
+        'attempt.unknown',
+        { intentId: r.id, attemptId, connector: a.connector, method: a.method_class, amountMinor: r.amount_minor, currency: r.currency, error: details.error ?? null },
+        { aggregateId: r.id, tenantId: r.merchant_user_id },
+      );
       const merchant = findUserById(r.merchant_user_id);
       if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.ambiguous_hold', { paymentIntent: intentView(intent), attemptId }, { resource: { type: 'payment_intent', id: r.id } });
     } else {
       // FAILED / ABANDONED: retryable failures return the intent to method selection (recovery), others close it
-      const retryable = outcome === 'ABANDONED' || (details.failureCategory ? RETRYABLE_FAILURES.has(details.failureCategory) : false);
+      const cat = details.failureCategory ?? null;
+      const retryable = !(cat && NON_RETRYABLE_FAILURES.has(cat)) && (outcome === 'ABANDONED' || (cat ? RETRYABLE_FAILURES.has(cat) : false));
       const expired = r.expires_at && r.expires_at < now();
-      if (retryable && !expired && r.status !== 'CAPTURED') intent = transitionIntent(r.id, 'REQUIRES_PAYMENT_METHOD', actor, { attemptId, failureCategory: details.failureCategory ?? null, recovery: true });
+      if (retryable && !expired && r.status !== 'CAPTURED')
+        intent = transitionIntent(r.id, 'REQUIRES_PAYMENT_METHOD', actor, { attemptId, failureCategory: details.failureCategory ?? null, recovery: true });
       else {
         intent = transitionIntent(r.id, expired ? 'EXPIRED' : 'FAILED', actor, { attemptId, failureCategory: details.failureCategory ?? null, error: details.error ?? null });
         const merchant = findUserById(r.merchant_user_id);
-        if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.failed', { paymentIntent: intentView(intent), attemptId, failureCategory: details.failureCategory ?? null }, { resource: { type: 'payment_intent', id: r.id } });
+        if (merchant)
+          void dispatchWebhook(
+            merchant.id,
+            'payment_intent.failed',
+            { paymentIntent: intentView(intent), attemptId, failureCategory: details.failureCategory ?? null },
+            { resource: { type: 'payment_intent', id: r.id } },
+          );
       }
     }
     recordEvent('payment', r.id, `attempt.${outcome.toLowerCase()}`, actor, { attemptId, failureCategory: details.failureCategory ?? null, providerRef: details.providerRef ?? null });
     // Smart Route telemetry: the connector's own faults trip the breaker; customer declines only count as attempts.
     const latency = a.started_at ? Date.now() - Date.parse(a.started_at) : null;
     const connectorFault = details.failureCategory ? ['provider_unavailable', 'timeout_before_send'].includes(details.failureCategory) : false;
-    recordRoutingOutcome(a.connector, a.method_class, outcome === 'CAPTURED' || outcome === 'AUTHORISED' ? 'success' : outcome === 'UNKNOWN' ? 'unknown' : connectorFault ? 'failure' : 'decline', latency);
+    recordRoutingOutcome(
+      a.connector,
+      a.method_class,
+      outcome === 'CAPTURED' || outcome === 'AUTHORISED' ? 'success' : outcome === 'UNKNOWN' ? 'unknown' : connectorFault ? 'failure' : 'decline',
+      latency,
+    );
     return { attempt: toAttempt(db.prepare('SELECT * FROM payment_attempts WHERE id = ?').get(attemptId)), intent };
   })();
 }
@@ -406,7 +593,9 @@ export function onRequestPaid(request: PaymentRequestRow, transactionId: string,
   if (!request.intent_id) return;
   const r = getDb().prepare('SELECT * FROM payment_intents WHERE id = ?').get(request.intent_id) as IntentRow | undefined;
   if (!r) return;
-  let attempt = (getDb().prepare("SELECT * FROM payment_attempts WHERE intent_id = ? AND status IN ('CREATED', 'PROCESSING', 'AUTHORISED', 'UNKNOWN') ORDER BY seq DESC LIMIT 1").get(r.id) as any) ?? (gatewayPaymentId ? getDb().prepare('SELECT * FROM payment_attempts WHERE gateway_payment_id = ?').get(gatewayPaymentId) : null);
+  let attempt =
+    (getDb().prepare("SELECT * FROM payment_attempts WHERE intent_id = ? AND status IN ('CREATED', 'PROCESSING', 'AUTHORISED', 'UNKNOWN') ORDER BY seq DESC LIMIT 1").get(r.id) as any) ??
+    (gatewayPaymentId ? getDb().prepare('SELECT * FROM payment_attempts WHERE gateway_payment_id = ?').get(gatewayPaymentId) : null);
   if (!attempt) {
     if (!r.amount_minor && request.amount) getDb().prepare('UPDATE payment_intents SET amount_minor = ?, updated_at = ? WHERE id = ?').run(request.amount, now(), r.id);
     if (r.status === 'CREATED') transitionIntent(r.id, 'REQUIRES_PAYMENT_METHOD', actor);
@@ -480,7 +669,9 @@ export function cancelIntent(id: string, actor: Actor, reason?: string | null): 
 
 export function expireIntents(): number {
   const db = getDb();
-  const rows = db.prepare("SELECT id FROM payment_intents WHERE expires_at IS NOT NULL AND expires_at < ? AND status IN ('CREATED', 'REQUIRES_PAYMENT_METHOD', 'ROUTING', 'REQUIRES_CUSTOMER_ACTION')").all(now()) as { id: string }[];
+  const rows = db
+    .prepare("SELECT id FROM payment_intents WHERE expires_at IS NOT NULL AND expires_at < ? AND status IN ('CREATED', 'REQUIRES_PAYMENT_METHOD', 'ROUTING', 'REQUIRES_CUSTOMER_ACTION')")
+    .all(now()) as { id: string }[];
   let n = 0;
   for (const r of rows) {
     const open = db.prepare("SELECT id FROM payment_attempts WHERE intent_id = ? AND status IN ('PROCESSING', 'UNKNOWN')").get(r.id);
@@ -504,26 +695,48 @@ export function discoverMethods(r: IntentRow, payer: UserRow | null, payerCountr
   const allowed = gw?.methods ?? ['wallet', 'card', 'mobile_money', 'bank'];
   const options = paymentOptions(r.currency, payerCountry ?? merchant?.country ?? null, 'checkout');
   const list: { methodClass: string; label: string; available: boolean; reason?: string; operators?: unknown[]; gateways?: unknown[]; crossBorder?: boolean }[] = [];
-  list.push({ methodClass: 'wallet', label: 'BitriPay balance', available: rails.includes('wallet') && caps.wallet && allowed.includes('wallet'), reason: payer ? undefined : 'sign in to pay from your balance' });
+  list.push({
+    methodClass: 'wallet',
+    label: 'BitriPay balance',
+    available: rails.includes('wallet') && caps.wallet && allowed.includes('wallet'),
+    reason: payer ? undefined : 'sign in to pay from your balance',
+  });
   const momo = options.find((o) => o.method === 'mobile_money');
-  list.push({ methodClass: 'mobile_money', label: 'Mobile money', available: caps.mobileMoney && !!momo && allowed.includes('mobile_money') && rails.some((x) => ['mpesa', 'airtel', 'orange', 'mobile_money'].includes(x)), operators: momo?.operators, gateways: momo?.gateways });
+  list.push({
+    methodClass: 'mobile_money',
+    label: 'Mobile money',
+    available: caps.mobileMoney && !!momo && allowed.includes('mobile_money') && rails.some((x) => ['mpesa', 'airtel', 'orange', 'mobile_money'].includes(x)),
+    operators: momo?.operators,
+    gateways: momo?.gateways,
+  });
   const card = options.find((o) => o.method === 'card');
   list.push({ methodClass: 'card', label: 'Card', available: caps.cardCollection && !!card && allowed.includes('card') && rails.includes('card'), gateways: card?.gateways });
   const bank = options.find((o) => o.method === 'bank');
   list.push({ methodClass: 'bank', label: 'Bank transfer', available: !!bank && allowed.includes('bank') && rails.includes('bank'), gateways: bank?.gateways });
   // Smart Route: rank the connectors of each method for this intent's policy; the recommended one is what the
   // checkout uses when the payer expresses no preference, and the failed connector of the last attempt is avoided.
-  const lastFailed = listAttempts(r.id).filter((a) => a.status === 'FAILED' && ['provider_unavailable', 'timeout_before_send'].includes(a.failureCategory ?? '')).map((a) => a.connector);
+  const lastFailed = listAttempts(r.id)
+    .filter((a) => a.status === 'FAILED' && ['provider_unavailable', 'timeout_before_send'].includes(a.failureCategory ?? ''))
+    .map((a) => a.connector);
   for (const m of list) {
     const gws = (m.gateways as { id: string }[] | undefined) ?? [];
     if (!gws.length) continue;
     const candidates: RouteCandidate[] = gws.map((g, i) => ({ id: g.id, method: m.methodClass, preferenceRank: i }));
-    const { id, scores } = pickConnector(candidates.filter((c) => !lastFailed.includes(c.id)).length ? candidates.filter((c) => !lastFailed.includes(c.id)) : candidates, (r.method_policy as any) ?? 'smart');
+    const { id, scores } = pickConnector(
+      candidates.filter((c) => !lastFailed.includes(c.id)).length ? candidates.filter((c) => !lastFailed.includes(c.id)) : candidates,
+      (r.method_policy as any) ?? 'smart',
+    );
     (m as any).recommendedGateway = id;
     (m as any).routeScores = scores.map((sc) => ({ id: sc.id, score: sc.score, usable: sc.usable, reason: sc.reason }));
   }
   const crossBorder = !!payerCountry && !!merchant?.country && payerCountry.toUpperCase() !== merchant.country.toUpperCase();
-  if (crossBorder) list.push({ methodClass: 'diaspora', label: 'Pay from abroad in your currency', available: caps.crossBorder && rails.includes('diaspora') && countryCapabilities(payerCountry).crossBorder, crossBorder: true });
+  if (crossBorder)
+    list.push({
+      methodClass: 'diaspora',
+      label: 'Pay from abroad in your currency',
+      available: caps.crossBorder && rails.includes('diaspora') && countryCapabilities(payerCountry).crossBorder,
+      crossBorder: true,
+    });
   if (rails.includes('bitcoin')) list.push({ methodClass: 'bitcoin', label: 'Bitcoin / Lightning', available: caps.bitcoin, reason: caps.bitcoin ? undefined : 'not enabled in this country' });
   return list;
 }
@@ -543,9 +756,19 @@ export function intentTimeline(id: string) {
 export function listIntents(filter: { merchantUserId?: string | null; status?: string | null; limit?: number } = {}): IntentView[] {
   const where: string[] = [];
   const params: unknown[] = [];
-  if (filter.merchantUserId) { where.push('merchant_user_id = ?'); params.push(filter.merchantUserId); }
-  if (filter.status) { where.push('status = ?'); params.push(filter.status); }
-  return (getDb().prepare(`SELECT * FROM payment_intents ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT ?`).all(...params, filter.limit ?? 50) as IntentRow[]).map(intentView);
+  if (filter.merchantUserId) {
+    where.push('merchant_user_id = ?');
+    params.push(filter.merchantUserId);
+  }
+  if (filter.status) {
+    where.push('status = ?');
+    params.push(filter.status);
+  }
+  return (
+    getDb()
+      .prepare(`SELECT * FROM payment_intents ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT ?`)
+      .all(...params, filter.limit ?? 50) as IntentRow[]
+  ).map(intentView);
 }
 
 /** Merchant identity for the trust layer. */
@@ -553,5 +776,12 @@ export function merchantIdentity(merchantUserId: string, locationId?: string | n
   const m = findUserById(merchantUserId);
   if (!m) throw notFound('Merchant not found', 'merchant_not_found');
   const loc = locationId ? (getDb().prepare('SELECT * FROM merchant_locations WHERE id = ?').get(locationId) as any) : null;
-  return { ...toPublicUser(m), businessName: m.business_name, verified: m.kyc_status === 'verified', kycStatus: m.kyc_status, country: m.country, location: loc ? { id: loc.id, name: loc.name, city: loc.city, address: loc.address } : null };
+  return {
+    ...toPublicUser(m),
+    businessName: m.business_name,
+    verified: m.kyc_status === 'verified',
+    kycStatus: m.kyc_status,
+    country: m.country,
+    location: loc ? { id: loc.id, name: loc.name, city: loc.city, address: loc.address } : null,
+  };
 }

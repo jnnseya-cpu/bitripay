@@ -39,19 +39,55 @@ export interface LinkRule {
   enabled: boolean;
   createdAt: string;
 }
-const toRule = (r: any): LinkRule => ({ id: r.id, keyword: r.keyword, url: r.url, title: r.title, kind: r.kind, maxPerPage: r.max_per_page, priority: r.priority, enabled: !!r.enabled, createdAt: r.created_at });
+const toRule = (r: any): LinkRule => ({
+  id: r.id,
+  keyword: r.keyword,
+  url: r.url,
+  title: r.title,
+  kind: r.kind,
+  maxPerPage: r.max_per_page,
+  priority: r.priority,
+  enabled: !!r.enabled,
+  createdAt: r.created_at,
+});
 
 export function listLinkRules(enabledOnly = false): LinkRule[] {
-  return (getDb().prepare(`SELECT * FROM seo_link_rules ${enabledOnly ? 'WHERE enabled = 1' : ''} ORDER BY priority DESC, length(keyword) DESC`).all() as any[]).map(toRule);
+  return (
+    getDb()
+      .prepare(`SELECT * FROM seo_link_rules ${enabledOnly ? 'WHERE enabled = 1' : ''} ORDER BY priority DESC, length(keyword) DESC`)
+      .all() as any[]
+  ).map(toRule);
 }
-export function upsertLinkRule(input: { id?: string; keyword: string; url: string; title?: string | null; kind?: 'internal' | 'outbound'; maxPerPage?: number; priority?: number; enabled?: boolean }): LinkRule {
+export function upsertLinkRule(input: {
+  id?: string;
+  keyword: string;
+  url: string;
+  title?: string | null;
+  kind?: 'internal' | 'outbound';
+  maxPerPage?: number;
+  priority?: number;
+  enabled?: boolean;
+}): LinkRule {
   const keyword = input.keyword.trim();
   if (keyword.length < 2) throw badRequest('Keyword must be at least 2 characters');
   if (!/^(\/|https?:\/\/)/.test(input.url)) throw badRequest('URL must be absolute or start with /');
   const id = input.id ?? (getDb().prepare('SELECT id FROM seo_link_rules WHERE lower(keyword) = lower(?)').get(keyword) as any)?.id ?? uuid();
-  getDb().prepare(`INSERT INTO seo_link_rules (id, keyword, url, title, kind, max_per_page, priority, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET keyword = excluded.keyword, url = excluded.url, title = excluded.title, kind = excluded.kind, max_per_page = excluded.max_per_page, priority = excluded.priority, enabled = excluded.enabled`)
-    .run(id, keyword, input.url, input.title ?? null, input.kind ?? (/^https?:/.test(input.url) ? 'outbound' : 'internal'), input.maxPerPage ?? 1, input.priority ?? 50, input.enabled === false ? 0 : 1, now());
+  getDb()
+    .prepare(
+      `INSERT INTO seo_link_rules (id, keyword, url, title, kind, max_per_page, priority, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET keyword = excluded.keyword, url = excluded.url, title = excluded.title, kind = excluded.kind, max_per_page = excluded.max_per_page, priority = excluded.priority, enabled = excluded.enabled`,
+    )
+    .run(
+      id,
+      keyword,
+      input.url,
+      input.title ?? null,
+      input.kind ?? (/^https?:/.test(input.url) ? 'outbound' : 'internal'),
+      input.maxPerPage ?? 1,
+      input.priority ?? 50,
+      input.enabled === false ? 0 : 1,
+      now(),
+    );
   return toRule(getDb().prepare('SELECT * FROM seo_link_rules WHERE id = ?').get(id));
 }
 export function deleteLinkRule(id: string) {
@@ -108,7 +144,20 @@ export interface Backlink {
   firstSeenAt: string;
   lastSeenAt: string;
 }
-const toBacklink = (r: any): Backlink => ({ id: r.id, direction: r.direction, sourceUrl: r.source_url, sourceDomain: r.source_domain, targetUrl: r.target_url, anchor: r.anchor, status: r.status, hits: r.hits, nofollow: !!r.nofollow, notes: r.notes, firstSeenAt: r.first_seen_at, lastSeenAt: r.last_seen_at });
+const toBacklink = (r: any): Backlink => ({
+  id: r.id,
+  direction: r.direction,
+  sourceUrl: r.source_url,
+  sourceDomain: r.source_domain,
+  targetUrl: r.target_url,
+  anchor: r.anchor,
+  status: r.status,
+  hits: r.hits,
+  nofollow: !!r.nofollow,
+  notes: r.notes,
+  firstSeenAt: r.first_seen_at,
+  lastSeenAt: r.last_seen_at,
+});
 
 function domainOf(url: string): string | null {
   try {
@@ -117,7 +166,26 @@ function domainOf(url: string): string | null {
     return null;
   }
 }
-const IGNORED_REFERRER_HOSTS = new Set(['localhost', '127.0.0.1', 'google.com', 'bing.com', 'duckduckgo.com', 'yahoo.com', 'baidu.com', 'yandex.ru', 'facebook.com', 't.co', 'twitter.com', 'x.com', 'linkedin.com', 'instagram.com', 'youtube.com', 'chatgpt.com', 'perplexity.ai', 'claude.ai']);
+const IGNORED_REFERRER_HOSTS = new Set([
+  'localhost',
+  '127.0.0.1',
+  'google.com',
+  'bing.com',
+  'duckduckgo.com',
+  'yahoo.com',
+  'baidu.com',
+  'yandex.ru',
+  'facebook.com',
+  't.co',
+  'twitter.com',
+  'x.com',
+  'linkedin.com',
+  'instagram.com',
+  'youtube.com',
+  'chatgpt.com',
+  'perplexity.ai',
+  'claude.ai',
+]);
 
 /** Called from the referrer middleware: a visit that arrived from another site counts as a live inbound backlink. */
 export function recordReferrer(referrer: string | undefined, targetPath: string): Backlink | null {
@@ -138,7 +206,9 @@ export function recordReferrer(referrer: string | undefined, targetPath: string)
     return toBacklink(db.prepare('SELECT * FROM seo_backlinks WHERE id = ?').get(existing.id));
   }
   const id = uuid();
-  db.prepare("INSERT INTO seo_backlinks (id, direction, source_url, source_domain, target_url, anchor, status, hits, nofollow, notes, first_seen_at, last_seen_at) VALUES (?, 'inbound', ?, ?, ?, NULL, 'live', 1, 0, 'Discovered from referrer', ?, ?)").run(id, referrer.slice(0, 500), domain, target, now(), now());
+  db.prepare(
+    "INSERT INTO seo_backlinks (id, direction, source_url, source_domain, target_url, anchor, status, hits, nofollow, notes, first_seen_at, last_seen_at) VALUES (?, 'inbound', ?, ?, ?, NULL, 'live', 1, 0, 'Discovered from referrer', ?, ?)",
+  ).run(id, referrer.slice(0, 500), domain, target, now(), now());
   recordEvent('admin', id, 'seo.backlink.discovered', { type: 'system' }, { sourceDomain: domain, target });
   return toBacklink(db.prepare('SELECT * FROM seo_backlinks WHERE id = ?').get(id));
 }
@@ -146,18 +216,39 @@ export function recordReferrer(referrer: string | undefined, targetPath: string)
 export function listBacklinks(filter: { direction?: string | null; status?: string | null } = {}): Backlink[] {
   const where: string[] = [];
   const params: unknown[] = [];
-  if (filter.direction) { where.push('direction = ?'); params.push(filter.direction); }
-  if (filter.status) { where.push('status = ?'); params.push(filter.status); }
-  return (getDb().prepare(`SELECT * FROM seo_backlinks ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY last_seen_at DESC LIMIT 500`).all(...params) as any[]).map(toBacklink);
+  if (filter.direction) {
+    where.push('direction = ?');
+    params.push(filter.direction);
+  }
+  if (filter.status) {
+    where.push('status = ?');
+    params.push(filter.status);
+  }
+  return (
+    getDb()
+      .prepare(`SELECT * FROM seo_backlinks ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY last_seen_at DESC LIMIT 500`)
+      .all(...params) as any[]
+  ).map(toBacklink);
 }
-export function upsertBacklink(input: { id?: string; direction: 'inbound' | 'outbound' | 'partner'; sourceUrl: string; targetUrl: string; anchor?: string | null; status?: Backlink['status']; nofollow?: boolean; notes?: string | null }): Backlink {
+export function upsertBacklink(input: {
+  id?: string;
+  direction: 'inbound' | 'outbound' | 'partner';
+  sourceUrl: string;
+  targetUrl: string;
+  anchor?: string | null;
+  status?: Backlink['status'];
+  nofollow?: boolean;
+  notes?: string | null;
+}): Backlink {
   const domain = domainOf(input.sourceUrl);
   if (!domain) throw badRequest('Source must be a full URL');
   const db = getDb();
-  const id = input.id ?? (db.prepare('SELECT id FROM seo_backlinks WHERE direction = ? AND source_url = ? AND target_url = ?').get(input.direction, input.sourceUrl, input.targetUrl) as any)?.id ?? uuid();
-  db.prepare(`INSERT INTO seo_backlinks (id, direction, source_url, source_domain, target_url, anchor, status, hits, nofollow, notes, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET direction = excluded.direction, source_url = excluded.source_url, source_domain = excluded.source_domain, target_url = excluded.target_url, anchor = excluded.anchor, status = excluded.status, nofollow = excluded.nofollow, notes = excluded.notes, last_seen_at = excluded.last_seen_at`)
-    .run(id, input.direction, input.sourceUrl, domain, input.targetUrl, input.anchor ?? null, input.status ?? 'live', input.nofollow ? 1 : 0, input.notes ?? null, now(), now());
+  const id =
+    input.id ?? (db.prepare('SELECT id FROM seo_backlinks WHERE direction = ? AND source_url = ? AND target_url = ?').get(input.direction, input.sourceUrl, input.targetUrl) as any)?.id ?? uuid();
+  db.prepare(
+    `INSERT INTO seo_backlinks (id, direction, source_url, source_domain, target_url, anchor, status, hits, nofollow, notes, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET direction = excluded.direction, source_url = excluded.source_url, source_domain = excluded.source_domain, target_url = excluded.target_url, anchor = excluded.anchor, status = excluded.status, nofollow = excluded.nofollow, notes = excluded.notes, last_seen_at = excluded.last_seen_at`,
+  ).run(id, input.direction, input.sourceUrl, domain, input.targetUrl, input.anchor ?? null, input.status ?? 'live', input.nofollow ? 1 : 0, input.notes ?? null, now(), now());
   return toBacklink(db.prepare('SELECT * FROM seo_backlinks WHERE id = ?').get(id));
 }
 export function deleteBacklink(id: string) {
@@ -223,7 +314,16 @@ export function organizationJsonLd() {
 }
 export function websiteJsonLd() {
   const s = getSeoSettings();
-  return { '@context': 'https://schema.org', '@type': 'WebSite', '@id': `${siteUrl()}/#website`, url: siteUrl(), name: s.siteName, inLanguage: s.languages, publisher: { '@id': `${siteUrl()}/#organization` }, potentialAction: { '@type': 'SearchAction', target: { '@type': 'EntryPoint', urlTemplate: `${siteUrl()}/blog?q={search_term_string}` }, 'query-input': 'required name=search_term_string' } };
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    '@id': `${siteUrl()}/#website`,
+    url: siteUrl(),
+    name: s.siteName,
+    inLanguage: s.languages,
+    publisher: { '@id': `${siteUrl()}/#organization` },
+    potentialAction: { '@type': 'SearchAction', target: { '@type': 'EntryPoint', urlTemplate: `${siteUrl()}/blog?q={search_term_string}` }, 'query-input': 'required name=search_term_string' },
+  };
 }
 export function breadcrumbJsonLd(items: { name: string; url: string }[]) {
   return { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: items.map((it, i) => ({ '@type': 'ListItem', position: i + 1, name: it.name, item: absoluteUrl(it.url) })) };
@@ -244,31 +344,36 @@ export interface SitemapEntry {
 export function sitemapXml(entries: SitemapEntry[]): string {
   const s = getSeoSettings();
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${entries
-    .map((e) => `  <url><loc>${escapeHtml(absoluteUrl(e.path))}</loc>${e.lastmod ? `<lastmod>${e.lastmod.slice(0, 10)}</lastmod>` : ''}<changefreq>${e.changefreq ?? 'weekly'}</changefreq><priority>${(e.priority ?? 0.6).toFixed(1)}</priority>${s.languages.length > 1 ? s.languages.map((l) => `<xhtml:link rel="alternate" hreflang="${l}" href="${escapeHtml(absoluteUrl(e.path))}${e.path.includes('?') ? '&' : '?'}lang=${l}"/>`).join('') : ''}</url>`)
+    .map(
+      (e) =>
+        `  <url><loc>${escapeHtml(absoluteUrl(e.path))}</loc>${e.lastmod ? `<lastmod>${e.lastmod.slice(0, 10)}</lastmod>` : ''}<changefreq>${e.changefreq ?? 'weekly'}</changefreq><priority>${(e.priority ?? 0.6).toFixed(1)}</priority>${s.languages.length > 1 ? s.languages.map((l) => `<xhtml:link rel="alternate" hreflang="${l}" href="${escapeHtml(absoluteUrl(e.path))}${e.path.includes('?') ? '&' : '?'}lang=${l}"/>`).join('') : ''}</url>`,
+    )
     .join('\n')}\n</urlset>\n`;
 }
 export function robotsTxt(): string {
   const key = getSeoSettings().indexNowKey;
-  return [
-    'User-agent: *',
-    'Allow: /',
-    'Disallow: /app/',
-    'Disallow: /api/',
-    'Disallow: /admin/',
-    '',
-    '# AI answer engines are welcome to read the public site, the blog and llms.txt.',
-    'User-agent: GPTBot',
-    'Allow: /',
-    'User-agent: ClaudeBot',
-    'Allow: /',
-    'User-agent: PerplexityBot',
-    'Allow: /',
-    'User-agent: Google-Extended',
-    'Allow: /',
-    '',
-    `Sitemap: ${absoluteUrl('/sitemap.xml')}`,
-    key ? `# IndexNow key: ${absoluteUrl(`/${key}.txt`)}` : '',
-  ].join('\n') + '\n';
+  return (
+    [
+      'User-agent: *',
+      'Allow: /',
+      'Disallow: /app/',
+      'Disallow: /api/',
+      'Disallow: /admin/',
+      '',
+      '# AI answer engines are welcome to read the public site, the blog and llms.txt.',
+      'User-agent: GPTBot',
+      'Allow: /',
+      'User-agent: ClaudeBot',
+      'Allow: /',
+      'User-agent: PerplexityBot',
+      'Allow: /',
+      'User-agent: Google-Extended',
+      'Allow: /',
+      '',
+      `Sitemap: ${absoluteUrl('/sitemap.xml')}`,
+      key ? `# IndexNow key: ${absoluteUrl(`/${key}.txt`)}` : '',
+    ].join('\n') + '\n'
+  );
 }
 
 /** Ping IndexNow (Bing, Yandex, Seznam, Naver share one endpoint) with changed URLs; best-effort. */
@@ -278,7 +383,12 @@ export async function pingIndexNow(paths: string[]): Promise<{ ok: boolean; stat
   if (config.isTest) return { ok: true, reason: 'test' };
   try {
     const host = new URL(siteUrl()).host;
-    const res = await fetch('https://api.indexnow.org/indexnow', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ host, key, keyLocation: absoluteUrl(`/${key}.txt`), urlList: paths.map(absoluteUrl) }), signal: AbortSignal.timeout(8000) });
+    const res = await fetch('https://api.indexnow.org/indexnow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ host, key, keyLocation: absoluteUrl(`/${key}.txt`), urlList: paths.map(absoluteUrl) }),
+      signal: AbortSignal.timeout(8000),
+    });
     return { ok: res.status < 300, status: res.status };
   } catch (err) {
     return { ok: false, reason: (err as Error).message };

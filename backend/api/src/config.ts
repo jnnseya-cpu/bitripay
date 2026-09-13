@@ -80,8 +80,33 @@ export const config = {
     twilioFrom: env.TWILIO_FROM || '',
   },
   expoAccessToken: env.EXPO_ACCESS_TOKEN || '',
+  /** Server-side model key used by the assist runtime and the content agent when no encrypted key is stored in settings. */
+  anthropicApiKey: env.ANTHROPIC_API_KEY || '',
+  webauthn: {
+    rpId: env.WEBAUTHN_RP_ID || '',
+    origins: (env.WEBAUTHN_ORIGINS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
+  /** Demo seed defaults (country of the demo accounts; wallets follow BASE_CURRENCY). */
+  seed: { country: (env.SEED_COUNTRY || 'US').toUpperCase(), writeDeviceKey: env.SEED_WRITE_DEVICE_KEY === '1' },
 };
 
-if (config.isProduction && (config.jwtSecret.startsWith('dev-') || config.appSecret.startsWith('dev-'))) {
-  console.warn('[config] WARNING: JWT_SECRET / APP_SECRET are using insecure defaults in production!');
+const DEV_SECRET_PREFIX = 'dev-';
+const DEFAULT_ADMIN_PASSWORD = 'Admin123!';
+/**
+ * Insecure defaults are convenient in development and tests and a breach in production: refuse to start rather than
+ * run with a guessable signing key or admin password.
+ */
+export function assertProductionSecrets(c: { isProduction: boolean; jwtSecret: string; appSecret: string; admin: { password: string } }): string[] {
+  const problems: string[] = [];
+  if (c.jwtSecret.startsWith(DEV_SECRET_PREFIX) || c.jwtSecret.length < 32) problems.push('JWT_SECRET must be set to a random value of at least 32 characters');
+  if (c.appSecret.startsWith(DEV_SECRET_PREFIX) || c.appSecret.length < 32) problems.push('APP_SECRET must be set to a random value of at least 32 characters');
+  if (c.admin.password === DEFAULT_ADMIN_PASSWORD || c.admin.password.length < 12) problems.push('ADMIN_PASSWORD must be set to a strong value (12+ characters, not the default)');
+  if (c.isProduction && problems.length) throw new Error(`[config] refusing to start in production: ${problems.join('; ')}`);
+  return problems;
 }
+
+const secretProblems = assertProductionSecrets(config);
+if (secretProblems.length && !config.isTest) console.warn(`[config] development defaults in use: ${secretProblems.join('; ')}`);

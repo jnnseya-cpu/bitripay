@@ -1,6 +1,6 @@
 import { getDb } from '../db';
 import { uuid, now } from '../lib/ids';
-import { badRequest, forbidden, notFound } from '../lib/errors';
+import { badRequest, notFound } from '../lib/errors';
 import type { Wallet } from '@bitripay/shared';
 import { getCurrency } from './currencies';
 import { classifyBalance } from './emoney';
@@ -18,7 +18,16 @@ export interface WalletRow {
 }
 
 export function toWallet(row: WalletRow, user?: { role: string } | null): Wallet {
-  const base: Wallet = { id: row.id, userId: row.user_id, currency: row.currency, balance: row.balance, createdAt: row.created_at, promoBalance: row.promo_balance ?? 0, frozen: !!row.frozen_at, frozenReason: row.frozen_reason ?? null };
+  const base: Wallet = {
+    id: row.id,
+    userId: row.user_id,
+    currency: row.currency,
+    balance: row.balance,
+    createdAt: row.created_at,
+    promoBalance: row.promo_balance ?? 0,
+    frozen: !!row.frozen_at,
+    frozenReason: row.frozen_reason ?? null,
+  };
   if (user) {
     try {
       base.classification = classifyBalance(user, row.currency);
@@ -57,8 +66,4 @@ export function getUserWallet(userId: string, currency: string, autoCreate = fal
     throw badRequest(`You do not have a ${currency.toUpperCase()} wallet`, 'wallet_not_found');
   }
   return w;
-}
-
-export function assertWalletOwner(wallet: WalletRow, userId: string) {
-  if (wallet.user_id !== userId) throw forbidden('This wallet does not belong to you');
 }

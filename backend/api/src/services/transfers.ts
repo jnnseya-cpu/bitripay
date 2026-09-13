@@ -35,7 +35,20 @@ export function sendMoney(sender: UserRow, input: TransferInput): TransactionRow
   const fee = calculateFee(type, input.amount, currency.code, null, { userId: sender.id });
   enforceLimits(sender, input.amount, currency.code);
   const firstToRecipient = !getDb().prepare("SELECT 1 FROM transactions WHERE sender_user_id = ? AND receiver_user_id = ? AND status = 'completed' LIMIT 1").get(sender.id, recipient.id);
-  enforceOutboundRisk({ userId: sender.id, kind: 'transfer', amount: input.amount, currency: currency.code, subjectType: 'transfer', counterparty: { name: recipient.full_name, phone: recipient.phone, email: recipient.email, country: recipient.country }, method: 'wallet', recipientUserId: recipient.id, newBeneficiary: firstToRecipient, stepUpVerified: input.stepUpVerified ?? false, deviceHash: input.deviceHash ?? null, ipCountry: input.ipCountry ?? null });
+  enforceOutboundRisk({
+    userId: sender.id,
+    kind: 'transfer',
+    amount: input.amount,
+    currency: currency.code,
+    subjectType: 'transfer',
+    counterparty: { name: recipient.full_name, phone: recipient.phone, email: recipient.email, country: recipient.country },
+    method: 'wallet',
+    recipientUserId: recipient.id,
+    newBeneficiary: firstToRecipient,
+    stepUpVerified: input.stepUpVerified ?? false,
+    deviceHash: input.deviceHash ?? null,
+    ipCountry: input.ipCountry ?? null,
+  });
   const fromWallet = getUserWallet(sender.id, currency.code);
   const toWallet = ensureWallet(recipient.id, currency.code);
   const tx = postTransaction({
@@ -60,7 +73,13 @@ export function sendMoney(sender: UserRow, input: TransferInput): TransactionRow
 }
 
 /** Exchange between the user's own wallets at the platform rate (mid-market minus margin). */
-export function exchange(user: UserRow, fromCurrency: string, toCurrency: string, amount: number, opts: { quoteId?: string | null } = {}): { tx: TransactionRow; rate: number; received: number; quoteId: string | null; guaranteed: boolean } {
+export function exchange(
+  user: UserRow,
+  fromCurrency: string,
+  toCurrency: string,
+  amount: number,
+  opts: { quoteId?: string | null } = {},
+): { tx: TransactionRow; rate: number; received: number; quoteId: string | null; guaranteed: boolean } {
   if (!getModules().exchange) throw unprocessable('Currency exchange is currently disabled', 'module_disabled');
   const from = getCurrency(fromCurrency);
   const to = getCurrency(toCurrency);

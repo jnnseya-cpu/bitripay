@@ -6,17 +6,7 @@ import { generateTotpSecret, otpauthUrl, verifyTotp } from '../lib/totp';
 import { encrypt, decrypt } from '../lib/crypto';
 import { now } from '../lib/ids';
 import { config } from '../config';
-import {
-  createUser,
-  findUserByEmail,
-  findUserByPhone,
-  normalizeEmail,
-  normalizePhone,
-  toUser,
-  updateUser,
-  type UserRow,
-  type CreateUserInput,
-} from './users';
+import { createUser, findUserByEmail, findUserByPhone, normalizeEmail, normalizePhone, toUser, updateUser, type UserRow, type CreateUserInput } from './users';
 import { issueOtp, verifyOtp } from './otp';
 import { getAppSettings, getSetting } from './settings';
 import { notify } from './notifications';

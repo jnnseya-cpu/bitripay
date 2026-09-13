@@ -11,10 +11,26 @@ import { offlineQueue } from '../lib/offline';
 
 type Trust = 'verified' | 'basic';
 type Resolved =
-  | { kind: 'payment_request'; paymentRequest: PaymentRequest; merchant: PublicUser & { brandColor: string; verified?: boolean; location?: { name: string; city: string | null } | null }; methods: string[]; trust?: Trust; intent?: { id: string; status: string; purposeCode: string | null; reference: string | null } }
+  | {
+      kind: 'payment_request';
+      paymentRequest: PaymentRequest;
+      merchant: PublicUser & { brandColor: string; verified?: boolean; location?: { name: string; city: string | null } | null };
+      methods: string[];
+      trust?: Trust;
+      intent?: { id: string; status: string; purposeCode: string | null; reference: string | null };
+    }
   | { kind: 'user' | 'merchant' | 'agent'; user: PublicUser; amount: string | null; currency: string | null; note: string | null }
   /** A static BitriQR sticker: the payer enters the amount, an intent is created for the code, then paid. */
-  | { kind: 'bitriqr'; user: PublicUser & { verified?: boolean; location?: { name: string; city: string | null } | null }; qrId: string | null; /** Set for reusable payment links with a fixed amount. */ amount: string | null; currency: string | null; note: string | null; purposeCode: string | null; trust: Trust };
+  | {
+      kind: 'bitriqr';
+      user: PublicUser & { verified?: boolean; location?: { name: string; city: string | null } | null };
+      qrId: string | null;
+      /** Set for reusable payment links with a fixed amount. */ amount: string | null;
+      currency: string | null;
+      note: string | null;
+      purposeCode: string | null;
+      trust: Trust;
+    };
 
 export function Scan() {
   const t = useT();
@@ -24,28 +40,34 @@ export function Scan() {
   const { user, toast } = useStore();
   const [queued, setQueued] = useState<{ amountMinor: number; currency: string; merchantName: string; hash: string } | null>(null);
   /** Offline: a signed offline BitriQR becomes a locally signed promise, queued until the network returns (never final before the platform confirms). */
-  const queueOffline = useCallback(async (data: string) => {
-    if (!user || !bitriqr.isBitriQr(data)) return false;
-    const d = bitriqr.decode(data);
-    if (!d.offlineNonce) return false;
-    const item = await offlineQueue.promiseFor(data, user.id, d.merchantId);
-    setQueued({ amountMinor: item.amountMinor, currency: item.currency, merchantName: item.merchantName, hash: item.hash });
-    return true;
-  }, [user]);
-  const resolve = useCallback(async (data: string) => {
-    setError(null);
-    setQueued(null);
-    try {
-      if (!navigator.onLine && (await queueOffline(data))) return;
-      const r = await api.post<Resolved>('/api/qr/resolve', { data });
-      setResolved(r);
-    } catch (err) {
-      const e = err as Error & { status?: number };
-      // a network failure on an offline code: queue it instead of failing
-      if ((e.status === undefined || e.status === 0 || e.status === 503) && (await queueOffline(data).catch(() => false))) return;
-      setError(e.message);
-    }
-  }, [queueOffline]);
+  const queueOffline = useCallback(
+    async (data: string) => {
+      if (!user || !bitriqr.isBitriQr(data)) return false;
+      const d = bitriqr.decode(data);
+      if (!d.offlineNonce) return false;
+      const item = await offlineQueue.promiseFor(data, user.id, d.merchantId);
+      setQueued({ amountMinor: item.amountMinor, currency: item.currency, merchantName: item.merchantName, hash: item.hash });
+      return true;
+    },
+    [user],
+  );
+  const resolve = useCallback(
+    async (data: string) => {
+      setError(null);
+      setQueued(null);
+      try {
+        if (!navigator.onLine && (await queueOffline(data))) return;
+        const r = await api.post<Resolved>('/api/qr/resolve', { data });
+        setResolved(r);
+      } catch (err) {
+        const e = err as Error & { status?: number };
+        // a network failure on an offline code: queue it instead of failing
+        if ((e.status === undefined || e.status === 0 || e.status === 503) && (await queueOffline(data).catch(() => false))) return;
+        setError(e.message);
+      }
+    },
+    [queueOffline],
+  );
   const syncNow = async () => {
     try {
       const r = await offlineQueue.sync();
@@ -60,7 +82,14 @@ export function Scan() {
     <div style={{ maxWidth: 560 }}>
       <PageHeader title={t('scan.title')} subtitle={t('scan.hint')} />
       {error && <Alert kind="error">{error}</Alert>}
-      {queued && <Alert kind="warning"><b>Offline payment queued</b> · {queued.amountMinor / 100} {queued.currency} to {queued.merchantName}. It is not final yet: it will be confirmed the moment you are back online. <Button size="sm" variant="secondary" onClick={syncNow} disabled={!navigator.onLine}>Sync now</Button></Alert>}
+      {queued && (
+        <Alert kind="warning">
+          <b>Offline payment queued</b> · {queued.amountMinor / 100} {queued.currency} to {queued.merchantName}. It is not final yet: it will be confirmed the moment you are back online.{' '}
+          <Button size="sm" variant="secondary" onClick={syncNow} disabled={!navigator.onLine}>
+            Sync now
+          </Button>
+        </Alert>
+      )}
       {resolved ? (
         <PayTarget resolved={resolved} onBack={() => setResolved(null)} />
       ) : (
@@ -70,7 +99,9 @@ export function Scan() {
           <Field label={t('scan.paste')}>
             <div className="row">
               <Input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="bitripay://pay?… or https://…/pay/CODE or @tag" />
-              <Button type="button" onClick={() => manual && resolve(manual)}>Go</Button>
+              <Button type="button" onClick={() => manual && resolve(manual)}>
+                Go
+              </Button>
             </div>
           </Field>
         </div>
@@ -87,13 +118,13 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
   const isBq = resolved.kind === 'bitriqr';
   const pr = isPr ? resolved.paymentRequest : null;
   const target = isPr ? resolved.merchant : resolved.user;
-  const trust: Trust | null = isPr ? resolved.trust ?? null : isBq ? resolved.trust : null;
+  const trust: Trust | null = isPr ? (resolved.trust ?? null) : isBq ? resolved.trust : null;
   const location = isPr ? resolved.merchant.location : isBq ? resolved.user.location : null;
-  const purpose = isPr ? resolved.intent?.purposeCode ?? null : isBq ? resolved.purposeCode : null;
-  const fixedAmount = isPr ? (pr!.amount != null ? String(pr!.amount / 10 ** currency(pr!.currency).decimals) : '') : resolved.amount ?? '';
+  const purpose = isPr ? (resolved.intent?.purposeCode ?? null) : isBq ? resolved.purposeCode : null;
+  const fixedAmount = isPr ? (pr!.amount != null ? String(pr!.amount / 10 ** currency(pr!.currency).decimals) : '') : (resolved.amount ?? '');
   const [amount, setAmount] = useState(fixedAmount);
   const [cur, setCur] = useState(isPr ? pr!.currency : resolved.currency || wallets[0]?.currency || config?.baseCurrency || 'USD');
-  const [note, setNote] = useState(isPr ? pr!.description ?? '' : resolved.note ?? '');
+  const [note, setNote] = useState(isPr ? (pr!.description ?? '') : (resolved.note ?? ''));
   const [pinOpen, setPinOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +139,10 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
   useEffect(() => {
     if (minor <= 0) return setFee(0);
     const type = target.role === 'merchant' ? 'merchant_payment' : isPr ? 'transfer' : 'qr_payment';
-    api.get<{ fee: number }>(`/api/transfers/fee?amount=${amount}&currency=${cur}&type=${type}`).then((r) => setFee(r.fee)).catch(() => setFee(0));
+    api
+      .get<{ fee: number }>(`/api/transfers/fee?amount=${amount}&currency=${cur}&type=${type}`)
+      .then((r) => setFee(r.fee))
+      .catch(() => setFee(0));
   }, [amount, cur, minor, target.role, isPr]);
   const feeOnMe = target.role !== 'merchant';
   const total = minor + (feeOnMe ? fee : 0);
@@ -116,12 +150,26 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
   if (resolved.kind === 'agent') {
     return (
       <div className="card">
-        <div className="list-item"><Avatar user={target} /><div><div className="main-text">{target.businessName || target.fullName}</div><div className="sub-text">Agent · @{target.tag}</div></div></div>
+        <div className="list-item">
+          <Avatar user={target} />
+          <div>
+            <div className="main-text">{target.businessName || target.fullName}</div>
+            <div className="sub-text">Agent · @{target.tag}</div>
+          </div>
+        </div>
         <p className="muted small">Agents let you deposit cash into your wallet or withdraw cash. Choose what you'd like to do.</p>
         <div className="row wrap">
-          <Link className="btn" to={`/app/agents?agent=${target.tag}&action=cashout`}>Withdraw cash (cash-out)</Link>
-          <Link className="btn secondary" to={`/app/send?to=${target.tag}`}>Send money to agent</Link>
-          {onBack && <Button variant="ghost" onClick={onBack}>{t('common.back')}</Button>}
+          <Link className="btn" to={`/app/agents?agent=${target.tag}&action=cashout`}>
+            Withdraw cash (cash-out)
+          </Link>
+          <Link className="btn secondary" to={`/app/send?to=${target.tag}`}>
+            Send money to agent
+          </Link>
+          {onBack && (
+            <Button variant="ghost" onClick={onBack}>
+              {t('common.back')}
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -161,12 +209,34 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
       <div className="list-item">
         <Avatar user={target} size="lg" />
         <div>
-          <div className="main-text" style={{ fontSize: '1.1rem' }}>{target.businessName || target.fullName}</div>
-          <div className="sub-text">@{target.tag} · {target.role}{isPr && <> · <StatusBadge status={pr!.status} /></>}</div>
+          <div className="main-text" style={{ fontSize: '1.1rem' }}>
+            {target.businessName || target.fullName}
+          </div>
+          <div className="sub-text">
+            @{target.tag} · {target.role}
+            {isPr && (
+              <>
+                {' '}
+                · <StatusBadge status={pr!.status} />
+              </>
+            )}
+          </div>
           {(trust || location || purpose) && (
             <div className="row wrap" style={{ gap: 6, marginTop: 4 }}>
-              {trust && <span className={`chip ${trust === 'verified' ? 'success' : 'warning'}`} title={trust === 'verified' ? 'Signed by the merchant key registered with BitriPay' : 'Unsigned code: check the name before paying'}>{trust === 'verified' ? '✓ Verified merchant' : 'Unverified code'}</span>}
-              {location && <span className="chip">{location.name}{location.city ? ` · ${location.city}` : ''}</span>}
+              {trust && (
+                <span
+                  className={`chip ${trust === 'verified' ? 'success' : 'warning'}`}
+                  title={trust === 'verified' ? 'Signed by the merchant key registered with BitriPay' : 'Unsigned code: check the name before paying'}
+                >
+                  {trust === 'verified' ? '✓ Verified merchant' : 'Unverified code'}
+                </span>
+              )}
+              {location && (
+                <span className="chip">
+                  {location.name}
+                  {location.city ? ` · ${location.city}` : ''}
+                </span>
+              )}
               {purpose && purpose !== 'GENERAL_MERCHANT' && <span className="chip primary">{purpose.replace(/_/g, ' ').toLowerCase()}</span>}
             </div>
           )}
@@ -190,7 +260,11 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
         <Button size="lg" className="flex1" disabled={minor <= 0 || !wallet || wallet.balance < total || (isPr && pr!.status !== 'open') || target.id === user?.id} onClick={() => setPinOpen(true)}>
           Pay {minor > 0 ? money(total, cur) : ''}
         </Button>
-        {onBack && <Button variant="secondary" onClick={onBack}>{t('common.back')}</Button>}
+        {onBack && (
+          <Button variant="secondary" onClick={onBack}>
+            {t('common.back')}
+          </Button>
+        )}
       </div>
       <PinModal open={pinOpen} onClose={() => setPinOpen(false)} onSubmit={pay} loading={loading} summary={<KV k={`Pay ${target.businessName || target.fullName}`} v={money(total, cur)} />} />
     </div>
@@ -220,14 +294,27 @@ export function QrLanding() {
       nav(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`, { replace: true });
       return;
     }
-    api.post<Resolved>('/api/qr/resolve', { data: code ?? window.location.href }).then(setResolved).catch((e) => setError(e.message));
+    api
+      .post<Resolved>('/api/qr/resolve', { data: code ?? window.location.href })
+      .then(setResolved)
+      .catch((e) => setError(e.message));
   }, [loading, user, tag, code, nav, params]);
-  if (error) return <div className="auth-page"><div className="card"><Alert kind="error">{error}</Alert><Link to="/">Home</Link></div></div>;
+  if (error)
+    return (
+      <div className="auth-page">
+        <div className="card">
+          <Alert kind="error">{error}</Alert>
+          <Link to="/">Home</Link>
+        </div>
+      </div>
+    );
   if (!resolved) return <Loading />;
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <Link to="/app" className="brand" style={{ color: 'inherit', justifyContent: 'center' }}><img className="brand-img swap" src="/brand/logo.svg" alt="BitriPay" width={140} height={34} /></Link>
+        <Link to="/app" className="brand" style={{ color: 'inherit', justifyContent: 'center' }}>
+          <img className="brand-img swap" src="/brand/logo.svg" alt="BitriPay" width={140} height={34} />
+        </Link>
         <PayTarget resolved={resolved} onBack={() => nav('/app')} />
       </div>
     </div>

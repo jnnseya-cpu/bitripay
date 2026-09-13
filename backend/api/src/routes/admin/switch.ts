@@ -15,12 +15,73 @@ import { config } from '../../config';
 import { now, shortCode } from '../../lib/ids';
 import { parseJson } from '../../lib/json';
 import { getSetting, setSetting } from '../../services/settings';
-import { listConnections, getConnection, upsertConnection, setCertification, setCertificate, setEnabled, setLinkState, probeSwitchConnections, emissionGate, enableBlockers, listIncidents, acknowledgeIncident, resolveIncident, certificateAlerts } from '../../services/switch/connections';
-import { listParticipants, upsertParticipant, approveParticipant, setParticipantStatus, upsertPair, setPairStatus, listPairs, registryStatus, serviceAvailability } from '../../services/switch/participants';
+import {
+  listConnections,
+  getConnection,
+  upsertConnection,
+  setCertification,
+  setCertificate,
+  setEnabled,
+  setLinkState,
+  probeSwitchConnections,
+  emissionGate,
+  enableBlockers,
+  listIncidents,
+  acknowledgeIncident,
+  resolveIncident,
+  certificateAlerts,
+} from '../../services/switch/connections';
+import {
+  listParticipants,
+  upsertParticipant,
+  approveParticipant,
+  setParticipantStatus,
+  upsertPair,
+  setPairStatus,
+  listPairs,
+  registryStatus,
+  serviceAvailability,
+  SWITCH_PRODUCTS,
+} from '../../services/switch/participants';
 import { listPolicies, createPolicyDraft, approvePolicy, activatePolicy, listExceptions, createException, approveException, decideRoute, activePolicy } from '../../services/switch/policy';
 import { simulatorFor, SIMULATOR_SCENARIOS } from '../../services/switch/adapter';
-import { listPayments, paymentTimeline, cancelPayment, inquirePayment, dispatchOutbox, recoverUncertainEmissions, currentLease, acquireLease, ingestInbound, listInbox, listOutbox, retryOutbox, discardInbox, listCatalogue, upsertCatalogueEntry, verifyBinding, activateBinding, suspendBinding, getBinding, resolveLinkedOperation, nationalView, expirePayments } from '../../services/switch/payments';
-import { importReport, listImports, runReconciliation, listRuns, listCases, getCase, assignCase, proposeResolution, approveClosure, reconciliationOverview, checkCoverage } from '../../services/switch/reconciliation';
+import {
+  listPayments,
+  paymentTimeline,
+  cancelPayment,
+  inquirePayment,
+  dispatchOutbox,
+  recoverUncertainEmissions,
+  currentLease,
+  acquireLease,
+  ingestInbound,
+  listInbox,
+  listOutbox,
+  retryOutbox,
+  discardInbox,
+  listCatalogue,
+  upsertCatalogueEntry,
+  verifyBinding,
+  activateBinding,
+  suspendBinding,
+  getBinding,
+  resolveLinkedOperation,
+  nationalView,
+  expirePayments,
+} from '../../services/switch/payments';
+import {
+  importReport,
+  listImports,
+  runReconciliation,
+  listRuns,
+  listCases,
+  getCase,
+  assignCase,
+  proposeResolution,
+  approveClosure,
+  reconciliationOverview,
+  checkCoverage,
+} from '../../services/switch/reconciliation';
 import { readEvidence, listEvidence, verifyVault } from '../../services/switch/vault';
 import { listRails, getRail, pauseConnector, resumeConnector, probeConnectors, connectorSeries, scoreConnectors } from '../../services/rails';
 
@@ -30,19 +91,55 @@ const r = adminSwitchRouter;
 // ---------------------------------------------------------------- connections & connectivity view
 r.get('/connections', requirePermission('switch'), (_req, res) => res.json({ items: listConnections().map((c) => ({ ...c, gate: emissionGate(c), blockers: enableBlockers(c) })) }));
 r.put('/connections/:id', requirePermission('security'), (req, res) => {
-  const b = validate(z.object({ name: z.string().min(2), country: z.string().length(2), schemeId: z.string().min(2), accessMode: z.enum(['DIRECT', 'SPONSORED']).optional(), participantId: z.string().optional().nullable(), sponsorId: z.string().optional().nullable(), adapter: z.enum(['simulator', 'certified']).optional(), environment: z.enum(['simulation', 'sandbox', 'production']).optional(), profileVersion: z.string().optional().nullable(), quotaPerSecond: z.number().int().min(1).max(10_000).optional(), inquiryReservePct: z.number().int().min(0).max(90).optional(), endpoint: z.string().optional().nullable() }), req.body);
+  const b = validate(
+    z.object({
+      name: z.string().min(2),
+      country: z.string().length(2),
+      schemeId: z.string().min(2),
+      accessMode: z.enum(['DIRECT', 'SPONSORED']).optional(),
+      participantId: z.string().optional().nullable(),
+      sponsorId: z.string().optional().nullable(),
+      adapter: z.enum(['simulator', 'certified']).optional(),
+      environment: z.enum(['simulation', 'sandbox', 'production']).optional(),
+      profileVersion: z.string().optional().nullable(),
+      quotaPerSecond: z.number().int().min(1).max(10_000).optional(),
+      inquiryReservePct: z.number().int().min(0).max(90).optional(),
+      endpoint: z.string().optional().nullable(),
+    }),
+    req.body,
+  );
   const c = upsertConnection({ id: String(req.params.id), ...b }, req.user!.id);
   audit(req.user!.id, 'switch.connection.upsert', 'switch_connection', c.id, { accessMode: c.accessMode, environment: c.environment, adapter: c.adapter });
   res.json({ connection: c, blockers: enableBlockers(c) });
 });
 r.post('/connections/:id/certification', requirePermission('security'), (req, res) => {
-  const b = validate(z.object({ status: z.enum(['INTERNAL_TESTS', 'SANDBOX', 'CERTIFIED', 'REVOKED']), evidenceRef: z.string().optional().nullable(), profileVersion: z.string().optional().nullable(), approverId: z.string().optional().nullable() }), req.body);
+  const b = validate(
+    z.object({
+      status: z.enum(['INTERNAL_TESTS', 'SANDBOX', 'CERTIFIED', 'REVOKED']),
+      evidenceRef: z.string().optional().nullable(),
+      profileVersion: z.string().optional().nullable(),
+      approverId: z.string().optional().nullable(),
+    }),
+    req.body,
+  );
   const c = setCertification(String(req.params.id), b.status, b, req.user!.id);
   audit(req.user!.id, 'switch.certification', 'switch_connection', c.id, { status: b.status, evidenceRef: b.evidenceRef ?? null, approverId: b.approverId ?? null });
   res.json({ connection: c, blockers: enableBlockers(c) });
 });
 r.post('/connections/:id/certificate', requirePermission('security'), (req, res) => {
-  const b = validate(z.object({ fingerprint: z.string().optional().nullable(), subject: z.string().optional().nullable(), notBefore: z.string().optional().nullable(), notAfter: z.string().optional().nullable(), status: z.enum(['VALID', 'EXPIRED', 'REVOKED', 'MISSING']).optional(), owner: z.string().optional().nullable(), usage: z.string().optional().nullable(), revocationProcedure: z.string().optional().nullable() }), req.body);
+  const b = validate(
+    z.object({
+      fingerprint: z.string().optional().nullable(),
+      subject: z.string().optional().nullable(),
+      notBefore: z.string().optional().nullable(),
+      notAfter: z.string().optional().nullable(),
+      status: z.enum(['VALID', 'EXPIRED', 'REVOKED', 'MISSING']).optional(),
+      owner: z.string().optional().nullable(),
+      usage: z.string().optional().nullable(),
+      revocationProcedure: z.string().optional().nullable(),
+    }),
+    req.body,
+  );
   const c = setCertificate(String(req.params.id), b, req.user!.id);
   audit(req.user!.id, 'switch.certificate', 'switch_connection', c.id, { fingerprint: b.fingerprint ?? null, notAfter: b.notAfter ?? null, status: b.status ?? null });
   res.json({ connection: c, blockers: enableBlockers(c) });
@@ -53,10 +150,14 @@ r.post('/connections/:id/enable', requirePermission('security'), (req, res) => {
   audit(req.user!.id, b.enabled ? 'switch.enable' : 'switch.disable', 'switch_connection', c.id, {});
   res.json({ connection: c });
 });
-r.post('/connections/:id/probe', requirePermission('switch'), wrap(async (req, res) => {
-  const results = await probeSwitchConnections();
-  res.json({ results: results.filter((x) => x.id === String(req.params.id)), connection: getConnection(String(req.params.id)) });
-}));
+r.post(
+  '/connections/:id/probe',
+  requirePermission('switch'),
+  wrap(async (req, res) => {
+    const results = await probeSwitchConnections();
+    res.json({ results: results.filter((x) => x.id === String(req.params.id)), connection: getConnection(String(req.params.id)) });
+  }),
+);
 /** Simulator only: take the simulated link down/up (degraded-mode and fencing exercises). */
 r.post('/connections/:id/link', requirePermission('switch'), (req, res) => {
   const b = validate(z.object({ up: z.boolean() }), req.body);
@@ -69,7 +170,14 @@ r.post('/connections/:id/link', requirePermission('switch'), (req, res) => {
 });
 /** Simulator only: inject an inbound message for a payment (duplicate success, contradictory reject, bad signature, unknown code, stale pending, tampered same id). */
 r.post('/connections/:id/simulate-inbound', requirePermission('switch'), (req, res) => {
-  const b = validate(z.object({ stableMessageId: z.string().min(1), variant: z.enum(['completed', 'completed_dup', 'reject_contradiction', 'bad_signature', 'unknown_code', 'pending_stale', 'tampered_same_id']), externalMessageId: z.string().optional() }), req.body);
+  const b = validate(
+    z.object({
+      stableMessageId: z.string().min(1),
+      variant: z.enum(['completed', 'completed_dup', 'reject_contradiction', 'bad_signature', 'unknown_code', 'pending_stale', 'tampered_same_id']),
+      externalMessageId: z.string().optional(),
+    }),
+    req.body,
+  );
   const c = getConnection(String(req.params.id));
   if (!c.simulation) return res.status(409).json({ error: { code: 'not_simulation', message: 'Inbound injection exists only for the simulator' } });
   const msg = simulatorFor(c).inboundFor(b.stableMessageId, b.variant, { externalMessageId: b.externalMessageId });
@@ -85,9 +193,30 @@ r.get('/connections/:id/national-view', requirePermission('switch'), (req, res) 
 r.post('/certificates/check', requirePermission('security'), (_req, res) => res.json(certificateAlerts()));
 
 // ---------------------------------------------------------------- participants, pairs, registry
-r.get('/participants', requirePermission('switch'), (req, res) => res.json({ items: listParticipants({ country: req.query.country ? String(req.query.country) : null, status: req.query.status ? String(req.query.status) : null }), registry: registryStatus(String(req.query.country ?? 'CD')) }));
+r.get('/participants', requirePermission('switch'), (req, res) =>
+  res.json({
+    items: listParticipants({ country: req.query.country ? String(req.query.country) : null, status: req.query.status ? String(req.query.status) : null }),
+    registry: registryStatus(String(req.query.country ?? 'CD')),
+  }),
+);
 r.post('/participants', requirePermission('switch'), (req, res) => {
-  const b = validate(z.object({ id: z.string().min(3), name: z.string().min(2), kind: z.enum(['BANK', 'MMO', 'PSP', 'SWITCH', 'SPONSOR', 'AGGREGATOR']), country: z.string().length(2), currencies: z.array(z.string().length(3)), services: z.array(z.string()), channels: z.array(z.string()).optional(), routingIds: z.record(z.string(), z.string()).optional(), source: z.enum(['SIMULATION', 'OFFICIAL']).optional(), evidenceRef: z.string().optional().nullable(), validFrom: z.string().optional().nullable(), validTo: z.string().optional().nullable() }), req.body);
+  const b = validate(
+    z.object({
+      id: z.string().min(3),
+      name: z.string().min(2),
+      kind: z.enum(['BANK', 'MMO', 'PSP', 'SWITCH', 'SPONSOR', 'AGGREGATOR']),
+      country: z.string().length(2),
+      currencies: z.array(z.string().length(3)),
+      services: z.array(z.string()),
+      channels: z.array(z.string()).optional(),
+      routingIds: z.record(z.string(), z.string()).optional(),
+      source: z.enum(['SIMULATION', 'OFFICIAL']).optional(),
+      evidenceRef: z.string().optional().nullable(),
+      validFrom: z.string().optional().nullable(),
+      validTo: z.string().optional().nullable(),
+    }),
+    req.body,
+  );
   const p = upsertParticipant(b, req.user!.id);
   audit(req.user!.id, 'switch.participant.upsert', 'participant', p.id, { version: p.version, source: p.source });
   res.status(201).json({ participant: p });
@@ -105,7 +234,10 @@ r.post('/participants/:id/status', requirePermission('switch'), (req, res) => {
 });
 r.get('/pairs', requirePermission('switch'), (req, res) => res.json({ items: listPairs(req.query.connection ? String(req.query.connection) : null) }));
 r.post('/pairs', requirePermission('switch'), (req, res) => {
-  const b = validate(z.object({ connectionId: z.string(), debtorId: z.string(), creditorId: z.string(), currency: z.string().length(3), product: z.string(), channel: z.string().optional() }), req.body);
+  const b = validate(
+    z.object({ connectionId: z.string(), debtorId: z.string(), creditorId: z.string(), currency: z.string().length(3), product: z.enum(SWITCH_PRODUCTS), channel: z.string().optional() }),
+    req.body,
+  );
   const p = upsertPair(b, req.user!.id);
   audit(req.user!.id, 'switch.pair.upsert', 'participant_pair', p.id, {});
   res.status(201).json({ pair: p });
@@ -117,13 +249,35 @@ r.post('/pairs/:id/status', requirePermission('approvals'), (req, res) => {
   res.json({ pair: p });
 });
 r.get('/availability', requirePermission('switch'), (req, res) => {
-  const q = validate(z.object({ connection: z.string(), debtor: z.string(), creditor: z.string(), currency: z.string().length(3), product: z.string().default('MERCHANT_PAYMENT'), channel: z.string().default('api') }), req.query);
+  const q = validate(
+    z.object({ connection: z.string(), debtor: z.string(), creditor: z.string(), currency: z.string().length(3), product: z.string().default('MERCHANT_PAYMENT'), channel: z.string().default('api') }),
+    req.query,
+  );
   const c = getConnection(q.connection);
-  res.json({ availability: serviceAvailability({ connectionId: c.id, connectionEnabled: c.enabled, environmentCertified: c.environment !== 'production' || c.certification.status === 'CERTIFIED', country: c.country, debtorId: q.debtor, creditorId: q.creditor, currency: q.currency, product: q.product, channel: q.channel }), decision: decideRoute({ country: c.country, debtorId: q.debtor, creditorId: q.creditor, product: q.product, channel: q.channel, currency: q.currency, amountMinor: 100 }) });
+  res.json({
+    availability: serviceAvailability({
+      connectionId: c.id,
+      connectionEnabled: c.enabled,
+      environmentCertified: c.environment !== 'production' || c.certification.status === 'CERTIFIED',
+      country: c.country,
+      debtorId: q.debtor,
+      creditorId: q.creditor,
+      currency: q.currency,
+      product: q.product,
+      channel: q.channel,
+    }),
+    decision: decideRoute({ country: c.country, debtorId: q.debtor, creditorId: q.creditor, product: q.product, channel: q.channel, currency: q.currency, amountMinor: 100 }),
+  });
 });
 
 // ---------------------------------------------------------------- route policies & exceptions (configuration view)
-r.get('/policies', requirePermission('switch'), (req, res) => res.json({ active: activePolicy(String(req.query.country ?? 'CD')), items: listPolicies(req.query.country ? String(req.query.country) : null), exceptions: listExceptions(req.query.country ? String(req.query.country) : null) }));
+r.get('/policies', requirePermission('switch'), (req, res) =>
+  res.json({
+    active: activePolicy(String(req.query.country ?? 'CD')),
+    items: listPolicies(req.query.country ? String(req.query.country) : null),
+    exceptions: listExceptions(req.query.country ? String(req.query.country) : null),
+  }),
+);
 r.post('/policies', requirePermission('switch'), (req, res) => {
   const b = validate(z.object({ country: z.string().length(2), rules: z.record(z.string(), z.unknown()).default({}), notes: z.string().max(500).optional().nullable() }), req.body);
   const p = createPolicyDraft(b.country, b.rules as any, req.user!.id, b.notes ?? null);
@@ -141,7 +295,20 @@ r.post('/policies/:version/activate', requirePermission('security'), (req, res) 
   res.json({ policy: p });
 });
 r.post('/exceptions', requirePermission('compliance'), (req, res) => {
-  const b = validate(z.object({ country: z.string().length(2), scope: z.string().min(3), products: z.array(z.string()), participants: z.array(z.string()), currency: z.string().length(3).optional().nullable(), documentRef: z.string().min(3), documentSha256: z.string().optional().nullable(), validFrom: z.string(), validTo: z.string() }), req.body);
+  const b = validate(
+    z.object({
+      country: z.string().length(2),
+      scope: z.string().min(3),
+      products: z.array(z.string()),
+      participants: z.array(z.string()),
+      currency: z.string().length(3).optional().nullable(),
+      documentRef: z.string().min(3),
+      documentSha256: z.string().optional().nullable(),
+      validFrom: z.string(),
+      validTo: z.string(),
+    }),
+    req.body,
+  );
   const e = createException(b, req.user!.id);
   audit(req.user!.id, 'switch.exception.draft', 'routing_exception', e.id, { documentRef: b.documentRef });
   res.status(201).json({ exception: e });
@@ -153,16 +320,29 @@ r.post('/exceptions/:id/approve', requirePermission('approvals'), (req, res) => 
 });
 
 // ---------------------------------------------------------------- payments (transaction view), inquiries, bindings
-r.get('/payments', requirePermission('switch'), (req, res) => res.json({ items: listPayments({ status: req.query.status ? String(req.query.status) : null, connectionId: req.query.connection ? String(req.query.connection) : null, uncertainOnly: req.query.uncertain === '1', limit: Number(req.query.limit) || 50 }) }));
+r.get('/payments', requirePermission('switch'), (req, res) =>
+  res.json({
+    items: listPayments({
+      status: req.query.status ? String(req.query.status) : null,
+      connectionId: req.query.connection ? String(req.query.connection) : null,
+      uncertainOnly: req.query.uncertain === '1',
+      limit: Number(req.query.limit) || 50,
+    }),
+  }),
+);
 r.get('/payments/:id', requirePermission('switch'), (req, res) => res.json(paymentTimeline(String(req.params.id))));
-r.post('/payments/:id/inquire', requirePermission('switch'), wrap(async (req, res) => {
-  const t = paymentTimeline(String(req.params.id));
-  const last = t.attempts[t.attempts.length - 1];
-  if (!last) return res.status(409).json({ error: { code: 'no_attempt', message: 'Nothing was ever transmitted for this payment' } });
-  const result = await inquirePayment(String(req.params.id), last.id, 99);
-  audit(req.user!.id, 'switch.inquiry', 'switch_payment', String(req.params.id), { result: result.result });
-  res.json({ result, payment: paymentTimeline(String(req.params.id)).payment });
-}));
+r.post(
+  '/payments/:id/inquire',
+  requirePermission('switch'),
+  wrap(async (req, res) => {
+    const t = paymentTimeline(String(req.params.id));
+    const last = t.attempts[t.attempts.length - 1];
+    if (!last) return res.status(409).json({ error: { code: 'no_attempt', message: 'Nothing was ever transmitted for this payment' } });
+    const result = await inquirePayment(String(req.params.id), last.id, 99);
+    audit(req.user!.id, 'switch.inquiry', 'switch_payment', String(req.params.id), { result: result.result });
+    res.json({ result, payment: paymentTimeline(String(req.params.id)).payment });
+  }),
+);
 r.post('/payments/:id/cancel', requirePermission('switch'), (req, res) => {
   const p = cancelPayment(null, String(req.params.id), { type: 'admin', id: req.user!.id }, String(req.body?.reason ?? 'operations'));
   audit(req.user!.id, 'switch.cancel', 'switch_payment', p.payment_id, { reason: req.body?.reason ?? null });
@@ -201,14 +381,24 @@ r.post('/operations/:id/resolve', requirePermission('approvals'), (req, res) => 
 });
 
 // ---------------------------------------------------------------- inbox / outbox / catalogue / dispatcher
-r.get('/inbox', requirePermission('switch'), (req, res) => res.json({ items: listInbox({ connectionId: req.query.connection ? String(req.query.connection) : null, quarantine: req.query.quarantine === '1' ? true : req.query.quarantine === '0' ? false : null, limit: Number(req.query.limit) || 50 }) }));
+r.get('/inbox', requirePermission('switch'), (req, res) =>
+  res.json({
+    items: listInbox({
+      connectionId: req.query.connection ? String(req.query.connection) : null,
+      quarantine: req.query.quarantine === '1' ? true : req.query.quarantine === '0' ? false : null,
+      limit: Number(req.query.limit) || 50,
+    }),
+  }),
+);
 r.post('/inbox/:id/discard', requirePermission('security'), (req, res) => {
   const b = validate(z.object({ reason: z.string().min(3) }), req.body);
   discardInbox(String(req.params.id), req.user!.id, b.reason);
   audit(req.user!.id, 'switch.inbox.discard', 'inbox', String(req.params.id), { reason: b.reason });
   res.json({ discarded: true });
 });
-r.get('/outbox', requirePermission('switch'), (req, res) => res.json({ items: listOutbox({ dead: req.query.dead === '1', pending: req.query.pending === '1', limit: Number(req.query.limit) || 50 }) }));
+r.get('/outbox', requirePermission('switch'), (req, res) =>
+  res.json({ items: listOutbox({ dead: req.query.dead === '1', pending: req.query.pending === '1', limit: Number(req.query.limit) || 50 }) }),
+);
 r.post('/outbox/:id/retry', requirePermission('switch'), (req, res) => {
   const m = retryOutbox(String(req.params.id), req.user!.id);
   audit(req.user!.id, 'switch.outbox.retry', 'outbox', String(req.params.id), {});
@@ -216,17 +406,36 @@ r.post('/outbox/:id/retry', requirePermission('switch'), (req, res) => {
 });
 r.get('/catalogue', requirePermission('switch'), (req, res) => res.json({ items: listCatalogue(req.query.product ? String(req.query.product) : null) }));
 r.post('/catalogue', requirePermission('security'), (req, res) => {
-  const b = validate(z.object({ product: z.string(), externalCode: z.string(), phase: z.string(), meaning: z.string(), finality: z.enum(['NONE', 'AUTHORIZATION', 'COMPLETION', 'REJECTION']), minimumProof: z.string(), authority: z.string(), transition: z.string(), source: z.enum(['SIMULATION', 'OFFICIAL']).default('OFFICIAL') }), req.body);
+  const b = validate(
+    z.object({
+      product: z.string(),
+      externalCode: z.string(),
+      phase: z.string(),
+      meaning: z.string(),
+      finality: z.enum(['NONE', 'AUTHORIZATION', 'COMPLETION', 'REJECTION']),
+      minimumProof: z.string(),
+      authority: z.string(),
+      transition: z.string(),
+      source: z.enum(['SIMULATION', 'OFFICIAL']).default('OFFICIAL'),
+    }),
+    req.body,
+  );
   const e = upsertCatalogueEntry(b, req.user!.id);
   audit(req.user!.id, 'switch.catalogue.version', 'message_catalogue', e.id, { product: e.product, code: e.externalCode, version: e.version });
   res.status(201).json({ entry: e });
 });
-r.get('/dispatcher', requirePermission('switch'), (_req, res) => res.json({ lease: currentLease(), pending: listOutbox({ pending: true, limit: 200 }).length, dead: listOutbox({ dead: true, limit: 200 }).length }));
-r.post('/dispatcher/run', requirePermission('switch'), wrap(async (req, res) => {
-  const result = await dispatchOutbox(`admin:${req.user!.id}`, { force: req.body?.force === true });
-  audit(req.user!.id, 'switch.dispatch', 'dispatcher', 'switch', { processed: result.processed, forced: req.body?.force === true });
-  res.json(result);
-}));
+r.get('/dispatcher', requirePermission('switch'), (_req, res) =>
+  res.json({ lease: currentLease(), pending: listOutbox({ pending: true, limit: 200 }).length, dead: listOutbox({ dead: true, limit: 200 }).length }),
+);
+r.post(
+  '/dispatcher/run',
+  requirePermission('switch'),
+  wrap(async (req, res) => {
+    const result = await dispatchOutbox(`admin:${req.user!.id}`, { force: req.body?.force === true });
+    audit(req.user!.id, 'switch.dispatch', 'dispatcher', 'switch', { processed: result.processed, forced: req.body?.force === true });
+    res.json(result);
+  }),
+);
 r.post('/dispatcher/recover', requirePermission('switch'), (req, res) => {
   const recovered = recoverUncertainEmissions();
   const expired = expirePayments();
@@ -242,13 +451,32 @@ r.post('/dispatcher/takeover', requirePermission('security'), (req, res) => {
 
 // ---------------------------------------------------------------- reconciliation
 r.get('/reconciliation/:connection', requirePermission('reconciliation'), (req, res) => res.json(reconciliationOverview(String(req.params.connection))));
-r.get('/reconciliation/:connection/imports', requirePermission('reconciliation'), (req, res) => res.json({ items: listImports(String(req.params.connection), req.query.cycle ? String(req.query.cycle) : null) }));
-r.post('/reconciliation/:connection/imports', requirePermission('reconciliation'), wrap(async (req, res) => {
-  const b = validate(z.object({ source: z.enum(['SWITCH', 'INSTITUTION', 'SPONSOR']), cycleRef: z.string().min(4), periodFrom: z.string(), periodTo: z.string(), currency: z.string().length(3), lines: z.array(z.record(z.string(), z.unknown())).max(50_000), controlTotalMinor: z.union([z.string(), z.number()]).optional().nullable(), replacesImportId: z.string().optional().nullable(), signatureValid: z.boolean().optional() }), req.body);
-  const imp = await importReport(String(req.params.connection), b as any, req.user!.id);
-  audit(req.user!.id, 'reconciliation.import', 'reconciliation_import', imp.id, { source: b.source, cycleRef: b.cycleRef, lines: imp.lineCount, duplicate: !!imp.duplicate });
-  res.status(imp.duplicate ? 200 : 201).json({ import: imp });
-}));
+r.get('/reconciliation/:connection/imports', requirePermission('reconciliation'), (req, res) =>
+  res.json({ items: listImports(String(req.params.connection), req.query.cycle ? String(req.query.cycle) : null) }),
+);
+r.post(
+  '/reconciliation/:connection/imports',
+  requirePermission('reconciliation'),
+  wrap(async (req, res) => {
+    const b = validate(
+      z.object({
+        source: z.enum(['SWITCH', 'INSTITUTION', 'SPONSOR']),
+        cycleRef: z.string().min(4),
+        periodFrom: z.string(),
+        periodTo: z.string(),
+        currency: z.string().length(3),
+        lines: z.array(z.record(z.string(), z.unknown())).max(50_000),
+        controlTotalMinor: z.union([z.string(), z.number()]).optional().nullable(),
+        replacesImportId: z.string().optional().nullable(),
+        signatureValid: z.boolean().optional(),
+      }),
+      req.body,
+    );
+    const imp = await importReport(String(req.params.connection), b as any, req.user!.id);
+    audit(req.user!.id, 'reconciliation.import', 'reconciliation_import', imp.id, { source: b.source, cycleRef: b.cycleRef, lines: imp.lineCount, duplicate: !!imp.duplicate });
+    res.status(imp.duplicate ? 200 : 201).json({ import: imp });
+  }),
+);
 r.get('/reconciliation/:connection/runs', requirePermission('reconciliation'), (req, res) => res.json({ items: listRuns(String(req.params.connection)) }));
 r.post('/reconciliation/:connection/runs', requirePermission('reconciliation'), (req, res) => {
   const b = validate(z.object({ cycleRef: z.string().min(4) }), req.body);
@@ -257,7 +485,18 @@ r.post('/reconciliation/:connection/runs', requirePermission('reconciliation'), 
   res.status(201).json({ run });
 });
 r.post('/reconciliation/coverage-check', requirePermission('reconciliation'), (_req, res) => res.json(checkCoverage()));
-r.get('/cases', requirePermission('reconciliation'), (req, res) => res.json(listCases({ connectionId: req.query.connection ? String(req.query.connection) : null, status: req.query.status ? String(req.query.status) : null, class: req.query.class ? String(req.query.class) : null, paymentId: req.query.payment ? String(req.query.payment) : null, limit: Number(req.query.limit) || 50, cursor: req.query.cursor ? String(req.query.cursor) : null })));
+r.get('/cases', requirePermission('reconciliation'), (req, res) =>
+  res.json(
+    listCases({
+      connectionId: req.query.connection ? String(req.query.connection) : null,
+      status: req.query.status ? String(req.query.status) : null,
+      class: req.query.class ? String(req.query.class) : null,
+      paymentId: req.query.payment ? String(req.query.payment) : null,
+      limit: Number(req.query.limit) || 50,
+      cursor: req.query.cursor ? String(req.query.cursor) : null,
+    }),
+  ),
+);
 r.get('/cases/:id', requirePermission('reconciliation'), (req, res) => res.json({ case: getCase(String(req.params.id)) }));
 r.post('/cases/:id/assign', requirePermission('reconciliation'), (req, res) => {
   const b = validate(z.object({ ownerId: z.string().min(1) }), req.body);
@@ -313,7 +552,18 @@ r.get('/recovery', requirePermission('switch'), (_req, res) => {
   const checklist = getSetting<{ done: number[]; updatedAt: string | null }>('dr_checklist', { done: [], updatedAt: null });
   const uncertain = (db.prepare("SELECT COUNT(*) c FROM switch_payments WHERE status = 'UNKNOWN'").get() as any).c;
   const sentNoResponse = (db.prepare("SELECT COUNT(*) c FROM switch_attempts WHERE status = 'SENT' AND responded_at IS NULL").get() as any).c;
-  res.json({ database: { journalMode: journal, walCheckpoint: wal?.[0] ?? null, sizeBytes: size, walBytes: walSize, path: config.databasePath === ':memory:' ? 'memory' : 'file' }, replication: { mode: 'single-node SQLite (WAL); inter-site replication is an infrastructure deliverable (18.1) — RPO 0 for emission references requires the durable attempt journal below', emissionJournal: { attemptsSentWithoutResponse: sentNoResponse, uncertainPayments: uncertain } }, lease: currentLease(), lastExercise: exercises[0] ? { ...exercises[0], checklist: parseJson(exercises[0].checklist, []) } : null, exercises: exercises.map((e) => ({ ...e, checklist: parseJson(e.checklist, []) })), runbook: RECOVERY_RUNBOOK.map((step, i) => ({ step: i + 1, text: step, done: checklist.done.includes(i + 1) })), checklistUpdatedAt: checklist.updatedAt });
+  res.json({
+    database: { journalMode: journal, walCheckpoint: wal?.[0] ?? null, sizeBytes: size, walBytes: walSize, path: config.databasePath === ':memory:' ? 'memory' : 'file' },
+    replication: {
+      mode: 'single-node SQLite (WAL); inter-site replication is an infrastructure deliverable (18.1) — RPO 0 for emission references requires the durable attempt journal below',
+      emissionJournal: { attemptsSentWithoutResponse: sentNoResponse, uncertainPayments: uncertain },
+    },
+    lease: currentLease(),
+    lastExercise: exercises[0] ? { ...exercises[0], checklist: parseJson(exercises[0].checklist, []) } : null,
+    exercises: exercises.map((e) => ({ ...e, checklist: parseJson(e.checklist, []) })),
+    runbook: RECOVERY_RUNBOOK.map((step, i) => ({ step: i + 1, text: step, done: checklist.done.includes(i + 1) })),
+    checklistUpdatedAt: checklist.updatedAt,
+  });
 });
 r.post('/recovery/checklist', requirePermission('switch'), (req, res) => {
   const b = validate(z.object({ done: z.array(z.number().int().min(1).max(RECOVERY_RUNBOOK.length)) }), req.body);
@@ -322,15 +572,31 @@ r.post('/recovery/checklist', requirePermission('switch'), (req, res) => {
   res.json({ done: b.done });
 });
 r.post('/recovery/exercises', requirePermission('security'), (req, res) => {
-  const b = validate(z.object({ kind: z.enum(['node_loss', 'site_loss', 'restore', 'key_rotation', 'link_loss', 'failover']), outcome: z.enum(['PASSED', 'FAILED', 'PARTIAL']), rtoMinutes: z.number().int().min(0).optional().nullable(), rpoSeconds: z.number().int().min(0).optional().nullable(), checklist: z.array(z.number().int()).default([]), notes: z.string().max(2000).optional().nullable() }), req.body);
+  const b = validate(
+    z.object({
+      kind: z.enum(['node_loss', 'site_loss', 'restore', 'key_rotation', 'link_loss', 'failover']),
+      outcome: z.enum(['PASSED', 'FAILED', 'PARTIAL']),
+      rtoMinutes: z.number().int().min(0).optional().nullable(),
+      rpoSeconds: z.number().int().min(0).optional().nullable(),
+      checklist: z.array(z.number().int()).default([]),
+      notes: z.string().max(2000).optional().nullable(),
+    }),
+    req.body,
+  );
   const id = `drx_${shortCode(10).toLowerCase()}`;
-  getDb().prepare('INSERT INTO dr_exercises (id, kind, outcome, rto_minutes, rpo_seconds, checklist, notes, run_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, b.kind, b.outcome, b.rtoMinutes ?? null, b.rpoSeconds ?? null, JSON.stringify(b.checklist), b.notes ?? null, req.user!.id, now());
+  getDb()
+    .prepare('INSERT INTO dr_exercises (id, kind, outcome, rto_minutes, rpo_seconds, checklist, notes, run_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, b.kind, b.outcome, b.rtoMinutes ?? null, b.rpoSeconds ?? null, JSON.stringify(b.checklist), b.notes ?? null, req.user!.id, now());
   audit(req.user!.id, 'recovery.exercise', 'dr_exercise', id, { kind: b.kind, outcome: b.outcome });
   res.status(201).json({ exercise: getDb().prepare('SELECT * FROM dr_exercises WHERE id = ?').get(id) });
 });
 
 // ---------------------------------------------------------------- rail registry (all rails, not only the switch)
-r.get('/rails', requirePermission('gateways'), (req, res) => res.json({ items: listRails({ kind: (req.query.kind as any) ?? null, country: req.query.country ? String(req.query.country) : null, currency: req.query.currency ? String(req.query.currency) : null }) }));
+r.get('/rails', requirePermission('gateways'), (req, res) =>
+  res.json({
+    items: listRails({ kind: (req.query.kind as any) ?? null, country: req.query.country ? String(req.query.country) : null, currency: req.query.currency ? String(req.query.currency) : null }),
+  }),
+);
 r.get('/rails/:id', requirePermission('gateways'), (req, res) => res.json({ rail: getRail(String(req.params.id)), series: connectorSeries(String(req.params.id), Number(req.query.hours) || 24) }));
 r.post('/rails/:id/pause', requirePermission('gateways'), (req, res) => {
   const b = validate(z.object({ reason: z.string().min(3).max(300) }), req.body);
@@ -343,8 +609,17 @@ r.post('/rails/:id/resume', requirePermission('gateways'), (req, res) => {
   audit(req.user!.id, 'rail.resume', 'rail', String(req.params.id), {});
   res.json({ health: h });
 });
-r.post('/rails/probe', requirePermission('gateways'), wrap(async (_req, res) => res.json(await probeConnectors(true))));
+r.post(
+  '/rails/probe',
+  requirePermission('gateways'),
+  wrap(async (_req, res) => res.json(await probeConnectors(true))),
+);
 r.post('/rails/score', requirePermission('gateways'), (req, res) => {
   const b = validate(z.object({ method: z.string(), candidates: z.array(z.string()).min(1), policy: z.enum(['smart', 'cheapest', 'fastest', 'most_reliable']).default('smart') }), req.body);
-  res.json({ scores: scoreConnectors(b.candidates.map((id, i) => ({ id, method: b.method, preferenceRank: i })), b.policy) });
+  res.json({
+    scores: scoreConnectors(
+      b.candidates.map((id, i) => ({ id, method: b.method, preferenceRank: i })),
+      b.policy,
+    ),
+  });
 });

@@ -1,7 +1,11 @@
 import { signRequest } from './protocol';
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string) {
+  constructor(
+    public status: number,
+    public code: string,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -20,7 +24,11 @@ export async function agentCall<T>(apiUrl: string, token: string, method: string
 
 /** Calls made as the device itself – authenticated by the device key, never by a user token. */
 export async function deviceCall<T>(apiUrl: string, privateKeyHex: string, deviceId: string, method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${apiUrl}${path}`, { method, headers: { 'Content-Type': 'application/json', ...signRequest(privateKeyHex, deviceId, method, path) }, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(`${apiUrl}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...signRequest(privateKeyHex, deviceId, method, path) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
   return handle(res);
 }
 

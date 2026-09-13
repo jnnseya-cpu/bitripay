@@ -27,11 +27,23 @@ async function setupDirectRail() {
   const admin = await adminToken(app);
   const ops = await request(app).get('/api/mobile-money-operators?country=KE');
   const mpesa = ops.body.items.find((o: any) => o.id === 'mpesa_ke');
-  await request(app).put('/api/admin/momo-operators/mpesa_ke').set(admin.auth).send({ ...mpesa, collectionNumber: '0712000000', collectionName: 'BitriPay Ltd', payoutEnabled: true, enabled: true });
-  await request(app).put('/api/admin/gateways/manual_momo').set(admin.auth).send({ name: 'Mobile money (direct)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], credentials: { smsSecret: 'sms-secret' } });
-  await request(app).put('/api/admin/settings/gateway').set(admin.auth).send({ value: { sharedSecretAutoConfirm: false, makerChecker: true, adminStepUp: true } });
+  await request(app)
+    .put('/api/admin/momo-operators/mpesa_ke')
+    .set(admin.auth)
+    .send({ ...mpesa, collectionNumber: '0712000000', collectionName: 'BitriPay Ltd', payoutEnabled: true, enabled: true });
+  await request(app)
+    .put('/api/admin/gateways/manual_momo')
+    .set(admin.auth)
+    .send({ name: 'Mobile money (direct)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], credentials: { smsSecret: 'sms-secret' } });
+  await request(app)
+    .put('/api/admin/settings/gateway')
+    .set(admin.auth)
+    .send({ value: { sharedSecretAutoConfirm: false, makerChecker: true, adminStepUp: true } });
   const keys = deviceKeys();
-  const dev = await request(app).post('/api/admin/evidence/devices').set(admin.auth).send({ name: 'Collection phone KE', publicKey: keys.publicPem, operatorIds: ['mpesa_ke'] });
+  const dev = await request(app)
+    .post('/api/admin/evidence/devices')
+    .set(admin.auth)
+    .send({ name: 'Collection phone KE', publicKey: keys.publicPem, operatorIds: ['mpesa_ke'] });
   expect(dev.status, JSON.stringify(dev.body)).toBe(201);
   return { admin, deviceId: dev.body.device.id as string, ...keys };
 }
@@ -60,14 +72,26 @@ describe('payment lifecycle', () => {
     expect(authed.body.payment.stageGroup).toBe('initiated');
 
     // Card via the sandbox processor settles end to end; the declaration says it is a sandbox.
-    const card = await request(app).post('/api/deposits').set(u.auth).send({ method: 'card', amount: '25', currency: 'USD', pin: '1234', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'Kim Test' } });
+    const card = await request(app)
+      .post('/api/deposits')
+      .set(u.auth)
+      .send({ method: 'card', amount: '25', currency: 'USD', pin: '1234', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'Kim Test' } });
     expect(card.body.payment.stage).toBe('SETTLED');
     expect(card.body.payment.stageGroup).toBe('settled');
     expect(card.body.declaration.carrier).toBe('sandbox');
     expect(card.body.declaration.regulatedRail).toBe(true);
     const events = await request(app).get(`/api/deposits/${card.body.payment.id}/events`).set(u.auth);
     const seq = events.body.items.map((e: any) => e.event);
-    expect(seq).toEqual(['payment.created', 'payment.authentication_required', 'payment.authenticated', 'payment.instruction_issued', 'payment.evidence_received', 'payment.verifying', 'payment.confirmed', 'payment.settled']);
+    expect(seq).toEqual([
+      'payment.created',
+      'payment.authentication_required',
+      'payment.authenticated',
+      'payment.instruction_issued',
+      'payment.evidence_received',
+      'payment.verifying',
+      'payment.confirmed',
+      'payment.settled',
+    ]);
     for (const e of events.body.items) {
       expect(e.createdAt).toMatch(/^\d{4}-/);
       expect(e.actorType).toBeTruthy();
@@ -93,13 +117,19 @@ describe('payment lifecycle', () => {
   it('expires intents that never get confirmed, crediting nothing', async () => {
     const admin = await adminToken(app);
     const u = await registerUser(app);
-    await request(app).put('/api/admin/settings/gateway').set(admin.auth).send({ value: { intentExpiryHours: 0.0000001 } });
+    await request(app)
+      .put('/api/admin/settings/gateway')
+      .set(admin.auth)
+      .send({ value: { intentExpiryHours: 0.0000001 } });
     const p = await request(app).post('/api/deposits').set(u.auth).send({ method: 'bank', amount: '30', currency: 'USD', gateway: 'manual_bank', pin: '1234' });
     await new Promise((r) => setTimeout(r, 20));
     const later = await request(app).get(`/api/deposits/${p.body.payment.id}`).set(u.auth);
     expect(later.body.payment.stage).toBe('EXPIRED');
     expect(later.body.payment.status).toBe('failed');
-    await request(app).put('/api/admin/settings/gateway').set(admin.auth).send({ value: { intentExpiryHours: 48 } });
+    await request(app)
+      .put('/api/admin/settings/gateway')
+      .set(admin.auth)
+      .send({ value: { intentExpiryHours: 48 } });
     expect(await balance(u.auth, 'USD')).toBe(0);
     // A terminal intent cannot be revived by a manual proposal.
     const propose = await request(app).post(`/api/admin/payments/${p.body.payment.id}/confirm`).set(admin.auth).send({});
@@ -118,7 +148,9 @@ describe('no-API evidence engine', () => {
 
     // Wrong key → rejected, nothing credited.
     const otherKey = deviceKeys();
-    const forged = await request(app).post('/api/evidence/sms').send({ ...base, nonce: randomUUID(), signature: signEvidence(otherKey.privateKey, { ...base, nonce: 'x' }) });
+    const forged = await request(app)
+      .post('/api/evidence/sms')
+      .send({ ...base, nonce: randomUUID(), signature: signEvidence(otherKey.privateKey, { ...base, nonce: 'x' }) });
     expect(forged.status).toBe(401);
     expect(await balance(u.auth, 'KES')).toBe(0);
 
@@ -132,7 +164,9 @@ describe('no-API evidence engine', () => {
 
     // Properly signed evidence settles the intent.
     const nonce = randomUUID();
-    const ok = await request(app).post('/api/evidence/sms').send({ ...base, nonce, signature: signEvidence(privateKey, { ...base, nonce }) });
+    const ok = await request(app)
+      .post('/api/evidence/sms')
+      .send({ ...base, nonce, signature: signEvidence(privateKey, { ...base, nonce }) });
     expect(ok.status, JSON.stringify(ok.body)).toBe(201);
     expect(ok.body.evidence.outcome).toBe('settled');
     expect(await balance(u.auth, 'KES')).toBe(100000);
@@ -140,12 +174,16 @@ describe('no-API evidence engine', () => {
     expect(view.body.payment.stage).toBe('SETTLED');
 
     // Replaying the exact same signed submission is refused (nonce) and cannot settle again.
-    const replay = await request(app).post('/api/evidence/sms').send({ ...base, nonce, signature: signEvidence(privateKey, { ...base, nonce }) });
+    const replay = await request(app)
+      .post('/api/evidence/sms')
+      .send({ ...base, nonce, signature: signEvidence(privateKey, { ...base, nonce }) });
     expect(replay.status).toBe(401);
     expect(replay.body.error.code).toBe('evidence_replay');
     // The same message with a fresh nonce is a duplicate submission – still nothing more is credited.
     const n2 = randomUUID();
-    const dup = await request(app).post('/api/evidence/sms').send({ ...base, nonce: n2, signature: signEvidence(privateKey, { ...base, nonce: n2 }) });
+    const dup = await request(app)
+      .post('/api/evidence/sms')
+      .send({ ...base, nonce: n2, signature: signEvidence(privateKey, { ...base, nonce: n2 }) });
     expect(dup.body.evidence.outcome).toBe('duplicate');
     expect(await balance(u.auth, 'KES')).toBe(100000);
 
@@ -154,7 +192,9 @@ describe('no-API evidence engine', () => {
     const ref2 = dep2.body.payment.providerRef as string;
     const reused = { ...base, text: `QX7A1B2C3D Confirmed. You have received Ksh1,000.00 from JOHN DOE 254712345678 on 11/9/26 at 10:20 AM. Ref ${ref2}.` };
     const n3 = randomUUID();
-    const dupRef = await request(app).post('/api/evidence/sms').send({ ...reused, nonce: n3, signature: signEvidence(privateKey, { ...reused, nonce: n3 }) });
+    const dupRef = await request(app)
+      .post('/api/evidence/sms')
+      .send({ ...reused, nonce: n3, signature: signEvidence(privateKey, { ...reused, nonce: n3 }) });
     expect(dupRef.body.evidence.outcome).toBe('duplicate');
     expect(dupRef.body.evidence.reasons.join(',')).toContain('external_ref_reused');
     const v2 = await request(app).get(`/api/deposits/${dep2.body.payment.id}`).set(u.auth);
@@ -165,7 +205,9 @@ describe('no-API evidence engine', () => {
     const dep3 = await request(app).post('/api/deposits').set(u.auth).send({ method: 'mobile_money', amount: '1000', currency: 'KES', operatorId: 'mpesa_ke', phone: '+254712345678', pin: '1234' });
     const bad = { ...base, text: `QY9Z8Y7X6W Confirmed. You have received Ksh900.00 from JANE ROE 254700000000 on 11/9/26 at 10:30 AM. Ref ${dep3.body.payment.providerRef}.` };
     const n4 = randomUUID();
-    const mis = await request(app).post('/api/evidence/sms').send({ ...bad, nonce: n4, signature: signEvidence(privateKey, { ...bad, nonce: n4 }) });
+    const mis = await request(app)
+      .post('/api/evidence/sms')
+      .send({ ...bad, nonce: n4, signature: signEvidence(privateKey, { ...bad, nonce: n4 }) });
     expect(mis.body.evidence.outcome).toBe('mismatched');
     expect(mis.body.evidence.reasons).toEqual(expect.arrayContaining(['amount_mismatch', 'sender_mismatch']));
     const v3 = await request(app).get(`/api/deposits/${dep3.body.payment.id}`).set(u.auth);
@@ -184,7 +226,9 @@ describe('no-API evidence engine', () => {
     // A revoked device can no longer submit.
     await request(app).delete(`/api/admin/evidence/devices/${deviceId}`).set(admin.auth).send({ reason: 'phone lost' });
     const n5 = randomUUID();
-    const revoked = await request(app).post('/api/evidence/sms').send({ ...base, nonce: n5, signature: signEvidence(privateKey, { ...base, nonce: n5 }) });
+    const revoked = await request(app)
+      .post('/api/evidence/sms')
+      .send({ ...base, nonce: n5, signature: signEvidence(privateKey, { ...base, nonce: n5 }) });
     expect(revoked.status).toBe(403);
   });
 
@@ -193,7 +237,9 @@ describe('no-API evidence engine', () => {
     const u = await registerUser(app, { country: 'KE' });
     const dep = await request(app).post('/api/deposits').set(u.auth).send({ method: 'mobile_money', amount: '250', currency: 'KES', operatorId: 'mpesa_ke', phone: '+254722000111', pin: '1234' });
     const ref = dep.body.payment.providerRef;
-    const hook = await request(app).post('/api/webhooks/manual_momo').send({ secret: 'sms-secret', operatorId: 'mpesa_ke', text: `QA1B2C3D4E Confirmed. You have received Ksh250.00 from ANN 254722000111. Ref ${ref}.` });
+    const hook = await request(app)
+      .post('/api/webhooks/manual_momo')
+      .send({ secret: 'sms-secret', operatorId: 'mpesa_ke', text: `QA1B2C3D4E Confirmed. You have received Ksh250.00 from ANN 254722000111. Ref ${ref}.` });
     expect(hook.status).toBe(200);
     expect(hook.body.evidence.outcome).toBe('review');
     expect(hook.body.evidence.reasons).toContain('shared_secret_not_authoritative');
@@ -309,7 +355,10 @@ describe('risk controls', () => {
     expect(t.body.error.code).toBe('risk_blocked');
     expect(await balance(bad.auth, 'USD')).toBe(0);
     // A brand-new bank account cannot receive a large payout until the cooling-off period has passed.
-    await request(app).put('/api/admin/settings/risk').set(admin.auth).send({ value: { coolingOffAmount: 10_000, coolingOffMinutes: 60 } });
+    await request(app)
+      .put('/api/admin/settings/risk')
+      .set(admin.auth)
+      .send({ value: { coolingOffAmount: 10_000, coolingOffMinutes: 60 } });
     const bank = await request(app).post('/api/bank-accounts').set(a.auth).send({ bankName: 'New Bank', accountName: 'A Person', accountNumber: '55556666', currency: 'USD', pin: '1234' });
     const big = await request(app).post('/api/withdrawals').set(a.auth).send({ amount: '200', currency: 'USD', bankAccountId: bank.body.bankAccount.id, pin: '1234' });
     expect(big.status).toBe(403);
@@ -317,7 +366,10 @@ describe('risk controls', () => {
     const small = await request(app).post('/api/withdrawals').set(a.auth).send({ amount: '20', currency: 'USD', bankAccountId: bank.body.bankAccount.id, pin: '1234' });
     expect(small.status).toBe(201);
     // Inbound: a sanctioned payer's card payment stops in MANUAL_REVIEW even though the processor approved it.
-    const card = await request(app).post('/api/deposits').set(bad.auth).send({ method: 'card', amount: '25', currency: 'USD', pin: '1234', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'Blocked Person' } });
+    const card = await request(app)
+      .post('/api/deposits')
+      .set(bad.auth)
+      .send({ method: 'card', amount: '25', currency: 'USD', pin: '1234', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'Blocked Person' } });
     expect(card.body.payment.stage).toBe('MANUAL_REVIEW');
     expect(await balance(bad.auth, 'USD')).toBe(0);
     const risk = await request(app).get('/api/admin/risk-events').set(admin.auth);
@@ -363,7 +415,8 @@ describe('FX disclosure and route declarations', () => {
     const cat = await request(app).get('/api/money/catalog?currency=USD').set(a.auth);
     expect(cat.body.items.length).toBeGreaterThanOrEqual(30);
     for (const r of cat.body.items) {
-      for (const leg of [r.funding, r.payout]) for (const k of ['initiation', 'confirmation', 'settlement', 'expectedCompletion', 'processing', 'refundMethod']) expect(leg[k], `${r.source}->${r.destination} ${k}`).toBeTruthy();
+      for (const leg of [r.funding, r.payout])
+        for (const k of ['initiation', 'confirmation', 'settlement', 'expectedCompletion', 'processing', 'refundMethod']) expect(leg[k], `${r.source}->${r.destination} ${k}`).toBeTruthy();
       expect(['automatic', 'assisted', 'manual']).toContain(r.processing);
       expect(r.disclosure).toBeTruthy();
     }

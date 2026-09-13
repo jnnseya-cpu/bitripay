@@ -49,8 +49,31 @@ export function parseBitriQrLite(content: string): QrPayload | null {
   const top = read(s.slice(0, Math.max(0, s.lastIndexOf('6304'))));
   const mai = top['26'] ? read(top['26']) : {};
   if (mai['00'] !== 'cd.bitripay') return null;
-  const numeric: Record<string, string> = { '976': 'CDF', '840': 'USD', '978': 'EUR', '826': 'GBP', '404': 'KES', '566': 'NGN', '800': 'UGX', '952': 'XOF', '950': 'XAF', '710': 'ZAR', '834': 'TZS', '646': 'RWF', '936': 'GHS' };
-  return { type: mai['03'] ? 'pi' : 'bq', id: mai['03'] ?? mai['01'] ?? '', merchantId: mai['01'], intentRef: mai['03'] ?? null, amount: top['54'], currency: numeric[top['53'] ?? ''] ?? top['53'], note: top['59'], raw: s };
+  const numeric: Record<string, string> = {
+    '976': 'CDF',
+    '840': 'USD',
+    '978': 'EUR',
+    '826': 'GBP',
+    '404': 'KES',
+    '566': 'NGN',
+    '800': 'UGX',
+    '952': 'XOF',
+    '950': 'XAF',
+    '710': 'ZAR',
+    '834': 'TZS',
+    '646': 'RWF',
+    '936': 'GHS',
+  };
+  return {
+    type: mai['03'] ? 'pi' : 'bq',
+    id: mai['03'] ?? mai['01'] ?? '',
+    merchantId: mai['01'],
+    intentRef: mai['03'] ?? null,
+    amount: top['54'],
+    currency: numeric[top['53'] ?? ''] ?? top['53'],
+    note: top['59'],
+    raw: s,
+  };
 }
 
 export const QR_SCHEME = 'bitripay://pay';

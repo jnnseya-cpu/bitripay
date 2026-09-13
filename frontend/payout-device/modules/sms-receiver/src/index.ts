@@ -36,7 +36,6 @@ type Native = {
 let native: Native | null = null;
 if (Platform.OS === 'android') {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { requireNativeModule } = require('expo-modules-core');
     native = requireNativeModule('SmsReceiver');
   } catch {
@@ -60,7 +59,12 @@ export function onSms(listener: (sms: ReceivedSms) => void): () => void {
 /** Ask for the runtime permissions the receiver needs (Android 6+). Returns true when all were granted. */
 export async function requestPermissions(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
-  const wanted = [PermissionsAndroid.PERMISSIONS.RECEIVE_SMS, PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE, PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS, PermissionsAndroid.PERMISSIONS.CALL_PHONE].filter(Boolean);
+  const wanted = [
+    PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
+    PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
+    PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS,
+    PermissionsAndroid.PERMISSIONS.CALL_PHONE,
+  ].filter(Boolean);
   try {
     const res = await PermissionsAndroid.requestMultiple(wanted);
     return wanted.every((p) => res[p] === PermissionsAndroid.RESULTS.GRANTED);

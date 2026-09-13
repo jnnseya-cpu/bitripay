@@ -8,7 +8,20 @@ import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
 import { requireAuth, requireRole, requireScope } from '../middleware/auth';
 import { rateLimit } from '../middleware/rateLimit';
-import { upsertProfile, listProfiles, getProfile, listCycles, getCycle, cycleItems, cycleStatement, cycleStatementCsv, cycleStatementPdf, settlementCalendar, closeCycle, payCycle } from '../services/finops/settlement';
+import {
+  upsertProfile,
+  listProfiles,
+  getProfile,
+  listCycles,
+  getCycle,
+  cycleItems,
+  cycleStatement,
+  cycleStatementCsv,
+  cycleStatementPdf,
+  settlementCalendar,
+  closeCycle,
+  payCycle,
+} from '../services/finops/settlement';
 import { listDisputes, getDispute, merchantRespond, addEvidence, withdrawDispute, openDispute, disputeChronology, getDisputeSettings } from '../services/finops/disputes';
 import { effectiveFees } from '../services/finops/fees';
 import { listSplitPayouts, retrySplits } from '../services/finops/splits';
@@ -26,7 +39,21 @@ const profileSchema = z.object({
   currency: z.string().length(3),
   schedule: z.enum(['T0', 'T1', 'T2', 'weekly', 'manual']),
   cutoff_hour_utc: z.number().int().min(0).max(23).optional(),
-  destination: z.union([z.object({ method: z.literal('wallet') }), z.object({ method: z.literal('bank'), bankAccountId: z.string() }), z.object({ method: z.literal('bank'), bankName: z.string(), accountName: z.string(), accountNumber: z.string(), country: z.string().optional().nullable(), swift: z.string().optional().nullable() }), z.object({ method: z.literal('mobile_money'), operatorId: z.string(), phone: z.string(), name: z.string().optional().nullable() })]).optional(),
+  destination: z
+    .union([
+      z.object({ method: z.literal('wallet') }),
+      z.object({ method: z.literal('bank'), bankAccountId: z.string() }),
+      z.object({
+        method: z.literal('bank'),
+        bankName: z.string(),
+        accountName: z.string(),
+        accountNumber: z.string(),
+        country: z.string().optional().nullable(),
+        swift: z.string().optional().nullable(),
+      }),
+      z.object({ method: z.literal('mobile_money'), operatorId: z.string(), phone: z.string(), name: z.string().optional().nullable() }),
+    ])
+    .optional(),
   min_amount: z.number().int().min(0).optional(),
   auto: z.boolean().optional(),
   active: z.boolean().optional(),
@@ -34,14 +61,32 @@ const profileSchema = z.object({
 finopsRouter.get('/settlement_profiles', ...merchantOnly, requireScope('settlements:read', 'settlements:write'), (req, res) => res.json({ data: listProfiles(req.user!.id) }));
 finopsRouter.post('/settlement_profiles', ...merchantOnly, requireScope('settlements:write'), writeLimit, (req, res) => {
   const b = validate(profileSchema, req.body);
-  const p = upsertProfile(req.user!, { rail: b.rail, currency: b.currency, schedule: b.schedule, cutoffHourUtc: b.cutoff_hour_utc, destination: b.destination as any, minAmount: b.min_amount, auto: b.auto, active: b.active });
+  const p = upsertProfile(req.user!, {
+    rail: b.rail,
+    currency: b.currency,
+    schedule: b.schedule,
+    cutoffHourUtc: b.cutoff_hour_utc,
+    destination: b.destination as any,
+    minAmount: b.min_amount,
+    auto: b.auto,
+    active: b.active,
+  });
   res.status(201).json(p);
 });
 finopsRouter.get('/settlement_profiles/:id', ...merchantOnly, requireScope('settlements:read', 'settlements:write'), (req, res) => res.json(getProfile(req.user!.id, String(req.params.id))));
 
 // ---------------------------------------------------------------- settlement cycles, obligations, statements
 finopsRouter.get('/settlement_calendar', ...merchantOnly, requireScope('settlements:read', 'settlements:write'), (req, res) => res.json(settlementCalendar(req.user!.id)));
-finopsRouter.get('/settlement_cycles', ...merchantOnly, requireScope('settlements:read', 'settlements:write'), (req, res) => res.json({ data: listCycles({ userId: req.user!.id, status: req.query.status ? String(req.query.status) : null, currency: req.query.currency ? String(req.query.currency).toUpperCase() : null, limit: Math.min(200, Number(req.query.limit) || 50) }) }));
+finopsRouter.get('/settlement_cycles', ...merchantOnly, requireScope('settlements:read', 'settlements:write'), (req, res) =>
+  res.json({
+    data: listCycles({
+      userId: req.user!.id,
+      status: req.query.status ? String(req.query.status) : null,
+      currency: req.query.currency ? String(req.query.currency).toUpperCase() : null,
+      limit: Math.min(200, Number(req.query.limit) || 50),
+    }),
+  }),
+);
 /** Merchant-initiated close of the running period (manual schedule, or an early cut-off). */
 finopsRouter.post('/settlement_cycles', ...merchantOnly, requireScope('settlements:write'), writeLimit, (req, res) => {
   const b = validate(z.object({ currency: z.string().length(3), rail: z.string().min(2).max(40).optional(), pay: z.boolean().optional() }), req.body);
@@ -76,19 +121,47 @@ finopsRouter.get('/settlement_cycles/:id/statement', ...merchantOnly, requireSco
 });
 
 // ---------------------------------------------------------------- holds (read-only for the merchant)
-finopsRouter.get('/holds', ...merchantOnly, requireScope('balance:read'), (req, res) => res.json({ data: listHolds({ userId: req.user!.id, status: req.query.status ? String(req.query.status) : 'ACTIVE', limit: Math.min(200, Number(req.query.limit) || 50) }) }));
+finopsRouter.get('/holds', ...merchantOnly, requireScope('balance:read'), (req, res) =>
+  res.json({ data: listHolds({ userId: req.user!.id, status: req.query.status ? String(req.query.status) : 'ACTIVE', limit: Math.min(200, Number(req.query.limit) || 50) }) }),
+);
 
 // ---------------------------------------------------------------- disputes
-finopsRouter.get('/disputes', ...merchantOnly, requireScope('disputes:read', 'disputes:write'), (req, res) => res.json({ data: listDisputes({ merchantId: req.user!.id, status: req.query.status ? String(req.query.status) : null, limit: Math.min(200, Number(req.query.limit) || 50) }), settings: { responseDays: getDisputeSettings().responseDays, reasonCodes: getDisputeSettings().reasonCodes } }));
+finopsRouter.get('/disputes', ...merchantOnly, requireScope('disputes:read', 'disputes:write'), (req, res) =>
+  res.json({
+    data: listDisputes({ merchantId: req.user!.id, status: req.query.status ? String(req.query.status) : null, limit: Math.min(200, Number(req.query.limit) || 50) }),
+    settings: { responseDays: getDisputeSettings().responseDays, reasonCodes: getDisputeSettings().reasonCodes },
+  }),
+);
 /** A merchant can open a dispute against a payment it received (for example on a customer's complaint made in person). */
 finopsRouter.post('/disputes', ...merchantOnly, requireScope('disputes:write'), writeLimit, (req, res) => {
-  const b = validate(z.object({ payment_intent: z.string().optional().nullable(), transaction_id: z.string().optional().nullable(), reason_code: z.string().min(2), reason: z.string().max(1000).optional().nullable(), amount_minor: z.number().int().positive().optional().nullable(), evidence: z.string().max(4000).optional().nullable() }), req.body);
+  const b = validate(
+    z.object({
+      payment_intent: z.string().optional().nullable(),
+      transaction_id: z.string().optional().nullable(),
+      reason_code: z.string().min(2),
+      reason: z.string().max(1000).optional().nullable(),
+      amount_minor: z.number().int().positive().optional().nullable(),
+      evidence: z.string().max(4000).optional().nullable(),
+    }),
+    req.body,
+  );
   if (!b.payment_intent && !b.transaction_id) throw forbidden('payment_intent or transaction_id is required', 'validation_error');
   if (b.payment_intent) {
     const i = getDb().prepare('SELECT merchant_user_id FROM payment_intents WHERE id = ?').get(b.payment_intent) as any;
     if (!i || i.merchant_user_id !== req.user!.id) throw forbidden('That payment intent is not yours', 'not_owner');
   }
-  const d = openDispute({ intentId: b.payment_intent ?? null, transactionId: b.transaction_id ?? null, openedBy: 'merchant', reasonCode: b.reason_code, reason: b.reason ?? null, amountMinor: b.amount_minor ?? null, evidenceText: b.evidence ?? null }, { type: 'merchant', id: req.user!.id });
+  const d = openDispute(
+    {
+      intentId: b.payment_intent ?? null,
+      transactionId: b.transaction_id ?? null,
+      openedBy: 'merchant',
+      reasonCode: b.reason_code,
+      reason: b.reason ?? null,
+      amountMinor: b.amount_minor ?? null,
+      evidenceText: b.evidence ?? null,
+    },
+    { type: 'merchant', id: req.user!.id },
+  );
   if (d.merchantId !== req.user!.id) throw forbidden('That payment was not received by you', 'not_owner');
   res.status(201).json(d);
 });
@@ -112,14 +185,22 @@ finopsRouter.post('/disputes/:id/withdraw', ...merchantOnly, requireScope('dispu
 });
 
 // ---------------------------------------------------------------- fees that apply to me, split payouts
-finopsRouter.get('/fee_schedule', ...merchantOnly, requireScope('balance:read'), (req, res) => res.json({ data: effectiveFees({ userId: req.user!.id }), tier: (getDb().prepare('SELECT fee_tier FROM users WHERE id = ?').get(req.user!.id) as any)?.fee_tier ?? null }));
+finopsRouter.get('/fee_schedule', ...merchantOnly, requireScope('balance:read'), (req, res) =>
+  res.json({ data: effectiveFees({ userId: req.user!.id }), tier: (getDb().prepare('SELECT fee_tier FROM users WHERE id = ?').get(req.user!.id) as any)?.fee_tier ?? null }),
+);
 finopsRouter.get('/payment_intents/:id/splits', ...merchantOnly, requireScope('payment_intents:read', 'payment_intents:write'), (req, res) => {
   const i = getDb().prepare('SELECT merchant_user_id FROM payment_intents WHERE id = ?').get(String(req.params.id)) as any;
   if (!i || i.merchant_user_id !== req.user!.id) throw forbidden('That payment intent is not yours', 'not_owner');
   res.json({ data: listSplitPayouts(String(req.params.id)) });
 });
-finopsRouter.post('/payment_intents/:id/splits/retry', ...merchantOnly, requireScope('payment_intents:write'), writeLimit, wrap(async (req, res) => {
-  const i = getDb().prepare('SELECT merchant_user_id FROM payment_intents WHERE id = ?').get(String(req.params.id)) as any;
-  if (!i || i.merchant_user_id !== req.user!.id) throw forbidden('That payment intent is not yours', 'not_owner');
-  res.json({ data: retrySplits(String(req.params.id)) });
-}));
+finopsRouter.post(
+  '/payment_intents/:id/splits/retry',
+  ...merchantOnly,
+  requireScope('payment_intents:write'),
+  writeLimit,
+  wrap(async (req, res) => {
+    const i = getDb().prepare('SELECT merchant_user_id FROM payment_intents WHERE id = ?').get(String(req.params.id)) as any;
+    if (!i || i.merchant_user_id !== req.user!.id) throw forbidden('That payment intent is not yours', 'not_owner');
+    res.json({ data: retrySplits(String(req.params.id)) });
+  }),
+);

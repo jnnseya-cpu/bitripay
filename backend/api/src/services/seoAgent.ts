@@ -32,14 +32,32 @@ export interface AgentRun {
   triggeredBy: string | null;
   createdAt: string;
 }
-const toRun = (r: any): AgentRun => ({ id: r.id, task: r.task, input: parseJson(r.input, null), output: parseJson(r.output, null), model: r.model, provider: r.provider, inputTokens: r.input_tokens, outputTokens: r.output_tokens, status: r.status, error: r.error, postId: r.post_id, triggeredBy: r.triggered_by, createdAt: r.created_at });
+const toRun = (r: any): AgentRun => ({
+  id: r.id,
+  task: r.task,
+  input: parseJson(r.input, null),
+  output: parseJson(r.output, null),
+  model: r.model,
+  provider: r.provider,
+  inputTokens: r.input_tokens,
+  outputTokens: r.output_tokens,
+  status: r.status,
+  error: r.error,
+  postId: r.post_id,
+  triggeredBy: r.triggered_by,
+  createdAt: r.created_at,
+});
 
 export function listRuns(limit = 50): AgentRun[] {
   return (getDb().prepare('SELECT * FROM seo_runs ORDER BY created_at DESC LIMIT ?').all(limit) as any[]).map(toRun);
 }
 function logRun(r: Omit<AgentRun, 'id' | 'createdAt'>): AgentRun {
   const id = uuid();
-  getDb().prepare('INSERT INTO seo_runs (id, task, input, output, model, provider, input_tokens, output_tokens, status, error, post_id, triggered_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, r.task, JSON.stringify(r.input ?? null), JSON.stringify(r.output ?? null), r.model, r.provider, r.inputTokens, r.outputTokens, r.status, r.error, r.postId, r.triggeredBy, now());
+  getDb()
+    .prepare(
+      'INSERT INTO seo_runs (id, task, input, output, model, provider, input_tokens, output_tokens, status, error, post_id, triggered_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    )
+    .run(id, r.task, JSON.stringify(r.input ?? null), JSON.stringify(r.output ?? null), r.model, r.provider, r.inputTokens, r.outputTokens, r.status, r.error, r.postId, r.triggeredBy, now());
   return toRun(getDb().prepare('SELECT * FROM seo_runs WHERE id = ?').get(id));
 }
 
@@ -52,18 +70,31 @@ function apiKey(): string | null {
       return null;
     }
   }
-  return process.env.ANTHROPIC_API_KEY ?? null;
+  return config.anthropicApiKey || null;
 }
 export function agentStatus() {
   const s = getSeoSettings().agent;
-  return { enabled: s.enabled, provider: s.provider, model: s.model, keyConfigured: !!apiKey(), autoPublish: s.autoPublish, postsPerWeek: s.postsPerWeek, topicsQueued: s.topics.length, mode: apiKey() ? 'live' : 'fallback' };
+  return {
+    enabled: s.enabled,
+    provider: s.provider,
+    model: s.model,
+    keyConfigured: !!apiKey(),
+    autoPublish: s.autoPublish,
+    postsPerWeek: s.postsPerWeek,
+    topicsQueued: s.topics.length,
+    mode: apiKey() ? 'live' : 'fallback',
+  };
 }
 
 /** Site facts the model must stay inside – no invented numbers, partners or licences. */
 function siteContext(): string {
   const s = getSeoSettings();
-  const posts = listPosts({ status: 'published', pageSize: 50 }).items.map((p) => `- ${p.title} (${siteUrl()}${p.url})`).join('\n');
-  const rules = listLinkRules(true).map((r) => `- "${r.keyword}" → ${r.url}`).join('\n');
+  const posts = listPosts({ status: 'published', pageSize: 50 })
+    .items.map((p) => `- ${p.title} (${siteUrl()}${p.url})`)
+    .join('\n');
+  const rules = listLinkRules(true)
+    .map((r) => `- "${r.keyword}" → ${r.url}`)
+    .join('\n');
   return `Site: ${s.siteName} (${siteUrl()}).
 What BitriPay is: a digital wallet and payment platform for everyday people, market traders, moto-taxi riders, small merchants, agents and diaspora senders. Send and receive money with a QR code or @tag, pay merchants, add money by card, bank transfer, mobile money or a cash agent, hold multi-currency balances, issue virtual cards, pay bills and airtime, send remittances to bank accounts, mobile money wallets or cash pickup. Mobile-money payouts are executed from prefunded local accounts by secured payout devices or approved agents and settled only on verified operator confirmations. Balances are regulated e-money backed 1:1 by safeguarded funds where the platform is authorised; sandbox balances have no real-world value. Fees are shown before every payment.
 Audience: ${s.agent.audience}
@@ -108,7 +139,12 @@ const DRAFT_SCHEMA = {
     bodyMd: { type: 'string' },
     faq: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['question', 'answer'], properties: { question: { type: 'string' }, answer: { type: 'string' } } } },
     sources: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['title', 'url'], properties: { title: { type: 'string' }, url: { type: 'string' } } } },
-    social: { type: 'object', additionalProperties: false, required: ['x', 'linkedin', 'facebook', 'whatsapp', 'instagram'], properties: { x: { type: 'string' }, linkedin: { type: 'string' }, facebook: { type: 'string' }, whatsapp: { type: 'string' }, instagram: { type: 'string' } } },
+    social: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['x', 'linkedin', 'facebook', 'whatsapp', 'instagram'],
+      properties: { x: { type: 'string' }, linkedin: { type: 'string' }, facebook: { type: 'string' }, whatsapp: { type: 'string' }, instagram: { type: 'string' } },
+    },
     internalLinks: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['keyword', 'url'], properties: { keyword: { type: 'string' }, url: { type: 'string' } } } },
   },
 } as const;
@@ -128,7 +164,10 @@ async function callClaude<T>(task: string, system: string, user: string, schema:
   } as any);
   const message = await stream.finalMessage();
   if (message.stop_reason === 'refusal') throw new Error(`Model declined the request${message.stop_details?.explanation ? `: ${message.stop_details.explanation}` : ''}`);
-  const text = message.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map((b) => b.text).join('');
+  const text = message.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
   const data = JSON.parse(text) as T;
   return { data, run: { task, model: message.model, provider: 'anthropic', inputTokens: message.usage.input_tokens, outputTokens: message.usage.output_tokens, status: 'ok', triggeredBy } };
 }
@@ -182,8 +221,15 @@ Related guides on this blog cover ${kw.slice(0, 3).join(', ')}. Create a free ac
     category: 'guides',
     bodyMd,
     faq: [
-      { question: `Is ${kw[0]} safe with BitriPay?`, answer: 'Every payment is approved on your phone with biometrics or a PIN, and a mobile-money payout is only marked complete when the operator confirmation matches the amount, reference and recipient.' },
-      { question: 'How long does it take?', answer: 'Wallet-to-wallet payments are instant. Mobile money and bank payouts usually complete within minutes to a few hours during business hours, depending on the operator.' },
+      {
+        question: `Is ${kw[0]} safe with BitriPay?`,
+        answer:
+          'Every payment is approved on your phone with biometrics or a PIN, and a mobile-money payout is only marked complete when the operator confirmation matches the amount, reference and recipient.',
+      },
+      {
+        question: 'How long does it take?',
+        answer: 'Wallet-to-wallet payments are instant. Mobile money and bank payouts usually complete within minutes to a few hours during business hours, depending on the operator.',
+      },
       { question: 'What does it cost?', answer: 'Fees vary by corridor and method. The full cost and the recipient amount are always shown before you confirm.' },
     ],
     sources: [],
@@ -194,12 +240,19 @@ Related guides on this blog cover ${kw.slice(0, 3).join(', ')}. Create a free ac
       whatsapp: `${title} – read the short guide on the BitriPay blog.`,
       instagram: `${title}. Link in bio. #bitripay #mobilemoney #qrpayments`,
     },
-    internalLinks: [{ keyword: 'send money', url: '/app/send' }, { keyword: 'add money', url: '/app/add-money' }],
+    internalLinks: [
+      { keyword: 'send money', url: '/app/send' },
+      { keyword: 'add money', url: '/app/add-money' },
+    ],
   };
 }
 
 /** Draft an article for a topic. Returns the created post (status review, or published when autoPublish is on). */
-export async function draftArticle(input: { topic: string; keywords?: string[]; language?: string; extraInstructions?: string | null }, actor: Actor, triggeredBy: string | null = null): Promise<{ post: Post; run: AgentRun }> {
+export async function draftArticle(
+  input: { topic: string; keywords?: string[]; language?: string; extraInstructions?: string | null },
+  actor: Actor,
+  triggeredBy: string | null = null,
+): Promise<{ post: Post; run: AgentRun }> {
   const s = getSeoSettings();
   if (!s.agent.enabled) throw badRequest('The content agent is switched off in SEO settings', 'agent_disabled');
   const language = input.language ?? s.agent.languages[0] ?? 'en';
@@ -221,7 +274,27 @@ export async function draftArticle(input: { topic: string; keywords?: string[]; 
     draft = fallbackDraft(input.topic, input.keywords ?? []);
     runMeta = { ...runMeta, status: 'fallback', error: error === 'no_api_key' ? 'No Anthropic API key configured – offline template used' : error };
   }
-  const post = createPost({ title: draft.title, slug: draft.slug, excerpt: draft.excerpt, bodyMd: draft.bodyMd, category: draft.category || 'guides', tags: draft.tags, keywords: draft.keywords, language, metaTitle: draft.metaTitle, metaDescription: draft.metaDescription, faq: draft.faq, sources: draft.sources, social: draft.social, status: s.agent.autoPublish && runMeta.status === 'ok' ? 'published' : 'review', source: 'agent', authorName: `${s.siteName} Editorial` }, actor);
+  const post = createPost(
+    {
+      title: draft.title,
+      slug: draft.slug,
+      excerpt: draft.excerpt,
+      bodyMd: draft.bodyMd,
+      category: draft.category || 'guides',
+      tags: draft.tags,
+      keywords: draft.keywords,
+      language,
+      metaTitle: draft.metaTitle,
+      metaDescription: draft.metaDescription,
+      faq: draft.faq,
+      sources: draft.sources,
+      social: draft.social,
+      status: s.agent.autoPublish && runMeta.status === 'ok' ? 'published' : 'review',
+      source: 'agent',
+      authorName: `${s.siteName} Editorial`,
+    },
+    actor,
+  );
   for (const l of draft.internalLinks ?? []) {
     try {
       if (l.url.startsWith('/') || l.url.startsWith(siteUrl())) upsertLinkRule({ keyword: l.keyword, url: l.url.replace(siteUrl(), ''), kind: 'internal', priority: 40 });
@@ -229,7 +302,14 @@ export async function draftArticle(input: { topic: string; keywords?: string[]; 
       /* skip bad suggestions */
     }
   }
-  const run = logRun({ ...(runMeta as AgentRun), task: 'draft_article', input: { topic: input.topic, keywords: input.keywords ?? [], language }, output: { postId: post.id, title: post.title, status: post.status }, postId: post.id, error: runMeta.error ?? null });
+  const run = logRun({
+    ...(runMeta as AgentRun),
+    task: 'draft_article',
+    input: { topic: input.topic, keywords: input.keywords ?? [], language },
+    output: { postId: post.id, title: post.title, status: post.status },
+    postId: post.id,
+    error: runMeta.error ?? null,
+  });
   getDb().prepare('UPDATE blog_posts SET agent_run_id = ? WHERE id = ?').run(run.id, post.id);
   recordEvent('admin', post.id, 'seo.agent.drafted', actor, { runId: run.id, status: run.status, model: run.model });
   if (post.status === 'published') void pingIndexNow([post.url]);
@@ -240,16 +320,65 @@ interface KeywordIdeas {
   ideas: { keyword: string; intent: string; difficulty: 'low' | 'medium' | 'high'; angle: string }[];
 }
 export async function keywordIdeas(seed: string, actor: Actor): Promise<{ ideas: KeywordIdeas['ideas']; run: AgentRun }> {
-  const schema = { type: 'object', additionalProperties: false, required: ['ideas'], properties: { ideas: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['keyword', 'intent', 'difficulty', 'angle'], properties: { keyword: { type: 'string' }, intent: { type: 'string' }, difficulty: { type: 'string', enum: ['low', 'medium', 'high'] }, angle: { type: 'string' } } } } } };
+  const schema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['ideas'],
+    properties: {
+      ideas: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['keyword', 'intent', 'difficulty', 'angle'],
+          properties: { keyword: { type: 'string' }, intent: { type: 'string' }, difficulty: { type: 'string', enum: ['low', 'medium', 'high'] }, angle: { type: 'string' } },
+        },
+      },
+    },
+  };
   try {
-    const r = await callClaude<KeywordIdeas>('keyword_ideas', `You are an SEO strategist for ${getSeoSettings().siteName}. Propose 12 realistic long-tail search queries real people in the site's markets type into Google, Bing, YouTube, TikTok or ask an AI assistant. Prefer questions with clear intent the site can genuinely answer. Difficulty is a judgement of how competitive the query is. Return JSON only.\n\n${siteContext()}`, `Seed topic: ${seed}`, schema, actor.id ?? null);
+    const r = await callClaude<KeywordIdeas>(
+      'keyword_ideas',
+      `You are an SEO strategist for ${getSeoSettings().siteName}. Propose 12 realistic long-tail search queries real people in the site's markets type into Google, Bing, YouTube, TikTok or ask an AI assistant. Prefer questions with clear intent the site can genuinely answer. Difficulty is a judgement of how competitive the query is. Return JSON only.\n\n${siteContext()}`,
+      `Seed topic: ${seed}`,
+      schema,
+      actor.id ?? null,
+    );
     const run = logRun({ ...(r.run as AgentRun), input: { seed }, output: r.data, postId: null, error: null });
     return { ideas: r.data.ideas, run };
   } catch (err) {
     const words = seed.toLowerCase().split(/\s+/).filter(Boolean);
     const base = words.join(' ');
-    const ideas = [`how to ${base}`, `${base} fees`, `${base} without a bank account`, `${base} in congo`, `${base} in kenya`, `is ${base} safe`, `${base} vs bank transfer`, `best app for ${base}`, `${base} step by step`, `${base} for small business`].map((k) => ({ keyword: k, intent: k.startsWith('how') || k.includes('step') ? 'informational' : k.includes('best') || k.includes('vs') ? 'commercial' : 'informational', difficulty: 'medium' as const, angle: 'Answer directly in the first paragraph, then explain with a local example.' }));
-    const run = logRun({ task: 'keyword_ideas', input: { seed }, output: { ideas }, model: null, provider: 'anthropic', inputTokens: 0, outputTokens: 0, status: 'fallback', error: (err as Error).message === 'no_api_key' ? 'No Anthropic API key configured – heuristic ideas used' : (err as Error).message, postId: null, triggeredBy: actor.id ?? null });
+    const ideas = [
+      `how to ${base}`,
+      `${base} fees`,
+      `${base} without a bank account`,
+      `${base} in congo`,
+      `${base} in kenya`,
+      `is ${base} safe`,
+      `${base} vs bank transfer`,
+      `best app for ${base}`,
+      `${base} step by step`,
+      `${base} for small business`,
+    ].map((k) => ({
+      keyword: k,
+      intent: k.startsWith('how') || k.includes('step') ? 'informational' : k.includes('best') || k.includes('vs') ? 'commercial' : 'informational',
+      difficulty: 'medium' as const,
+      angle: 'Answer directly in the first paragraph, then explain with a local example.',
+    }));
+    const run = logRun({
+      task: 'keyword_ideas',
+      input: { seed },
+      output: { ideas },
+      model: null,
+      provider: 'anthropic',
+      inputTokens: 0,
+      outputTokens: 0,
+      status: 'fallback',
+      error: (err as Error).message === 'no_api_key' ? 'No Anthropic API key configured – heuristic ideas used' : (err as Error).message,
+      postId: null,
+      triggeredBy: actor.id ?? null,
+    });
     return { ideas, run };
   }
 }
@@ -270,23 +399,70 @@ export async function auditPost(postId: string, actor: Actor): Promise<{ audit: 
   const title = post.metaTitle ?? post.title;
   if (title.length > 60) issues.push({ severity: 'medium', issue: `Title is ${title.length} characters`, fix: 'Keep the title under 60 characters so it is not cut off in results.' });
   const desc = post.metaDescription ?? post.excerpt;
-  if (!desc || desc.length < 80 || desc.length > 160) issues.push({ severity: 'medium', issue: `Meta description is ${desc?.length ?? 0} characters`, fix: 'Write 120-155 characters that answer the query and invite the click.' });
+  if (!desc || desc.length < 80 || desc.length > 160)
+    issues.push({ severity: 'medium', issue: `Meta description is ${desc?.length ?? 0} characters`, fix: 'Write 120-155 characters that answer the query and invite the click.' });
   if (!post.faq.length) issues.push({ severity: 'low', issue: 'No FAQ', fix: 'Add 3-5 questions with complete answers; they feed FAQ structured data and AI answers.' });
-  if (!post.sources.length) issues.push({ severity: 'medium', issue: 'No cited sources', fix: 'Cite 2-4 authoritative references (regulators, operators, GSMA); citations raise trust and earn backlinks.' });
+  if (!post.sources.length)
+    issues.push({ severity: 'medium', issue: 'No cited sources', fix: 'Cite 2-4 authoritative references (regulators, operators, GSMA); citations raise trust and earn backlinks.' });
   if (!post.coverUrl) issues.push({ severity: 'low', issue: 'No cover image', fix: 'Add a real photo or product screenshot with descriptive alt text for social previews.' });
   if (!/^##\s/m.test(post.bodyMd)) issues.push({ severity: 'high', issue: 'No H2 headings', fix: 'Break the article into H2/H3 sections phrased as questions or steps.' });
   const kwHits = post.keywords.filter((k) => post.bodyMd.toLowerCase().includes(k.toLowerCase())).length;
-  if (post.keywords.length && kwHits < Math.ceil(post.keywords.length / 2)) issues.push({ severity: 'medium', issue: 'Target keywords rarely appear in the body', fix: 'Use each target phrase naturally at least once, ideally in a heading.' });
+  if (post.keywords.length && kwHits < Math.ceil(post.keywords.length / 2))
+    issues.push({ severity: 'medium', issue: 'Target keywords rarely appear in the body', fix: 'Use each target phrase naturally at least once, ideally in a heading.' });
   const internal = (post.bodyMd.match(/\]\(\//g) ?? []).length;
-  if (internal < 2) issues.push({ severity: 'low', issue: `Only ${internal} internal link(s) written in the body`, fix: 'Link to 2-4 related guides or product pages; dynamic links add more automatically.' });
-  const base: Audit = { score: Math.max(20, 100 - issues.reduce((s, i) => s + (i.severity === 'high' ? 25 : i.severity === 'medium' ? 12 : 5), 0)), summary: `${issues.length} finding(s) from on-page checks.`, issues, suggestedTitle: title, suggestedDescription: desc ?? '' };
-  const schema = { type: 'object', additionalProperties: false, required: ['score', 'summary', 'issues', 'suggestedTitle', 'suggestedDescription'], properties: { score: { type: 'integer' }, summary: { type: 'string' }, issues: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['severity', 'issue', 'fix'], properties: { severity: { type: 'string', enum: ['high', 'medium', 'low'] }, issue: { type: 'string' }, fix: { type: 'string' } } } }, suggestedTitle: { type: 'string' }, suggestedDescription: { type: 'string' } } };
+  if (internal < 2)
+    issues.push({ severity: 'low', issue: `Only ${internal} internal link(s) written in the body`, fix: 'Link to 2-4 related guides or product pages; dynamic links add more automatically.' });
+  const base: Audit = {
+    score: Math.max(20, 100 - issues.reduce((s, i) => s + (i.severity === 'high' ? 25 : i.severity === 'medium' ? 12 : 5), 0)),
+    summary: `${issues.length} finding(s) from on-page checks.`,
+    issues,
+    suggestedTitle: title,
+    suggestedDescription: desc ?? '',
+  };
+  const schema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['score', 'summary', 'issues', 'suggestedTitle', 'suggestedDescription'],
+    properties: {
+      score: { type: 'integer' },
+      summary: { type: 'string' },
+      issues: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['severity', 'issue', 'fix'],
+          properties: { severity: { type: 'string', enum: ['high', 'medium', 'low'] }, issue: { type: 'string' }, fix: { type: 'string' } },
+        },
+      },
+      suggestedTitle: { type: 'string' },
+      suggestedDescription: { type: 'string' },
+    },
+  };
   try {
-    const r = await callClaude<Audit>('audit_post', `You are a senior SEO editor. Audit the article for search intent match, completeness, E-E-A-T signals, readability on a phone, structured-data opportunities and AI-answer readiness (does the first paragraph answer the question?). Merge the automated findings you are given with your own; keep fixes concrete. Score 0-100. Return JSON only.\n\n${siteContext()}`, `Title: ${post.title}\nMeta title: ${post.metaTitle ?? ''}\nMeta description: ${post.metaDescription ?? ''}\nKeywords: ${post.keywords.join(', ')}\nAutomated findings: ${JSON.stringify(issues)}\n\nArticle (Markdown):\n${post.bodyMd}`, schema, actor.id ?? null);
+    const r = await callClaude<Audit>(
+      'audit_post',
+      `You are a senior SEO editor. Audit the article for search intent match, completeness, E-E-A-T signals, readability on a phone, structured-data opportunities and AI-answer readiness (does the first paragraph answer the question?). Merge the automated findings you are given with your own; keep fixes concrete. Score 0-100. Return JSON only.\n\n${siteContext()}`,
+      `Title: ${post.title}\nMeta title: ${post.metaTitle ?? ''}\nMeta description: ${post.metaDescription ?? ''}\nKeywords: ${post.keywords.join(', ')}\nAutomated findings: ${JSON.stringify(issues)}\n\nArticle (Markdown):\n${post.bodyMd}`,
+      schema,
+      actor.id ?? null,
+    );
     const run = logRun({ ...(r.run as AgentRun), input: { postId }, output: r.data, postId, error: null });
     return { audit: r.data, run };
   } catch (err) {
-    const run = logRun({ task: 'audit_post', input: { postId }, output: base, model: null, provider: 'anthropic', inputTokens: 0, outputTokens: 0, status: 'fallback', error: (err as Error).message === 'no_api_key' ? 'No Anthropic API key configured – automated checks only' : (err as Error).message, postId, triggeredBy: actor.id ?? null });
+    const run = logRun({
+      task: 'audit_post',
+      input: { postId },
+      output: base,
+      model: null,
+      provider: 'anthropic',
+      inputTokens: 0,
+      outputTokens: 0,
+      status: 'fallback',
+      error: (err as Error).message === 'no_api_key' ? 'No Anthropic API key configured – automated checks only' : (err as Error).message,
+      postId,
+      triggeredBy: actor.id ?? null,
+    });
     return { audit: base, run };
   }
 }
@@ -295,16 +471,46 @@ export async function auditPost(postId: string, actor: Actor): Promise<{ audit: 
 export async function socialPack(postId: string, actor: Actor): Promise<{ social: Record<string, string>; run: AgentRun }> {
   const post = getPost(postId, false);
   const url = `${siteUrl()}${post.url}`;
-  const schema = { type: 'object', additionalProperties: false, required: ['x', 'linkedin', 'facebook', 'whatsapp', 'instagram', 'tiktok'], properties: { x: { type: 'string' }, linkedin: { type: 'string' }, facebook: { type: 'string' }, whatsapp: { type: 'string' }, instagram: { type: 'string' }, tiktok: { type: 'string' } } };
+  const schema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['x', 'linkedin', 'facebook', 'whatsapp', 'instagram', 'tiktok'],
+    properties: { x: { type: 'string' }, linkedin: { type: 'string' }, facebook: { type: 'string' }, whatsapp: { type: 'string' }, instagram: { type: 'string' }, tiktok: { type: 'string' } },
+  };
   try {
-    const r = await callClaude<Record<string, string>>('social_pack', `Write platform-native social posts announcing an article. X under 260 characters with 2 hashtags; LinkedIn 3 short paragraphs with a hook; Facebook conversational; WhatsApp one friendly line for a broadcast list; Instagram caption with 5 hashtags; TikTok a 30-second script outline. Include the URL ${url} where the platform allows links. Return JSON only.`, `Title: ${post.title}\nExcerpt: ${post.excerpt}\nKey points:\n${post.bodyMd.slice(0, 3000)}`, schema, actor.id ?? null);
+    const r = await callClaude<Record<string, string>>(
+      'social_pack',
+      `Write platform-native social posts announcing an article. X under 260 characters with 2 hashtags; LinkedIn 3 short paragraphs with a hook; Facebook conversational; WhatsApp one friendly line for a broadcast list; Instagram caption with 5 hashtags; TikTok a 30-second script outline. Include the URL ${url} where the platform allows links. Return JSON only.`,
+      `Title: ${post.title}\nExcerpt: ${post.excerpt}\nKey points:\n${post.bodyMd.slice(0, 3000)}`,
+      schema,
+      actor.id ?? null,
+    );
     updatePost(postId, { social: r.data }, actor);
     const run = logRun({ ...(r.run as AgentRun), input: { postId }, output: r.data, postId, error: null });
     return { social: r.data, run };
   } catch (err) {
-    const social = { x: `${post.title} ${url} #mobilemoney #bitripay`, linkedin: `${post.title}\n\n${post.excerpt}\n\nRead: ${url}`, facebook: `${post.title} – ${post.excerpt} ${url}`, whatsapp: `${post.title}: ${url}`, instagram: `${post.title}. Link in bio. #bitripay #mobilemoney #qrpayments #fintech #africa`, tiktok: `Hook: "${post.title}?" → 3 quick tips from the article → "Full guide on the BitriPay blog".` };
+    const social = {
+      x: `${post.title} ${url} #mobilemoney #bitripay`,
+      linkedin: `${post.title}\n\n${post.excerpt}\n\nRead: ${url}`,
+      facebook: `${post.title} – ${post.excerpt} ${url}`,
+      whatsapp: `${post.title}: ${url}`,
+      instagram: `${post.title}. Link in bio. #bitripay #mobilemoney #qrpayments #fintech #africa`,
+      tiktok: `Hook: "${post.title}?" → 3 quick tips from the article → "Full guide on the BitriPay blog".`,
+    };
     updatePost(postId, { social }, actor);
-    const run = logRun({ task: 'social_pack', input: { postId }, output: social, model: null, provider: 'anthropic', inputTokens: 0, outputTokens: 0, status: 'fallback', error: (err as Error).message === 'no_api_key' ? 'No Anthropic API key configured – template used' : (err as Error).message, postId, triggeredBy: actor.id ?? null });
+    const run = logRun({
+      task: 'social_pack',
+      input: { postId },
+      output: social,
+      model: null,
+      provider: 'anthropic',
+      inputTokens: 0,
+      outputTokens: 0,
+      status: 'fallback',
+      error: (err as Error).message === 'no_api_key' ? 'No Anthropic API key configured – template used' : (err as Error).message,
+      postId,
+      triggeredBy: actor.id ?? null,
+    });
     return { social, run };
   }
 }

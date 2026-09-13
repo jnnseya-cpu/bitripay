@@ -25,7 +25,10 @@ export function idempotency(req: Request, res: Response, next: NextFunction) {
     if (existing.status_code === null) return res.status(409).json({ error: { code: 'request_in_progress', message: 'A request with this Idempotency-Key is still being processed' } });
     res.setHeader('Idempotent-Replayed', 'true');
     // an identical repeat of a creation returns the same resource with 200 (it already exists); other statuses replay as stored
-    return res.status(existing.status_code === 201 ? 200 : existing.status_code).type('application/json').send(existing.response);
+    return res
+      .status(existing.status_code === 201 ? 200 : existing.status_code)
+      .type('application/json')
+      .send(existing.response);
   }
   db.prepare('INSERT INTO idempotency_keys (scope, key, request_hash, status_code, response, created_at) VALUES (?, ?, ?, NULL, NULL, ?)').run(scope, key, requestHash, now());
   const originalJson = res.json.bind(res);

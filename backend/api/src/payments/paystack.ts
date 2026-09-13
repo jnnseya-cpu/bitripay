@@ -69,9 +69,10 @@ export const paystackProvider: GatewayProvider = {
     const data = json.data;
     if (data.status === 'success') {
       const auth = data.authorization;
-      const savedCard = auth?.reusable && auth.authorization_code
-        ? { token: auth.authorization_code, brand: auth.brand || auth.card_type || 'card', last4: auth.last4, expMonth: Number(auth.exp_month), expYear: Number(auth.exp_year) }
-        : undefined;
+      const savedCard =
+        auth?.reusable && auth.authorization_code
+          ? { token: auth.authorization_code, brand: auth.brand || auth.card_type || 'card', last4: auth.last4, expMonth: Number(auth.exp_month), expYear: Number(auth.exp_year) }
+          : undefined;
       return { status: 'succeeded', raw: data, savedCard };
     }
     if (data.status === 'failed' || data.status === 'abandoned' || data.status === 'reversed') return { status: 'failed', failureReason: data.gateway_response, raw: data };

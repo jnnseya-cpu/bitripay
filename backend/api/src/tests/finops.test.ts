@@ -17,10 +17,14 @@ beforeAll(() => {
   app = setupApp();
 });
 
-const balanceOf = async (auth: Record<string, string>, currency = 'USD') => ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
+const balanceOf = async (auth: Record<string, string>, currency = 'USD') =>
+  ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
 
 async function merchantPaidByWallet(merchant: Awaited<ReturnType<typeof registerUser>>, payer: Awaited<ReturnType<typeof registerUser>>, amountMinor: number, extra: Record<string, unknown> = {}) {
-  const intent = await request(app).post('/api/v1/payment_intents').set(merchant.auth).send({ amount_minor: amountMinor, currency: 'USD', description: 'Order', ...extra });
+  const intent = await request(app)
+    .post('/api/v1/payment_intents')
+    .set(merchant.auth)
+    .send({ amount_minor: amountMinor, currency: 'USD', description: 'Order', ...extra });
   expect(intent.status, JSON.stringify(intent.body)).toBe(201);
   const paid = await request(app).post(`/api/v1/payment_intents/${intent.body.id}/pay/wallet`).set(payer.auth).send({ pin: '1234' });
   expect(paid.status, JSON.stringify(paid.body)).toBe(201);
@@ -38,7 +42,10 @@ describe('fee schedules', () => {
     const before = await request(app).get('/api/admin/finops/fees/effective').set(admin.auth).query({ type: 'merchant_payment', user: m.user.id });
     expect(before.body.resolved.source.scope).toBe('settings');
 
-    const draft = await request(app).post('/api/admin/finops/fees/schedules').set(admin.auth).send({ scope: 'platform', rules: { merchant_payment: { fixed: 0, bps: 100, min: 50 } }, notes: 'Platform v1' });
+    const draft = await request(app)
+      .post('/api/admin/finops/fees/schedules')
+      .set(admin.auth)
+      .send({ scope: 'platform', rules: { merchant_payment: { fixed: 0, bps: 100, min: 50 } }, notes: 'Platform v1' });
     expect(draft.status, JSON.stringify(draft.body)).toBe(201);
     expect(draft.body.status).toBe('DRAFT');
     const selfApprove = await request(app).post(`/api/admin/finops/fees/schedules/${draft.body.id}/approve`).set(admin.auth);
@@ -54,7 +61,10 @@ describe('fee schedules', () => {
 
     // a tier schedule beats the platform one for members of the tier
     await request(app).put(`/api/admin/finops/fees/tier/${m.user.id}`).set(admin.auth).send({ tier: 'gold' });
-    const tier = await request(app).post('/api/admin/finops/fees/schedules').set(admin.auth).send({ scope: 'tier', scopeRef: 'gold', rules: { merchant_payment: { fixed: 0, bps: 50, max: 100 } } });
+    const tier = await request(app)
+      .post('/api/admin/finops/fees/schedules')
+      .set(admin.auth)
+      .send({ scope: 'tier', scopeRef: 'gold', rules: { merchant_payment: { fixed: 0, bps: 50, max: 100 } } });
     await request(app).post(`/api/admin/finops/fees/schedules/${tier.body.id}/approve`).set(checker.auth);
     await request(app).post(`/api/admin/finops/fees/schedules/${tier.body.id}/activate`).set(admin.auth);
     expect(calculateFee('merchant_payment', 10_000, 'USD', null, { userId: m.user.id })).toBe(50);
@@ -64,12 +74,18 @@ describe('fee schedules', () => {
     expect(mine.body.tier).toBe('gold');
     expect(mine.body.data.find((f: any) => f.type === 'merchant_payment').source.scope).toBe('tier');
     // a second platform version retires the first
-    const v2 = await request(app).post('/api/admin/finops/fees/schedules').set(admin.auth).send({ scope: 'platform', rules: { merchant_payment: { fixed: 0, bps: 150 } } });
+    const v2 = await request(app)
+      .post('/api/admin/finops/fees/schedules')
+      .set(admin.auth)
+      .send({ scope: 'platform', rules: { merchant_payment: { fixed: 0, bps: 150 } } });
     expect(v2.body.version).toBe(2);
     await request(app).post(`/api/admin/finops/fees/schedules/${v2.body.id}/approve`).set(checker.auth);
     await request(app).post(`/api/admin/finops/fees/schedules/${v2.body.id}/activate`).set(admin.auth);
     const list = await request(app).get('/api/admin/finops/fees/schedules').set(admin.auth).query({ scope: 'platform' });
-    expect(list.body.items.map((s: any) => [s.version, s.status])).toEqual([[2, 'ACTIVE'], [1, 'RETIRED']]);
+    expect(list.body.items.map((s: any) => [s.version, s.status])).toEqual([
+      [2, 'ACTIVE'],
+      [1, 'RETIRED'],
+    ]);
     expect(calculateFee('merchant_payment', 10_000, 'USD')).toBe(150);
     // clean up the tier so later merchants in this file pay the default fee
     await request(app).post(`/api/admin/finops/fees/schedules/${tier.body.id}/retire`).set(admin.auth);
@@ -111,19 +127,43 @@ describe('split payments', () => {
     const courier = await registerUser(app, { tag: 'courier1' });
     const payer = await registerUser(app);
     await fund(app, payer.user.id, '100.00');
-    const over = await request(app).post('/api/v1/payment_intents').set(m.auth).send({ amount_minor: 5000, currency: 'USD', splits: [{ recipient: '@seller1', bps: 6000 }, { recipient: 'courier1', bps: 5000 }] });
+    const over = await request(app)
+      .post('/api/v1/payment_intents')
+      .set(m.auth)
+      .send({
+        amount_minor: 5000,
+        currency: 'USD',
+        splits: [
+          { recipient: '@seller1', bps: 6000 },
+          { recipient: 'courier1', bps: 5000 },
+        ],
+      });
     expect(over.status).toBe(400);
     expect(over.body.error.code).toBe('split_over_100');
-    const self = await request(app).post('/api/v1/payment_intents').set(m.auth).send({ amount_minor: 5000, currency: 'USD', splits: [{ recipient: m.user.tag, bps: 100 }] });
+    const self = await request(app)
+      .post('/api/v1/payment_intents')
+      .set(m.auth)
+      .send({ amount_minor: 5000, currency: 'USD', splits: [{ recipient: m.user.tag, bps: 100 }] });
     expect(self.body.error.code).toBe('split_self');
-    const unknown = await request(app).post('/api/v1/payment_intents').set(m.auth).send({ amount_minor: 5000, currency: 'USD', splits: [{ recipient: 'nobody-here', bps: 100 }] });
+    const unknown = await request(app)
+      .post('/api/v1/payment_intents')
+      .set(m.auth)
+      .send({ amount_minor: 5000, currency: 'USD', splits: [{ recipient: 'nobody-here', bps: 100 }] });
     expect(unknown.body.error.code).toBe('split_recipient_not_found');
 
-    const { intentId } = await merchantPaidByWallet(m, payer, 5000, { splits: [{ recipient: 'seller1', bps: 2000, label: 'Seller share' }, { recipient: 'courier1', fixed_minor: 100, label: 'Delivery' }] });
+    const { intentId } = await merchantPaidByWallet(m, payer, 5000, {
+      splits: [
+        { recipient: 'seller1', bps: 2000, label: 'Seller share' },
+        { recipient: 'courier1', fixed_minor: 100, label: 'Delivery' },
+      ],
+    });
     // merchant received 5000 - 1.5% fee = 4925; fixed 100 first, then 20% of the remaining 4825 = 965
     const shares = await request(app).get(`/api/v1/payment_intents/${intentId}/splits`).set(m.auth);
     expect(shares.status).toBe(200);
-    expect(shares.body.data.map((s: any) => [s.label, s.amountMinor, s.status])).toEqual([['Seller share', 965, 'PAID'], ['Delivery', 100, 'PAID']]);
+    expect(shares.body.data.map((s: any) => [s.label, s.amountMinor, s.status])).toEqual([
+      ['Seller share', 965, 'PAID'],
+      ['Delivery', 100, 'PAID'],
+    ]);
     expect(await balanceOf(seller.auth)).toBe(965);
     expect(await balanceOf(courier.auth)).toBe(100);
     expect(await balanceOf(m.auth)).toBe(4925 - 965 - 100);
@@ -141,7 +181,10 @@ describe('holds and balance classes', () => {
     const admin = await adminToken(app);
     const m = await registerUser(app, { role: 'merchant', businessName: 'Held Shop', country: 'CD' });
     await fund(app, m.user.id, '30.00');
-    const hold = await request(app).post('/api/admin/finops/holds').set(admin.auth).send({ userId: m.user.id, currency: 'USD', amountMinor: 1000, kind: 'reserve', reason: 'Rolling reserve for a new merchant' });
+    const hold = await request(app)
+      .post('/api/admin/finops/holds')
+      .set(admin.auth)
+      .send({ userId: m.user.id, currency: 'USD', amountMinor: 1000, kind: 'reserve', reason: 'Rolling reserve for a new merchant' });
     expect(hold.status, JSON.stringify(hold.body)).toBe(201);
     expect(hold.body.status).toBe('ACTIVE');
     let bal = await request(app).get('/api/v1/balance').set(m.auth);
@@ -159,7 +202,10 @@ describe('holds and balance classes', () => {
     usd = bal.body.data.find((d: any) => d.currency === 'USD');
     expect(usd.available).toBe(3000);
     // expiring hold
-    const short = await request(app).post('/api/admin/finops/holds').set(admin.auth).send({ userId: m.user.id, currency: 'USD', amountMinor: 500, kind: 'review', reason: 'Risk review', expiresAt: new Date(Date.now() - 1000).toISOString() });
+    const short = await request(app)
+      .post('/api/admin/finops/holds')
+      .set(admin.auth)
+      .send({ userId: m.user.id, currency: 'USD', amountMinor: 500, kind: 'review', reason: 'Risk review', expiresAt: new Date(Date.now() - 1000).toISOString() });
     expect(short.status).toBe(201);
     const expired = await request(app).post('/api/admin/finops/holds/expire').set(admin.auth);
     expect(expired.body.released).toBe(1);
@@ -178,7 +224,10 @@ describe('disputes', () => {
     const p2 = await merchantPaidByWallet(m, payer, 3000);
     const bad = await request(app).post('/api/admin/finops/disputes').set(admin.auth).send({ transactionId: p1.transactionId, openedBy: 'customer', reasonCode: 'nope' });
     expect(bad.status).toBe(400);
-    const d1 = await request(app).post('/api/admin/finops/disputes').set(admin.auth).send({ transactionId: p1.transactionId, openedBy: 'customer', reasonCode: 'not_received', reason: 'Never delivered', evidenceText: 'Customer called support' });
+    const d1 = await request(app)
+      .post('/api/admin/finops/disputes')
+      .set(admin.auth)
+      .send({ transactionId: p1.transactionId, openedBy: 'customer', reasonCode: 'not_received', reason: 'Never delivered', evidenceText: 'Customer called support' });
     expect(d1.status, JSON.stringify(d1.body)).toBe(201);
     expect(d1.body.status).toBe('OPEN');
     expect(d1.body.holdId).toMatch(/^hold_/);
@@ -194,7 +243,10 @@ describe('disputes', () => {
     const list = await request(app).get('/api/v1/disputes').set(m.auth);
     expect(list.body.data.map((d: any) => d.id)).toEqual([d1.body.id]);
     expect((await request(app).get(`/api/v1/disputes/${d1.body.id}`).set(payer.auth)).status).toBe(403);
-    const resp = await request(app).post(`/api/v1/disputes/${d1.body.id}/respond`).set(m.auth).send({ response: 'Delivered and signed for on 2 March', files: ['pod-123.pdf'] });
+    const resp = await request(app)
+      .post(`/api/v1/disputes/${d1.body.id}/respond`)
+      .set(m.auth)
+      .send({ response: 'Delivered and signed for on 2 March', files: ['pod-123.pdf'] });
     expect(resp.status, JSON.stringify(resp.body)).toBe(200);
     expect(resp.body.status).toBe('UNDER_REVIEW');
     expect(resp.body.evidence).toHaveLength(2);
@@ -231,7 +283,9 @@ describe('disputes', () => {
     expect(withdrawn.body.status).toBe('WITHDRAWN');
     const p4 = await merchantPaidByWallet(m, payer, 700);
     const late = await request(app).post('/api/admin/finops/disputes').set(admin.auth).send({ intentId: p4.intentId, openedBy: 'customer', reasonCode: 'other' });
-    getDb().prepare('UPDATE disputes SET deadline_at = ? WHERE id = ?').run(new Date(Date.now() - 60_000).toISOString(), late.body.id);
+    getDb()
+      .prepare('UPDATE disputes SET deadline_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 60_000).toISOString(), late.body.id);
     expect(sweepDisputeDeadlines()).toBe(1);
     expect((await request(app).get(`/api/admin/finops/disputes/${late.body.id}`).set(admin.auth)).body.status).toBe('UNDER_REVIEW');
     const tooLate = await request(app).post(`/api/v1/disputes/${late.body.id}/respond`).set(m.auth).send({ response: 'sorry' });
@@ -246,7 +300,10 @@ describe('settlement engine', () => {
     await registerUser(app, { tag: 'settlepartner' });
     const payer = await registerUser(app);
     await fund(app, payer.user.id, '200.00');
-    const profile = await request(app).post('/api/v1/settlement_profiles').set(m.auth).send({ currency: 'USD', schedule: 'T1', cutoff_hour_utc: 0, destination: { method: 'wallet' }, auto: true });
+    const profile = await request(app)
+      .post('/api/v1/settlement_profiles')
+      .set(m.auth)
+      .send({ currency: 'USD', schedule: 'T1', cutoff_hour_utc: 0, destination: { method: 'wallet' }, auto: true });
     expect(profile.status, JSON.stringify(profile.body)).toBe(201);
     expect((await request(app).get('/api/v1/settlement_profiles').set(m.auth)).body.data).toHaveLength(1);
     await merchantPaidByWallet(m, payer, 10_000); // fee 150
@@ -274,7 +331,16 @@ describe('settlement engine', () => {
     const csv = await request(app).get(`/api/v1/settlement_cycles/${cycle.body.id}/statement`).set(m.auth).query({ format: 'csv' });
     expect(csv.headers['content-type']).toContain('text/csv');
     expect(csv.text).toContain('Gross 140.00');
-    const pdf = await request(app).get(`/api/v1/settlement_cycles/${cycle.body.id}/statement`).set(m.auth).query({ format: 'pdf' }).buffer(true).parse((res, cb) => { const chunks: Buffer[] = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks))); });
+    const pdf = await request(app)
+      .get(`/api/v1/settlement_cycles/${cycle.body.id}/statement`)
+      .set(m.auth)
+      .query({ format: 'pdf' })
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
     expect(pdf.headers['content-type']).toBe('application/pdf');
     expect((pdf.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
     // a second close with nothing new is skipped; the webhook event was recorded
@@ -291,7 +357,10 @@ describe('settlement engine', () => {
     // bank destination: the cycle is paid through a withdrawal under maker-checker and mirrors its outcome
     const bank = await request(app).post('/api/bank-accounts').set(m.auth).send({ bankName: 'Rawbank', accountName: 'Settled Shop', accountNumber: '00112233', currency: 'USD', pin: '1234' });
     expect(bank.status, JSON.stringify(bank.body)).toBe(201);
-    const bankProfile = await request(app).post('/api/v1/settlement_profiles').set(m.auth).send({ currency: 'USD', schedule: 'T0', destination: { method: 'bank', bankAccountId: bank.body.bankAccount.id } });
+    const bankProfile = await request(app)
+      .post('/api/v1/settlement_profiles')
+      .set(m.auth)
+      .send({ currency: 'USD', schedule: 'T0', destination: { method: 'bank', bankAccountId: bank.body.bankAccount.id } });
     expect(bankProfile.body.id).toBe(profile.body.id); // one profile per rail and currency, updated in place
     await merchantPaidByWallet(m, payer, 2_000); // fee 30
     const c2 = await request(app).post('/api/admin/finops/settlements/cycles').set(admin.auth).send({ userId: m.user.id, currency: 'USD', pay: true });
@@ -311,7 +380,10 @@ describe('settlement engine', () => {
     expect(cal.body.recent.length).toBeGreaterThanOrEqual(3);
     // the scheduler closes at each auto profile's cut-off once per business day; T+1 cycles are not paid before their due date
     const m2 = await registerUser(app, { role: 'merchant', businessName: 'Scheduled Shop', country: 'CD' });
-    await request(app).post('/api/v1/settlement_profiles').set(m2.auth).send({ currency: 'USD', schedule: 'T1', cutoff_hour_utc: 0, destination: { method: 'wallet' }, auto: true });
+    await request(app)
+      .post('/api/v1/settlement_profiles')
+      .set(m2.auth)
+      .send({ currency: 'USD', schedule: 'T1', cutoff_hour_utc: 0, destination: { method: 'wallet' }, auto: true });
     await merchantPaidByWallet(m2, payer, 1_000);
     const run = runSettlementSchedules(new Date());
     expect(run.closed).toBeGreaterThanOrEqual(1);
@@ -329,7 +401,10 @@ describe('processor reconciliation workbench', () => {
   it('matches a processor statement three ways (statement ↔ gateway payment ↔ ledger) and opens cases for every discrepancy', async () => {
     const admin = await adminToken(app);
     const u = await registerUser(app, { country: 'KE' });
-    const card = await request(app).post('/api/deposits').set(u.auth).send({ method: 'card', amount: '25', currency: 'USD', pin: '1234', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'Kim Test' } });
+    const card = await request(app)
+      .post('/api/deposits')
+      .set(u.auth)
+      .send({ method: 'card', amount: '25', currency: 'USD', pin: '1234', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'Kim Test' } });
     expect(card.body.payment.stage).toBe('SETTLED');
     const gp = getDb().prepare('SELECT gateway, provider_ref, amount, fee, currency FROM gateway_payments WHERE id = ?').get(card.body.payment.id) as any;
     expect(gp.provider_ref).toBeTruthy();
@@ -338,10 +413,16 @@ describe('processor reconciliation workbench', () => {
       { reference: gp.provider_ref, amountMinor: gp.amount, currency: 'USD', status: 'SETTLED', feeMinor: gp.fee },
       { reference: 'ghost-ref-1', amountMinor: 999, currency: 'USD', status: 'SETTLED' },
     ];
-    const wrongTotal = await request(app).post(`/api/admin/finops/reconciliation/processors/${gp.gateway}/statements`).set(admin.auth).send({ cycleRef: day, currency: 'USD', lines, controlTotalMinor: 1 });
+    const wrongTotal = await request(app)
+      .post(`/api/admin/finops/reconciliation/processors/${gp.gateway}/statements`)
+      .set(admin.auth)
+      .send({ cycleRef: day, currency: 'USD', lines, controlTotalMinor: 1 });
     expect(wrongTotal.status).toBe(400);
     expect(wrongTotal.body.error.code).toBe('control_total_mismatch');
-    const imp = await request(app).post(`/api/admin/finops/reconciliation/processors/${gp.gateway}/statements`).set(admin.auth).send({ cycleRef: day, currency: 'USD', lines, controlTotalMinor: gp.amount + 999, run: true });
+    const imp = await request(app)
+      .post(`/api/admin/finops/reconciliation/processors/${gp.gateway}/statements`)
+      .set(admin.auth)
+      .send({ cycleRef: day, currency: 'USD', lines, controlTotalMinor: gp.amount + 999, run: true });
     expect(imp.status, JSON.stringify(imp.body)).toBe(201);
     expect(imp.body.import.duplicate).toBe(false);
     expect(imp.body.import.lineCount).toBe(2);
@@ -358,7 +439,10 @@ describe('processor reconciliation workbench', () => {
     expect(wb.body.exceptions.some((e: any) => e.connectionId === `gateway:${gp.gateway}`)).toBe(true);
     expect(wb.body.recentRuns[0].cycleRef).toBe(day);
     // a settled payment the statement does not mention is flagged on the next run of the same cycle
-    const card2 = await request(app).post('/api/deposits').set(u.auth).send({ method: 'card', amount: '10', currency: 'USD', pin: '1234', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'Kim Test' } });
+    const card2 = await request(app)
+      .post('/api/deposits')
+      .set(u.auth)
+      .send({ method: 'card', amount: '10', currency: 'USD', pin: '1234', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'Kim Test' } });
     const run2 = await request(app).post(`/api/admin/finops/reconciliation/processors/${gp.gateway}/run`).set(admin.auth).send({ cycleRef: day });
     expect(run2.status).toBe(200);
     const cases = await request(app).get('/api/admin/switch/cases').set(admin.auth).query({ class: 'SETTLEMENT_NOT_OBSERVED' });

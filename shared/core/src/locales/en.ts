@@ -1,6 +1,7 @@
 export const en: Record<string, string> = {
   'nav.dashboard': 'Dashboard',
-  'nav.move': 'Move money', 'nav.send': 'Send money',
+  'nav.move': 'Move money',
+  'nav.send': 'Send money',
   'nav.scan': 'Scan & pay',
   'nav.receive': 'Receive',
   'nav.requests': 'Requests & links',
@@ -106,8 +107,8 @@ export const en: Record<string, string> = {
   'settings.pin': 'Transaction PIN',
   'settings.password': 'Change password',
   'landing.hero': 'Money moves at the speed of a scan',
-  'landing.sub': 'Send, receive and accept payments with QR codes. Add money by card or mobile money, pay bills, send remittances, trade currencies and issue virtual cards – all from one BitriPay wallet.',
+  'landing.sub':
+    'Send, receive and accept payments with QR codes. Add money by card or mobile money, pay bills, send remittances, trade currencies and issue virtual cards – all from one BitriPay wallet.',
   'landing.getStarted': 'Get started free',
   'landing.merchant': 'Accept payments',
 };
-

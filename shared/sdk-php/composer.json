@@ -3,6 +3,14 @@
   "description": "BitriPay Gateway API client for PHP: payment intents, checkout, QR, refunds, verifications, payouts, settlements, disputes and webhook verification",
   "type": "library",
   "license": "MIT",
-  "require": { "php": ">=8.1", "ext-curl": "*", "ext-json": "*" },
-  "autoload": { "psr-4": { "BitriPay\\": "src/" } }
+  "require": {
+    "php": ">=8.1",
+    "ext-curl": "*",
+    "ext-json": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "BitriPay\\": "src/"
+    }
+  }
 }

@@ -11,13 +11,40 @@ savingsRouter.use(requireAuth);
 savingsRouter.get('/', (req, res) => res.json(savingsOverview(req.user!)));
 savingsRouter.get('/wellbeing', (req, res) => res.json(wellbeing(req.user!.id)));
 savingsRouter.put('/settings', (req, res) => {
-  const b = validate(z.object({ autoAnchor: z.boolean().optional(), anchorBps: z.number().int().optional(), roundUps: z.boolean().optional(), roundToMinor: z.number().int().min(1).optional(), defaultGoalId: z.string().optional().nullable() }), req.body);
+  const b = validate(
+    z.object({
+      autoAnchor: z.boolean().optional(),
+      anchorBps: z.number().int().optional(),
+      roundUps: z.boolean().optional(),
+      roundToMinor: z.number().int().min(1).optional(),
+      defaultGoalId: z.string().optional().nullable(),
+    }),
+    req.body,
+  );
   res.json(updateSavingsSettings(req.user!, b));
 });
 savingsRouter.post('/goals', (req, res) => {
-  const b = validate(z.object({ name: z.string().min(2).max(80), currency: z.string().length(3), target: z.string().optional().nullable(), targetMinor: z.number().int().min(0).optional().nullable(), deadline: z.string().optional().nullable(), makeDefault: z.boolean().optional() }), req.body);
+  const b = validate(
+    z.object({
+      name: z.string().min(2).max(80),
+      currency: z.string().length(3),
+      target: z.string().optional().nullable(),
+      targetMinor: z.number().int().min(0).optional().nullable(),
+      deadline: z.string().optional().nullable(),
+      makeDefault: z.boolean().optional(),
+    }),
+    req.body,
+  );
   const cur = getCurrency(b.currency);
-  res.status(201).json(createGoal(req.user!, { name: b.name, currency: cur.code, targetMinor: b.targetMinor ?? (b.target ? toMinor(b.target, cur.decimals) : 0), deadline: b.deadline ?? null, makeDefault: b.makeDefault }));
+  res.status(201).json(
+    createGoal(req.user!, {
+      name: b.name,
+      currency: cur.code,
+      targetMinor: b.targetMinor ?? (b.target ? toMinor(b.target, cur.decimals) : 0),
+      deadline: b.deadline ?? null,
+      makeDefault: b.makeDefault,
+    }),
+  );
 });
 savingsRouter.get('/goals/:id', (req, res) => res.json({ goal: getGoal(req.user!.id, String(req.params.id)), movements: goalMovements(req.user!.id, String(req.params.id)) }));
 savingsRouter.post('/goals/:id/contribute', (req, res) => {

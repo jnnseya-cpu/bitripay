@@ -14,8 +14,8 @@ import { findUserById, updateUser, type UserRow } from './users';
 
 function rp() {
   const web = new URL(config.webUrl);
-  const rpID = process.env.WEBAUTHN_RP_ID || web.hostname;
-  const origins = Array.from(new Set([config.webUrl, config.adminUrl, ...(process.env.WEBAUTHN_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)]));
+  const rpID = config.webauthn.rpId || web.hostname;
+  const origins = Array.from(new Set([config.webUrl, config.adminUrl, ...config.webauthn.origins]));
   return { rpID, rpName: config.appName, origins };
 }
 
@@ -23,7 +23,14 @@ function storeChallenge(purpose: string, challenge: string, userId?: string | nu
   const db = getDb();
   db.prepare('DELETE FROM webauthn_challenges WHERE expires_at < ?').run(now());
   const id = uuid();
-  db.prepare('INSERT INTO webauthn_challenges (id, user_id, purpose, challenge, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, userId ?? null, purpose, challenge, new Date(Date.now() + 5 * 60_000).toISOString(), now());
+  db.prepare('INSERT INTO webauthn_challenges (id, user_id, purpose, challenge, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+    id,
+    userId ?? null,
+    purpose,
+    challenge,
+    new Date(Date.now() + 5 * 60_000).toISOString(),
+    now(),
+  );
   return id;
 }
 
@@ -36,7 +43,14 @@ function consumeChallenge(id: string, purpose: string): { challenge: string; use
 }
 
 export function listPasskeys(userId: string) {
-  return (getDb().prepare('SELECT * FROM webauthn_credentials WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[]).map((r) => ({ id: r.id, deviceName: r.device_name, deviceType: r.device_type, backedUp: !!r.backed_up, createdAt: r.created_at, lastUsedAt: r.last_used_at }));
+  return (getDb().prepare('SELECT * FROM webauthn_credentials WHERE user_id = ? ORDER BY created_at DESC').all(userId) as any[]).map((r) => ({
+    id: r.id,
+    deviceName: r.device_name,
+    deviceType: r.device_type,
+    backedUp: !!r.backed_up,
+    createdAt: r.created_at,
+    lastUsedAt: r.last_used_at,
+  }));
 }
 
 export async function registrationOptions(user: UserRow) {
@@ -64,7 +78,18 @@ export async function verifyRegistration(user: UserRow, challengeId: string, res
   const id = uuid();
   getDb()
     .prepare('INSERT INTO webauthn_credentials (id, user_id, credential_id, public_key, counter, transports, device_type, backed_up, device_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, user.id, credential.id, Buffer.from(credential.publicKey).toString('base64url'), credential.counter, JSON.stringify(credential.transports ?? []), credentialDeviceType, credentialBackedUp ? 1 : 0, deviceName ?? null, now());
+    .run(
+      id,
+      user.id,
+      credential.id,
+      Buffer.from(credential.publicKey).toString('base64url'),
+      credential.counter,
+      JSON.stringify(credential.transports ?? []),
+      credentialDeviceType,
+      credentialBackedUp ? 1 : 0,
+      deviceName ?? null,
+      now(),
+    );
   return listPasskeys(user.id);
 }
 
@@ -77,7 +102,11 @@ export async function authenticationOptions(purpose: 'login' | 'step_up', user?:
   const { rpID } = rp();
   const allow = user ? (getDb().prepare('SELECT credential_id, transports FROM webauthn_credentials WHERE user_id = ?').all(user.id) as any[]) : [];
   if (user && allow.length === 0) throw badRequest('No passkey registered on this account', 'no_passkey');
-  const options = await generateAuthenticationOptions({ rpID, userVerification: 'preferred', allowCredentials: user ? allow.map((c) => ({ id: c.credential_id, transports: parseJson<AuthenticatorTransportFuture[]>(c.transports, []) })) : undefined });
+  const options = await generateAuthenticationOptions({
+    rpID,
+    userVerification: 'preferred',
+    allowCredentials: user ? allow.map((c) => ({ id: c.credential_id, transports: parseJson<AuthenticatorTransportFuture[]>(c.transports, []) })) : undefined,
+  });
   const challengeId = storeChallenge(purpose, options.challenge, user?.id ?? null);
   return { challengeId, options };
 }

@@ -46,40 +46,278 @@ export function App() {
     <>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/" element={<P><Dashboard /></P>} />
-        <Route path="/users" element={<P><Users /></P>} />
-        <Route path="/users/:id" element={<P><Users /></P>} />
-        <Route path="/transactions" element={<P><Transactions /></P>} />
-        <Route path="/approvals" element={<P><Approvals /></P>} />
-        <Route path="/verification" element={<P><Verification /></P>} />
-        <Route path="/controls" element={<P><Controls /></P>} />
-        <Route path="/corridors" element={<P><Corridors /></P>} />
-        <Route path="/emoney" element={<P><Emoney /></P>} />
-        <Route path="/seo" element={<P><Seo /></P>} />
-        <Route path="/agents" element={<P><Agents /></P>} />
-        <Route path="/channels" element={<P><Channels /></P>} />
-        <Route path="/kyc" element={<P><Kyc /></P>} />
-        <Route path="/currencies" element={<P><Currencies /></P>} />
-        <Route path="/fees" element={<P><Fees /></P>} />
-        <Route path="/gateways" element={<P><Gateways /></P>} />
-        <Route path="/mobile-money" element={<P><MobileMoney /></P>} />
-        <Route path="/modules" element={<P><Modules /></P>} />
-        <Route path="/catalogs" element={<P><Catalogs /></P>} />
-        <Route path="/site" element={<P><Site /></P>} />
-        <Route path="/pages" element={<P><Pages /></P>} />
-        <Route path="/languages" element={<P><Languages /></P>} />
-        <Route path="/messaging" element={<P><Messaging /></P>} />
-        <Route path="/support" element={<P><Support /></P>} />
-        <Route path="/chat" element={<P><Chat /></P>} />
-        <Route path="/inbox" element={<P><Inbox /></P>} />
-        <Route path="/p2p" element={<P><P2P /></P>} />
-        <Route path="/reports" element={<P><Reports /></P>} />
-        <Route path="/audit" element={<P><Audit /></P>} />
-        <Route path="/switch" element={<P><SwitchConsole /></P>} />
-        <Route path="/finops" element={<P><Finops /></P>} />
-        <Route path="/risk" element={<P><Risk /></P>} />
-        <Route path="/intelligence" element={<P><Intelligence /></P>} />
-        <Route path="/profile" element={<P><Profile /></P>} />
+        <Route
+          path="/"
+          element={
+            <P>
+              <Dashboard />
+            </P>
+          }
+        />
+        <Route
+          path="/users"
+          element={
+            <P>
+              <Users />
+            </P>
+          }
+        />
+        <Route
+          path="/users/:id"
+          element={
+            <P>
+              <Users />
+            </P>
+          }
+        />
+        <Route
+          path="/transactions"
+          element={
+            <P>
+              <Transactions />
+            </P>
+          }
+        />
+        <Route
+          path="/approvals"
+          element={
+            <P>
+              <Approvals />
+            </P>
+          }
+        />
+        <Route
+          path="/verification"
+          element={
+            <P>
+              <Verification />
+            </P>
+          }
+        />
+        <Route
+          path="/controls"
+          element={
+            <P>
+              <Controls />
+            </P>
+          }
+        />
+        <Route
+          path="/corridors"
+          element={
+            <P>
+              <Corridors />
+            </P>
+          }
+        />
+        <Route
+          path="/emoney"
+          element={
+            <P>
+              <Emoney />
+            </P>
+          }
+        />
+        <Route
+          path="/seo"
+          element={
+            <P>
+              <Seo />
+            </P>
+          }
+        />
+        <Route
+          path="/agents"
+          element={
+            <P>
+              <Agents />
+            </P>
+          }
+        />
+        <Route
+          path="/channels"
+          element={
+            <P>
+              <Channels />
+            </P>
+          }
+        />
+        <Route
+          path="/kyc"
+          element={
+            <P>
+              <Kyc />
+            </P>
+          }
+        />
+        <Route
+          path="/currencies"
+          element={
+            <P>
+              <Currencies />
+            </P>
+          }
+        />
+        <Route
+          path="/fees"
+          element={
+            <P>
+              <Fees />
+            </P>
+          }
+        />
+        <Route
+          path="/gateways"
+          element={
+            <P>
+              <Gateways />
+            </P>
+          }
+        />
+        <Route
+          path="/mobile-money"
+          element={
+            <P>
+              <MobileMoney />
+            </P>
+          }
+        />
+        <Route
+          path="/modules"
+          element={
+            <P>
+              <Modules />
+            </P>
+          }
+        />
+        <Route
+          path="/catalogs"
+          element={
+            <P>
+              <Catalogs />
+            </P>
+          }
+        />
+        <Route
+          path="/site"
+          element={
+            <P>
+              <Site />
+            </P>
+          }
+        />
+        <Route
+          path="/pages"
+          element={
+            <P>
+              <Pages />
+            </P>
+          }
+        />
+        <Route
+          path="/languages"
+          element={
+            <P>
+              <Languages />
+            </P>
+          }
+        />
+        <Route
+          path="/messaging"
+          element={
+            <P>
+              <Messaging />
+            </P>
+          }
+        />
+        <Route
+          path="/support"
+          element={
+            <P>
+              <Support />
+            </P>
+          }
+        />
+        <Route
+          path="/chat"
+          element={
+            <P>
+              <Chat />
+            </P>
+          }
+        />
+        <Route
+          path="/inbox"
+          element={
+            <P>
+              <Inbox />
+            </P>
+          }
+        />
+        <Route
+          path="/p2p"
+          element={
+            <P>
+              <P2P />
+            </P>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <P>
+              <Reports />
+            </P>
+          }
+        />
+        <Route
+          path="/audit"
+          element={
+            <P>
+              <Audit />
+            </P>
+          }
+        />
+        <Route
+          path="/switch"
+          element={
+            <P>
+              <SwitchConsole />
+            </P>
+          }
+        />
+        <Route
+          path="/finops"
+          element={
+            <P>
+              <Finops />
+            </P>
+          }
+        />
+        <Route
+          path="/risk"
+          element={
+            <P>
+              <Risk />
+            </P>
+          }
+        />
+        <Route
+          path="/intelligence"
+          element={
+            <P>
+              <Intelligence />
+            </P>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <P>
+              <Profile />
+            </P>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Toasts />

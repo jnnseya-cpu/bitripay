@@ -10,8 +10,11 @@ import { reconcileLedger, calculateFee } from '../services/ledger';
 import { computeReadiness } from '../services/creditReadiness';
 
 let app: ReturnType<typeof setupApp>;
-beforeAll(() => { app = setupApp(); });
-const balanceOf = async (auth: Record<string, string>, currency = 'USD') => ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
+beforeAll(() => {
+  app = setupApp();
+});
+const balanceOf = async (auth: Record<string, string>, currency = 'USD') =>
+  ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
 
 describe('open banking', () => {
   it('links a bank through hosted authorisation, imports six months of statements, verifies income and feeds the readiness signal', async () => {
@@ -61,7 +64,14 @@ describe('open banking', () => {
     expect(income.monthlyIncomeBase).toBe(salary.monthlyBaseMinor);
     // a statement import cannot pay: no mandate on it
     const link = imp.body.link;
-    expect((await request(app).post('/api/open-banking/mandates').set(u.auth).send({ linkId: link.id, accountId: link.accounts[0].id, purpose: 'top_up', maxPerPayment: '100', maxPerMonth: '300', pin: '1234' })).body.error.code).toBe('provider_unavailable');
+    expect(
+      (
+        await request(app)
+          .post('/api/open-banking/mandates')
+          .set(u.auth)
+          .send({ linkId: link.id, accountId: link.accounts[0].id, purpose: 'top_up', maxPerPayment: '100', maxPerMonth: '300', pin: '1234' })
+      ).body.error.code,
+    ).toBe('provider_unavailable');
   });
 
   it('pays by bank from a linked account through the payments pipeline, and a VRP mandate tops up a short wallet for billing', async () => {
@@ -83,8 +93,13 @@ describe('open banking', () => {
     expect(big.body.payment.status).toBe('failed');
     expect(big.body.payment.failureReason).toMatch(/Insufficient funds at the bank/);
     // a billing mandate (step-up) lets a subscription draw the shortfall from the bank
-    expect((await request(app).post('/api/open-banking/mandates').set(u.auth).send({ linkId: linked.id, accountId: usd.id, purpose: 'billing', maxPerPayment: '40', maxPerMonth: '100' })).status).toBe(403);
-    const mandate = await request(app).post('/api/open-banking/mandates').set(u.auth).send({ linkId: linked.id, accountId: usd.id, purpose: 'billing', maxPerPayment: '40', maxPerMonth: '100', pin: '1234' });
+    expect((await request(app).post('/api/open-banking/mandates').set(u.auth).send({ linkId: linked.id, accountId: usd.id, purpose: 'billing', maxPerPayment: '40', maxPerMonth: '100' })).status).toBe(
+      403,
+    );
+    const mandate = await request(app)
+      .post('/api/open-banking/mandates')
+      .set(u.auth)
+      .send({ linkId: linked.id, accountId: usd.id, purpose: 'billing', maxPerPayment: '40', maxPerMonth: '100', pin: '1234' });
     expect(mandate.status, JSON.stringify(mandate.body)).toBe(201);
     expect(mandate.body.mandate).toMatchObject({ status: 'ACTIVE', maxPerPaymentMinor: 4000, maxPerMonthMinor: 10000, usedThisMonthMinor: 0 });
     const m = await registerUser(app, { role: 'merchant', businessName: 'Kin Gym', country: 'CD' });

@@ -13,7 +13,10 @@ describe('transaction statements', () => {
     const a = await registerUser(app);
     const b = await registerUser(app);
     await fund(app, a.user.id, '100.00', 'USD');
-    const t = await request(app).post('/api/transfers').set(a.auth).send({ pin: '1234', to: `@${b.user.tag}`, amount: '25.00', currency: 'USD', note: 'Rent share' });
+    const t = await request(app)
+      .post('/api/transfers')
+      .set(a.auth)
+      .send({ pin: '1234', to: `@${b.user.tag}`, amount: '25.00', currency: 'USD', note: 'Rent share' });
     expect(t.status).toBe(201);
     const today = new Date().toISOString().slice(0, 10);
     const s = await request(app).get('/api/wallets/statement').set(a.auth).query({ currency: 'USD', from: '2020-01-01', to: today });
@@ -54,7 +57,16 @@ describe('transaction statements', () => {
     expect(csv.headers['content-type']).toContain('text/csv');
     expect(csv.text).toContain('Date,Reference,Type,Description');
     expect(csv.text).toContain('Rent share');
-    const pdf = await request(app).get('/api/wallets/statement').set(a.auth).query({ currency: 'USD', from: '2020-01-01', to: today, format: 'pdf' }).buffer(true).parse((res, cb) => { const chunks: Buffer[] = []; res.on('data', (c) => chunks.push(Buffer.from(c))); res.on('end', () => cb(null, Buffer.concat(chunks))); });
+    const pdf = await request(app)
+      .get('/api/wallets/statement')
+      .set(a.auth)
+      .query({ currency: 'USD', from: '2020-01-01', to: today, format: 'pdf' })
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c) => chunks.push(Buffer.from(c)));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
     expect(pdf.status).toBe(200);
     expect(pdf.headers['content-type']).toContain('application/pdf');
     const body = pdf.body as Buffer;

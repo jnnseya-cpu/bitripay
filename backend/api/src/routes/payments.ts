@@ -18,7 +18,13 @@ depositsRouter.get('/options', (req, res) => {
   res.json({ currency: cur.code, methods: paymentOptions(cur.code, req.user!.country) });
 });
 
-const cardSchema = z.object({ number: z.string().min(12).max(23), expMonth: z.coerce.number().int().min(1).max(12), expYear: z.coerce.number().int().min(0).max(2100), cvc: z.string().min(3).max(4), holderName: z.string().min(2).max(120) });
+const cardSchema = z.object({
+  number: z.string().min(12).max(23),
+  expMonth: z.coerce.number().int().min(1).max(12),
+  expYear: z.coerce.number().int().min(0).max(2100),
+  cvc: z.string().min(3).max(4),
+  holderName: z.string().min(2).max(120),
+});
 
 depositsRouter.post(
   '/',
@@ -65,7 +71,16 @@ depositsRouter.get(
 depositsRouter.post(
   '/:id/authenticate',
   wrap(async (req, res) => {
-    const body = validate(z.object({ pin: z.string().optional().nullable(), card: cardSchema.optional(), savedCardId: z.string().optional().nullable(), saveCard: z.boolean().optional(), returnUrl: z.string().url().optional().nullable() }), req.body);
+    const body = validate(
+      z.object({
+        pin: z.string().optional().nullable(),
+        card: cardSchema.optional(),
+        savedCardId: z.string().optional().nullable(),
+        saveCard: z.boolean().optional(),
+        returnUrl: z.string().url().optional().nullable(),
+      }),
+      req.body,
+    );
     res.json({ payment: await authenticatePayment(req.user!, String(req.params.id), body, req) });
   }),
 );
@@ -90,7 +105,16 @@ depositsRouter.post(
 depositsRouter.get('/:id/events', (req, res) => {
   const payment = getPayment(String(req.params.id));
   if (payment.user_id !== req.user!.id) throw notFound('Payment not found');
-  res.json({ items: listEvents({ subjectId: payment.id, limit: 200 }).items.map((e) => ({ id: e.id, event: e.event, actorType: e.actor.type, createdAt: e.createdAt, from: e.details.from ?? null, to: e.details.to ?? null })) });
+  res.json({
+    items: listEvents({ subjectId: payment.id, limit: 200 }).items.map((e) => ({
+      id: e.id,
+      event: e.event,
+      actorType: e.actor.type,
+      createdAt: e.createdAt,
+      from: e.details.from ?? null,
+      to: e.details.to ?? null,
+    })),
+  });
 });
 
 export const cardsRouter = Router();

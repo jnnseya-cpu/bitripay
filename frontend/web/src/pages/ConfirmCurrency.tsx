@@ -15,7 +15,13 @@ export function ConfirmCurrency() {
   const [choice, setChoice] = useState<string>('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    api.get<any>(`/api/routes/consent/${token}`, { token: null }).then((v) => { setView(v); setChoice(v.currency); }).catch((e) => setError(e.message));
+    api
+      .get<any>(`/api/routes/consent/${token}`, { token: null })
+      .then((v) => {
+        setView(v);
+        setChoice(v.currency);
+      })
+      .catch((e) => setError(e.message));
   }, [token]);
   const decide = async (accept: boolean) => {
     setBusy(true);
@@ -28,7 +34,14 @@ export function ConfirmCurrency() {
       setBusy(false);
     }
   };
-  if (error) return <div className="auth-page"><div className="card" style={{ maxWidth: 480, margin: '40px auto' }}><Alert kind="error">{error}</Alert></div></div>;
+  if (error)
+    return (
+      <div className="auth-page">
+        <div className="card" style={{ maxWidth: 480, margin: '40px auto' }}>
+          <Alert kind="error">{error}</Alert>
+        </div>
+      </div>
+    );
   if (!view) return <Loading />;
   const fmt = (n: number | null, c: string) => (n == null ? '—' : `${(n / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${c}`);
   return (
@@ -36,7 +49,11 @@ export function ConfirmCurrency() {
       <div className="card" style={{ maxWidth: 520, margin: '40px auto' }}>
         <h2>Confirm your payout currency</h2>
         {done ? (
-          <Alert kind={done.stage === 'FAILED' ? 'warning' : 'success'}>{done.stage === 'FAILED' ? 'You declined. The sender keeps the money and can resend in your local currency.' : `Thank you – the payout will be made in ${done.currency}. Stage: ${done.stage.replace(/_/g, ' ').toLowerCase()}.`}</Alert>
+          <Alert kind={done.stage === 'FAILED' ? 'warning' : 'success'}>
+            {done.stage === 'FAILED'
+              ? 'You declined. The sender keeps the money and can resend in your local currency.'
+              : `Thank you – the payout will be made in ${done.currency}. Stage: ${done.stage.replace(/_/g, ' ').toLowerCase()}.`}
+          </Alert>
         ) : view.confirmedAt ? (
           <Alert kind="info">This transfer was already confirmed.</Alert>
         ) : (
@@ -49,14 +66,21 @@ export function ConfirmCurrency() {
               <div className="small bold mb-sm">Receive in</div>
               <div className="row wrap">
                 {view.options.map((o: any) => (
-                  <button key={o.currency} type="button" className={`chip ${choice === o.currency ? 'primary' : ''}`} onClick={() => setChoice(o.currency)}>{o.currency}{o.isLocal ? ' (local)' : ''}</button>
+                  <button key={o.currency} type="button" className={`chip ${choice === o.currency ? 'primary' : ''}`} onClick={() => setChoice(o.currency)}>
+                    {o.currency}
+                    {o.isLocal ? ' (local)' : ''}
+                  </button>
                 ))}
               </div>
               {choice !== view.currency && <div className="tiny muted mt-sm">The transfer will be re-quoted in {choice} at the current disclosed rate.</div>}
             </div>
             <div className="row mt">
-              <Button loading={busy} onClick={() => decide(true)}>Confirm {choice}</Button>
-              <Button variant="ghost" disabled={busy} onClick={() => decide(false)}>Decline</Button>
+              <Button loading={busy} onClick={() => decide(true)}>
+                Confirm {choice}
+              </Button>
+              <Button variant="ghost" disabled={busy} onClick={() => decide(false)}>
+                Decline
+              </Button>
             </div>
             <p className="tiny muted mt">Nothing is paid out until you confirm. Your choice is recorded in the immutable transfer log.</p>
           </>

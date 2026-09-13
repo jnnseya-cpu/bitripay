@@ -79,7 +79,14 @@ export function evidenceCanonical(f: EvidenceFields): string {
 
 /** Full signed evidence payload for POST /api/payouts/device/:id/evidence or /api/evidence/sms. */
 export function buildEvidence(privateKeyHex: string, f: EvidenceFields, extra: { simIdentity?: string | null; deviceTimestamp?: string } = {}) {
-  return { ...f, operatorId: f.operatorId ?? null, signature: signString(privateKeyHex, evidenceCanonical(f)), clientHash: sha256Hex(f.text), deviceTimestamp: extra.deviceTimestamp ?? new Date().toISOString(), simIdentity: extra.simIdentity ?? null };
+  return {
+    ...f,
+    operatorId: f.operatorId ?? null,
+    signature: signString(privateKeyHex, evidenceCanonical(f)),
+    clientHash: sha256Hex(f.text),
+    deviceTimestamp: extra.deviceTimestamp ?? new Date().toISOString(),
+    simIdentity: extra.simIdentity ?? null,
+  };
 }
 
 export function randomNonce(randomBytes: (n: number) => Uint8Array): string {

@@ -16,7 +16,8 @@ export function seedDefaultCatalogs() {
       ['water', 'Nairobi Water', 'KE', 'KES', 10000, 2000000, 0, 'Account number', '#0ea5e9'],
       ['electricity', 'ECG PowerPay', 'GH', 'GHS', 500, 500000, 0, 'Meter number', '#f59e0b'],
     ] as const;
-    for (const [category, name, country, currency, min, max, fee, label, color] of billers) upsertBiller({ category, name, country, currency, minAmount: min, maxAmount: max, feeBps: fee, accountLabel: label, enabled: true, color });
+    for (const [category, name, country, currency, min, max, fee, label, color] of billers)
+      upsertBiller({ category, name, country, currency, minAmount: min, maxAmount: max, feeBps: fee, accountLabel: label, enabled: true, color });
   }
   if ((db.prepare('SELECT COUNT(*) c FROM topup_operators').get() as any).c === 0) {
     const ops = [
@@ -47,6 +48,7 @@ export function seedDefaultCatalogs() {
       ['Uber', 'Uber Gift Card', 'travel', 'USD', [2500, 5000, 10000], '#111827', 'Rides and Uber Eats'],
       ['Jumia', 'Jumia Voucher', 'shopping', 'NGN', [500000, 1000000, 2500000], '#f97316', "Africa's leading online marketplace"],
     ] as const;
-    for (const [brand, name, category, currency, den, color, description] of products) upsertGiftProduct({ brand, name, category, currency, denominations: [...den], color, enabled: true, description });
+    for (const [brand, name, category, currency, den, color, description] of products)
+      upsertGiftProduct({ brand, name, category, currency, denominations: [...den], color, enabled: true, description });
   }
 }

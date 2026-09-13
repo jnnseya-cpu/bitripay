@@ -25,7 +25,10 @@ accountRouter.patch(
         country: z.string().length(2).optional().nullable(),
         businessName: z.string().max(120).optional().nullable(),
         language: z.string().min(2).max(5).optional(),
-        avatarColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        avatarColor: z
+          .string()
+          .regex(/^#[0-9a-fA-F]{6}$/)
+          .optional(),
         loudAlerts: z.boolean().optional(),
       }),
       req.body,

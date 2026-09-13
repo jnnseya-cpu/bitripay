@@ -2,7 +2,6 @@ import { getDb } from '../db';
 import { uuid, now } from '../lib/ids';
 import { badRequest, notFound } from '../lib/errors';
 import { getSetting, setSetting } from './settings';
-import { config } from '../config';
 import { sendEmail } from './messaging';
 
 export interface SiteSettings {
@@ -36,7 +35,12 @@ export const DEFAULT_SITE: SiteSettings = {
   logoUrl: null,
   faviconUrl: null,
   primaryColor: '#2563eb',
-  seo: { title: 'BitriPay – QR Code Money Transfer & Payment Gateway', description: 'Launch payments with QR codes, cards, mobile money, remittance and more.', keywords: 'qr payment, money transfer, wallet, payment gateway, remittance', ogImage: null },
+  seo: {
+    title: 'BitriPay – QR Code Money Transfer & Payment Gateway',
+    description: 'Launch payments with QR codes, cards, mobile money, remittance and more.',
+    keywords: 'qr payment, money transfer, wallet, payment gateway, remittance',
+    ogImage: null,
+  },
   appUrls: { playStore: '', appStore: '', agentApp: '', merchantApp: '' },
   social: { twitter: '', facebook: '', instagram: '', linkedin: '', youtube: '' },
   splash: { headline: 'BitriPay', subheadline: 'Pay anyone with a scan', backgroundColor: '#0f172a', imageUrl: null },
@@ -57,7 +61,15 @@ export const DEFAULT_SITE: SiteSettings = {
 
 export const getSiteSettings = () => {
   const stored = getSetting<Partial<SiteSettings>>('site', {});
-  return { ...DEFAULT_SITE, ...stored, seo: { ...DEFAULT_SITE.seo, ...(stored.seo ?? {}) }, appUrls: { ...DEFAULT_SITE.appUrls, ...(stored.appUrls ?? {}) }, social: { ...DEFAULT_SITE.social, ...(stored.social ?? {}) }, splash: { ...DEFAULT_SITE.splash, ...(stored.splash ?? {}) }, gdpr: { ...DEFAULT_SITE.gdpr, ...(stored.gdpr ?? {}) } } as SiteSettings;
+  return {
+    ...DEFAULT_SITE,
+    ...stored,
+    seo: { ...DEFAULT_SITE.seo, ...(stored.seo ?? {}) },
+    appUrls: { ...DEFAULT_SITE.appUrls, ...(stored.appUrls ?? {}) },
+    social: { ...DEFAULT_SITE.social, ...(stored.social ?? {}) },
+    splash: { ...DEFAULT_SITE.splash, ...(stored.splash ?? {}) },
+    gdpr: { ...DEFAULT_SITE.gdpr, ...(stored.gdpr ?? {}) },
+  } as SiteSettings;
 };
 export const updateSiteSettings = (patch: Partial<SiteSettings>) => {
   setSetting('site', { ...getSiteSettings(), ...patch });
@@ -73,10 +85,35 @@ export interface Page {
   updatedAt: string;
 }
 const DEFAULT_PAGES: Page[] = [
-  { slug: 'about', title: 'About BitriPay', content: '# About BitriPay\n\nBitriPay is a digital wallet and payment platform. Send money with a QR code, pay merchants, add funds by card or mobile money, and send remittances worldwide.', published: true, updatedAt: now() },
-  { slug: 'faq', title: 'Frequently asked questions', content: '# FAQ\n\n**How do I add money?** Go to Add Money and choose card, mobile money, bank transfer or a nearby agent.\n\n**How do I pay with QR?** Tap Scan, point your camera at the QR code and confirm.\n\n**Is my money safe?** Balances are held in segregated accounts and every transaction is recorded on a double-entry ledger.', published: true, updatedAt: now() },
-  { slug: 'terms', title: 'Terms of service', content: '# Terms of service\n\nBy using BitriPay you agree to these terms. Replace this text with your own terms in Admin → Pages.', published: true, updatedAt: now() },
-  { slug: 'privacy', title: 'Privacy policy', content: '# Privacy policy\n\nWe only collect the data needed to operate your account and comply with regulations. Replace this text in Admin → Pages.', published: true, updatedAt: now() },
+  {
+    slug: 'about',
+    title: 'About BitriPay',
+    content: '# About BitriPay\n\nBitriPay is a digital wallet and payment platform. Send money with a QR code, pay merchants, add funds by card or mobile money, and send remittances worldwide.',
+    published: true,
+    updatedAt: now(),
+  },
+  {
+    slug: 'faq',
+    title: 'Frequently asked questions',
+    content:
+      '# FAQ\n\n**How do I add money?** Go to Add Money and choose card, mobile money, bank transfer or a nearby agent.\n\n**How do I pay with QR?** Tap Scan, point your camera at the QR code and confirm.\n\n**Is my money safe?** Balances are held in segregated accounts and every transaction is recorded on a double-entry ledger.',
+    published: true,
+    updatedAt: now(),
+  },
+  {
+    slug: 'terms',
+    title: 'Terms of service',
+    content: '# Terms of service\n\nBy using BitriPay you agree to these terms. Replace this text with your own terms in Admin → Pages.',
+    published: true,
+    updatedAt: now(),
+  },
+  {
+    slug: 'privacy',
+    title: 'Privacy policy',
+    content: '# Privacy policy\n\nWe only collect the data needed to operate your account and comply with regulations. Replace this text in Admin → Pages.',
+    published: true,
+    updatedAt: now(),
+  },
 ];
 export function listPages(publishedOnly = true): Page[] {
   const pages = getSetting<Page[]>('pages', DEFAULT_PAGES);
@@ -96,7 +133,10 @@ export function upsertPage(input: { slug: string; title: string; content: string
   return page;
 }
 export function deletePage(slug: string) {
-  setSetting('pages', listPages(false).filter((p) => p.slug !== slug));
+  setSetting(
+    'pages',
+    listPages(false).filter((p) => p.slug !== slug),
+  );
 }
 
 // ----- Contact messages & newsletter (stored in settings-backed tables for simplicity) -----
@@ -104,13 +144,30 @@ export function submitContact(input: { name: string; email: string; subject: str
   const db = getDb();
   db.exec('CREATE TABLE IF NOT EXISTS contact_messages (id TEXT PRIMARY KEY, name TEXT, email TEXT, subject TEXT, message TEXT, status TEXT DEFAULT "new", reply TEXT, created_at TEXT)');
   const id = uuid();
-  db.prepare('INSERT INTO contact_messages (id, name, email, subject, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, input.name, input.email, input.subject, input.message, 'new', now());
+  db.prepare('INSERT INTO contact_messages (id, name, email, subject, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    id,
+    input.name,
+    input.email,
+    input.subject,
+    input.message,
+    'new',
+    now(),
+  );
   return { id };
 }
 export function listContactMessages() {
   const db = getDb();
   db.exec('CREATE TABLE IF NOT EXISTS contact_messages (id TEXT PRIMARY KEY, name TEXT, email TEXT, subject TEXT, message TEXT, status TEXT DEFAULT "new", reply TEXT, created_at TEXT)');
-  return (db.prepare('SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 200').all() as any[]).map((r) => ({ id: r.id, name: r.name, email: r.email, subject: r.subject, message: r.message, status: r.status, reply: r.reply, createdAt: r.created_at }));
+  return (db.prepare('SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 200').all() as any[]).map((r) => ({
+    id: r.id,
+    name: r.name,
+    email: r.email,
+    subject: r.subject,
+    message: r.message,
+    status: r.status,
+    reply: r.reply,
+    createdAt: r.created_at,
+  }));
 }
 export async function replyContactMessage(id: string, reply: string) {
   const db = getDb();
@@ -174,7 +231,10 @@ export function upsertLanguage(lang: Language) {
 }
 export function deleteLanguage(code: string) {
   if (code === 'en') throw badRequest('English is the fallback language and cannot be removed');
-  setSetting('languages', listLanguages().filter((l) => l.code !== code));
+  setSetting(
+    'languages',
+    listLanguages().filter((l) => l.code !== code),
+  );
 }
 /** Admin-provided translation overrides per language: { [lang]: { key: text } }. Apps merge these over their built-in dictionaries. */
 export const getTranslationOverrides = (lang: string) => getSetting<Record<string, Record<string, string>>>('translations', {})[lang] ?? {};
@@ -183,5 +243,3 @@ export function setTranslationOverrides(lang: string, dict: Record<string, strin
   all[lang] = dict;
   setSetting('translations', all);
 }
-
-export const appInfo = () => ({ apiUrl: config.apiUrl, webUrl: config.webUrl, adminUrl: config.adminUrl });

@@ -14,7 +14,16 @@ async function call(secret: string, path: string, method: 'GET' | 'POST', body?:
   return json;
 }
 
-const MOMO_NETWORKS: Record<string, string> = { GHS: 'mobile_money_ghana', KES: 'mpesa', UGX: 'mobile_money_uganda', RWF: 'mobile_money_rwanda', ZMW: 'mobile_money_zambia', TZS: 'mobile_money_tanzania', XAF: 'mobile_money_franco', XOF: 'mobile_money_franco' };
+const MOMO_NETWORKS: Record<string, string> = {
+  GHS: 'mobile_money_ghana',
+  KES: 'mpesa',
+  UGX: 'mobile_money_uganda',
+  RWF: 'mobile_money_rwanda',
+  ZMW: 'mobile_money_zambia',
+  TZS: 'mobile_money_tanzania',
+  XAF: 'mobile_money_franco',
+  XOF: 'mobile_money_franco',
+};
 
 /** Flutterwave adapter – Standard hosted checkout for cards/bank, direct mobile money charges for African wallets. */
 export const flutterwaveProvider: GatewayProvider = {
@@ -86,7 +95,9 @@ export const flutterwaveProvider: GatewayProvider = {
     if (!data) return { status: 'pending' };
     if (data.status === 'successful' && Number(data.amount) >= payment.amount / 100 - 0.01 && data.currency === payment.currency) {
       const card = data.card;
-      const savedCard = card?.token ? { token: card.token, brand: card.type || 'card', last4: card.last_4digits, expMonth: Number(card.expiry?.split('/')[0]), expYear: 2000 + Number(card.expiry?.split('/')[1]) } : undefined;
+      const savedCard = card?.token
+        ? { token: card.token, brand: card.type || 'card', last4: card.last_4digits, expMonth: Number(card.expiry?.split('/')[0]), expYear: 2000 + Number(card.expiry?.split('/')[1]) }
+        : undefined;
       return { status: 'succeeded', raw: data, savedCard };
     }
     if (data.status === 'failed' || data.status === 'cancelled') return { status: 'failed', failureReason: data.processor_response, raw: data };

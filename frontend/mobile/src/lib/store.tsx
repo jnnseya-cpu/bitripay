@@ -55,7 +55,16 @@ async function registerPush() {
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', { name: 'default', importance: Notifications.AndroidImportance.MAX });
       // Money events: alarm sound, long vibration, bypasses Do-Not-Disturb, shown on the lock screen.
-      await Notifications.setNotificationChannelAsync('bitripay-loud', { name: 'Money alerts (loud)', importance: Notifications.AndroidImportance.MAX, sound: 'loud_alert.wav', vibrationPattern: VIBRATION_PATTERN, enableVibrate: true, bypassDnd: true, lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC, lightColor: '#2563eb' });
+      await Notifications.setNotificationChannelAsync('bitripay-loud', {
+        name: 'Money alerts (loud)',
+        importance: Notifications.AndroidImportance.MAX,
+        sound: 'loud_alert.wav',
+        vibrationPattern: VIBRATION_PATTERN,
+        enableVibrate: true,
+        bypassDnd: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        lightColor: '#2563eb',
+      });
     }
     const token = (await Notifications.getExpoPushTokenAsync()).data;
     await api.post('/api/account/push-tokens', { token, platform: Platform.OS });
@@ -131,7 +140,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
-    api.get<{ overrides: Record<string, string> }>(`/api/translations/${lang}`).then((r) => setOverrides(r.overrides)).catch(() => setOverrides({}));
+    api
+      .get<{ overrides: Record<string, string> }>(`/api/translations/${lang}`)
+      .then((r) => setOverrides(r.overrides))
+      .catch(() => setOverrides({}));
   }, [lang]);
 
   useEffect(() => {

@@ -2,7 +2,18 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate, wrap, parsePagination } from '../lib/http';
 import { requireAuth, requireMerchant } from '../middleware/auth';
-import { listApiKeys, createApiKey, revokeApiKey, updateGatewaySettings, setWebhook, rotateWebhookSecret, listWebhookDeliveries, merchantStats, listSettlements, upgradeToMerchant } from '../services/merchant';
+import {
+  listApiKeys,
+  createApiKey,
+  revokeApiKey,
+  updateGatewaySettings,
+  setWebhook,
+  rotateWebhookSecret,
+  listWebhookDeliveries,
+  merchantStats,
+  listSettlements,
+  upgradeToMerchant,
+} from '../services/merchant';
 import { getGatewaySettings, toUser } from '../services/users';
 import { createPaymentRequest, getPaymentRequestByCode, listPaymentRequests, toPaymentRequest, cancelPaymentRequest } from '../services/paymentRequests';
 import { getCurrency } from '../services/currencies';
@@ -37,7 +48,10 @@ merchantRouter.put(
         autoSettle: z.boolean().optional(),
         successUrl: z.string().url().optional().nullable(),
         cancelUrl: z.string().url().optional().nullable(),
-        brandColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        brandColor: z
+          .string()
+          .regex(/^#[0-9a-fA-F]{6}$/)
+          .optional(),
         logoUrl: z.string().max(500_000).optional().nullable(),
         testMode: z.boolean().optional(),
       }),
@@ -50,7 +64,16 @@ merchantRouter.get('/api-keys', (req, res) => res.json({ items: listApiKeys(req.
 merchantRouter.post(
   '/api-keys',
   wrap(async (req, res) => {
-    const body = validate(z.object({ label: z.string().max(60).default('API key'), mode: z.enum(['live', 'test']).default('live'), kind: z.enum(['secret', 'publishable', 'restricted']).default('secret'), scopes: z.array(z.string()).optional(), ipAllowlist: z.array(z.string().max(45)).max(20).optional().nullable() }), req.body);
+    const body = validate(
+      z.object({
+        label: z.string().max(60).default('API key'),
+        mode: z.enum(['live', 'test']).default('live'),
+        kind: z.enum(['secret', 'publishable', 'restricted']).default('secret'),
+        scopes: z.array(z.string()).optional(),
+        ipAllowlist: z.array(z.string().max(45)).max(20).optional().nullable(),
+      }),
+      req.body,
+    );
     res.status(201).json({ apiKey: createApiKey(req.user!, body.label, body.mode, { kind: body.kind, scopes: body.scopes, ipAllowlist: body.ipAllowlist ?? null }) });
   }),
 );
@@ -80,7 +103,7 @@ merchantRouter.post(
 );
 
 /**
- * Public merchant API v1 (API key auth: Authorization: Bearer bp_live_...).
+ * Public merchant API v1 (API key auth: Authorization: Bearer sk_live_...).
  * Used by the WooCommerce plugin and any custom integration.
  */
 export const v1Router = Router();
@@ -89,7 +112,6 @@ v1Router.use(requireAuth, (req, _res, next) => {
   next();
 });
 v1Router.get('/me', (req, res) => res.json({ merchant: toUser(req.user!), wallets: listWallets(req.user!.id).map((w) => toWallet(w)) }));
-v1Router.get('/balance', (req, res) => res.json({ wallets: listWallets(req.user!.id).map((w) => toWallet(w)) }));
 v1Router.post(
   '/payment-requests',
   wrap(async (req, res) => {

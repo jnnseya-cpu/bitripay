@@ -19,7 +19,12 @@ function OfflineBanner() {
   const [, force] = useState(0);
   useEffect(() => onPwaChange(() => force((n) => n + 1)), []);
   if (pwaState.online) return null;
-  return <div className="alert warning" role="status">📡 {t('pwa.offline')}{pwaState.lastSync ? ` ${t('pwa.lastSync')}: ${new Date(pwaState.lastSync).toLocaleString()}.` : ''}</div>;
+  return (
+    <div className="alert warning" role="status">
+      📡 {t('pwa.offline')}
+      {pwaState.lastSync ? ` ${t('pwa.lastSync')}: ${new Date(pwaState.lastSync).toLocaleString()}.` : ''}
+    </div>
+  );
 }
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -66,12 +71,14 @@ export function Layout({ children }: { children: ReactNode }) {
   ];
 
   const renderItems = (items: NavItem[]) =>
-    items.filter((i) => has(i.module)).map((i) => (
-      <NavLink key={i.to} to={i.to} end={i.to === '/app'} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={() => setOpen(false)}>
-        <span className="ico">{i.ico}</span>
-        {t(i.key)}
-      </NavLink>
-    ));
+    items
+      .filter((i) => has(i.module))
+      .map((i) => (
+        <NavLink key={i.to} to={i.to} end={i.to === '/app'} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={() => setOpen(false)}>
+          <span className="ico">{i.ico}</span>
+          {t(i.key)}
+        </NavLink>
+      ));
 
   return (
     <div className="app-shell">
@@ -105,7 +112,14 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="nav-section">Account</div>
         {renderItems(account)}
         <div style={{ flex: 1 }} />
-        <button className="nav-link" style={{ border: 0, background: 'transparent', cursor: 'pointer', width: '100%' }} onClick={() => { logout(); nav('/'); }}>
+        <button
+          className="nav-link"
+          style={{ border: 0, background: 'transparent', cursor: 'pointer', width: '100%' }}
+          onClick={() => {
+            logout();
+            nav('/');
+          }}
+        >
           <span className="ico">🚪</span>
           {t('nav.logout')}
         </button>
@@ -113,7 +127,9 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="main">
         <header className="topbar">
           <div className="row">
-            <button className="btn secondary icon menu-btn" onClick={() => setOpen(true)} aria-label="Menu">☰</button>
+            <button className="btn secondary icon menu-btn" onClick={() => setOpen(true)} aria-label="Menu">
+              ☰
+            </button>
             {user?.kycStatus !== 'verified' && has('kyc') && (
               <Link to="/app/settings?tab=kyc" className="chip warning hide-mobile" style={{ textDecoration: 'none' }}>
                 {user?.kycStatus === 'pending' ? 'KYC under review' : 'Verify your identity →'}
@@ -128,17 +144,25 @@ export function Layout({ children }: { children: ReactNode }) {
                 </option>
               ))}
             </select>
-            <button className="btn secondary icon" onClick={toggleTheme} aria-label="Toggle theme">{theme === 'dark' ? '☀️' : '🌙'}</button>
+            <button className="btn secondary icon" onClick={toggleTheme} aria-label="Toggle theme">
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             <div style={{ position: 'relative' }}>
               <button className="btn secondary icon" onClick={() => setNotifOpen((o) => !o)} aria-label="Notifications">
                 🔔
-                {unread > 0 && <span className="chip danger" style={{ position: 'absolute', top: -6, right: -6, padding: '0 6px' }}>{unread}</span>}
+                {unread > 0 && (
+                  <span className="chip danger" style={{ position: 'absolute', top: -6, right: -6, padding: '0 6px' }}>
+                    {unread}
+                  </span>
+                )}
               </button>
               {notifOpen && (
                 <div className="card" style={{ position: 'absolute', right: 0, top: 44, width: 340, maxHeight: 420, overflowY: 'auto', zIndex: 30, padding: 12 }}>
                   <div className="card-title">
                     <h4 style={{ margin: 0 }}>Notifications</h4>
-                    <button className="btn ghost sm" onClick={() => api.post('/api/account/notifications/read').then(refreshWallets)}>Mark all read</button>
+                    <button className="btn ghost sm" onClick={() => api.post('/api/account/notifications/read').then(refreshWallets)}>
+                      Mark all read
+                    </button>
                   </div>
                   {notifications.length === 0 && <div className="muted small">No notifications</div>}
                   {notifications.slice(0, 20).map((n) => (
@@ -159,7 +183,10 @@ export function Layout({ children }: { children: ReactNode }) {
             </Link>
           </div>
         </header>
-        <main className="content"><OfflineBanner />{children}</main>
+        <main className="content">
+          <OfflineBanner />
+          {children}
+        </main>
       </div>
     </div>
   );
@@ -170,7 +197,9 @@ export function Toasts() {
   return (
     <div className="toasts">
       {toasts.map((t) => (
-        <div key={t.id} className={`toast ${t.kind}`}>{t.message}</div>
+        <div key={t.id} className={`toast ${t.kind}`}>
+          {t.message}
+        </div>
       ))}
     </div>
   );

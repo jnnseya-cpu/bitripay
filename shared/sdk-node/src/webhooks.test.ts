@@ -15,9 +15,15 @@ test('verifies a BitriPay-Signature header and rejects tampering', () => {
 });
 test('sends the key, idempotency header and raises typed errors', async () => {
   const calls: any[] = [];
-  const f = (async (url: any, init: any) => { calls.push({ url, init }); return new Response(JSON.stringify({ error: { code: 'insufficient_funds', bp: 'BP-3001', message: 'Insufficient balance' } }), { status: 422, headers: { 'content-type': 'application/json' } }); }) as any;
+  const f = (async (url: any, init: any) => {
+    calls.push({ url, init });
+    return new Response(JSON.stringify({ error: { code: 'insufficient_funds', bp: 'BP-3001', message: 'Insufficient balance' } }), { status: 422, headers: { 'content-type': 'application/json' } });
+  }) as any;
   const bp = new BitriPay({ apiKey: 'sk_test_x', baseUrl: 'http://localhost:4000', fetch: f });
-  await assert.rejects(() => bp.paymentIntents.create({ amount_minor: 100, currency: 'USD' }, { idempotencyKey: 'k1' }), (e: any) => e.code === 'insufficient_funds' && e.bp === 'BP-3001' && e.status === 422);
+  await assert.rejects(
+    () => bp.paymentIntents.create({ amount_minor: 100, currency: 'USD' }, { idempotencyKey: 'k1' }),
+    (e: any) => e.code === 'insufficient_funds' && e.bp === 'BP-3001' && e.status === 422,
+  );
   assert.equal(calls[0].url, 'http://localhost:4000/v1/payment_intents');
   assert.equal(calls[0].init.headers['idempotency-key'], 'k1');
   assert.equal(calls[0].init.headers.authorization, 'Bearer sk_test_x');

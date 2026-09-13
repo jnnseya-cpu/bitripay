@@ -9,7 +9,10 @@ export function Header({ title, right }: { title: string; right?: React.ReactNod
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 }}>
       {nav.canGoBack() && (
-        <Pressable onPress={() => nav.goBack()} style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: th.card, borderWidth: 1, borderColor: th.border, alignItems: 'center', justifyContent: 'center' }}>
+        <Pressable
+          onPress={() => nav.goBack()}
+          style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: th.card, borderWidth: 1, borderColor: th.border, alignItems: 'center', justifyContent: 'center' }}
+        >
           <Text style={{ color: th.text, fontSize: 18 }}>‹</Text>
         </Pressable>
       )}

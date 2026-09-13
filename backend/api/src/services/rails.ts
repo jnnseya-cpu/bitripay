@@ -15,7 +15,7 @@
 import { getDb } from '../db';
 import { now } from '../lib/ids';
 import { parseJson } from '../lib/json';
-import { badRequest, notFound } from '../lib/errors';
+import { notFound } from '../lib/errors';
 import { listGateways, testGateway, type GatewayConfig } from '../payments';
 import { listOperators } from './momo';
 import { getSetting } from './settings';
@@ -41,7 +41,13 @@ const DEFAULT_ROUTING: RoutingSettings = {
 };
 export const getRoutingSettings = (): RoutingSettings => {
   const s = getSetting<Partial<RoutingSettings>>('routing', {});
-  return { ...DEFAULT_ROUTING, ...s, circuit: { ...DEFAULT_ROUTING.circuit, ...(s.circuit ?? {}) }, weights: { ...DEFAULT_ROUTING.weights, ...(s.weights ?? {}) }, defaultCostBps: { ...DEFAULT_ROUTING.defaultCostBps, ...(s.defaultCostBps ?? {}) } };
+  return {
+    ...DEFAULT_ROUTING,
+    ...s,
+    circuit: { ...DEFAULT_ROUTING.circuit, ...(s.circuit ?? {}) },
+    weights: { ...DEFAULT_ROUTING.weights, ...(s.weights ?? {}) },
+    defaultCostBps: { ...DEFAULT_ROUTING.defaultCostBps, ...(s.defaultCostBps ?? {}) },
+  };
 };
 
 export type RailKind = 'wallet' | 'card' | 'mobile_money' | 'bank' | 'national_switch' | 'bitcoin';
@@ -111,7 +117,11 @@ export function recordRoutingOutcome(connector: string | null | undefined, metho
 
 export function connectorStats(connector: string, method?: string | null, hours = 24): ConnectorStats {
   const since = bucketOf(new Date(Date.now() - hours * 3600_000));
-  const r = getDb().prepare(`SELECT COALESCE(SUM(attempts),0) a, COALESCE(SUM(successes),0) s, COALESCE(SUM(failures),0) f, COALESCE(SUM(unknowns),0) u, COALESCE(SUM(declines),0) d, COALESCE(SUM(latency_sum_ms),0) ls, COALESCE(MAX(latency_max_ms),0) lm FROM routing_stats WHERE connector = ? ${method ? 'AND method = ?' : ''} AND bucket >= ?`).get(...(method ? [connector, method, since] : [connector, since])) as any;
+  const r = getDb()
+    .prepare(
+      `SELECT COALESCE(SUM(attempts),0) a, COALESCE(SUM(successes),0) s, COALESCE(SUM(failures),0) f, COALESCE(SUM(unknowns),0) u, COALESCE(SUM(declines),0) d, COALESCE(SUM(latency_sum_ms),0) ls, COALESCE(MAX(latency_max_ms),0) lm FROM routing_stats WHERE connector = ? ${method ? 'AND method = ?' : ''} AND bucket >= ?`,
+    )
+    .get(...(method ? [connector, method, since] : [connector, since])) as any;
   const { minSample } = getRoutingSettings();
   const decided = r.a - r.d;
   return {
@@ -131,7 +141,21 @@ export function connectorStats(connector: string, method?: string | null, hours 
 /** Hourly series for dashboards. */
 export function connectorSeries(connector: string, hours = 24) {
   const since = bucketOf(new Date(Date.now() - hours * 3600_000));
-  return (getDb().prepare('SELECT bucket, method, attempts, successes, failures, unknowns, declines, latency_sum_ms, latency_max_ms FROM routing_stats WHERE connector = ? AND bucket >= ? ORDER BY bucket').all(connector, since) as any[]).map((r) => ({ bucket: r.bucket, method: r.method, attempts: r.attempts, successes: r.successes, failures: r.failures, unknowns: r.unknowns, declines: r.declines, avgLatencyMs: r.attempts ? Math.round(r.latency_sum_ms / r.attempts) : null, maxLatencyMs: r.latency_max_ms }));
+  return (
+    getDb()
+      .prepare('SELECT bucket, method, attempts, successes, failures, unknowns, declines, latency_sum_ms, latency_max_ms FROM routing_stats WHERE connector = ? AND bucket >= ? ORDER BY bucket')
+      .all(connector, since) as any[]
+  ).map((r) => ({
+    bucket: r.bucket,
+    method: r.method,
+    attempts: r.attempts,
+    successes: r.successes,
+    failures: r.failures,
+    unknowns: r.unknowns,
+    declines: r.declines,
+    avgLatencyMs: r.attempts ? Math.round(r.latency_sum_ms / r.attempts) : null,
+    maxLatencyMs: r.latency_max_ms,
+  }));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -164,7 +188,13 @@ function noteCircuit(connector: string, outcome: 'success' | 'failure'): void {
     if (r.circuit !== 'open') publish('connector.degraded', { connector, failures, cooldownSeconds: s.cooldownSeconds }, { aggregateId: connector });
     if (r.circuit !== 'open') {
       recordEvent('route', connector, 'circuit.opened', { type: 'system' }, { failures, cooldownSeconds: s.cooldownSeconds });
-      for (const a of db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_system = 0 AND status = 'active'").all() as { id: string }[]) notify(a.id, 'Connector circuit opened', `${connector} failed ${failures} times in a row and is paused for ${s.cooldownSeconds}s. Traffic fails over to the other connectors for the same rail.`, { kind: 'connector', connector });
+      for (const a of db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_system = 0 AND status = 'active'").all() as { id: string }[])
+        notify(
+          a.id,
+          'Connector circuit opened',
+          `${connector} failed ${failures} times in a row and is paused for ${s.cooldownSeconds}s. Traffic fails over to the other connectors for the same rail.`,
+          { kind: 'connector', connector },
+        );
     }
   } else db.prepare('UPDATE connector_state SET consecutive_failures = ?, updated_at = ? WHERE connector = ?').run(failures, now(), connector);
 }
@@ -181,7 +211,17 @@ export function connectorHealth(connector: string): ConnectorHealth {
   const lastProbe = r.last_probe ? parseJson<{ ok: boolean; at: string; message: string }>(r.last_probe, null as any) : null;
   const paused = !!r.paused_by;
   const usable = !paused && r.circuit !== 'open';
-  return { connector, circuit: r.circuit, consecutiveFailures: r.consecutive_failures, openedAt: r.opened_at, paused, pausedReason: r.paused_reason, lastProbe, usable, reason: paused ? `paused: ${r.paused_reason ?? 'by operations'}` : r.circuit === 'open' ? 'circuit open after consecutive failures' : null };
+  return {
+    connector,
+    circuit: r.circuit,
+    consecutiveFailures: r.consecutive_failures,
+    openedAt: r.opened_at,
+    paused,
+    pausedReason: r.paused_reason,
+    lastProbe,
+    usable,
+    reason: paused ? `paused: ${r.paused_reason ?? 'by operations'}` : r.circuit === 'open' ? 'circuit open after consecutive failures' : null,
+  };
 }
 
 export function pauseConnector(connector: string, adminId: string, reason: string): ConnectorHealth {
@@ -193,14 +233,20 @@ export function pauseConnector(connector: string, adminId: string, reason: strin
 
 export function resumeConnector(connector: string, adminId: string): ConnectorHealth {
   stateRow(connector);
-  getDb().prepare("UPDATE connector_state SET paused_by = NULL, paused_reason = NULL, circuit = 'closed', consecutive_failures = 0, opened_at = NULL, half_open_at = NULL, updated_at = ? WHERE connector = ?").run(now(), connector);
+  getDb()
+    .prepare(
+      "UPDATE connector_state SET paused_by = NULL, paused_reason = NULL, circuit = 'closed', consecutive_failures = 0, opened_at = NULL, half_open_at = NULL, updated_at = ? WHERE connector = ?",
+    )
+    .run(now(), connector);
   recordEvent('route', connector, 'connector.resumed', { type: 'admin', id: adminId }, {});
   return connectorHealth(connector);
 }
 
 export function recordProbe(connector: string, ok: boolean, message: string, details: Record<string, unknown> = {}): void {
   stateRow(connector);
-  getDb().prepare('UPDATE connector_state SET last_probe = ?, updated_at = ? WHERE connector = ?').run(JSON.stringify({ ok, at: now(), message, ...details }), now(), connector);
+  getDb()
+    .prepare('UPDATE connector_state SET last_probe = ?, updated_at = ? WHERE connector = ?')
+    .run(JSON.stringify({ ok, at: now(), message, ...details }), now(), connector);
   noteCircuit(connector, ok ? 'success' : 'failure');
 }
 
@@ -217,21 +263,83 @@ function kindOfGateway(g: GatewayConfig): RailKind {
 export function listRails(filter: { kind?: RailKind | null; country?: string | null; currency?: string | null; method?: string | null } = {}): RailEntry[] {
   const settings = getRoutingSettings();
   const entries: RailEntry[] = [];
-  const wallet: RailEntry = { id: 'wallet', name: 'BitriPay balance', kind: 'wallet', provider: 'ledger', methods: ['wallet'], countries: [], currencies: [], enabled: true, ready: true, mode: 'live', costBps: settings.defaultCostBps.wallet ?? 0, health: connectorHealth('wallet'), stats: connectorStats('wallet') };
+  const wallet: RailEntry = {
+    id: 'wallet',
+    name: 'BitriPay balance',
+    kind: 'wallet',
+    provider: 'ledger',
+    methods: ['wallet'],
+    countries: [],
+    currencies: [],
+    enabled: true,
+    ready: true,
+    mode: 'live',
+    costBps: settings.defaultCostBps.wallet ?? 0,
+    health: connectorHealth('wallet'),
+    stats: connectorStats('wallet'),
+  };
   entries.push(wallet);
   for (const g of listGateways()) {
     const kind = kindOfGateway(g);
-    entries.push({ id: g.id, name: g.name, kind, provider: g.provider, methods: g.methods, countries: g.countries, currencies: g.currencies, enabled: g.enabled, ready: g.enabled && (g.mode !== 'unknown' || ['sandbox', 'manual_momo', 'manual_bank'].includes(g.provider)), mode: g.mode, costBps: typeof g.config.costBps === 'number' ? (g.config.costBps as number) : settings.defaultCostBps[kind] ?? 100, health: connectorHealth(g.id), stats: connectorStats(g.id) });
+    entries.push({
+      id: g.id,
+      name: g.name,
+      kind,
+      provider: g.provider,
+      methods: g.methods,
+      countries: g.countries,
+      currencies: g.currencies,
+      enabled: g.enabled,
+      ready: g.enabled && (g.mode !== 'unknown' || ['sandbox', 'manual_momo', 'manual_bank'].includes(g.provider)),
+      mode: g.mode,
+      costBps: typeof g.config.costBps === 'number' ? (g.config.costBps as number) : (settings.defaultCostBps[kind] ?? 100),
+      health: connectorHealth(g.id),
+      stats: connectorStats(g.id),
+    });
   }
   for (const o of listOperators({ onlyDirect: true })) {
-    entries.push({ id: `operator:${o.id}`, name: `${o.name} (direct rail)`, kind: 'mobile_money', provider: 'manual_momo', methods: ['mobile_money'], countries: [o.country], currencies: [o.currency], enabled: o.enabled, ready: o.enabled && o.directRail, mode: 'test', costBps: settings.defaultCostBps.mobile_money ?? 150, health: connectorHealth(`operator:${o.id}`), stats: connectorStats(`operator:${o.id}`) });
+    entries.push({
+      id: `operator:${o.id}`,
+      name: `${o.name} (direct rail)`,
+      kind: 'mobile_money',
+      provider: 'manual_momo',
+      methods: ['mobile_money'],
+      countries: [o.country],
+      currencies: [o.currency],
+      enabled: o.enabled,
+      ready: o.enabled && o.directRail,
+      mode: 'test',
+      costBps: settings.defaultCostBps.mobile_money ?? 150,
+      health: connectorHealth(`operator:${o.id}`),
+      stats: connectorStats(`operator:${o.id}`),
+    });
   }
   const switches = getDb().prepare('SELECT * FROM switch_connections').all() as any[];
   for (const c of switches) {
     const cert = parseJson<{ status: string }>(c.certification, { status: 'NOT_STARTED' });
-    entries.push({ id: c.id, name: c.name, kind: 'national_switch', provider: `switch:${c.adapter}`, methods: ['national_switch'], countries: [c.country], currencies: [], enabled: !!c.enabled, ready: !!c.enabled && (c.environment !== 'production' || cert.status === 'CERTIFIED'), mode: c.environment === 'production' ? 'live' : 'test', costBps: settings.defaultCostBps.national_switch ?? 30, health: connectorHealth(c.id), stats: connectorStats(c.id) });
+    entries.push({
+      id: c.id,
+      name: c.name,
+      kind: 'national_switch',
+      provider: `switch:${c.adapter}`,
+      methods: ['national_switch'],
+      countries: [c.country],
+      currencies: [],
+      enabled: !!c.enabled,
+      ready: !!c.enabled && (c.environment !== 'production' || cert.status === 'CERTIFIED'),
+      mode: c.environment === 'production' ? 'live' : 'test',
+      costBps: settings.defaultCostBps.national_switch ?? 30,
+      health: connectorHealth(c.id),
+      stats: connectorStats(c.id),
+    });
   }
-  return entries.filter((e) => (!filter.kind || e.kind === filter.kind) && (!filter.method || e.methods.includes(filter.method)) && (!filter.country || !e.countries.length || e.countries.includes(filter.country.toUpperCase())) && (!filter.currency || !e.currencies.length || e.currencies.includes(filter.currency.toUpperCase())));
+  return entries.filter(
+    (e) =>
+      (!filter.kind || e.kind === filter.kind) &&
+      (!filter.method || e.methods.includes(filter.method)) &&
+      (!filter.country || !e.countries.length || e.countries.includes(filter.country.toUpperCase())) &&
+      (!filter.currency || !e.currencies.length || e.currencies.includes(filter.currency.toUpperCase())),
+  );
 }
 
 export function getRail(id: string): RailEntry {
@@ -289,7 +397,14 @@ export function scoreConnectors(candidates: RouteCandidate[], policy: RoutePolic
       const healthPts = !health.usable ? 0 : health.circuit === 'half_open' ? 40 : health.lastProbe ? (health.lastProbe.ok ? 100 : 20) : 80;
       const prefPts = c.preferenceRank == null ? 50 : Math.max(0, 100 - c.preferenceRank * 25);
       const score = Math.round((w.success * successPts + w.latency * latencyPts + w.cost * costPts + w.health * healthPts + w.preference * prefPts) / total);
-      return { id: c.id, score: health.usable ? score : 0, usable: health.usable, reason: health.reason, components: { success: Math.round(successPts), latency: Math.round(latencyPts), cost: Math.round(costPts), health: healthPts, preference: prefPts }, stats };
+      return {
+        id: c.id,
+        score: health.usable ? score : 0,
+        usable: health.usable,
+        reason: health.reason,
+        components: { success: Math.round(successPts), latency: Math.round(latencyPts), cost: Math.round(costPts), health: healthPts, preference: prefPts },
+        stats,
+      };
     })
     .sort((a, b) => Number(b.usable) - Number(a.usable) || b.score - a.score);
 }
@@ -327,8 +442,4 @@ export async function probeConnectors(force = false): Promise<{ probed: string[]
     if (!r.ok) failed.push(r.id);
   }
   return { probed, failed };
-}
-
-export function assertRailKnown(id: string): void {
-  if (!listRails().some((e) => e.id === id)) throw badRequest(`Unknown rail ${id}`, 'unknown_rail');
 }

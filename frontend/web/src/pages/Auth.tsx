@@ -74,8 +74,28 @@ export function Login() {
   };
 
   return (
-    <AuthShell title={t('auth.signIn')} footer={<>{t('auth.noAccount')} <Link to="/register">{t('auth.signUp')}</Link></>}>
-      {!mfa && <Tabs pills tabs={[{ id: 'password', label: t('auth.password') }, { id: 'otp', label: t('auth.otpLogin') }]} value={mode} onChange={(m) => { setMode(m as any); setOtpSent(null); }} />}
+    <AuthShell
+      title={t('auth.signIn')}
+      footer={
+        <>
+          {t('auth.noAccount')} <Link to="/register">{t('auth.signUp')}</Link>
+        </>
+      }
+    >
+      {!mfa && (
+        <Tabs
+          pills
+          tabs={[
+            { id: 'password', label: t('auth.password') },
+            { id: 'otp', label: t('auth.otpLogin') },
+          ]}
+          value={mode}
+          onChange={(m) => {
+            setMode(m as any);
+            setOtpSent(null);
+          }}
+        />
+      )}
       <form onSubmit={submit} className="mt">
         {error && <Alert kind="error">{error}</Alert>}
         {mfa ? (
@@ -101,7 +121,9 @@ export function Login() {
             ) : null}
           </>
         )}
-        <Button block loading={loading}>{mfa ? t('common.confirm') : mode === 'otp' && !otpSent ? t('auth.sendCode') : t('auth.signIn')}</Button>
+        <Button block loading={loading}>
+          {mfa ? t('common.confirm') : mode === 'otp' && !otpSent ? t('auth.sendCode') : t('auth.signIn')}
+        </Button>
         {!mfa && passkeysSupported() && (
           <Button
             block
@@ -137,7 +159,18 @@ export function Register() {
   const nav = useNavigate();
   const { login, config } = useStore();
   const [params] = useSearchParams();
-  const [form, setForm] = useState({ fullName: '', email: '', phone: '', password: '', role: (params.get('role') as string) || 'user', businessName: '', referralCode: params.get('ref') || '', country: '', tag: '', otpCode: '' });
+  const [form, setForm] = useState({
+    fullName: '',
+    email: '',
+    phone: '',
+    password: '',
+    role: (params.get('role') as string) || 'user',
+    businessName: '',
+    referralCode: params.get('ref') || '',
+    country: '',
+    tag: '',
+    otpCode: '',
+  });
   const [otpInfo, setOtpInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -177,7 +210,14 @@ export function Register() {
   };
 
   return (
-    <AuthShell title={t('auth.signUp')} footer={<>{t('auth.haveAccount')} <Link to="/login">{t('auth.signIn')}</Link></>}>
+    <AuthShell
+      title={t('auth.signUp')}
+      footer={
+        <>
+          {t('auth.haveAccount')} <Link to="/login">{t('auth.signIn')}</Link>
+        </>
+      }
+    >
       <form onSubmit={submit}>
         {error && <Alert kind="error">{error}</Alert>}
         <Field label={t('auth.role')}>
@@ -211,7 +251,9 @@ export function Register() {
             <Select value={form.country} onChange={(e) => set('country', e.target.value)}>
               <option value="">—</option>
               {(config?.countries ?? []).map((c) => (
-                <option key={c.code} value={c.code}>{c.name}</option>
+                <option key={c.code} value={c.code}>
+                  {c.name}
+                </option>
               ))}
             </Select>
           </Field>
@@ -225,11 +267,15 @@ export function Register() {
         <Field label={t('auth.code')} hint="Optional: verify your phone/email now">
           <div className="row">
             <Input value={form.otpCode} onChange={(e) => set('otpCode', e.target.value)} placeholder="123456" />
-            <Button type="button" variant="secondary" onClick={sendCode} disabled={!form.email && !form.phone}>{t('auth.sendCode')}</Button>
+            <Button type="button" variant="secondary" onClick={sendCode} disabled={!form.email && !form.phone}>
+              {t('auth.sendCode')}
+            </Button>
           </div>
           {otpInfo && <span className="hint">{otpInfo}</span>}
         </Field>
-        <Button block loading={loading}>{t('auth.signUp')}</Button>
+        <Button block loading={loading}>
+          {t('auth.signUp')}
+        </Button>
       </form>
     </AuthShell>
   );

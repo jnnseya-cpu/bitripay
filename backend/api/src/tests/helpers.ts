@@ -37,7 +37,10 @@ export async function checkerToken(app: ReturnType<typeof createApp>) {
   const login = async () => request(app).post('/api/auth/login').send({ identifier: 'checker@bitripay.local', password: 'Checker123!' });
   let res = await login();
   if (res.status !== 200) {
-    const created = await request(app).post('/api/admin/users').set(admin.auth).send({ fullName: 'Checker Admin', email: 'checker@bitripay.local', password: 'Checker123!', role: 'admin', permissions: [] });
+    const created = await request(app)
+      .post('/api/admin/users')
+      .set(admin.auth)
+      .send({ fullName: 'Checker Admin', email: 'checker@bitripay.local', password: 'Checker123!', role: 'admin', permissions: [] });
     if (created.status !== 201) throw new Error(`checker create failed: ${JSON.stringify(created.body)}`);
     res = await login();
   }
@@ -50,7 +53,10 @@ export async function checkerToken(app: ReturnType<typeof createApp>) {
 export async function decideWithdrawal(app: ReturnType<typeof createApp>, txId: string, outcome: 'approve' | 'reject', ref = 'OPREF-12345') {
   const admin = await adminToken(app);
   const checker = await checkerToken(app);
-  const proposed = await request(app).post(`/api/admin/withdrawals/${txId}/${outcome}`).set(admin.auth).send(outcome === 'approve' ? { payoutReference: ref, note: 'Operator statement line checked by treasury' } : { reason: 'bad account' });
+  const proposed = await request(app)
+    .post(`/api/admin/withdrawals/${txId}/${outcome}`)
+    .set(admin.auth)
+    .send(outcome === 'approve' ? { payoutReference: ref, note: 'Operator statement line checked by treasury' } : { reason: 'bad account' });
   if (proposed.status !== 200) throw new Error(`propose failed: ${JSON.stringify(proposed.body)}`);
   const approved = await request(app).post(`/api/admin/verifications/${proposed.body.verification.id}/approve`).set(checker.auth).send({ pin: checker.pin });
   if (approved.status !== 200) throw new Error(`approve failed: ${JSON.stringify(approved.body)}`);

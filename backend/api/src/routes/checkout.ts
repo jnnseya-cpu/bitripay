@@ -36,7 +36,13 @@ checkoutRouter.post(
   }),
 );
 
-const cardSchema = z.object({ number: z.string().min(12).max(23), expMonth: z.coerce.number().int().min(1).max(12), expYear: z.coerce.number().int().min(0).max(2100), cvc: z.string().min(3).max(4), holderName: z.string().min(2).max(120) });
+const cardSchema = z.object({
+  number: z.string().min(12).max(23),
+  expMonth: z.coerce.number().int().min(1).max(12),
+  expYear: z.coerce.number().int().min(0).max(2100),
+  cvc: z.string().min(3).max(4),
+  holderName: z.string().min(2).max(120),
+});
 
 checkoutRouter.post(
   '/:code/pay',
@@ -66,14 +72,25 @@ checkoutRouter.post(
     if (body.method === 'virtual_card') {
       if (!body.card) throw badRequest('Card details are required');
       const merchant = findUserById(row.requester_user_id)!;
-      const { tx, owner } = chargeVirtualCard(body.card, row.amount, row.currency, merchant, row.description ?? 'Virtual card payment', { paymentRequestId: row.id, paymentRequestCode: row.code, ...parseJson(row.metadata, {}) });
+      const { tx, owner } = chargeVirtualCard(body.card, row.amount, row.currency, merchant, row.description ?? 'Virtual card payment', {
+        paymentRequestId: row.id,
+        paymentRequestCode: row.code,
+        ...parseJson(row.metadata, {}),
+      });
       const updated = markPaidByGateway(row.code, tx.id, owner.id);
-      void dispatchWebhook(merchant.id, 'payment.completed', { paymentRequest: toPaymentRequest(updated), transaction: { id: tx.id, reference: tx.reference, amount: tx.amount, fee: tx.fee, currency: tx.currency, method: 'virtual_card' } });
+      void dispatchWebhook(merchant.id, 'payment.completed', {
+        paymentRequest: toPaymentRequest(updated),
+        transaction: { id: tx.id, reference: tx.reference, amount: tx.amount, fee: tx.fee, currency: tx.currency, method: 'virtual_card' },
+      });
       return res.status(201).json({ status: 'succeeded', transaction: toTransaction(tx), paymentRequest: toPaymentRequest(updated) });
     }
     const { pin, ...rest } = body;
     const payment = await initiatePayment(req.user ?? null, { purpose: 'checkout', paymentRequestCode: row.code, ...rest }, { pin, req });
-    res.status(201).json({ payment, paymentRequest: toPaymentRequest(getPaymentRequestByCode(row.code)), declaration: describeFunding(rest.method as 'card' | 'mobile_money' | 'bank', { currency: row.currency, operatorId: body.operatorId, gateway: body.gateway }) });
+    res.status(201).json({
+      payment,
+      paymentRequest: toPaymentRequest(getPaymentRequestByCode(row.code)),
+      declaration: describeFunding(rest.method as 'card' | 'mobile_money' | 'bank', { currency: row.currency, operatorId: body.operatorId, gateway: body.gateway }),
+    });
   }),
 );
 
@@ -82,7 +99,16 @@ checkoutRouter.post(
   '/:code/payments/:paymentId/authenticate',
   requireAuth,
   wrap(async (req, res) => {
-    const body = validate(z.object({ pin: z.string().optional().nullable(), card: cardSchema.optional(), savedCardId: z.string().optional().nullable(), saveCard: z.boolean().optional(), returnUrl: z.string().url().optional().nullable() }), req.body);
+    const body = validate(
+      z.object({
+        pin: z.string().optional().nullable(),
+        card: cardSchema.optional(),
+        savedCardId: z.string().optional().nullable(),
+        saveCard: z.boolean().optional(),
+        returnUrl: z.string().url().optional().nullable(),
+      }),
+      req.body,
+    );
     const payment = await authenticatePayment(req.user!, String(req.params.paymentId), body, req);
     res.json({ payment, paymentRequest: toPaymentRequest(getPaymentRequestByCode(String(req.params.code))) });
   }),

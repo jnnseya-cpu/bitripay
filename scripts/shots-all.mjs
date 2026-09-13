@@ -3,7 +3,7 @@
  * the page gallery. Run with the API (4000), web (5173) and admin (5174) dev servers up and the demo seed applied.
  *   node scripts/shots-all.mjs [outDir]
  */
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -111,7 +111,18 @@ async function loginWeb(page, email) {
   const token = await page.evaluate(() => localStorage.getItem('token') || localStorage.getItem('bitripay_token') || '');
   const guest = await browser.newPage({ viewport: { width: 1280, height: 860 } });
   try {
-    const res = await fetch(API + '/api/v1/checkout_sessions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ currency: 'USD', line_items: [{ name: 'Flat white', quantity: 2, unit_amount_minor: 350 }, { name: 'Croissant', quantity: 1, unit_amount_minor: 250 }], reference: 'GALLERY-1' }) });
+    const res = await fetch(API + '/api/v1/checkout_sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        currency: 'USD',
+        line_items: [
+          { name: 'Flat white', quantity: 2, unit_amount_minor: 350 },
+          { name: 'Croissant', quantity: 1, unit_amount_minor: 250 },
+        ],
+        reference: 'GALLERY-1',
+      }),
+    });
     const cs = await res.json();
     if (cs.url) await shot(guest, 'Merchant', 'checkout-hosted', 'Hosted checkout (guest payer)', cs.url.replace(/^https?:\/\/[^/]+/, WEB), { wait: 'text=Pay' });
     else errors.push('checkout session: ' + JSON.stringify(cs).slice(0, 200));

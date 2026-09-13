@@ -24,8 +24,36 @@ import { flushPending, forwardSms, matchesFilters, type IncomingSms } from './sr
 import * as Sms from './modules/sms-receiver/src';
 
 // ---------- types mirrored from the API ----------
-interface PayoutAccount { id: string; label: string; rail: string; operatorId: string | null; operatorName: string | null; country: string; currency: string; msisdn: string | null; simIccid: string | null; deviceId: string | null; status: string }
-interface Payout { id: string; reference: string; stage: string; amount: number; currency: string; recipientMsisdn: string | null; recipientMasked: string | null; recipientName: string | null; operatorId: string | null; operatorName: string | null; claimedByDeviceId: string | null; expiresAt: string | null; error: string | null; instructions: { ussd: string | null; steps: string[] } | null; riskFlags: string[] }
+interface PayoutAccount {
+  id: string;
+  label: string;
+  rail: string;
+  operatorId: string | null;
+  operatorName: string | null;
+  country: string;
+  currency: string;
+  msisdn: string | null;
+  simIccid: string | null;
+  deviceId: string | null;
+  status: string;
+}
+interface Payout {
+  id: string;
+  reference: string;
+  stage: string;
+  amount: number;
+  currency: string;
+  recipientMsisdn: string | null;
+  recipientMasked: string | null;
+  recipientName: string | null;
+  operatorId: string | null;
+  operatorName: string | null;
+  claimedByDeviceId: string | null;
+  expiresAt: string | null;
+  error: string | null;
+  instructions: { ussd: string | null; steps: string[] } | null;
+  riskFlags: string[];
+}
 
 const DEFAULT_API = (Constants.expoConfig?.extra as any)?.apiUrl ?? 'http://10.0.2.2:4000';
 const POLL_MS = 10_000;
@@ -41,7 +69,6 @@ async function ringLoud() {
   try {
     if (!alarm) {
       await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, shouldDuckAndroid: false });
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       alarm = (await Audio.Sound.createAsync(require('./assets/loud_alert.wav'), { volume: 1 })).sound;
     }
     await alarm.setPositionAsync(0);
@@ -56,18 +83,33 @@ const fmt = (minor: number, currency: string) => `${(minor / 100).toLocaleString
 // ---------- theme ----------
 function useTheme() {
   const dark = useColorScheme() === 'dark';
-  return useMemo(() => ({
-    dark,
-    bg: dark ? '#0b1220' : '#f3f5f9', card: dark ? '#141d2e' : '#ffffff', text: dark ? '#e6ebf5' : '#0f172a', muted: dark ? '#8b96ad' : '#5b6478', line: dark ? '#22304a' : '#e2e6ee',
-    primary: '#2563eb', ok: '#16a34a', warn: '#d97706', danger: '#dc2626', chip: dark ? '#1f2a40' : '#eef2ff',
-  }), [dark]);
+  return useMemo(
+    () => ({
+      dark,
+      bg: dark ? '#0b1220' : '#f3f5f9',
+      card: dark ? '#141d2e' : '#ffffff',
+      text: dark ? '#e6ebf5' : '#0f172a',
+      muted: dark ? '#8b96ad' : '#5b6478',
+      line: dark ? '#22304a' : '#e2e6ee',
+      primary: '#2563eb',
+      ok: '#16a34a',
+      warn: '#d97706',
+      danger: '#dc2626',
+      chip: dark ? '#1f2a40' : '#eef2ff',
+    }),
+    [dark],
+  );
 }
 type Theme = ReturnType<typeof useTheme>;
 
 function Button({ title, onPress, kind = 'primary', disabled, t }: { title: string; onPress: () => void; kind?: 'primary' | 'ghost' | 'danger' | 'ok'; disabled?: boolean; t: Theme }) {
   const bg = kind === 'primary' ? t.primary : kind === 'danger' ? t.danger : kind === 'ok' ? t.ok : 'transparent';
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [s.btn, { backgroundColor: bg, borderColor: kind === 'ghost' ? t.line : bg, opacity: disabled ? 0.5 : pressed ? 0.8 : 1 }]}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [s.btn, { backgroundColor: bg, borderColor: kind === 'ghost' ? t.line : bg, opacity: disabled ? 0.5 : pressed ? 0.8 : 1 }]}
+    >
       <Text style={[s.btnText, { color: kind === 'ghost' ? t.text : '#fff' }]}>{title}</Text>
     </Pressable>
   );
@@ -84,9 +126,20 @@ function Card({ children, t, style }: { children: React.ReactNode; t: Theme; sty
   return <View style={[s.card, { backgroundColor: t.card, borderColor: t.line }, style]}>{children}</View>;
 }
 function Chip({ text, color, t }: { text: string; color?: string; t: Theme }) {
-  return <View style={[s.chip, { backgroundColor: t.chip }]}><Text style={{ color: color ?? t.text, fontSize: 12, fontWeight: '600' }}>{text}</Text></View>;
+  return (
+    <View style={[s.chip, { backgroundColor: t.chip }]}>
+      <Text style={{ color: color ?? t.text, fontSize: 12, fontWeight: '600' }}>{text}</Text>
+    </View>
+  );
 }
-const stageColor = (stage: string, t: Theme) => (stage === 'SETTLED' ? t.ok : ['FAILED', 'MISMATCHED', 'DUPLICATE', 'EXPIRED', 'CANCELLED'].includes(stage) ? t.danger : ['IN_PROGRESS', 'VERIFYING', 'EVIDENCE_RECEIVED'].includes(stage) ? t.warn : t.primary);
+const stageColor = (stage: string, t: Theme) =>
+  stage === 'SETTLED'
+    ? t.ok
+    : ['FAILED', 'MISMATCHED', 'DUPLICATE', 'EXPIRED', 'CANCELLED'].includes(stage)
+      ? t.danger
+      : ['IN_PROGRESS', 'VERIFYING', 'EVIDENCE_RECEIVED'].includes(stage)
+        ? t.warn
+        : t.primary;
 
 // =====================================================================================
 // Setup + enrolment
@@ -113,12 +166,20 @@ function Enrol({ t, onDone }: { t: Theme; onDone: (e: Enrolment) => void }) {
   const base = apiUrl.trim().replace(/\/+$/, '');
 
   const signIn = async () => {
-    setBusy(true); setError(null);
+    setBusy(true);
+    setError(null);
     try {
-      const r: any = needsCode ? await agentCall(base, token!, 'POST', '/api/auth/2fa/verify', { code }) : await agentCall(base, '', 'POST', '/api/auth/login', { identifier: identifier.trim(), password });
-      if (r.requiresTwoFactor) { setToken(r.token); setNeedsCode(true); return; }
+      const r: any = needsCode
+        ? await agentCall(base, token!, 'POST', '/api/auth/2fa/verify', { code })
+        : await agentCall(base, '', 'POST', '/api/auth/login', { identifier: identifier.trim(), password });
+      if (r.requiresTwoFactor) {
+        setToken(r.token);
+        setNeedsCode(true);
+        return;
+      }
       if (!['agent', 'admin'].includes(r.user?.role)) throw new Error('Only agents (or administrators) can enrol a payout device');
-      setToken(r.token); setNeedsCode(false);
+      setToken(r.token);
+      setNeedsCode(false);
       const list: any = await agentCall(base, r.token, 'GET', '/api/payouts/agent/accounts');
       setAccounts(list.items ?? []);
       setName(`${r.user.name ?? 'Agent'} – ${Platform.OS} payout device`);
@@ -129,7 +190,9 @@ function Enrol({ t, onDone }: { t: Theme; onDone: (e: Enrolment) => void }) {
       if (info[0]?.iccid) setIccid(info[0].iccid);
     } catch (err) {
       setError((err as Error).message);
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
   const chosen = accounts.find((a) => a.id === accountId) ?? null;
@@ -145,27 +208,63 @@ function Enrol({ t, onDone }: { t: Theme; onDone: (e: Enrolment) => void }) {
     setError(null);
     if (kind === 'payout' && !chosen) return setError('Choose the payout account this phone and SIM operate');
     if (kind === 'payout' && !msisdn.trim() && !iccid.trim()) return setError('Enter the SIM number (MSISDN) or ICCID – the server only accepts confirmations from the registered SIM');
-    if (chosen && chosen.msisdn && msisdn.trim() && chosen.msisdn.replace(/\D/g, '') !== msisdn.replace(/\D/g, '')) return setError(`The SIM in this phone (${msisdn}) is not the SIM of ${chosen.label} (${chosen.msisdn})`);
+    if (chosen && chosen.msisdn && msisdn.trim() && chosen.msisdn.replace(/\D/g, '') !== msisdn.replace(/\D/g, ''))
+      return setError(`The SIM in this phone (${msisdn}) is not the SIM of ${chosen.label} (${chosen.msisdn})`);
     setBusy(true);
     try {
       const keys = createKeys();
-      const ops = kind === 'payout' ? (chosen?.operatorId ? [chosen.operatorId] : []) : operatorIds.split(',').map((x) => x.trim()).filter(Boolean);
-      const r: any = await agentCall(base, token!, 'POST', '/api/evidence/devices', { name: name.trim() || 'Payout device', publicKey: keys.publicKeyPem, operatorIds: ops, kind, simMsisdn: msisdn.trim() || null, simIccid: iccid.trim() || null, payoutAccountId: kind === 'payout' ? chosen!.id : null });
+      const ops =
+        kind === 'payout'
+          ? chosen?.operatorId
+            ? [chosen.operatorId]
+            : []
+          : operatorIds
+              .split(',')
+              .map((x) => x.trim())
+              .filter(Boolean);
+      const r: any = await agentCall(base, token!, 'POST', '/api/evidence/devices', {
+        name: name.trim() || 'Payout device',
+        publicKey: keys.publicKeyPem,
+        operatorIds: ops,
+        kind,
+        simMsisdn: msisdn.trim() || null,
+        simIccid: iccid.trim() || null,
+        payoutAccountId: kind === 'payout' ? chosen!.id : null,
+      });
       await secure.setPrivateKey(keys.privateKeyHex);
-      const e: Enrolment = { apiUrl: base, deviceId: r.device.id, deviceName: r.device.name, kind, payoutAccountId: chosen?.id ?? null, payoutAccountLabel: chosen ? `${chosen.label} · ${chosen.operatorName ?? chosen.rail} ${chosen.currency}` : null, operatorId: chosen?.operatorId ?? ops[0] ?? null, simMsisdn: msisdn.trim() || null, simIccid: iccid.trim() || null, senderFilters: filters.split(',').map((x) => x.trim()).filter(Boolean), enrolledAt: new Date().toISOString() };
+      const e: Enrolment = {
+        apiUrl: base,
+        deviceId: r.device.id,
+        deviceName: r.device.name,
+        kind,
+        payoutAccountId: chosen?.id ?? null,
+        payoutAccountLabel: chosen ? `${chosen.label} · ${chosen.operatorName ?? chosen.rail} ${chosen.currency}` : null,
+        operatorId: chosen?.operatorId ?? ops[0] ?? null,
+        simMsisdn: msisdn.trim() || null,
+        simIccid: iccid.trim() || null,
+        senderFilters: filters
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean),
+        enrolledAt: new Date().toISOString(),
+      };
       await saveEnrolment(e);
       await appendLog({ level: 'ok', text: `Enrolled as ${e.deviceName} (${e.deviceId.slice(0, 8)}…) on ${e.apiUrl}` });
       setToken(null); // the agent session is not needed any more – the device key authenticates from here on
       onDone(e);
     } catch (err) {
       setError((err as Error).message);
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
       <Text style={[s.h1, { color: t.text }]}>Enrol this device</Text>
-      <Text style={{ color: t.muted, marginBottom: 16 }}>Sign in as the agent who operates the payout SIM. The sign-in is used once to register this phone's key; afterwards the phone authenticates with its own key only.</Text>
+      <Text style={{ color: t.muted, marginBottom: 16 }}>
+        Sign in as the agent who operates the payout SIM. The sign-in is used once to register this phone's key; afterwards the phone authenticates with its own key only.
+      </Text>
       {!token || needsCode ? (
         <Card t={t}>
           <Field t={t} label="API URL" value={apiUrl} onChangeText={setApiUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
@@ -190,11 +289,17 @@ function Enrol({ t, onDone }: { t: Theme; onDone: (e: Enrolment) => void }) {
           {kind === 'payout' ? (
             <>
               <Text style={[s.label, { color: t.muted }]}>Payout account (the SIM in this phone)</Text>
-              {accounts.length === 0 && <Text style={{ color: t.warn, marginBottom: 8 }}>No payout accounts are assigned to you. An administrator must create a prefunded payout account with you as its agent first.</Text>}
+              {accounts.length === 0 && (
+                <Text style={{ color: t.warn, marginBottom: 8 }}>No payout accounts are assigned to you. An administrator must create a prefunded payout account with you as its agent first.</Text>
+              )}
               {accounts.map((a) => (
                 <Pressable key={a.id} onPress={() => setAccountId(a.id)} style={[s.option, { borderColor: accountId === a.id ? t.primary : t.line }]}>
                   <Text style={{ color: t.text, fontWeight: '600' }}>{a.label}</Text>
-                  <Text style={{ color: t.muted, fontSize: 12 }}>{a.operatorName ?? a.rail} · {a.currency} · SIM {a.msisdn ?? a.simIccid ?? '—'}{a.deviceId ? ' · already has a device (this will replace it)' : ''}{a.status !== 'active' ? ` · ${a.status}` : ''}</Text>
+                  <Text style={{ color: t.muted, fontSize: 12 }}>
+                    {a.operatorName ?? a.rail} · {a.currency} · SIM {a.msisdn ?? a.simIccid ?? '—'}
+                    {a.deviceId ? ' · already has a device (this will replace it)' : ''}
+                    {a.status !== 'active' ? ` · ${a.status}` : ''}
+                  </Text>
                 </Pressable>
               ))}
             </>
@@ -206,9 +311,20 @@ function Enrol({ t, onDone }: { t: Theme; onDone: (e: Enrolment) => void }) {
             <View style={{ marginBottom: 12 }}>
               <Text style={[s.label, { color: t.muted }]}>SIMs detected</Text>
               {sims.map((si) => (
-                <Pressable key={si.subscriptionId} onPress={() => { if (si.msisdn) setMsisdn(si.msisdn); if (si.iccid) setIccid(si.iccid); }} style={[s.option, { borderColor: t.line }]}>
-                  <Text style={{ color: t.text }}>Slot {si.simSlot + 1} · {si.carrier ?? si.displayName ?? 'SIM'}</Text>
-                  <Text style={{ color: t.muted, fontSize: 12 }}>{si.msisdn ?? 'number not readable'} · {si.iccid ?? 'ICCID not readable'}</Text>
+                <Pressable
+                  key={si.subscriptionId}
+                  onPress={() => {
+                    if (si.msisdn) setMsisdn(si.msisdn);
+                    if (si.iccid) setIccid(si.iccid);
+                  }}
+                  style={[s.option, { borderColor: t.line }]}
+                >
+                  <Text style={{ color: t.text }}>
+                    Slot {si.simSlot + 1} · {si.carrier ?? si.displayName ?? 'SIM'}
+                  </Text>
+                  <Text style={{ color: t.muted, fontSize: 12 }}>
+                    {si.msisdn ?? 'number not readable'} · {si.iccid ?? 'ICCID not readable'}
+                  </Text>
                 </Pressable>
               ))}
             </View>
@@ -216,7 +332,11 @@ function Enrol({ t, onDone }: { t: Theme; onDone: (e: Enrolment) => void }) {
           <Field t={t} label="SIM number (MSISDN, international format)" value={msisdn} onChangeText={setMsisdn} keyboardType="phone-pad" placeholder="+243…" />
           <Field t={t} label="SIM ICCID (optional)" value={iccid} onChangeText={setIccid} keyboardType="number-pad" />
           <Field t={t} label="Only forward SMS from these senders (comma-separated; empty = all)" value={filters} onChangeText={setFilters} autoCapitalize="none" placeholder="OrangeMoney, MPESA" />
-          {!Sms.isNativeAvailable() && <Text style={{ color: t.warn, marginBottom: 8 }}>Native SMS receiver not available in this build (Expo Go / iOS). Build the Android app with `expo run:android` for automatic forwarding.</Text>}
+          {!Sms.isNativeAvailable() && (
+            <Text style={{ color: t.warn, marginBottom: 8 }}>
+              Native SMS receiver not available in this build (Expo Go / iOS). Build the Android app with `expo run:android` for automatic forwarding.
+            </Text>
+          )}
           {error && <Text style={{ color: t.danger, marginBottom: 8 }}>{error}</Text>}
           <Button t={t} title={busy ? 'Generating key & registering…' : 'Generate key and enrol'} onPress={enrol} disabled={busy} />
         </Card>
@@ -264,34 +384,56 @@ function Home({ t, enrolment, privateKey, onUnenrol }: { t: Theme; enrolment: En
     } catch (err) {
       const e = err as ApiError;
       setError(e.code === 'device_revoked' ? 'This device has been revoked by an administrator. Re-enrol to continue.' : e.message);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
     setLog(await loadLog());
     setPending(await loadPending());
   }, [enrolment, privateKey]);
 
   // SMS → signed evidence, immediately.
-  const handleSms = useCallback(async (sms: Sms.ReceivedSms | IncomingSms) => {
-    if (!matchesFilters(sms.from, enrolment.senderFilters)) { await appendLog({ level: 'info', text: `Ignored SMS from ${sms.from} (not an operator sender)` }); setLog(await loadLog()); return; }
-    setLastSms(`${sms.from}: ${sms.text.slice(0, 80)}`);
-    await forwardSms({ enrolment, privateKeyHex: privateKey, activePayoutId: activeRef.current }, { id: sms.id, from: sms.from, text: sms.text, receivedAt: sms.receivedAt });
-    Sms.acknowledge([sms.id]);
-    await refresh();
-  }, [enrolment, privateKey, refresh]);
+  const handleSms = useCallback(
+    async (sms: Sms.ReceivedSms | IncomingSms) => {
+      if (!matchesFilters(sms.from, enrolment.senderFilters)) {
+        await appendLog({ level: 'info', text: `Ignored SMS from ${sms.from} (not an operator sender)` });
+        setLog(await loadLog());
+        return;
+      }
+      setLastSms(`${sms.from}: ${sms.text.slice(0, 80)}`);
+      await forwardSms({ enrolment, privateKeyHex: privateKey, activePayoutId: activeRef.current }, { id: sms.id, from: sms.from, text: sms.text, receivedAt: sms.receivedAt });
+      Sms.acknowledge([sms.id]);
+      await refresh();
+    },
+    [enrolment, privateKey, refresh],
+  );
 
   useEffect(() => {
     Sms.requestPermissions().then((ok) => setPermissions(ok || Sms.hasPermissions()));
     refresh();
     // Messages received while the app was closed are still in the native store.
-    (async () => { for (const m of Sms.drainPending()) await handleSms(m); })();
-    const off = Sms.onSms((m) => { handleSms(m); });
+    (async () => {
+      for (const m of Sms.drainPending()) await handleSms(m);
+    })();
+    const off = Sms.onSms((m) => {
+      handleSms(m);
+    });
     const timer = setInterval(async () => {
       if (AppState.currentState !== 'active') return;
       await refresh();
       const f = await flushPending(enrolment.apiUrl);
       if (f.delivered) setPending(await loadPending());
     }, POLL_MS);
-    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') { refresh(); setPermissions(Sms.hasPermissions()); } });
-    return () => { off(); clearInterval(timer); sub.remove(); };
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') {
+        refresh();
+        setPermissions(Sms.hasPermissions());
+      }
+    });
+    return () => {
+      off();
+      clearInterval(timer);
+      sub.remove();
+    };
   }, [refresh, handleSms, enrolment.apiUrl]);
 
   const claim = async (p: Payout) => {
@@ -299,18 +441,28 @@ function Home({ t, enrolment, privateKey, onUnenrol }: { t: Theme; enrolment: En
       await deviceCall(enrolment.apiUrl, privateKey, enrolment.deviceId, 'POST', `/api/payouts/device/${p.id}/claim`);
       await appendLog({ level: 'info', text: `Claimed payout ${p.reference} – ${fmt(p.amount, p.currency)} to ${p.recipientMasked}` });
       await refresh();
-    } catch (err) { Alert.alert('Could not claim', (err as Error).message); }
+    } catch (err) {
+      Alert.alert('Could not claim', (err as Error).message);
+    }
   };
   const release = (p: Payout) => {
     Alert.alert('Return to queue', 'Give this payout back to the queue? Do this only if the operator transfer did NOT go through.', [
       { text: 'Keep', style: 'cancel' },
-      { text: 'Return', style: 'destructive', onPress: async () => {
-        try {
-          await deviceCall(enrolment.apiUrl, privateKey, enrolment.deviceId, 'POST', `/api/payouts/device/${p.id}/release`, { reason: 'Released from payout device: operator transfer not completed' });
-          await appendLog({ level: 'warn', text: `Released payout ${p.reference} back to the queue` });
-          await refresh();
-        } catch (err) { Alert.alert('Could not release', (err as Error).message); }
-      } },
+      {
+        text: 'Return',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deviceCall(enrolment.apiUrl, privateKey, enrolment.deviceId, 'POST', `/api/payouts/device/${p.id}/release`, {
+              reason: 'Released from payout device: operator transfer not completed',
+            });
+            await appendLog({ level: 'warn', text: `Released payout ${p.reference} back to the queue` });
+            await refresh();
+          } catch (err) {
+            Alert.alert('Could not release', (err as Error).message);
+          }
+        },
+      },
     ]);
   };
   const dial = async (p: Payout) => {
@@ -326,10 +478,20 @@ function Home({ t, enrolment, privateKey, onUnenrol }: { t: Theme; enrolment: En
     setManualText('');
   };
 
-  const unenrol = () => Alert.alert('Remove enrolment', 'This deletes the device key from this phone. Ask an administrator to revoke the device on the server too.', [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Remove', style: 'destructive', onPress: async () => { await secure.clearPrivateKey(); await saveEnrolment(null); await savePending([]); onUnenrol(); } },
-  ]);
+  const unenrol = () =>
+    Alert.alert('Remove enrolment', 'This deletes the device key from this phone. Ask an administrator to revoke the device on the server too.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          await secure.clearPrivateKey();
+          await saveEnrolment(null);
+          await savePending([]);
+          onUnenrol();
+        },
+      },
+    ]);
 
   const renderPayout = ({ item: p }: { item: Payout }) => {
     const mine = p.claimedByDeviceId === enrolment.deviceId;
@@ -339,13 +501,26 @@ function Home({ t, enrolment, privateKey, onUnenrol }: { t: Theme; enrolment: En
           <Text style={{ color: t.text, fontWeight: '700', fontSize: 18 }}>{fmt(p.amount, p.currency)}</Text>
           <Chip t={t} text={p.stage.replace(/_/g, ' ')} color={stageColor(p.stage, t)} />
         </View>
-        <Text style={{ color: t.muted, marginTop: 4 }}>{p.operatorName ?? p.operatorId} · ref {p.reference}</Text>
-        <Text style={{ color: t.text, marginTop: 4 }}>To {mine && p.recipientMsisdn ? p.recipientMsisdn : p.recipientMasked}{p.recipientName ? ` (${p.recipientName})` : ''}</Text>
+        <Text style={{ color: t.muted, marginTop: 4 }}>
+          {p.operatorName ?? p.operatorId} · ref {p.reference}
+        </Text>
+        <Text style={{ color: t.text, marginTop: 4 }}>
+          To {mine && p.recipientMsisdn ? p.recipientMsisdn : p.recipientMasked}
+          {p.recipientName ? ` (${p.recipientName})` : ''}
+        </Text>
         {p.riskFlags?.length > 0 && <Text style={{ color: t.warn, fontSize: 12, marginTop: 4 }}>Flags: {p.riskFlags.join(', ')}</Text>}
-        {p.stage === 'QUEUED' && <View style={{ marginTop: 10 }}><Button t={t} title="Claim and pay" onPress={() => claim(p)} /></View>}
+        {p.stage === 'QUEUED' && (
+          <View style={{ marginTop: 10 }}>
+            <Button t={t} title="Claim and pay" onPress={() => claim(p)} />
+          </View>
+        )}
         {p.stage === 'IN_PROGRESS' && mine && (
           <View style={{ marginTop: 10 }}>
-            {p.instructions?.steps.map((step, i) => <Text key={i} style={{ color: t.text, marginBottom: 4 }}>{i + 1}. {step}</Text>)}
+            {p.instructions?.steps.map((step, i) => (
+              <Text key={i} style={{ color: t.text, marginBottom: 4 }}>
+                {i + 1}. {step}
+              </Text>
+            ))}
             {p.expiresAt && <Text style={{ color: t.muted, fontSize: 12 }}>Claim expires {new Date(p.expiresAt).toLocaleTimeString()}</Text>}
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
               <Button t={t} title={p.instructions?.ussd ? `Dial ${p.instructions.ussd}` : 'Open operator menu'} onPress={() => dial(p)} kind="ok" />
@@ -367,56 +542,120 @@ function Home({ t, enrolment, privateKey, onUnenrol }: { t: Theme; enrolment: En
       <View style={[s.header, { borderColor: t.line }]}>
         <View style={{ flex: 1 }}>
           <Text style={[s.h1, { color: t.text, marginBottom: 0 }]}>{enrolment.deviceName}</Text>
-          <Text style={{ color: t.muted, fontSize: 12 }}>{enrolment.payoutAccountLabel ?? 'SMS collector'} · SIM {enrolment.simMsisdn ?? enrolment.simIccid}</Text>
+          <Text style={{ color: t.muted, fontSize: 12 }}>
+            {enrolment.payoutAccountLabel ?? 'SMS collector'} · SIM {enrolment.simMsisdn ?? enrolment.simIccid}
+          </Text>
         </View>
-        <Chip t={t} text={error ? 'offline' : Sms.isNativeAvailable() ? (permissions ? 'listening' : 'no SMS permission') : 'manual'} color={error || (Sms.isNativeAvailable() && !permissions) ? t.danger : t.ok} />
+        <Chip
+          t={t}
+          text={error ? 'offline' : Sms.isNativeAvailable() ? (permissions ? 'listening' : 'no SMS permission') : 'manual'}
+          color={error || (Sms.isNativeAvailable() && !permissions) ? t.danger : t.ok}
+        />
       </View>
       <View style={[s.tabs, { borderColor: t.line }]}>
         {(['queue', 'log', 'device'] as const).map((k) => (
           <Pressable key={k} onPress={() => setTab(k)} style={[s.tab, tab === k && { borderBottomColor: t.primary, borderBottomWidth: 2 }]}>
-            <Text style={{ color: tab === k ? t.primary : t.muted, fontWeight: '600' }}>{k === 'queue' ? `Queue (${queue.length})` : k === 'log' ? `Log${pending.length ? ` · ${pending.length} pending` : ''}` : 'Device'}</Text>
+            <Text style={{ color: tab === k ? t.primary : t.muted, fontWeight: '600' }}>
+              {k === 'queue' ? `Queue (${queue.length})` : k === 'log' ? `Log${pending.length ? ` · ${pending.length} pending` : ''}` : 'Device'}
+            </Text>
           </Pressable>
         ))}
       </View>
       {error && <Text style={{ color: t.danger, padding: 12 }}>{error}</Text>}
       {tab === 'queue' && (
-        <FlatList data={queue} keyExtractor={(p) => p.id} renderItem={renderPayout} contentContainerStyle={{ padding: 16 }} refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={t.muted} />}
+        <FlatList
+          data={queue}
+          keyExtractor={(p) => p.id}
+          renderItem={renderPayout}
+          contentContainerStyle={{ padding: 16 }}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={t.muted} />}
           ListHeaderComponent={lastSms ? <Text style={{ color: t.muted, fontSize: 12, marginBottom: 8 }}>Last SMS: {lastSms}</Text> : null}
-          ListEmptyComponent={<Text style={{ color: t.muted, textAlign: 'center', marginTop: 40 }}>{enrolment.kind === 'payout' ? 'No payouts queued for this SIM. New instructions appear here automatically.' : 'This device forwards operator SMS as evidence; nothing to do here.'}</Text>}
-          ListFooterComponent={!Sms.isNativeAvailable() ? (
-            <Card t={t} style={{ marginTop: 12 }}>
-              <Text style={{ color: t.warn, fontWeight: '600', marginBottom: 6 }}>Development mode – native SMS receiver unavailable</Text>
-              <Text style={{ color: t.muted, fontSize: 12, marginBottom: 8 }}>Paste the operator SMS to sign and forward it. Production devices must run the native Android build so evidence comes only from real received messages.</Text>
-              <Field t={t} label="Sender" value={manualFrom} onChangeText={setManualFrom} placeholder="OrangeMoney" />
-              <Field t={t} label="Message" value={manualText} onChangeText={setManualText} multiline />
-              <Button t={t} title="Sign and forward" onPress={submitManual} kind="ghost" />
-            </Card>
-          ) : null} />
+          ListEmptyComponent={
+            <Text style={{ color: t.muted, textAlign: 'center', marginTop: 40 }}>
+              {enrolment.kind === 'payout' ? 'No payouts queued for this SIM. New instructions appear here automatically.' : 'This device forwards operator SMS as evidence; nothing to do here.'}
+            </Text>
+          }
+          ListFooterComponent={
+            !Sms.isNativeAvailable() ? (
+              <Card t={t} style={{ marginTop: 12 }}>
+                <Text style={{ color: t.warn, fontWeight: '600', marginBottom: 6 }}>Development mode – native SMS receiver unavailable</Text>
+                <Text style={{ color: t.muted, fontSize: 12, marginBottom: 8 }}>
+                  Paste the operator SMS to sign and forward it. Production devices must run the native Android build so evidence comes only from real received messages.
+                </Text>
+                <Field t={t} label="Sender" value={manualFrom} onChangeText={setManualFrom} placeholder="OrangeMoney" />
+                <Field t={t} label="Message" value={manualText} onChangeText={setManualText} multiline />
+                <Button t={t} title="Sign and forward" onPress={submitManual} kind="ghost" />
+              </Card>
+            ) : null
+          }
+        />
       )}
       {tab === 'log' && (
-        <FlatList data={log} keyExtractor={(l, i) => `${l.at}-${i}`} contentContainerStyle={{ padding: 16 }}
-          ListHeaderComponent={pending.length ? <Card t={t} style={{ marginBottom: 10 }}><Text style={{ color: t.warn, fontWeight: '600' }}>{pending.length} signed confirmation(s) waiting for connectivity</Text><Text style={{ color: t.muted, fontSize: 12 }}>They are retried every {POLL_MS / 1000}s and delivered once. Last error: {pending[0].lastError}</Text><View style={{ marginTop: 8 }}><Button t={t} title="Retry now" kind="ghost" onPress={async () => { await flushPending(enrolment.apiUrl); await refresh(); }} /></View></Card> : null}
+        <FlatList
+          data={log}
+          keyExtractor={(l, i) => `${l.at}-${i}`}
+          contentContainerStyle={{ padding: 16 }}
+          ListHeaderComponent={
+            pending.length ? (
+              <Card t={t} style={{ marginBottom: 10 }}>
+                <Text style={{ color: t.warn, fontWeight: '600' }}>{pending.length} signed confirmation(s) waiting for connectivity</Text>
+                <Text style={{ color: t.muted, fontSize: 12 }}>
+                  They are retried every {POLL_MS / 1000}s and delivered once. Last error: {pending[0].lastError}
+                </Text>
+                <View style={{ marginTop: 8 }}>
+                  <Button
+                    t={t}
+                    title="Retry now"
+                    kind="ghost"
+                    onPress={async () => {
+                      await flushPending(enrolment.apiUrl);
+                      await refresh();
+                    }}
+                  />
+                </View>
+              </Card>
+            ) : null
+          }
           renderItem={({ item }) => (
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-              <Text style={{ color: item.level === 'ok' ? t.ok : item.level === 'warn' ? t.warn : item.level === 'error' ? t.danger : t.muted, fontSize: 12, width: 62 }}>{new Date(item.at).toLocaleTimeString()}</Text>
+              <Text style={{ color: item.level === 'ok' ? t.ok : item.level === 'warn' ? t.warn : item.level === 'error' ? t.danger : t.muted, fontSize: 12, width: 62 }}>
+                {new Date(item.at).toLocaleTimeString()}
+              </Text>
               <Text style={{ color: t.text, flex: 1, fontSize: 13 }}>{item.text}</Text>
             </View>
           )}
-          ListEmptyComponent={<Text style={{ color: t.muted, textAlign: 'center', marginTop: 40 }}>No activity yet.</Text>} />
+          ListEmptyComponent={<Text style={{ color: t.muted, textAlign: 'center', marginTop: 40 }}>No activity yet.</Text>}
+        />
       )}
       {tab === 'device' && (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           <Card t={t}>
             <Text style={[s.label, { color: t.muted }]}>Device id</Text>
-            <Text selectable style={{ color: t.text, marginBottom: 12 }}>{enrolment.deviceId}</Text>
-            <View style={{ alignItems: 'center', marginBottom: 12 }}><QRCode value={enrolment.deviceId} size={140} backgroundColor="transparent" color={t.text} /></View>
-            <Text style={{ color: t.muted, fontSize: 12 }}>API {enrolment.apiUrl}{'\n'}Enrolled {new Date(enrolment.enrolledAt).toLocaleString()}{'\n'}Role {enrolment.kind}{enrolment.operatorId ? ` · operator ${enrolment.operatorId}` : ''}{'\n'}Sender filters: {enrolment.senderFilters.length ? enrolment.senderFilters.join(', ') : 'all senders'}</Text>
+            <Text selectable style={{ color: t.text, marginBottom: 12 }}>
+              {enrolment.deviceId}
+            </Text>
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+              <QRCode value={enrolment.deviceId} size={140} backgroundColor="transparent" color={t.text} />
+            </View>
+            <Text style={{ color: t.muted, fontSize: 12 }}>
+              API {enrolment.apiUrl}
+              {'\n'}Enrolled {new Date(enrolment.enrolledAt).toLocaleString()}
+              {'\n'}Role {enrolment.kind}
+              {enrolment.operatorId ? ` · operator ${enrolment.operatorId}` : ''}
+              {'\n'}Sender filters: {enrolment.senderFilters.length ? enrolment.senderFilters.join(', ') : 'all senders'}
+            </Text>
           </Card>
           <Card t={t} style={{ marginTop: 12 }}>
             <Text style={{ color: t.text, fontWeight: '600', marginBottom: 6 }}>How this device is trusted</Text>
-            <Text style={{ color: t.muted, fontSize: 13 }}>• The Ed25519 private key was generated on this phone and is stored in the Android keystore-backed secure store. It cannot be exported.{'\n'}• Every request and every forwarded SMS is signed; the server refuses replays, wrong SIMs and altered text.{'\n'}• Nothing settles because of this app: the server verifies each confirmation against the payout it queued.{'\n'}• If the phone or SIM is lost, an administrator revokes the device and its evidence stops being accepted.</Text>
+            <Text style={{ color: t.muted, fontSize: 13 }}>
+              • The Ed25519 private key was generated on this phone and is stored in the Android keystore-backed secure store. It cannot be exported.{'\n'}• Every request and every forwarded SMS is
+              signed; the server refuses replays, wrong SIMs and altered text.{'\n'}• Nothing settles because of this app: the server verifies each confirmation against the payout it queued.{'\n'}• If
+              the phone or SIM is lost, an administrator revokes the device and its evidence stops being accepted.
+            </Text>
           </Card>
-          <View style={{ marginTop: 16 }}><Button t={t} title="Remove enrolment from this phone" kind="danger" onPress={unenrol} /></View>
+          <View style={{ marginTop: 16 }}>
+            <Button t={t} title="Remove enrolment from this phone" kind="danger" onPress={unenrol} />
+          </View>
         </ScrollView>
       )}
     </View>
@@ -439,10 +678,19 @@ export default function App() {
     const enrolled = hw && (await LocalAuthentication.isEnrolledAsync().catch(() => false));
     if (enrolled) {
       const r = await LocalAuthentication.authenticateAsync({ promptMessage: 'Unlock the payout device', fallbackLabel: 'Use device passcode' });
-      if (!r.success) { setUnlockError('Unlock failed'); return; }
+      if (!r.success) {
+        setUnlockError('Unlock failed');
+        return;
+      }
     }
     const key = await secure.getPrivateKey();
-    if (!key) { setUnlockError('Device key missing – re-enrol'); await saveEnrolment(null); setEnrolment(null); setState('enrol'); return; }
+    if (!key) {
+      setUnlockError('Device key missing – re-enrol');
+      await saveEnrolment(null);
+      setEnrolment(null);
+      setState('enrol');
+      return;
+    }
     setPrivateKey(key);
     setState('home');
   }, []);
@@ -454,23 +702,47 @@ export default function App() {
       setState(e ? 'locked' : 'enrol');
     })();
   }, []);
-  useEffect(() => { if (state === 'locked') unlock(); }, [state, unlock]);
+  useEffect(() => {
+    if (state === 'locked') unlock();
+  }, [state, unlock]);
 
   return (
     <SafeAreaProvider>
       <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
         <StatusBar style={t.dark ? 'light' : 'dark'} />
         {state === 'loading' && <ActivityIndicator style={{ marginTop: 80 }} color={t.primary} />}
-        {state === 'enrol' && <Enrol t={t} onDone={(e) => { setEnrolment(e); setState('locked'); }} />}
+        {state === 'enrol' && (
+          <Enrol
+            t={t}
+            onDone={(e) => {
+              setEnrolment(e);
+              setState('locked');
+            }}
+          />
+        )}
         {state === 'locked' && (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
             <Text style={[s.h1, { color: t.text }]}>BitriPay payout device</Text>
-            <Text style={{ color: t.muted, textAlign: 'center', marginBottom: 16 }}>{enrolment?.deviceName}{'\n'}Unlock with your fingerprint or face to start executing payouts.</Text>
+            <Text style={{ color: t.muted, textAlign: 'center', marginBottom: 16 }}>
+              {enrolment?.deviceName}
+              {'\n'}Unlock with your fingerprint or face to start executing payouts.
+            </Text>
             {unlockError && <Text style={{ color: t.danger, marginBottom: 12 }}>{unlockError}</Text>}
             <Button t={t} title="Unlock" onPress={unlock} />
           </View>
         )}
-        {state === 'home' && enrolment && privateKey && <Home t={t} enrolment={enrolment} privateKey={privateKey} onUnenrol={() => { setPrivateKey(null); setEnrolment(null); setState('enrol'); }} />}
+        {state === 'home' && enrolment && privateKey && (
+          <Home
+            t={t}
+            enrolment={enrolment}
+            privateKey={privateKey}
+            onUnenrol={() => {
+              setPrivateKey(null);
+              setEnrolment(null);
+              setState('enrol');
+            }}
+          />
+        )}
       </SafeAreaView>
     </SafeAreaProvider>
   );

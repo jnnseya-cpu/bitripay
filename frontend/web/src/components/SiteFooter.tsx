@@ -43,33 +43,83 @@ export function SiteFooter() {
     <footer className="lp-footer">
       <div className="lp-wrap lp-footer-grid">
         <div className="lp-footer-brand">
-          <div className="lp-brand"><img src="/brand/logo.svg" alt={site?.siteName || 'BitriPay'} width={140} height={34} /></div>
+          <div className="lp-brand">
+            <img src="/brand/logo.svg" alt={site?.siteName || 'BitriPay'} width={140} height={34} />
+          </div>
           <p>Money that works for everyone: the mother selling food at the market, the moto-taxi rider paid by his passengers, the shop on the corner and the family sending money home.</p>
           {site?.contactEmail && <a href={`mailto:${site.contactEmail}`}>{site.contactEmail}</a>}
           <div className="lp-footer-social">
-            {site?.social?.twitter && <a href={site.social.twitter} rel="noopener" target="_blank">X</a>}
-            {site?.social?.facebook && <a href={site.social.facebook} rel="noopener" target="_blank">Facebook</a>}
-            {site?.social?.instagram && <a href={site.social.instagram} rel="noopener" target="_blank">Instagram</a>}
-            {site?.social?.linkedin && <a href={site.social.linkedin} rel="noopener" target="_blank">LinkedIn</a>}
-            {site?.social?.youtube && <a href={site.social.youtube} rel="noopener" target="_blank">YouTube</a>}
+            {site?.social?.twitter && (
+              <a href={site.social.twitter} rel="noopener" target="_blank">
+                X
+              </a>
+            )}
+            {site?.social?.facebook && (
+              <a href={site.social.facebook} rel="noopener" target="_blank">
+                Facebook
+              </a>
+            )}
+            {site?.social?.instagram && (
+              <a href={site.social.instagram} rel="noopener" target="_blank">
+                Instagram
+              </a>
+            )}
+            {site?.social?.linkedin && (
+              <a href={site.social.linkedin} rel="noopener" target="_blank">
+                LinkedIn
+              </a>
+            )}
+            {site?.social?.youtube && (
+              <a href={site.social.youtube} rel="noopener" target="_blank">
+                YouTube
+              </a>
+            )}
           </div>
         </div>
         <div>
           <h4>Product</h4>
-          <ul>{FOOTER_LINKS.product.map((l) => <li key={l.to}><Link to={l.to}>{l.label}</Link></li>)}</ul>
+          <ul>
+            {FOOTER_LINKS.product.map((l) => (
+              <li key={l.to}>
+                <Link to={l.to}>{l.label}</Link>
+              </li>
+            ))}
+          </ul>
         </div>
         <div>
           <h4>Company</h4>
-          <ul>{FOOTER_LINKS.company.map((l) => <li key={l.href}><a href={l.href}>{l.label}</a></li>)}</ul>
+          <ul>
+            {FOOTER_LINKS.company.map((l) => (
+              <li key={l.href}>
+                <a href={l.href}>{l.label}</a>
+              </li>
+            ))}
+          </ul>
         </div>
         <div>
           <h4>Legal</h4>
-          <ul>{FOOTER_LINKS.legal.map((l) => <li key={l.href}><a href={l.href}>{l.label}</a></li>)}</ul>
+          <ul>
+            {FOOTER_LINKS.legal.map((l) => (
+              <li key={l.href}>
+                <a href={l.href}>{l.label}</a>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
       <div className="lp-wrap lp-footer-legal">
-        <p>© {year} {site?.siteName || 'BitriPay'}. BitriPay balances are electronic money, not bank deposits, and are backed one-to-one by safeguarded funds where the platform is authorised. Where it is not yet authorised, accounts run in sandbox mode with no real-world value and the app says so. Cross-border transfers are a regulated money-transfer service offered only through authorised corridors. Card payments are processed by licensed card processors; BitriPay never stores full card numbers.</p>
-        <p className="lp-footer-links"><a href="/sitemap.xml">Sitemap</a><a href="/feed.xml">RSS</a><a href="/llms.txt">llms.txt</a>{site?.appUrls?.playStore && <a href={site.appUrls.playStore}>Google Play</a>}{site?.appUrls?.appStore && <a href={site.appUrls.appStore}>App Store</a>}</p>
+        <p>
+          © {year} {site?.siteName || 'BitriPay'}. BitriPay balances are electronic money, not bank deposits, and are backed one-to-one by safeguarded funds where the platform is authorised. Where it
+          is not yet authorised, accounts run in sandbox mode with no real-world value and the app says so. Cross-border transfers are a regulated money-transfer service offered only through
+          authorised corridors. Card payments are processed by licensed card processors; BitriPay never stores full card numbers.
+        </p>
+        <p className="lp-footer-links">
+          <a href="/sitemap.xml">Sitemap</a>
+          <a href="/feed.xml">RSS</a>
+          <a href="/llms.txt">llms.txt</a>
+          {site?.appUrls?.playStore && <a href={site.appUrls.playStore}>Google Play</a>}
+          {site?.appUrls?.appStore && <a href={site.appUrls.appStore}>App Store</a>}
+        </p>
       </div>
     </footer>
   );

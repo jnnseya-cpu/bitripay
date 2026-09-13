@@ -10,7 +10,31 @@ import { now } from '../lib/ids';
 import { conflict } from '../lib/errors';
 import { recordEvent, type Actor } from './events';
 
-export const ROUTE_STAGES = ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'BIOMETRICALLY_APPROVED', 'FUNDING_PENDING', 'FUNDED', 'FX_RESERVED', 'AWAITING_CONFIRMATION', 'PAYOUT_ROUTED', 'PAYOUT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'VERIFIED', 'SETTLED', 'EXPIRED', 'FAILED', 'MISMATCHED', 'DUPLICATE', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'DISPUTED', 'REVERSED', 'REFUNDED'] as const;
+export const ROUTE_STAGES = [
+  'CREATED',
+  'QUOTED',
+  'BIOMETRIC_APPROVAL_REQUIRED',
+  'BIOMETRICALLY_APPROVED',
+  'FUNDING_PENDING',
+  'FUNDED',
+  'FX_RESERVED',
+  'AWAITING_CONFIRMATION',
+  'PAYOUT_ROUTED',
+  'PAYOUT_SENT',
+  'EVIDENCE_RECEIVED',
+  'VERIFYING',
+  'VERIFIED',
+  'SETTLED',
+  'EXPIRED',
+  'FAILED',
+  'MISMATCHED',
+  'DUPLICATE',
+  'INSUFFICIENT_LIQUIDITY',
+  'MANUAL_REVIEW',
+  'DISPUTED',
+  'REVERSED',
+  'REFUNDED',
+] as const;
 export type RouteStage = (typeof ROUTE_STAGES)[number];
 
 export const ROUTE_TERMINAL: RouteStage[] = ['SETTLED', 'EXPIRED', 'FAILED', 'REVERSED', 'REFUNDED'];
@@ -78,7 +102,11 @@ export const ROUTE_STAGE_LABELS: Record<RouteStage, { label: string; group: 'ini
   BIOMETRICALLY_APPROVED: { label: 'Biometrically approved', group: 'initiated', description: 'Approved with biometrics / passkey / PIN. Funding is being collected.' },
   FUNDED: { label: 'Funded', group: 'funded', description: 'Funding confirmed and held in safeguarded e-money. The payout is being prepared.' },
   FX_RESERVED: { label: 'FX reserved', group: 'funded', description: 'The exchange rate is locked and local liquidity reserved at the disclosed rate.' },
-  AWAITING_CONFIRMATION: { label: 'Awaiting confirmation', group: 'exception', description: 'Waiting for the recipient to confirm the payout currency (required in this corridor) or for the operator confirmation.' },
+  AWAITING_CONFIRMATION: {
+    label: 'Awaiting confirmation',
+    group: 'exception',
+    description: 'Waiting for the recipient to confirm the payout currency (required in this corridor) or for the operator confirmation.',
+  },
   PAYOUT_ROUTED: { label: 'Payout routed', group: 'paying', description: 'Routed to a prefunded payout account or an approved local agent.' },
   PAYOUT_SENT: { label: 'Payout sent', group: 'paying', description: 'The payout is being executed from the local account (USSD / operator app).' },
   EVIDENCE_RECEIVED: { label: 'Evidence received', group: 'paying', description: 'The operator confirmation was received and is being checked.' },
@@ -89,7 +117,11 @@ export const ROUTE_STAGE_LABELS: Record<RouteStage, { label: string; group: 'ini
   FAILED: { label: 'Failed', group: 'exception', description: 'The transfer failed. Held funds are returned or refundable.' },
   MISMATCHED: { label: 'Mismatched', group: 'exception', description: 'The operator confirmation did not match. Under review.' },
   DUPLICATE: { label: 'Duplicate', group: 'exception', description: 'The confirmation was already used. Under review.' },
-  INSUFFICIENT_LIQUIDITY: { label: 'Insufficient liquidity', group: 'exception', description: 'No prefunded local account can pay this right now. Funds are safe; the payout resumes once liquidity is available.' },
+  INSUFFICIENT_LIQUIDITY: {
+    label: 'Insufficient liquidity',
+    group: 'exception',
+    description: 'No prefunded local account can pay this right now. Funds are safe; the payout resumes once liquidity is available.',
+  },
   MANUAL_REVIEW: { label: 'Manual review', group: 'exception', description: 'A verifier must review this transfer before the payout continues.' },
   DISPUTED: { label: 'Disputed', group: 'exception', description: 'The funding is disputed (chargeback).' },
   REVERSED: { label: 'Reversed', group: 'exception', description: 'The transfer was reversed.' },

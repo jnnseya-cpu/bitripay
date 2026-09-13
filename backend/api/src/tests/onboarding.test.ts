@@ -17,7 +17,18 @@ describe('processor onboarding', () => {
     expect(sbx.body.mode).toBe('test');
     expect(sbx.body.webhookUrl).toContain('/api/webhooks/sandbox');
     // Live Stripe keys are recognised as live and are not offered to payers while the platform is in sandbox mode.
-    await request(app).put('/api/admin/gateways/stripe_live').set(admin.auth).send({ name: 'Stripe live', provider: 'stripe', enabled: true, methods: ['card'], currencies: ['USD'], credentials: { secretKey: 'sk_live_abc', publishableKey: 'pk_live_abc', webhookSecret: 'whsec_x' }, config: { threeDSecure: 'any' } });
+    await request(app)
+      .put('/api/admin/gateways/stripe_live')
+      .set(admin.auth)
+      .send({
+        name: 'Stripe live',
+        provider: 'stripe',
+        enabled: true,
+        methods: ['card'],
+        currencies: ['USD'],
+        credentials: { secretKey: 'sk_live_abc', publishableKey: 'pk_live_abc', webhookSecret: 'whsec_x' },
+        config: { threeDSecure: 'any' },
+      });
     const list = await request(app).get('/api/admin/gateways').set(admin.auth);
     const live = list.body.items.find((g: any) => g.id === 'stripe_live');
     expect(live.mode).toBe('live');
@@ -42,7 +53,10 @@ describe('processor onboarding', () => {
     const ids = cl.body.items.map((i: any) => i.id);
     for (const id of ['processor', 'processor_live_keys', 'rates', 'corridor_live', 'liquidity', 'sanctions', 'maker_checker', 'kyc', 'secrets']) expect(ids).toContain(id);
     for (const i of cl.body.items) if (!i.ok) expect(i.fix ?? i.detail).toBeTruthy();
-    const sw = await request(app).put('/api/admin/settings/compliance').set(admin.auth).send({ value: { mode: 'live' }, pin: admin.pin });
+    const sw = await request(app)
+      .put('/api/admin/settings/compliance')
+      .set(admin.auth)
+      .send({ value: { mode: 'live' }, pin: admin.pin });
     expect(sw.status).toBe(400);
     expect(sw.body.error.code).toBe('go_live_blocked');
     expect(sw.body.error.details.items.some((i: any) => i.id === 'sandbox_off' && !i.ok)).toBe(true);
@@ -57,12 +71,18 @@ describe('live rate providers', () => {
     expect(status0.body.providers.map((p: any) => p.id)).toEqual(expect.arrayContaining(['frankfurter', 'open_er_api', 'exchangerate_host', 'openexchangerates', 'fixer']));
     expect(status0.body.freshness.live).toBe(false); // bundled test rates
     // A keyed provider without a key is refused with a clear message.
-    await request(app).put('/api/admin/settings/app').set(admin.auth).send({ value: { rateProvider: 'openexchangerates' } });
+    await request(app)
+      .put('/api/admin/settings/app')
+      .set(admin.auth)
+      .send({ value: { rateProvider: 'openexchangerates' } });
     const noKey = await request(app).post('/api/admin/currencies/refresh').set(admin.auth).send({});
     expect(noKey.status).toBe(400);
     expect(noKey.body.error.code).toBe('rate_provider_key_required');
     // The key is stored encrypted and masked when read back.
-    await request(app).put('/api/admin/settings/app').set(admin.auth).send({ value: { rateProvider: 'frankfurter', rateProviderKey: 'secret-key-123' } });
+    await request(app)
+      .put('/api/admin/settings/app')
+      .set(admin.auth)
+      .send({ value: { rateProvider: 'frankfurter', rateProviderKey: 'secret-key-123' } });
     const settings = await request(app).get('/api/admin/settings').set(admin.auth);
     expect(settings.body.app.rateProviderKey).toBe('••••••••');
     const { getDb } = await import('../db');
@@ -74,7 +94,10 @@ describe('live rate providers', () => {
     expect(st.body.status.lastError).toBeTruthy();
     expect(st.body.status.consecutiveFailures).toBeGreaterThan(0);
     // Manual versioned import: labelled non-live, never guaranteed, visible in the snapshot history.
-    const imp = await request(app).post('/api/admin/currencies/import').set(admin.auth).send({ rates: { EUR: 0.91, GBP: 0.78, KES: 129.5 }, note: 'Treasury desk rates 12 Sep' });
+    const imp = await request(app)
+      .post('/api/admin/currencies/import')
+      .set(admin.auth)
+      .send({ rates: { EUR: 0.91, GBP: 0.78, KES: 129.5 }, note: 'Treasury desk rates 12 Sep' });
     expect(imp.status).toBe(201);
     expect(imp.body.updated).toEqual(expect.arrayContaining(['EUR', 'GBP', 'KES']));
     const u = await registerUser(app);
@@ -90,7 +113,10 @@ describe('live rate providers', () => {
     const st3 = await request(app).get('/api/admin/currencies/rate-status').set(admin.auth);
     expect(st3.body.freshness.live).toBe(true);
     expect(st3.body.freshness.fresh).toBe(true);
-    await request(app).put('/api/admin/settings/app').set(admin.auth).send({ value: { rateProvider: 'manual' } });
+    await request(app)
+      .put('/api/admin/settings/app')
+      .set(admin.auth)
+      .send({ value: { rateProvider: 'manual' } });
   });
 });
 
@@ -101,14 +127,26 @@ describe('agent device enrolment', () => {
     const other = await registerUser(app, { role: 'agent', businessName: 'Other Point', country: 'KE' });
     const { getDb } = await import('../db');
     getDb().prepare("UPDATE users SET kyc_status = 'verified' WHERE id IN (?, ?)").run(agent.user.id, other.user.id);
-    const mine = await request(app).post('/api/admin/liquidity/accounts').set(admin.auth).send({ rail: 'mobile_money', operatorId: 'mpesa_ke', country: 'KE', currency: 'KES', label: 'M-Pesa SIM A', msisdn: '+254700000200', agentUserId: agent.user.id });
-    const theirs = await request(app).post('/api/admin/liquidity/accounts').set(admin.auth).send({ rail: 'mobile_money', operatorId: 'mpesa_ke', country: 'KE', currency: 'KES', label: 'M-Pesa SIM B', msisdn: '+254700000300', agentUserId: other.user.id });
+    const mine = await request(app)
+      .post('/api/admin/liquidity/accounts')
+      .set(admin.auth)
+      .send({ rail: 'mobile_money', operatorId: 'mpesa_ke', country: 'KE', currency: 'KES', label: 'M-Pesa SIM A', msisdn: '+254700000200', agentUserId: agent.user.id });
+    const theirs = await request(app)
+      .post('/api/admin/liquidity/accounts')
+      .set(admin.auth)
+      .send({ rail: 'mobile_money', operatorId: 'mpesa_ke', country: 'KE', currency: 'KES', label: 'M-Pesa SIM B', msisdn: '+254700000300', agentUserId: other.user.id });
     const accounts = await request(app).get('/api/payouts/agent/accounts').set(agent.auth);
     expect(accounts.body.items.map((a: any) => a.id)).toEqual([mine.body.account.id]);
     const pem = generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' }).toString();
-    const denied = await request(app).post('/api/evidence/devices').set(agent.auth).send({ name: 'Phone', publicKey: pem, kind: 'payout', simMsisdn: '+254700000300', payoutAccountId: theirs.body.account.id });
+    const denied = await request(app)
+      .post('/api/evidence/devices')
+      .set(agent.auth)
+      .send({ name: 'Phone', publicKey: pem, kind: 'payout', simMsisdn: '+254700000300', payoutAccountId: theirs.body.account.id });
     expect(denied.status).toBe(403);
-    const ok = await request(app).post('/api/evidence/devices').set(agent.auth).send({ name: 'Phone', publicKey: pem, kind: 'payout', simMsisdn: '+254700000200', payoutAccountId: mine.body.account.id });
+    const ok = await request(app)
+      .post('/api/evidence/devices')
+      .set(agent.auth)
+      .send({ name: 'Phone', publicKey: pem, kind: 'payout', simMsisdn: '+254700000200', payoutAccountId: mine.body.account.id });
     expect(ok.status, JSON.stringify(ok.body)).toBe(201);
     expect(ok.body.device.kind).toBe('payout');
     expect(ok.body.device.agentUserId).toBe(agent.user.id);

@@ -7,28 +7,21 @@
 import { getDb } from '../../db';
 import { config } from '../../config';
 import { uuid, now } from '../../lib/ids';
-import { formatMoney } from '@bitripay/shared';
 import { createUser, findUserByIdentifier, findUserByPhone, normalizePhone, type UserRow } from '../users';
 import { listWallets } from '../wallets';
 import { listTransactions, calculateFee } from '../ledger';
 import { sendMoney } from '../transfers';
 import { createCashOutRequest } from '../agents';
 import { assertPin, setPin } from '../auth';
-import { convert, getCurrency, listCurrencies } from '../currencies';
+import { convert, formatMinor, getCurrency, listCurrencies } from '../currencies';
 import { getChannelSettings, getAppSettings, getSiteSettingsSafe } from '../settings';
 import { sendSms } from '../messaging';
 
-function money(minor: number, code: string) {
-  try {
-    return formatMoney(minor, getCurrency(code, false));
-  } catch {
-    return `${minor} ${code}`;
-  }
-}
+const money = formatMinor;
 function defaultCurrency(user: UserRow): string {
   const w = listWallets(user.id);
   if (w.length) return w.sort((a, b) => b.balance - a.balance)[0].currency;
-  return listCurrencies(true).some((c) => c.code === config.baseCurrency) ? config.baseCurrency : listCurrencies(true)[0]?.code ?? 'USD';
+  return listCurrencies(true).some((c) => c.code === config.baseCurrency) ? config.baseCurrency : (listCurrencies(true)[0]?.code ?? 'USD');
 }
 function pinOk(user: UserRow, pin: string): boolean {
   try {
@@ -70,7 +63,9 @@ export function smsHandle(phoneRaw: string, body: string): string {
   if (cmd === 'STMT') {
     if (!pinOk(user, parts[1] ?? '')) return 'Wrong PIN. Format: STMT <PIN>';
     const items = listTransactions({ userId: user.id, page: 1, pageSize: 5 }).items;
-    return items.length ? `Last: ${items.map((x) => `${x.createdAt.slice(5, 10)} ${x.direction === 'in' ? '+' : '-'}${money(x.amount, x.currency)} ${x.counterparty ? '@' + x.counterparty.tag : x.type.replace(/_/g, ' ')}`).join('; ')}` : 'No transactions yet.';
+    return items.length
+      ? `Last: ${items.map((x) => `${x.createdAt.slice(5, 10)} ${x.direction === 'in' ? '+' : '-'}${money(x.amount, x.currency)} ${x.counterparty ? '@' + x.counterparty.tag : x.type.replace(/_/g, ' ')}`).join('; ')}`
+      : 'No transactions yet.';
   }
   if (cmd === 'SEND' || cmd === 'PAY' || cmd === 'CASH') {
     // SEND <amount> [CUR] <recipient> <PIN>
@@ -108,7 +103,14 @@ export function smsHandle(phoneRaw: string, body: string): string {
         return `Cash-out code ${r.code} for ${money(minor, currency)} (fee ${money(r.fee, currency)}). Show it to agent @${other.tag} within 30 minutes.`;
       }
       const fee = calculateFee(cmd === 'PAY' ? 'merchant_payment' : 'transfer', minor, currency);
-      const tx = sendMoney(user, { to: `@${other.tag}`, amount: minor, currency, note: `SMS ${cmd.toLowerCase()}`, type: cmd === 'PAY' ? 'merchant_payment' : 'transfer', idempotencyKey: `sms:${phone}:${body.trim()}:${now().slice(0, 16)}` });
+      const tx = sendMoney(user, {
+        to: `@${other.tag}`,
+        amount: minor,
+        currency,
+        note: `SMS ${cmd.toLowerCase()}`,
+        type: cmd === 'PAY' ? 'merchant_payment' : 'transfer',
+        idempotencyKey: `sms:${phone}:${body.trim()}:${now().slice(0, 16)}`,
+      });
       return `Sent ${money(minor, currency)} to @${other.tag} (fee ${money(fee, currency)}). Ref ${tx.id.slice(0, 8).toUpperCase()}. New balance: ${money(listWallets(user.id).find((w) => w.currency === currency)?.balance ?? 0, currency)}`;
     } catch (err: any) {
       return String(err?.message ?? 'Failed').slice(0, 150);
@@ -123,11 +125,34 @@ export async function smsInbound(phoneRaw: string, body: string): Promise<string
   const phone = normalizePhone(phoneRaw) ?? phoneRaw;
   const user = findUserByPhone(phone);
   const reply = smsHandle(phone, body);
-  db.prepare('INSERT INTO channel_messages (id, channel, direction, phone, body, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(uuid(), 'sms', 'in', phone, body.slice(0, 500), user?.id ?? null, now());
-  db.prepare('INSERT INTO channel_messages (id, channel, direction, phone, body, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(uuid(), 'sms', 'out', phone, reply.slice(0, 500), user?.id ?? null, now());
+  db.prepare('INSERT INTO channel_messages (id, channel, direction, phone, body, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    uuid(),
+    'sms',
+    'in',
+    phone,
+    body.slice(0, 500),
+    user?.id ?? null,
+    now(),
+  );
+  db.prepare('INSERT INTO channel_messages (id, channel, direction, phone, body, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    uuid(),
+    'sms',
+    'out',
+    phone,
+    reply.slice(0, 500),
+    user?.id ?? null,
+    now(),
+  );
   void sendSms(phone, reply).catch(() => {});
   return reply;
 }
 export function recentSms(limit = 40) {
-  return (getDb().prepare("SELECT * FROM channel_messages WHERE channel = 'sms' ORDER BY created_at DESC LIMIT ?").all(limit) as any[]).map((r) => ({ id: r.id, direction: r.direction, phone: r.phone, body: r.body, userId: r.user_id, createdAt: r.created_at }));
+  return (getDb().prepare("SELECT * FROM channel_messages WHERE channel = 'sms' ORDER BY created_at DESC LIMIT ?").all(limit) as any[]).map((r) => ({
+    id: r.id,
+    direction: r.direction,
+    phone: r.phone,
+    body: r.body,
+    userId: r.user_id,
+    createdAt: r.created_at,
+  }));
 }

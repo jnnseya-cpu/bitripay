@@ -43,7 +43,9 @@ export function signSms(ctx: ForwardContext, sms: IncomingSms): Record<string, u
   const fields = { deviceId: e.deviceId, nonce: nonce(), receivedAt: new Date(sms.receivedAt).toISOString(), from: sms.from, operatorId: e.operatorId, text: sms.text };
   const full = buildEvidence(ctx.privateKeyHex, fields, { simIdentity: e.simMsisdn ?? e.simIccid ?? null });
   // /api/evidence/sms accepts only the core fields; the payout endpoint takes the extra SIM / hash checks.
-  return endpointFor(ctx).payoutId ? full : { deviceId: full.deviceId, nonce: full.nonce, receivedAt: full.receivedAt, from: full.from, operatorId: full.operatorId, text: full.text, signature: full.signature };
+  return endpointFor(ctx).payoutId
+    ? full
+    : { deviceId: full.deviceId, nonce: full.nonce, receivedAt: full.receivedAt, from: full.from, operatorId: full.operatorId, text: full.text, signature: full.signature };
 }
 
 export interface DeliveryResult {
@@ -66,7 +68,10 @@ export async function forwardSms(ctx: ForwardContext, sms: IncomingSms): Promise
   const payload = signSms(ctx, sms);
   try {
     const r = await deliver(ctx.enrolment.apiUrl, path, payload);
-    await appendLog({ level: r.stage === 'SETTLED' || r.outcome === 'matched' || r.outcome === 'settled' ? 'ok' : 'info', text: `${payoutId ? `Payout ${payoutId.slice(0, 8)}` : 'SMS'} from ${sms.from}: ${r.outcome ?? 'received'}${r.stage ? ` → ${r.stage}` : ''}${r.reasons?.length ? ` (${r.reasons.join(', ')})` : ''}` });
+    await appendLog({
+      level: r.stage === 'SETTLED' || r.outcome === 'matched' || r.outcome === 'settled' ? 'ok' : 'info',
+      text: `${payoutId ? `Payout ${payoutId.slice(0, 8)}` : 'SMS'} from ${sms.from}: ${r.outcome ?? 'received'}${r.stage ? ` → ${r.stage}` : ''}${r.reasons?.length ? ` (${r.reasons.join(', ')})` : ''}`,
+    });
     return { delivered: true, queued: false, ...r };
   } catch (err) {
     const e = err as ApiError;

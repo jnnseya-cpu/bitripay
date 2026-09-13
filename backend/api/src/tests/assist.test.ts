@@ -35,7 +35,10 @@ const run = async (auth: Record<string, string>, agent: string, input: string, c
 describe('command centres', () => {
   it('offers an optional flat plan: nothing changes for account holders who do not activate it, activation is a normal ledger posting, and renewal can be cancelled', async () => {
     const admin0 = await adminToken(app);
-    await request(app).put('/api/admin/agents/settings').set(admin0.auth).send({ addon: { enabled: true }, billing: { mode: 'subscription' } });
+    await request(app)
+      .put('/api/admin/agents/settings')
+      .set(admin0.auth)
+      .send({ addon: { enabled: true }, billing: { mode: 'subscription' } });
     const u = await registerUser(app);
     await fund(app, u.user.id, '5.00', 'USD');
     const before = await request(app).get('/api/assist/agents').set(u.auth);
@@ -88,7 +91,10 @@ describe('command centres', () => {
     expect(a.body.addon.required).toBe(false);
     const report = await request(app).get('/api/admin/agents').set(admin.auth);
     expect(report.body.addon.revenue.find((x: any) => x.currency === 'USD').c).toBeGreaterThanOrEqual(3);
-    await request(app).put('/api/admin/agents/settings').set(admin.auth).send({ addon: { enabled: false }, billing: { mode: 'per_use' } });
+    await request(app)
+      .put('/api/admin/agents/settings')
+      .set(admin.auth)
+      .send({ addon: { enabled: false }, billing: { mode: 'per_use' } });
   });
 
   it('lists the agents each role can use, with tools filtered by role and permission', async () => {
@@ -137,7 +143,10 @@ describe('command centres', () => {
     const u = await subscriber();
     const b = await registerUser(app);
     await fund(app, u.user.id, '100.00', 'USD');
-    await request(app).post('/api/transfers').set(u.auth).send({ pin: '1234', to: `@${b.user.tag}`, amount: '30.00', currency: 'USD', note: 'School fees' });
+    await request(app)
+      .post('/api/transfers')
+      .set(u.auth)
+      .send({ pin: '1234', to: `@${b.user.tag}`, amount: '30.00', currency: 'USD', note: 'School fees' });
     const spent = await run(u.auth, 'analyst', 'How much did I spend this month?');
     expect(spent.actions[0].tool).toBe('transactions.list');
     expect(spent.actions[0].input.direction).toBe('out');
@@ -188,7 +197,10 @@ describe('command centres', () => {
     const forbidden = await request(app).get('/api/admin/agents').set(u.auth);
     expect(forbidden.status).toBe(403);
     // A policy can narrow an agent further; publishing needs admin step-up and retires the previous version.
-    const p1 = await request(app).put('/api/admin/agents/policies').set(admin.auth).send({ scope: 'agent', scopeId: 'analyst', rules: { deny: ['transactions.list'] }, note: 'pilot', pin: admin.pin });
+    const p1 = await request(app)
+      .put('/api/admin/agents/policies')
+      .set(admin.auth)
+      .send({ scope: 'agent', scopeId: 'analyst', rules: { deny: ['transactions.list'] }, note: 'pilot', pin: admin.pin });
     expect(p1.status, JSON.stringify(p1.body)).toBe(201);
     const denied = await run(u.auth, 'analyst', 'How much did I spend this month?');
     expect(denied.actions[0].outcome).toBe('denied');
@@ -206,7 +218,10 @@ describe('command centres', () => {
     const checker = await checkerToken(app);
     const victim = await registerUser(app);
     await fund(app, victim.user.id, '10.00', 'USD');
-    const r = await request(app).post('/api/admin/agents/run?wait=1').set(admin.auth).send({ agent: 'operations', input: `freeze USD wallet of ${victim.user.id} because suspicious card top-ups` });
+    const r = await request(app)
+      .post('/api/admin/agents/run?wait=1')
+      .set(admin.auth)
+      .send({ agent: 'operations', input: `freeze USD wallet of ${victim.user.id} because suspicious card top-ups` });
     expect(r.status, JSON.stringify(r.body)).toBe(202);
     expect(r.body.run.status).toBe('awaiting_approval');
     const action = r.body.run.actions[0];
@@ -253,7 +268,9 @@ describe('command centres', () => {
     expect(stopped.body.error.code).toBe('assist_paused');
     await request(app).post('/api/admin/agents/kill-switch').set(admin.auth).send({ on: false, pin: admin.pin });
     // allowance: pretend the account already spent its month
-    getDb().prepare("INSERT INTO agent_usage (user_id, agent_key, model, day, runs, tokens_in, tokens_out, cost_micros, acu) VALUES (?, 'analyst', 'claude-opus-5', ?, 3, 100000, 20000, 5000000, 500)").run(u.user.id, new Date().toISOString().slice(0, 10));
+    getDb()
+      .prepare("INSERT INTO agent_usage (user_id, agent_key, model, day, runs, tokens_in, tokens_out, cost_micros, acu) VALUES (?, 'analyst', 'claude-opus-5', ?, 3, 100000, 20000, 5000000, 500)")
+      .run(u.user.id, new Date().toISOString().slice(0, 10));
     const usage = await request(app).get('/api/assist/usage').set(u.auth);
     expect(usage.body.usage.remaining).toBe(0);
     const over = await request(app).post('/api/assist/runs?wait=1').set(u.auth).send({ agent: 'analyst', input: 'What is my balance?' });
@@ -268,7 +285,15 @@ describe('command centres', () => {
     const u = await subscriber();
     const r = await run(u.auth, 'security', 'Is my account secure?');
     expect(r.actions[0].tool).toBe('profile.summary');
-    const s = await request(app).get(`/api/assist/runs/${r.id}/stream`).set(u.auth).buffer(true).parse((res, cb) => { let d = ''; res.on('data', (c) => (d += c)); res.on('end', () => cb(null, d)); });
+    const s = await request(app)
+      .get(`/api/assist/runs/${r.id}/stream`)
+      .set(u.auth)
+      .buffer(true)
+      .parse((res, cb) => {
+        let d = '';
+        res.on('data', (c) => (d += c));
+        res.on('end', () => cb(null, d));
+      });
     expect(s.status).toBe(200);
     expect(s.headers['content-type']).toContain('text/event-stream');
     expect(s.body).toContain('event: step');
@@ -279,7 +304,13 @@ describe('command centres', () => {
 
   it('meters questions per use: disclosed prices and consent, free lookups, a free allowance for active accounts, wallet charges on completion, daily and platform caps, and a margin report', async () => {
     const admin = await adminToken(app);
-    await request(app).put('/api/admin/agents/settings').set(admin.auth).send({ addon: { enabled: false }, billing: { mode: 'per_use', simulateLive: true, freeRunsPerMonth: 2, dailyCapPerUser: 3, platformCapPctOfFees: 15, platformCapFloorMinor: 5_000, disclosureVersion: 1 } });
+    await request(app)
+      .put('/api/admin/agents/settings')
+      .set(admin.auth)
+      .send({
+        addon: { enabled: false },
+        billing: { mode: 'per_use', simulateLive: true, freeRunsPerMonth: 2, dailyCapPerUser: 3, platformCapPctOfFees: 15, platformCapFloorMinor: 5_000, disclosureVersion: 1 },
+      });
     const u = await registerUser(app);
     const friend = await registerUser(app);
     await fund(app, u.user.id, '10.00', 'USD');
@@ -305,7 +336,10 @@ describe('command centres', () => {
     expect(lookup.provider).toBe('offline');
     // no free allowance until the account moved money this month
     expect((await request(app).get('/api/assist/billing').set(u.auth)).body.billing.freeRunsLeft).toBe(0);
-    await request(app).post('/api/transfers').set(u.auth).send({ pin: '1234', to: `@${friend.user.tag}`, amount: '1.00', currency: 'USD' });
+    await request(app)
+      .post('/api/transfers')
+      .set(u.auth)
+      .send({ pin: '1234', to: `@${friend.user.tag}`, amount: '1.00', currency: 'USD' });
     expect((await request(app).get('/api/assist/billing').set(u.auth)).body.billing.freeRunsLeft).toBe(2);
     const q1 = await run(u.auth, 'research', 'How is my balance protected?');
     expect(q1.billing.reason).toBe('allowance');
@@ -352,7 +386,10 @@ describe('command centres', () => {
     expect(broke.body.error.code).toBe('insufficient_balance');
     expect(broke.body.error.message).toContain('costs');
     // the platform cap: once model spend reaches the share of fee revenue, everyone degrades to the free planner
-    await request(app).put('/api/admin/agents/settings').set(admin.auth).send({ billing: { platformCapPctOfFees: 0, platformCapFloorMinor: 0 } });
+    await request(app)
+      .put('/api/admin/agents/settings')
+      .set(admin.auth)
+      .send({ billing: { platformCapPctOfFees: 0, platformCapFloorMinor: 0 } });
     const degraded = await run(m.auth, 'research', 'How is my balance protected?');
     expect(degraded.billing.reason).toBe('degraded');
     expect(degraded.billing.amount).toBe(0);
@@ -367,9 +404,15 @@ describe('command centres', () => {
     expect(b.cap.degraded).toBe(true);
     expect(b.runsByReason.map((r: any) => r.reason)).toEqual(expect.arrayContaining(['lookup', 'allowance', 'charged', 'degraded']));
     // changing a price bumps the disclosure version so everyone re-reads it
-    const bump = await request(app).put('/api/admin/agents/settings').set(admin.auth).send({ billing: { prices: { standard: 6 } } });
+    const bump = await request(app)
+      .put('/api/admin/agents/settings')
+      .set(admin.auth)
+      .send({ billing: { prices: { standard: 6 } } });
     expect(bump.body.settings.billing.disclosureVersion).toBe(2);
     expect((await request(app).get('/api/assist/billing').set(u.auth)).body.billing.consentRequired).toBe(true);
-    await request(app).put('/api/admin/agents/settings').set(admin.auth).send({ billing: { simulateLive: false, freeRunsPerMonth: 5, dailyCapPerUser: 20, platformCapPctOfFees: 15, platformCapFloorMinor: 5_000, prices: { standard: 5 }, disclosureVersion: 1 } });
+    await request(app)
+      .put('/api/admin/agents/settings')
+      .set(admin.auth)
+      .send({ billing: { simulateLive: false, freeRunsPerMonth: 5, dailyCapPerUser: 20, platformCapPctOfFees: 15, platformCapFloorMinor: 5_000, prices: { standard: 5 }, disclosureVersion: 1 } });
   });
 });

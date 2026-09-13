@@ -11,7 +11,23 @@ import { conflict } from '../lib/errors';
 import { recordEvent, type Actor } from './events';
 import { onGatewayPaymentStage } from './intents';
 
-export const PAYMENT_STAGES = ['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED', 'PAYMENT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'CONFIRMED', 'SETTLED', 'EXPIRED', 'REJECTED', 'MISMATCHED', 'DUPLICATE', 'DISPUTED', 'REVERSED', 'MANUAL_REVIEW'] as const;
+export const PAYMENT_STAGES = [
+  'CREATED',
+  'AUTHENTICATION_REQUIRED',
+  'INSTRUCTION_ISSUED',
+  'PAYMENT_SENT',
+  'EVIDENCE_RECEIVED',
+  'VERIFYING',
+  'CONFIRMED',
+  'SETTLED',
+  'EXPIRED',
+  'REJECTED',
+  'MISMATCHED',
+  'DUPLICATE',
+  'DISPUTED',
+  'REVERSED',
+  'MANUAL_REVIEW',
+] as const;
 export type PaymentStage = (typeof PAYMENT_STAGES)[number];
 
 export const TERMINAL_STAGES: PaymentStage[] = ['SETTLED', 'EXPIRED', 'REJECTED', 'REVERSED'];

@@ -7,7 +7,10 @@ let app: ReturnType<typeof setupApp>;
 beforeAll(() => {
   app = setupApp();
 });
-const phone = () => `+2439${Math.floor(Math.random() * 1e8).toString().padStart(8, '0')}`;
+const phone = () =>
+  `+2439${Math.floor(Math.random() * 1e8)
+    .toString()
+    .padStart(8, '0')}`;
 /** Africa's Talking style: the aggregator resends the whole path each time. */
 const at = (sessionId: string, phoneNumber: string, text: string) => request(app).post('/api/ussd').type('form').send({ sessionId, serviceCode: '*384*247#', phoneNumber, text });
 /** Generic gateway: one input per request, the API keeps the path. */
@@ -44,7 +47,9 @@ describe('USSD', () => {
     expect(r.text).toMatch(/^END Send money to any @code or phone/);
     // the account is a normal BitriPay account: the app can sign in with the phone + a password set later, and the tag resolves
     const admin = await adminToken(app);
-    const found = await request(app).get(`/api/admin/users?search=${encodeURIComponent(tag)}`).set(admin.auth);
+    const found = await request(app)
+      .get(`/api/admin/users?search=${encodeURIComponent(tag)}`)
+      .set(admin.auth);
     expect(found.status).toBe(200);
   });
 
@@ -95,12 +100,18 @@ describe('USSD', () => {
 
   it('protects the webhook with a shared secret when one is configured', async () => {
     const admin = await adminToken(app);
-    await request(app).put('/api/admin/channels/settings').set(admin.auth).send({ ussd: { secret: 'top-secret' } });
+    await request(app)
+      .put('/api/admin/channels/settings')
+      .set(admin.auth)
+      .send({ ussd: { secret: 'top-secret' } });
     const denied = await at('x1', phone(), '');
     expect(denied.status).toBe(403);
     const ok = await request(app).post('/api/ussd?secret=top-secret').type('form').send({ sessionId: 'x2', phoneNumber: phone(), text: '' });
     expect(ok.status).toBe(200);
-    await request(app).put('/api/admin/channels/settings').set(admin.auth).send({ ussd: { secret: '' } });
+    await request(app)
+      .put('/api/admin/channels/settings')
+      .set(admin.auth)
+      .send({ ussd: { secret: '' } });
     const view = await request(app).get('/api/admin/channels').set(admin.auth);
     expect(view.body.settings.ussd.secret).toBe('');
     expect(view.body.ussdSessions.length).toBeGreaterThan(0);
@@ -113,7 +124,11 @@ describe('SMS commands', () => {
     const u = await registerUser(app, { phone: ph });
     await fund(app, u.user.id, '50.00', 'USD');
     const friend = await registerUser(app);
-    const sms = (text: string, extra: Record<string, string> = {}) => request(app).post('/api/sms/inbound').type('form').send({ from: ph, text, ...extra });
+    const sms = (text: string, extra: Record<string, string> = {}) =>
+      request(app)
+        .post('/api/sms/inbound')
+        .type('form')
+        .send({ from: ph, text, ...extra });
     let r = await sms('HELP');
     expect(r.text).toContain('BAL <PIN>');
     r = await sms('BAL 9999');
@@ -168,7 +183,11 @@ describe('Lite web', () => {
     const home = await request(app).get('/lite/home').set('Cookie', cookie);
     expect(home.text).toContain('$30.00');
     expect(home.text).toContain(`@${u.user.tag}`);
-    const send = await request(app).post('/lite/send').set('Cookie', cookie).type('form').send({ to: `@${friend.user.tag}`, amount: '4.50', currency: 'USD', note: 'bread', pin: '1234' });
+    const send = await request(app)
+      .post('/lite/send')
+      .set('Cookie', cookie)
+      .type('form')
+      .send({ to: `@${friend.user.tag}`, amount: '4.50', currency: 'USD', note: 'bread', pin: '1234' });
     expect(send.headers.location).toMatch(/^\/lite\/home\?ok=Sent/);
     const after = await request(app).get('/lite/history').set('Cookie', cookie);
     expect(after.text).toContain('bread');

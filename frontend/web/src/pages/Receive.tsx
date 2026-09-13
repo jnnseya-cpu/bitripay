@@ -18,7 +18,10 @@ export function Receive() {
       q.set('currency', cur);
     }
     if (note) q.set('note', note);
-    api.get<{ content: string; native: string }>(`/api/qr/me?${q}`).then(setData).catch(() => setData(null));
+    api
+      .get<{ content: string; native: string }>(`/api/qr/me?${q}`)
+      .then(setData)
+      .catch(() => setData(null));
   }, [amount, cur, note]);
   const share = () => {
     if (navigator.share && data) navigator.share({ title: 'Pay me on BitriPay', text: `Pay @${user?.tag} on BitriPay`, url: data.content }).catch(() => {});
@@ -31,12 +34,25 @@ export function Receive() {
           {data && <QrImage value={data.content} size={260} />}
           <h3 className="mt">@{user?.tag}</h3>
           <div className="muted small">{user?.businessName || user?.fullName}</div>
-          {amount && <div className="bold mt-sm">{amount} {cur}{note ? ` · ${note}` : ''}</div>}
+          {amount && (
+            <div className="bold mt-sm">
+              {amount} {cur}
+              {note ? ` · ${note}` : ''}
+            </div>
+          )}
           <div className="row mt" style={{ justifyContent: 'center' }}>
             {data && <CopyButton text={data.content} label="Copy link" />}
             {data && <CopyButton text={`@${user?.tag}`} label="Copy @tag" />}
-            {typeof navigator.share === 'function' && <Button variant="secondary" size="sm" onClick={share}>{t('common.share')}</Button>}
-            {data && <a className="btn secondary sm" href={`/api/qr/image.svg?data=${encodeURIComponent(data.content)}`} download={`bitripay-${user?.tag}.svg`}>Download</a>}
+            {typeof navigator.share === 'function' && (
+              <Button variant="secondary" size="sm" onClick={share}>
+                {t('common.share')}
+              </Button>
+            )}
+            {data && (
+              <a className="btn secondary sm" href={`/api/qr/image.svg?data=${encodeURIComponent(data.content)}`} download={`bitripay-${user?.tag}.svg`}>
+                Download
+              </a>
+            )}
           </div>
         </div>
         <div className="card">

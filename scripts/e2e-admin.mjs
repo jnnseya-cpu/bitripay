@@ -1,10 +1,12 @@
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-core';
 const base = 'http://127.0.0.1:5174';
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH });
 const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('console', (m) => {
+  if (m.type() === 'error') errors.push(m.text());
+});
 await page.goto(base + '/login');
 await page.fill('input:not([type=password])', 'admin@bitripay.local');
 await page.fill('input[type=password]', 'Admin123!');

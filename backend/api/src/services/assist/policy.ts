@@ -37,12 +37,39 @@ export interface PolicyRow {
 }
 
 /** Capabilities that are never exposed as tools. Named so a denial can say why. */
-export const FORBIDDEN = ['emoney.issue', 'emoney.mint', 'wallets.unfreeze', 'wallets.adjust', 'transfers.send', 'payouts.release', 'payouts.approve', 'corridors.set_status', 'api_keys.create', 'kyc.approve', 'sanctions.clear', 'settings.write'];
+export const FORBIDDEN = [
+  'emoney.issue',
+  'emoney.mint',
+  'wallets.unfreeze',
+  'wallets.adjust',
+  'transfers.send',
+  'payouts.release',
+  'payouts.approve',
+  'corridors.set_status',
+  'api_keys.create',
+  'kyc.approve',
+  'sanctions.clear',
+  'settings.write',
+];
 
-const toRow = (r: any): PolicyRow => ({ id: r.id, scope: r.scope, scopeId: r.scope_id, version: r.version, rules: parseJson<PolicyRules>(r.rules, {}), status: r.status, note: r.note, authorAdminId: r.author_admin_id, createdAt: r.created_at });
+const toRow = (r: any): PolicyRow => ({
+  id: r.id,
+  scope: r.scope,
+  scopeId: r.scope_id,
+  version: r.version,
+  rules: parseJson<PolicyRules>(r.rules, {}),
+  status: r.status,
+  note: r.note,
+  authorAdminId: r.author_admin_id,
+  createdAt: r.created_at,
+});
 
 export function listPolicies(includeRetired = false): PolicyRow[] {
-  return (getDb().prepare(`SELECT * FROM agent_policies ${includeRetired ? '' : "WHERE status = 'live'"} ORDER BY scope, scope_id, version DESC`).all() as any[]).map(toRow);
+  return (
+    getDb()
+      .prepare(`SELECT * FROM agent_policies ${includeRetired ? '' : "WHERE status = 'live'"} ORDER BY scope, scope_id, version DESC`)
+      .all() as any[]
+  ).map(toRow);
 }
 export function livePolicy(scope: PolicyRow['scope'], scopeId: string): PolicyRow | null {
   const r = getDb().prepare("SELECT * FROM agent_policies WHERE scope = ? AND scope_id = ? AND status = 'live' ORDER BY version DESC LIMIT 1").get(scope, scopeId);
@@ -62,7 +89,17 @@ export function publishPolicy(scope: PolicyRow['scope'], scopeId: string, rules:
   const id = uuid();
   db.transaction(() => {
     if (prev) db.prepare("UPDATE agent_policies SET status = 'retired' WHERE id = ?").run(prev.id);
-    db.prepare('INSERT INTO agent_policies (id, scope, scope_id, version, rules, status, note, author_admin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, scope, scopeId, (prev?.version ?? 0) + 1, JSON.stringify(clean), 'live', note ?? null, adminId, now());
+    db.prepare('INSERT INTO agent_policies (id, scope, scope_id, version, rules, status, note, author_admin_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+      id,
+      scope,
+      scopeId,
+      (prev?.version ?? 0) + 1,
+      JSON.stringify(clean),
+      'live',
+      note ?? null,
+      adminId,
+      now(),
+    );
   })();
   return toRow(db.prepare('SELECT * FROM agent_policies WHERE id = ?').get(id));
 }
@@ -78,7 +115,11 @@ export interface EffectivePolicy {
 export function effectivePolicy(agentKey: string, userId: string): EffectivePolicy {
   const settings = getAssistSettings();
   const out: EffectivePolicy = { deny: new Set(FORBIDDEN), requireApproval: new Set(), allow: null, maxStepsPerRun: settings.maxStepsPerRun, maxRunsPerDay: 200, layers: [] };
-  for (const [scope, scopeId] of [['global', '*'], ['agent', agentKey], ['user', userId]] as const) {
+  for (const [scope, scopeId] of [
+    ['global', '*'],
+    ['agent', agentKey],
+    ['user', userId],
+  ] as const) {
     const p = livePolicy(scope, scopeId);
     if (!p) continue;
     out.layers.push({ scope, scopeId, version: p.version });
@@ -95,7 +136,8 @@ export type Decision = { verdict: 'allow' | 'deny' | 'approval'; reason: string;
 
 /** The single authorisation point for tool calls, for humans triggering agents and for scheduled runs alike. */
 export function decide(agentKey: string, user: UserRow, toolName: string, policy = effectivePolicy(agentKey, user.id)): Decision {
-  if (FORBIDDEN.includes(toolName) || policy.deny.has(toolName) && FORBIDDEN.includes(toolName)) return { verdict: 'deny', reason: 'This capability is never available to agents. A person does it in the app under the usual controls.' };
+  if (FORBIDDEN.includes(toolName) || (policy.deny.has(toolName) && FORBIDDEN.includes(toolName)))
+    return { verdict: 'deny', reason: 'This capability is never available to agents. A person does it in the app under the usual controls.' };
   const tool = TOOL_BY_NAME.get(toolName);
   if (!tool) return { verdict: 'deny', reason: `Unknown tool ${toolName}` };
   const agent = getAgentDef(agentKey);

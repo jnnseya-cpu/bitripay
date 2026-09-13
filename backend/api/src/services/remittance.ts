@@ -67,7 +67,19 @@ export function toRemittance(row: any) {
   };
 }
 
-export function sendRemittance(sender: UserRow, input: { amount: number; sourceCurrency: string; targetCurrency: string; payoutMethod: PayoutMethod; recipient: RecipientInput; savedRecipientId?: string | null; note?: string | null; saveRecipient?: boolean }) {
+export function sendRemittance(
+  sender: UserRow,
+  input: {
+    amount: number;
+    sourceCurrency: string;
+    targetCurrency: string;
+    payoutMethod: PayoutMethod;
+    recipient: RecipientInput;
+    savedRecipientId?: string | null;
+    note?: string | null;
+    saveRecipient?: boolean;
+  },
+) {
   if (!getModules().remittance) throw unprocessable('Remittance is currently disabled', 'module_disabled');
   const db = getDb();
   const quote = quoteRemittance(input.amount, input.sourceCurrency, input.targetCurrency);
@@ -132,11 +144,18 @@ export function sendRemittance(sender: UserRow, input: { amount: number; sourceC
     if (recipientUser) {
       notify(recipientUser.id, 'Remittance received', `${sender.full_name} sent you ${formatMoney(quote.targetAmount, target)} from abroad.`, { kind: 'remittance_in', transactionId: tx.id });
     }
-    notify(sender.id, 'Remittance sent', instant ? `Your remittance of ${formatMoney(quote.targetAmount, target)} was delivered instantly.` : `Your remittance of ${formatMoney(quote.targetAmount, target)} is being processed${pickupCode ? `. Pickup code: ${pickupCode}` : ''}.`, {
-      kind: 'remittance_out',
-      transactionId: tx.id,
-      remittanceId,
-    });
+    notify(
+      sender.id,
+      'Remittance sent',
+      instant
+        ? `Your remittance of ${formatMoney(quote.targetAmount, target)} was delivered instantly.`
+        : `Your remittance of ${formatMoney(quote.targetAmount, target)} is being processed${pickupCode ? `. Pickup code: ${pickupCode}` : ''}.`,
+      {
+        kind: 'remittance_out',
+        transactionId: tx.id,
+        remittanceId,
+      },
+    );
     return { ...toRemittance(db.prepare('SELECT * FROM remittances WHERE id = ?').get(remittanceId)), transaction: tx };
   })();
 }
@@ -180,7 +199,12 @@ export function payoutCashPickup(agent: UserRow, pickupCode: string, recipientId
       issuance: { authority: 'internal_release', originTransactionId: row.transaction_id, reference: `remittance:${row.id}` },
     });
     db.prepare("UPDATE remittances SET status = 'completed', pickup_agent_id = ?, completed_at = ? WHERE id = ?").run(agent.id, now(), row.id);
-    notify(row.sender_user_id, 'Cash picked up', `${recipient.name} collected ${formatMoney(row.target_amount, getCurrency(row.target_currency, false))} at agent ${agent.business_name || agent.full_name}.`, { kind: 'remittance_pickup', remittanceId: row.id });
+    notify(
+      row.sender_user_id,
+      'Cash picked up',
+      `${recipient.name} collected ${formatMoney(row.target_amount, getCurrency(row.target_currency, false))} at agent ${agent.business_name || agent.full_name}.`,
+      { kind: 'remittance_pickup', remittanceId: row.id },
+    );
     return toRemittance(db.prepare('SELECT * FROM remittances WHERE id = ?').get(row.id));
   })();
 }
@@ -223,7 +247,20 @@ export function saveRecipient(userId: string, input: RecipientInput & { payoutMe
   const id = uuid();
   getDb()
     .prepare('INSERT INTO saved_recipients (id, user_id, name, country, phone, email, tag, payout_method, bank_name, account_number, currency, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, userId, input.name, input.country ?? null, input.phone ?? null, input.email ?? null, input.tag ?? null, input.payoutMethod, input.bankName ?? null, input.accountNumber ?? null, input.currency ?? null, now());
+    .run(
+      id,
+      userId,
+      input.name,
+      input.country ?? null,
+      input.phone ?? null,
+      input.email ?? null,
+      input.tag ?? null,
+      input.payoutMethod,
+      input.bankName ?? null,
+      input.accountNumber ?? null,
+      input.currency ?? null,
+      now(),
+    );
   return listSavedRecipients(userId).find((r) => r.id === id)!;
 }
 

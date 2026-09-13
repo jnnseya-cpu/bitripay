@@ -32,12 +32,17 @@ const CSS = `body{font:16px/1.4 system-ui,Arial,sans-serif;margin:0;background:#
 
 function page(title: string, body: string, user?: UserRow | null) {
   const app = getAppSettings().appName || 'BitriPay';
-  const nav = user ? `<nav><a href="/lite/home">Home</a><a href="/lite/send">Send</a><a href="/lite/remit">Abroad</a><a href="/lite/receive">Receive</a><a href="/lite/cash">Cash out</a><a href="/lite/history">History</a><a href="/lite/statement">Statement</a><a href="/lite/logout">Sign out</a></nav>` : '';
+  const nav = user
+    ? `<nav><a href="/lite/home">Home</a><a href="/lite/send">Send</a><a href="/lite/remit">Abroad</a><a href="/lite/receive">Receive</a><a href="/lite/cash">Cash out</a><a href="/lite/history">History</a><a href="/lite/statement">Statement</a><a href="/lite/logout">Sign out</a></nav>`
+    : '';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${e(title)} · ${e(app)} Lite</title><style>${CSS}</style></head><body><main><h1><img src="/brand/logo.svg" alt="${e(app)}" width="120" height="30" style="vertical-align:middle;height:30px;width:auto"> <span class="m">Lite</span></h1>${nav}${body}<p class="m">Lite works on any browser and slow connections. Full app: <a href="${config.webUrl}">${config.webUrl.replace(/^https?:\/\//, '')}</a> · USSD ${e(getChannelSettings().ussd.serviceCode)}</p></main></body></html>`;
 }
 function cookieOf(req: any): string | null {
   const raw = String(req.headers.cookie ?? '');
-  const m = raw.split(';').map((x) => x.trim()).find((x) => x.startsWith(`${COOKIE}=`));
+  const m = raw
+    .split(';')
+    .map((x) => x.trim())
+    .find((x) => x.startsWith(`${COOKIE}=`));
   return m ? decodeURIComponent(m.slice(COOKIE.length + 1)) : null;
 }
 function currentUser(req: any): UserRow | null {
@@ -56,7 +61,9 @@ function setSession(req: any, res: any, user: UserRow | null) {
   let value = '';
   if (user) {
     value = randomBytes(24).toString('base64url');
-    getDb().prepare('INSERT INTO lite_sessions (id, user_id, created_at, expires_at, last_seen_at, user_agent) VALUES (?, ?, ?, ?, ?, ?)').run(value, user.id, now(), new Date(Date.now() + 12 * 3600_000).toISOString(), now(), String(req.headers['user-agent'] ?? '').slice(0, 200));
+    getDb()
+      .prepare('INSERT INTO lite_sessions (id, user_id, created_at, expires_at, last_seen_at, user_agent) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(value, user.id, now(), new Date(Date.now() + 12 * 3600_000).toISOString(), now(), String(req.headers['user-agent'] ?? '').slice(0, 200));
     getDb().prepare('DELETE FROM lite_sessions WHERE expires_at < ?').run(now());
   }
   res.setHeader('Set-Cookie', `${COOKIE}=${encodeURIComponent(value)}; Path=/lite; HttpOnly; SameSite=Lax${config.isProduction ? '; Secure' : ''}${user ? '; Max-Age=43200' : '; Max-Age=0'}`);
@@ -82,7 +89,12 @@ const flash = (q: any) => (q.ok ? `<div class="ok">${e(String(q.ok))}</div>` : q
 liteRouter.get('/', limit, (req, res) => {
   if (!getChannelSettings().lite.enabled) return res.status(503).send(page('Unavailable', '<div class="card">Lite is switched off. Please use the app.</div>'));
   if (currentUser(req)) return res.redirect('/lite/home');
-  res.send(page('Sign in', `${flash(req.query)}<div class="card"><form method="post" action="/lite/login"><label>Phone number or email</label><input name="identifier" autocomplete="username" required><label>PIN (phone) or password (email)</label><input name="secret" type="password" autocomplete="current-password" required><input type="hidden" name="next" value="${e(String(req.query.next ?? ''))}"><button>Sign in</button></form></div><div class="card">New to BitriPay? <a href="/lite/register">Open a wallet</a> with your phone number, or dial ${e(getChannelSettings().ussd.serviceCode)}.</div>`));
+  res.send(
+    page(
+      'Sign in',
+      `${flash(req.query)}<div class="card"><form method="post" action="/lite/login"><label>Phone number or email</label><input name="identifier" autocomplete="username" required><label>PIN (phone) or password (email)</label><input name="secret" type="password" autocomplete="current-password" required><input type="hidden" name="next" value="${e(String(req.query.next ?? ''))}"><button>Sign in</button></form></div><div class="card">New to BitriPay? <a href="/lite/register">Open a wallet</a> with your phone number, or dial ${e(getChannelSettings().ussd.serviceCode)}.</div>`,
+    ),
+  );
 });
 liteRouter.post('/login', limit, (req, res) => {
   const id = String(req.body?.identifier ?? '').trim();
@@ -109,7 +121,12 @@ liteRouter.get('/logout', (req, res) => {
 });
 liteRouter.get('/register', limit, (req, res) => {
   if (!getChannelSettings().ussd.allowRegistration) return res.redirect('/lite?err=' + encodeURIComponent('Registration is only available in the app.'));
-  res.send(page('Open a wallet', `${flash(req.query)}<div class="card"><form method="post" action="/lite/register"><label>Full name</label><input name="fullName" required minlength="2"><label>Phone number (with country code)</label><input name="phone" type="tel" required><label>Choose a 4-digit PIN</label><input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" required><button>Open my wallet</button></form></div>`));
+  res.send(
+    page(
+      'Open a wallet',
+      `${flash(req.query)}<div class="card"><form method="post" action="/lite/register"><label>Full name</label><input name="fullName" required minlength="2"><label>Phone number (with country code)</label><input name="phone" type="tel" required><label>Choose a 4-digit PIN</label><input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" required><button>Open my wallet</button></form></div>`,
+    ),
+  );
 });
 liteRouter.post('/register', limit, (req, res) => {
   if (!getChannelSettings().ussd.allowRegistration) return res.redirect('/lite');
@@ -133,13 +150,25 @@ liteRouter.get('/home', (req, res) => {
   if (!u) return;
   const ws = listWallets(u.id);
   const tx = listTransactions({ userId: u.id, page: 1, pageSize: 5 }).items;
-  res.send(page('Home', `${flash(req.query)}<div class="card"><div class="b">${e(u.full_name)} · @${e(u.tag)}</div>${ws.length ? ws.map((w) => `<div><span class="b">${money(w.balance, w.currency)}</span>${w.frozen_at ? ' <span class="m">(frozen)</span>' : ''}</div>`).join('') : '<div class="m">No wallet yet. Cash in at an agent or ask someone to send to @' + e(u.tag) + '.</div>'}</div><h2>Recent</h2><div class="card">${tx.length ? `<table>${tx.map((t) => `<tr><td>${t.createdAt.slice(0, 10)}<br><span class="m">${e(t.counterparty ? '@' + t.counterparty.tag : t.type.replace(/_/g, ' '))}</span></td><td class="r ${t.direction === 'in' ? 'b' : ''}">${t.direction === 'in' ? '+' : '−'}${money(t.amount, t.currency)}</td></tr>`).join('')}</table>` : '<span class="m">Nothing yet.</span>'}</div>`, u));
+  res.send(
+    page(
+      'Home',
+      `${flash(req.query)}<div class="card"><div class="b">${e(u.full_name)} · @${e(u.tag)}</div>${ws.length ? ws.map((w) => `<div><span class="b">${money(w.balance, w.currency)}</span>${w.frozen_at ? ' <span class="m">(frozen)</span>' : ''}</div>`).join('') : '<div class="m">No wallet yet. Cash in at an agent or ask someone to send to @' + e(u.tag) + '.</div>'}</div><h2>Recent</h2><div class="card">${tx.length ? `<table>${tx.map((t) => `<tr><td>${t.createdAt.slice(0, 10)}<br><span class="m">${e(t.counterparty ? '@' + t.counterparty.tag : t.type.replace(/_/g, ' '))}</span></td><td class="r ${t.direction === 'in' ? 'b' : ''}">${t.direction === 'in' ? '+' : '−'}${money(t.amount, t.currency)}</td></tr>`).join('')}</table>` : '<span class="m">Nothing yet.</span>'}</div>`,
+      u,
+    ),
+  );
 });
 liteRouter.get('/send', (req, res) => {
   const u = guard(req, res);
   if (!u) return;
   const ws = listWallets(u.id);
-  res.send(page('Send money', `${flash(req.query)}<div class="card"><form method="post" action="/lite/send"><label>To (@code or phone number)</label><input name="to" required value="${e(String(req.query.to ?? ''))}"><label>Amount</label><input name="amount" inputmode="decimal" required value="${e(String(req.query.amount ?? ''))}"><label>Currency</label><select name="currency">${ws.map((w) => `<option value="${w.currency}">${w.currency} (${money(w.balance, w.currency)})</option>`).join('') || '<option value="USD">USD</option>'}</select><label>Note (optional)</label><input name="note" maxlength="80"><label>Your PIN</label><input name="pin" type="password" inputmode="numeric" required><button>Send now</button></form><p class="m">Fees are shown on your receipt and statement. Transfers are instant and final.</p></div>`, u));
+  res.send(
+    page(
+      'Send money',
+      `${flash(req.query)}<div class="card"><form method="post" action="/lite/send"><label>To (@code or phone number)</label><input name="to" required value="${e(String(req.query.to ?? ''))}"><label>Amount</label><input name="amount" inputmode="decimal" required value="${e(String(req.query.amount ?? ''))}"><label>Currency</label><select name="currency">${ws.map((w) => `<option value="${w.currency}">${w.currency} (${money(w.balance, w.currency)})</option>`).join('') || '<option value="USD">USD</option>'}</select><label>Note (optional)</label><input name="note" maxlength="80"><label>Your PIN</label><input name="pin" type="password" inputmode="numeric" required><button>Send now</button></form><p class="m">Fees are shown on your receipt and statement. Transfers are instant and final.</p></div>`,
+      u,
+    ),
+  );
 });
 liteRouter.post('/send', limit, (req, res) => {
   const u = guard(req, res);
@@ -153,7 +182,13 @@ liteRouter.post('/send', limit, (req, res) => {
     const recipient = findUserByIdentifier(to);
     if (!recipient) throw new Error(`${to} was not found`);
     const fee = calculateFee('transfer', minor, cur.code);
-    const tx = sendMoney(u, { to: `@${recipient.tag}`, amount: minor, currency: cur.code, note: String(req.body?.note ?? '') || null, idempotencyKey: `lite:${u.id}:${to}:${minor}:${Date.now().toString().slice(0, -4)}` });
+    const tx = sendMoney(u, {
+      to: `@${recipient.tag}`,
+      amount: minor,
+      currency: cur.code,
+      note: String(req.body?.note ?? '') || null,
+      idempotencyKey: `lite:${u.id}:${to}:${minor}:${Date.now().toString().slice(0, -4)}`,
+    });
     res.redirect('/lite/home?ok=' + encodeURIComponent(`Sent ${money(minor, cur.code)} to @${recipient.tag} (fee ${money(fee, cur.code)}). Ref ${tx.id.slice(0, 8).toUpperCase()}.`));
   } catch (err: any) {
     res.redirect('/lite/send?err=' + encodeURIComponent(err?.message ?? 'Could not send'));
@@ -173,10 +208,20 @@ liteRouter.get('/remit', (req, res) => {
       const cur = getCurrency(from);
       const q = quoteRemittance(Math.round(Number(amountStr.replace(',', '.')) * 10 ** cur.decimals), cur.code, to);
       quoteHtml = `<div class="card"><div class="b">They receive ${money(q.targetAmount, q.targetCurrency)}</div><div class="m">Rate 1 ${e(q.sourceCurrency)} = ${q.rate.toFixed(4)} ${e(q.targetCurrency)} · fee ${money(q.fee, q.sourceCurrency)} · total ${money(q.total, q.sourceCurrency)}</div></div>`;
-    } catch (err: any) { quoteHtml = `<div class="card err">${e(err?.message ?? 'No quote')}</div>`; }
+    } catch (err: any) {
+      quoteHtml = `<div class="card err">${e(err?.message ?? 'No quote')}</div>`;
+    }
   }
-  const curOpts = listCurrencies(true).map((c) => `<option value="${e(c.code)}"${c.code === to ? ' selected' : ''}>${e(c.code)} – ${e(c.name)}</option>`).join('');
-  res.send(page('Send abroad', `${flash(req.query)}${quoteHtml}<div class="card"><form method="get" action="/lite/remit"><label>Amount you send</label><input name="amount" inputmode="decimal" required value="${e(amountStr)}"><label>From wallet</label><select name="from">${ws.map((w) => `<option value="${e(w.currency)}"${w.currency === from ? ' selected' : ''}>${e(w.currency)} · ${money(w.balance, w.currency)}</option>`).join('')}</select><label>They receive in</label><select name="to_currency" required><option value="">choose…</option>${curOpts}</select><button type="submit">Show rate</button></form></div>${amountStr && to && !quoteHtml.includes('err') ? `<div class="card"><form method="post" action="/lite/remit"><input type="hidden" name="amount" value="${e(amountStr)}"><input type="hidden" name="from" value="${e(from)}"><input type="hidden" name="to_currency" value="${e(to)}"><label>Recipient (@code, phone or email, must have BitriPay)</label><input name="to" required><label>Their name</label><input name="name" required><label>Your PIN</label><input name="pin" type="password" inputmode="numeric" required><button type="submit">Send now</button></form></div>` : ''}`, u));
+  const curOpts = listCurrencies(true)
+    .map((c) => `<option value="${e(c.code)}"${c.code === to ? ' selected' : ''}>${e(c.code)} – ${e(c.name)}</option>`)
+    .join('');
+  res.send(
+    page(
+      'Send abroad',
+      `${flash(req.query)}${quoteHtml}<div class="card"><form method="get" action="/lite/remit"><label>Amount you send</label><input name="amount" inputmode="decimal" required value="${e(amountStr)}"><label>From wallet</label><select name="from">${ws.map((w) => `<option value="${e(w.currency)}"${w.currency === from ? ' selected' : ''}>${e(w.currency)} · ${money(w.balance, w.currency)}</option>`).join('')}</select><label>They receive in</label><select name="to_currency" required><option value="">choose…</option>${curOpts}</select><button type="submit">Show rate</button></form></div>${amountStr && to && !quoteHtml.includes('err') ? `<div class="card"><form method="post" action="/lite/remit"><input type="hidden" name="amount" value="${e(amountStr)}"><input type="hidden" name="from" value="${e(from)}"><input type="hidden" name="to_currency" value="${e(to)}"><label>Recipient (@code, phone or email, must have BitriPay)</label><input name="to" required><label>Their name</label><input name="name" required><label>Your PIN</label><input name="pin" type="password" inputmode="numeric" required><button type="submit">Send now</button></form></div>` : ''}`,
+      u,
+    ),
+  );
 });
 liteRouter.post('/remit', limit, (req, res) => {
   const u = guard(req, res);
@@ -189,8 +234,16 @@ liteRouter.post('/remit', limit, (req, res) => {
     const to = String(req.body?.to ?? '').trim();
     const recipient = findUserByIdentifier(to);
     if (!recipient) throw new Error(`${to} was not found on BitriPay`);
-    const r = sendRemittance(u, { amount: minor, sourceCurrency: cur.code, targetCurrency: String(req.body?.to_currency ?? cur.code).toUpperCase(), payoutMethod: 'wallet', recipient: { name: String(req.body?.name ?? recipient.full_name), tag: recipient.tag, country: recipient.country ?? null } });
-    res.redirect('/lite/home?ok=' + encodeURIComponent(`Sent ${money(minor, cur.code)}; @${recipient.tag} receives ${money(r.targetAmount, r.targetCurrency)}. Ref ${String(r.id).slice(0, 8).toUpperCase()}.`));
+    const r = sendRemittance(u, {
+      amount: minor,
+      sourceCurrency: cur.code,
+      targetCurrency: String(req.body?.to_currency ?? cur.code).toUpperCase(),
+      payoutMethod: 'wallet',
+      recipient: { name: String(req.body?.name ?? recipient.full_name), tag: recipient.tag, country: recipient.country ?? null },
+    });
+    res.redirect(
+      '/lite/home?ok=' + encodeURIComponent(`Sent ${money(minor, cur.code)}; @${recipient.tag} receives ${money(r.targetAmount, r.targetCurrency)}. Ref ${String(r.id).slice(0, 8).toUpperCase()}.`),
+    );
   } catch (err: any) {
     res.redirect('/lite/remit?err=' + encodeURIComponent(err?.message ?? 'Could not send'));
   }
@@ -198,14 +251,28 @@ liteRouter.post('/remit', limit, (req, res) => {
 liteRouter.get('/receive', (req, res) => {
   const u = guard(req, res);
   if (!u) return;
-  res.send(page('Receive', `<div class="card"><div>Your BitriPay code</div><div class="b" style="font-size:26px">@${e(u.tag)}</div><p class="m">Anyone can send to this code or to your phone number${u.phone ? ` (${e(u.phone)})` : ''}. Agents cash in to it. In the full app you also get a QR code.</p></div>`, u));
+  res.send(
+    page(
+      'Receive',
+      `<div class="card"><div>Your BitriPay code</div><div class="b" style="font-size:26px">@${e(u.tag)}</div><p class="m">Anyone can send to this code or to your phone number${u.phone ? ` (${e(u.phone)})` : ''}. Agents cash in to it. In the full app you also get a QR code.</p></div>`,
+      u,
+    ),
+  );
 });
 liteRouter.get('/cash', (req, res) => {
   const u = guard(req, res);
   if (!u) return;
   const ws = listWallets(u.id);
-  const open = listCashRequests(u).filter((r) => r.status === 'pending').slice(0, 3);
-  res.send(page('Cash out', `${flash(req.query)}${open.length ? `<div class="card"><div class="b">Open cash-out codes</div>${open.map((r) => `<div>${e(r.code)} · ${money(r.amount, r.currency)} · agent @${e(r.agent?.tag ?? '')} · until ${r.expiresAt.slice(11, 16)}</div>`).join('')}</div>` : ''}<div class="card"><form method="post" action="/lite/cash"><label>Agent (@code or phone)</label><input name="agent" required><label>Amount</label><input name="amount" inputmode="decimal" required><label>Currency</label><select name="currency">${ws.map((w) => `<option value="${w.currency}">${w.currency} (${money(w.balance, w.currency)})</option>`).join('') || '<option value="USD">USD</option>'}</select><label>Your PIN</label><input name="pin" type="password" inputmode="numeric" required><button>Get a cash-out code</button></form><p class="m">Show the code to the agent. Money leaves your wallet only when the agent hands over the cash and confirms the code.</p></div>`, u));
+  const open = listCashRequests(u)
+    .filter((r) => r.status === 'pending')
+    .slice(0, 3);
+  res.send(
+    page(
+      'Cash out',
+      `${flash(req.query)}${open.length ? `<div class="card"><div class="b">Open cash-out codes</div>${open.map((r) => `<div>${e(r.code)} · ${money(r.amount, r.currency)} · agent @${e(r.agent?.tag ?? '')} · until ${r.expiresAt.slice(11, 16)}</div>`).join('')}</div>` : ''}<div class="card"><form method="post" action="/lite/cash"><label>Agent (@code or phone)</label><input name="agent" required><label>Amount</label><input name="amount" inputmode="decimal" required><label>Currency</label><select name="currency">${ws.map((w) => `<option value="${w.currency}">${w.currency} (${money(w.balance, w.currency)})</option>`).join('') || '<option value="USD">USD</option>'}</select><label>Your PIN</label><input name="pin" type="password" inputmode="numeric" required><button>Get a cash-out code</button></form><p class="m">Show the code to the agent. Money leaves your wallet only when the agent hands over the cash and confirms the code.</p></div>`,
+      u,
+    ),
+  );
 });
 liteRouter.post('/cash', limit, (req, res) => {
   const u = guard(req, res);
@@ -226,7 +293,13 @@ liteRouter.get('/history', (req, res) => {
   if (!u) return;
   const pg = Math.max(1, Number(req.query.page) || 1);
   const r = listTransactions({ userId: u.id, page: pg, pageSize: 15 });
-  res.send(page('History', `<div class="card">${r.items.length ? `<table>${r.items.map((t) => `<tr><td>${t.createdAt.slice(0, 10)}<br><span class="m">${e(t.type.replace(/_/g, ' '))}${t.counterparty ? ' · @' + e(t.counterparty.tag) : ''}${t.note ? ' · ' + e(t.note) : ''}</span></td><td class="r ${t.direction === 'in' ? 'b' : ''}">${t.direction === 'in' ? '+' : '−'}${money(t.amount, t.currency)}<br><span class="m">${e(t.status)}</span></td></tr>`).join('')}</table>` : '<span class="m">No transactions yet.</span>'}<p class="m">${pg > 1 ? `<a href="/lite/history?page=${pg - 1}">← Newer</a> ` : ''}${pg * 15 < r.total ? `<a href="/lite/history?page=${pg + 1}">Older →</a>` : ''}</p></div>`, u));
+  res.send(
+    page(
+      'History',
+      `<div class="card">${r.items.length ? `<table>${r.items.map((t) => `<tr><td>${t.createdAt.slice(0, 10)}<br><span class="m">${e(t.type.replace(/_/g, ' '))}${t.counterparty ? ' · @' + e(t.counterparty.tag) : ''}${t.note ? ' · ' + e(t.note) : ''}</span></td><td class="r ${t.direction === 'in' ? 'b' : ''}">${t.direction === 'in' ? '+' : '−'}${money(t.amount, t.currency)}<br><span class="m">${e(t.status)}</span></td></tr>`).join('')}</table>` : '<span class="m">No transactions yet.</span>'}<p class="m">${pg > 1 ? `<a href="/lite/history?page=${pg - 1}">← Newer</a> ` : ''}${pg * 15 < r.total ? `<a href="/lite/history?page=${pg + 1}">Older →</a>` : ''}</p></div>`,
+      u,
+    ),
+  );
 });
 liteRouter.get('/statement', (req, res) => {
   const u = guard(req, res);
@@ -240,10 +313,22 @@ liteRouter.get('/statement', (req, res) => {
       const name = `bitripay-statement-${s.account.currency}-${q.from}-${q.to}`;
       if (q.format === 'pdf') return res.type('application/pdf').setHeader('Content-Disposition', `attachment; filename="${name}.pdf"`).send(statementPdf(s));
       if (q.format === 'csv') return res.type('text/csv').setHeader('Content-Disposition', `attachment; filename="${name}.csv"`).send(statementCsv(s));
-      return res.send(page('Statement', `<div class="card"><div class="b">Statement ${e(s.number)} · ${e(s.account.currency)}</div><div class="m">${e(s.period.from)} to ${e(s.period.to)} · hash ${e(s.hash.slice(0, 16))}…</div><table><tr><td>Opening</td><td class="r">${money(s.opening, s.account.currency)}</td></tr>${s.lines.map((l) => `<tr><td>${l.date.slice(0, 10)}<br><span class="m">${e(l.description)}</span></td><td class="r">${l.credit ? '+' + money(l.credit, s.account.currency) : '−' + money(l.debit, s.account.currency)}<br><span class="m">${money(l.balance, s.account.currency)}</span></td></tr>`).join('')}<tr><td class="b">Closing</td><td class="r b">${money(s.closing, s.account.currency)}</td></tr></table><p><a href="/lite/statement?currency=${e(s.account.currency)}&from=${e(q.from)}&to=${e(q.to)}&format=pdf">Download PDF</a> · <a href="/lite/statement?currency=${e(s.account.currency)}&from=${e(q.from)}&to=${e(q.to)}&format=csv">CSV</a></p></div>`, u));
+      return res.send(
+        page(
+          'Statement',
+          `<div class="card"><div class="b">Statement ${e(s.number)} · ${e(s.account.currency)}</div><div class="m">${e(s.period.from)} to ${e(s.period.to)} · hash ${e(s.hash.slice(0, 16))}…</div><table><tr><td>Opening</td><td class="r">${money(s.opening, s.account.currency)}</td></tr>${s.lines.map((l) => `<tr><td>${l.date.slice(0, 10)}<br><span class="m">${e(l.description)}</span></td><td class="r">${l.credit ? '+' + money(l.credit, s.account.currency) : '−' + money(l.debit, s.account.currency)}<br><span class="m">${money(l.balance, s.account.currency)}</span></td></tr>`).join('')}<tr><td class="b">Closing</td><td class="r b">${money(s.closing, s.account.currency)}</td></tr></table><p><a href="/lite/statement?currency=${e(s.account.currency)}&from=${e(q.from)}&to=${e(q.to)}&format=pdf">Download PDF</a> · <a href="/lite/statement?currency=${e(s.account.currency)}&from=${e(q.from)}&to=${e(q.to)}&format=csv">CSV</a></p></div>`,
+          u,
+        ),
+      );
     } catch (err: any) {
       return res.redirect('/lite/statement?err=' + encodeURIComponent(err?.message ?? 'Could not build the statement'));
     }
   }
-  res.send(page('Statement', `${flash(req.query)}<div class="card"><form method="get" action="/lite/statement"><label>Currency</label><select name="currency">${ws.map((w) => `<option value="${w.currency}">${w.currency}</option>`).join('') || '<option value="USD">USD</option>'}</select><label>From</label><input name="from" type="date" value="${today.slice(0, 8)}01" required><label>To</label><input name="to" type="date" value="${today}" required><button>Show statement</button></form></div>`, u));
+  res.send(
+    page(
+      'Statement',
+      `${flash(req.query)}<div class="card"><form method="get" action="/lite/statement"><label>Currency</label><select name="currency">${ws.map((w) => `<option value="${w.currency}">${w.currency}</option>`).join('') || '<option value="USD">USD</option>'}</select><label>From</label><input name="from" type="date" value="${today.slice(0, 8)}01" required><label>To</label><input name="to" type="date" value="${today}" required><button>Show statement</button></form></div>`,
+      u,
+    ),
+  );
 });

@@ -11,7 +11,13 @@ export const p2pRouter = Router();
 p2pRouter.use(requireAuth);
 
 p2pRouter.get('/ads', (req, res) =>
-  res.json({ items: p2p.listAds({ side: req.query.side ? String(req.query.side) : undefined, currency: req.query.currency ? String(req.query.currency) : undefined, priceCurrency: req.query.priceCurrency ? String(req.query.priceCurrency) : undefined }) }),
+  res.json({
+    items: p2p.listAds({
+      side: req.query.side ? String(req.query.side) : undefined,
+      currency: req.query.currency ? String(req.query.currency) : undefined,
+      priceCurrency: req.query.priceCurrency ? String(req.query.priceCurrency) : undefined,
+    }),
+  }),
 );
 p2pRouter.get('/ads/mine', (req, res) => res.json({ items: p2p.listAds({ userId: req.user!.id, includeInactive: true }) }));
 p2pRouter.post(
@@ -32,7 +38,12 @@ p2pRouter.post(
       req.body,
     );
     const cur = getCurrency(body.currency);
-    const ad = p2p.createAd(req.user!, { ...body, minAmount: toMinor(body.minAmount, cur.decimals), maxAmount: toMinor(body.maxAmount, cur.decimals), availableAmount: toMinor(body.availableAmount, cur.decimals) });
+    const ad = p2p.createAd(req.user!, {
+      ...body,
+      minAmount: toMinor(body.minAmount, cur.decimals),
+      maxAmount: toMinor(body.maxAmount, cur.decimals),
+      availableAmount: toMinor(body.availableAmount, cur.decimals),
+    });
     res.status(201).json({ ad });
   }),
 );
@@ -45,7 +56,10 @@ p2pRouter.get('/trades', (req, res) => res.json({ items: p2p.listTrades(req.user
 p2pRouter.post(
   '/trades',
   wrap(async (req, res) => {
-    const body = validate(z.object({ adId: z.string(), amount: z.string(), rate: z.number().positive().optional().nullable(), paymentMethod: z.string().optional(), message: z.string().max(500).optional().nullable() }), req.body);
+    const body = validate(
+      z.object({ adId: z.string(), amount: z.string(), rate: z.number().positive().optional().nullable(), paymentMethod: z.string().optional(), message: z.string().max(500).optional().nullable() }),
+      req.body,
+    );
     const ad = p2p.listAds({ includeInactive: true }).find((a) => a.id === body.adId);
     const cur = getCurrency(ad?.currency ?? 'USD');
     res.status(201).json({ trade: p2p.openTrade(req.user!, { ...body, amount: toMinor(body.amount, cur.decimals) }) });

@@ -129,14 +129,22 @@ export function withdrawFromVirtualCard(user: UserRow, id: string, amount: numbe
  * Charge a BitriPay virtual card at a merchant checkout. Validates PAN/expiry/CVV, debits the card
  * balance and posts a merchant payment from the treasury (which holds the card float).
  */
-export function chargeVirtualCard(card: { number: string; expMonth: number; expYear: number; cvc: string }, amount: number, currency: string, merchant: UserRow, note: string, metadata: Record<string, unknown>) {
+export function chargeVirtualCard(
+  card: { number: string; expMonth: number; expYear: number; cvc: string },
+  amount: number,
+  currency: string,
+  merchant: UserRow,
+  note: string,
+  metadata: Record<string, unknown>,
+) {
   const db = getDb();
   return db.transaction(() => {
     const pan = card.number.replace(/\D/g, '');
     const row = db.prepare('SELECT * FROM virtual_cards WHERE pan_hash = ?').get(sha256(pan)) as any;
     if (!row) throw badRequest('Card declined: unknown card', 'card_declined');
     if (row.status !== 'active') throw badRequest('Card declined: card is frozen or closed', 'card_declined');
-    if (row.exp_month !== Number(card.expMonth) || row.exp_year !== (Number(card.expYear) < 100 ? 2000 + Number(card.expYear) : Number(card.expYear))) throw badRequest('Card declined: invalid expiry', 'card_declined');
+    if (row.exp_month !== Number(card.expMonth) || row.exp_year !== (Number(card.expYear) < 100 ? 2000 + Number(card.expYear) : Number(card.expYear)))
+      throw badRequest('Card declined: invalid expiry', 'card_declined');
     if (decrypt(row.cvv_encrypted) !== card.cvc) throw badRequest('Card declined: invalid security code', 'card_declined');
     if (row.currency !== currency) throw badRequest(`Card declined: this card is denominated in ${row.currency}`, 'card_declined');
     if (row.balance < amount) throw unprocessable('Card declined: insufficient balance', 'insufficient_funds');
@@ -157,17 +165,23 @@ export function chargeVirtualCard(card: { number: string; expMonth: number; expY
       metadata: { ...metadata, method: 'virtual_card', cardId: row.id, cardLast4: row.last4 },
       feeFrom: 'receiver',
       // The card balance was funded out of the holder's wallet earlier (virtual_card_funding); charging releases that held value, it creates nothing.
-      issuance: { authority: 'internal_release', originTransactionId: (db.prepare("SELECT id FROM transactions WHERE type = 'virtual_card_funding' AND metadata LIKE ? ORDER BY created_at DESC LIMIT 1").get(`%${row.id}%`) as any)?.id ?? row.id, reference: `virtual_card:${row.id}` },
+      issuance: {
+        authority: 'internal_release',
+        originTransactionId:
+          (db.prepare("SELECT id FROM transactions WHERE type = 'virtual_card_funding' AND metadata LIKE ? ORDER BY created_at DESC LIMIT 1").get(`%${row.id}%`) as any)?.id ?? row.id,
+        reference: `virtual_card:${row.id}`,
+      },
     });
     db.prepare('UPDATE virtual_cards SET balance = balance - ? WHERE id = ?').run(amount, row.id);
-    notify(owner.id, 'Card payment', `${formatMoney(amount, getCurrency(currency, false))} was charged to your virtual card •••• ${row.last4} at ${merchant.business_name || merchant.full_name}.`, { kind: 'virtual_card_charge', transactionId: tx.id });
+    notify(owner.id, 'Card payment', `${formatMoney(amount, getCurrency(currency, false))} was charged to your virtual card •••• ${row.last4} at ${merchant.business_name || merchant.full_name}.`, {
+      kind: 'virtual_card_charge',
+      transactionId: tx.id,
+    });
     return { tx, owner };
   })();
 }
 
 export function virtualCardTransactions(userId: string, id: string) {
   getCardRow(userId, id);
-  return getDb()
-    .prepare("SELECT * FROM transactions WHERE metadata LIKE ? ORDER BY created_at DESC LIMIT 100")
-    .all(`%"cardId":"${id}"%`) as any[];
+  return getDb().prepare('SELECT * FROM transactions WHERE metadata LIKE ? ORDER BY created_at DESC LIMIT 100').all(`%"cardId":"${id}"%`) as any[];
 }

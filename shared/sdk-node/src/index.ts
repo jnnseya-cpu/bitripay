@@ -24,7 +24,10 @@ export class BitriPayError extends Error {
     this.details = details;
   }
 }
-export interface RequestOptions { idempotencyKey?: string; stepUpToken?: string }
+export interface RequestOptions {
+  idempotencyKey?: string;
+  stepUpToken?: string;
+}
 type Query = Record<string, string | number | boolean | undefined | null>;
 
 export class BitriPay {
@@ -40,7 +43,13 @@ export class BitriPay {
     this.f = opts.fetch ?? fetch;
   }
   async request<T>(method: string, path: string, body?: unknown, opts: RequestOptions & { query?: Query } = {}): Promise<T> {
-    const q = opts.query ? '?' + Object.entries(opts.query).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&') : '';
+    const q = opts.query
+      ? '?' +
+        Object.entries(opts.query)
+          .filter(([, v]) => v !== undefined && v !== null && v !== '')
+          .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+          .join('&')
+      : '';
     const headers: Record<string, string> = { authorization: `Bearer ${this.key}`, accept: 'application/json', 'user-agent': 'bitripay-sdk-node/1.0.0' };
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (opts.idempotencyKey) headers['idempotency-key'] = opts.idempotencyKey;
@@ -55,7 +64,23 @@ export class BitriPay {
   private post = <T>(path: string, body?: unknown, opts?: RequestOptions) => this.request<T>('POST', path, body ?? {}, opts);
 
   paymentIntents = {
-    create: (body: { amount_minor?: number; currency: string; rails?: string[]; reference?: string; description?: string; purpose_code?: string; metadata?: Record<string, unknown>; customer_msisdn?: string; success_url?: string; cancel_url?: string; splits?: { recipient: string; bps?: number; fixed_minor?: number; label?: string }[]; qr?: boolean }, opts?: RequestOptions) => this.post<any>('/v1/payment_intents', body, opts),
+    create: (
+      body: {
+        amount_minor?: number;
+        currency: string;
+        rails?: string[];
+        reference?: string;
+        description?: string;
+        purpose_code?: string;
+        metadata?: Record<string, unknown>;
+        customer_msisdn?: string;
+        success_url?: string;
+        cancel_url?: string;
+        splits?: { recipient: string; bps?: number; fixed_minor?: number; label?: string }[];
+        qr?: boolean;
+      },
+      opts?: RequestOptions,
+    ) => this.post<any>('/v1/payment_intents', body, opts),
     retrieve: (id: string) => this.get<any>(`/v1/payment_intents/${id}`),
     list: (query?: Query) => this.get<{ data: any[] }>('/v1/payment_intents', query),
     timeline: (id: string) => this.get<any>(`/v1/payment_intents/${id}/timeline`),
@@ -146,7 +171,8 @@ export class BitriPay {
   diaspora = {
     rateCards: () => this.get<any>('/v1/diaspora/rate-cards'),
     institutions: (query?: Query) => this.get<{ data: any[] }>('/v1/institutions', query),
-    quote: (body: { beneficiary: string; sourceCurrency: string; destCurrency?: string; sourceMinor?: number; destMinor?: number; purposeCode: string; reference?: string }) => this.post<any>('/v1/diaspora/quotes', body),
+    quote: (body: { beneficiary: string; sourceCurrency: string; destCurrency?: string; sourceMinor?: number; destMinor?: number; purposeCode: string; reference?: string }) =>
+      this.post<any>('/v1/diaspora/quotes', body),
     pay: (id: string, pin?: string, opts?: RequestOptions) => this.post<any>(`/v1/diaspora/quotes/${id}/pay`, { pin }, opts),
   };
   /** National switch payments (aggregator perimeter). */

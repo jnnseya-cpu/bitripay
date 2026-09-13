@@ -27,7 +27,16 @@ export function storeEvidence(kind: string, subjectId: string | null, rawBase64:
   const existing = db.prepare('SELECT id FROM evidence_vault WHERE sha256 = ? AND subject_id IS ? AND kind = ?').get(digest, subjectId, kind) as any;
   if (existing) return existing.id;
   const id = `ev_${shortCode(16).toLowerCase()}`;
-  db.prepare('INSERT INTO evidence_vault (id, kind, subject_id, sha256, ciphertext, bytes, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, kind, subjectId, digest, encrypt(rawBase64), Buffer.from(rawBase64, 'base64').length, JSON.stringify(meta), now());
+  db.prepare('INSERT INTO evidence_vault (id, kind, subject_id, sha256, ciphertext, bytes, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id,
+    kind,
+    subjectId,
+    digest,
+    encrypt(rawBase64),
+    Buffer.from(rawBase64, 'base64').length,
+    JSON.stringify(meta),
+    now(),
+  );
   return id;
 }
 
@@ -47,7 +56,15 @@ export function readEvidence(id: string): { entry: VaultEntry; rawBase64: string
 }
 
 export function listEvidence(subjectId: string): VaultEntry[] {
-  return (getDb().prepare('SELECT id, kind, subject_id, sha256, bytes, meta, created_at FROM evidence_vault WHERE subject_id = ? ORDER BY created_at').all(subjectId) as any[]).map((r) => ({ id: r.id, kind: r.kind, subjectId: r.subject_id, sha256: r.sha256, bytes: r.bytes, meta: parseJson(r.meta, {}), createdAt: r.created_at }));
+  return (getDb().prepare('SELECT id, kind, subject_id, sha256, bytes, meta, created_at FROM evidence_vault WHERE subject_id = ? ORDER BY created_at').all(subjectId) as any[]).map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    subjectId: r.subject_id,
+    sha256: r.sha256,
+    bytes: r.bytes,
+    meta: parseJson(r.meta, {}),
+    createdAt: r.created_at,
+  }));
 }
 
 /** Integrity sweep for the console: every entry must still hash to its recorded digest. */

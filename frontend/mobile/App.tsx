@@ -60,10 +60,16 @@ function LockScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: th.bg, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
       <Text style={{ fontSize: 48 }}>🔒</Text>
-      <T bold size={22}>BitriPay is locked</T>
-      <T muted center>Use your fingerprint or face to continue.</T>
+      <T bold size={22}>
+        BitriPay is locked
+      </T>
+      <T muted center>
+        Use your fingerprint or face to continue.
+      </T>
       <Button title="Unlock" onPress={unlock} />
-      <Pressable onPress={logout}><T muted>Sign out instead</T></Pressable>
+      <Pressable onPress={logout}>
+        <T muted>Sign out instead</T>
+      </Pressable>
     </View>
   );
 }
@@ -84,7 +90,9 @@ function Root() {
   const th = dark ? darkTheme : light;
   if (!ready) return <Loading />;
   if (locked) return <LockScreen />;
-  const navTheme = dark ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: th.bg, card: th.card, text: th.text, primary: th.primary, border: th.border } } : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: th.bg, card: th.card, text: th.text, primary: th.primary, border: th.border } };
+  const navTheme = dark
+    ? { ...DarkTheme, colors: { ...DarkTheme.colors, background: th.bg, card: th.card, text: th.text, primary: th.primary, border: th.border } }
+    : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: th.bg, card: th.card, text: th.text, primary: th.primary, border: th.border } };
   return (
     <NavigationContainer theme={navTheme} linking={linking}>
       <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: th.bg } }}>

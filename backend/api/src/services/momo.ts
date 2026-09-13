@@ -44,7 +44,9 @@ function map(r: any): MomoOperator {
 export function ensureMomoOperators() {
   const db = getDb();
   const existing = new Set((db.prepare('SELECT id FROM momo_operators').all() as any[]).map((r) => r.id));
-  const insert = db.prepare('INSERT INTO momo_operators (id, name, brand, country, currency, ussd, color, payout_enabled, enabled, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?)');
+  const insert = db.prepare(
+    'INSERT INTO momo_operators (id, name, brand, country, currency, ussd, color, payout_enabled, enabled, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?)',
+  );
   db.transaction(() => {
     MOBILE_MONEY_OPERATORS.forEach((o, i) => {
       if (existing.has(o.id)) return;
@@ -67,7 +69,10 @@ export function listOperators(filter: { country?: string | null; currency?: stri
   }
   if (filter.onlyDirect) where.push("collection_number IS NOT NULL AND collection_number != ''");
   const sql = `SELECT * FROM momo_operators ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY country, sort_order, name`;
-  return getDb().prepare(sql).all(...params).map(map);
+  return getDb()
+    .prepare(sql)
+    .all(...params)
+    .map(map);
 }
 
 export function getOperator(id: string): MomoOperator {
@@ -76,7 +81,21 @@ export function getOperator(id: string): MomoOperator {
   return map(row);
 }
 
-export function upsertOperator(input: { id: string; name: string; brand: string; country: string; currency: string; ussd?: string | null; color?: string; collectionNumber?: string | null; collectionName?: string | null; instructions?: string | null; payoutEnabled: boolean; enabled: boolean; sortOrder?: number }): MomoOperator {
+export function upsertOperator(input: {
+  id: string;
+  name: string;
+  brand: string;
+  country: string;
+  currency: string;
+  ussd?: string | null;
+  color?: string;
+  collectionNumber?: string | null;
+  collectionName?: string | null;
+  instructions?: string | null;
+  payoutEnabled: boolean;
+  enabled: boolean;
+  sortOrder?: number;
+}): MomoOperator {
   getDb()
     .prepare(
       `INSERT INTO momo_operators (id, name, brand, country, currency, ussd, color, collection_number, collection_name, instructions, payout_enabled, enabled, sort_order, created_at, updated_at)
@@ -84,7 +103,23 @@ export function upsertOperator(input: { id: string; name: string; brand: string;
        ON CONFLICT(id) DO UPDATE SET name = excluded.name, brand = excluded.brand, country = excluded.country, currency = excluded.currency, ussd = excluded.ussd, color = excluded.color,
          collection_number = excluded.collection_number, collection_name = excluded.collection_name, instructions = excluded.instructions, payout_enabled = excluded.payout_enabled, enabled = excluded.enabled, sort_order = excluded.sort_order, updated_at = excluded.updated_at`,
     )
-    .run(input.id, input.name, input.brand, input.country.toUpperCase(), input.currency.toUpperCase(), input.ussd ?? null, input.color ?? '#6366f1', input.collectionNumber || null, input.collectionName || null, input.instructions || null, input.payoutEnabled ? 1 : 0, input.enabled ? 1 : 0, input.sortOrder ?? 0, now(), now());
+    .run(
+      input.id,
+      input.name,
+      input.brand,
+      input.country.toUpperCase(),
+      input.currency.toUpperCase(),
+      input.ussd ?? null,
+      input.color ?? '#6366f1',
+      input.collectionNumber || null,
+      input.collectionName || null,
+      input.instructions || null,
+      input.payoutEnabled ? 1 : 0,
+      input.enabled ? 1 : 0,
+      input.sortOrder ?? 0,
+      now(),
+      now(),
+    );
   return getOperator(input.id);
 }
 

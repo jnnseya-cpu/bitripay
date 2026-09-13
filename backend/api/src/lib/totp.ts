@@ -19,7 +19,10 @@ export function base32Encode(buf: Buffer): string {
 }
 
 export function base32Decode(str: string): Buffer {
-  const clean = str.toUpperCase().replace(/=+$/, '').replace(/[^A-Z2-7]/g, '');
+  const clean = str
+    .toUpperCase()
+    .replace(/=+$/, '')
+    .replace(/[^A-Z2-7]/g, '');
   let bits = 0;
   let value = 0;
   const out: number[] = [];

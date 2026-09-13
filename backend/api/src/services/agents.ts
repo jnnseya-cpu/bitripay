@@ -28,7 +28,11 @@ export function listAgents(search?: string, country?: string | null) {
     where.push('country = ?');
     params.push(country.toUpperCase());
   }
-  return (getDb().prepare(`SELECT * FROM users WHERE ${where.join(' AND ')} ORDER BY full_name LIMIT 100`).all(...params) as UserRow[]).map((r) => ({ ...toPublicUser(r), commissionBps: agentCommissionBps(r) }));
+  return (
+    getDb()
+      .prepare(`SELECT * FROM users WHERE ${where.join(' AND ')} ORDER BY full_name LIMIT 100`)
+      .all(...params) as UserRow[]
+  ).map((r) => ({ ...toPublicUser(r), commissionBps: agentCommissionBps(r) }));
 }
 
 /** Agent gives cash to nobody – the customer hands cash to the agent; agent credits the customer from the agent float. */
@@ -57,8 +61,12 @@ export function agentCashIn(agent: UserRow, input: { customer: string; amount: n
     metadata: { agentId: agent.id, commission, method: 'agent' },
     feeSplits: [{ walletId: agentWallet.id, amount: commission }],
   });
-  if (commission > 0) recordCommission({ agentUserId: agent.id, transactionId: tx.id, kind: 'cash_in', amountMinor: commission, currency: cur.code, metadata: { customerId: customer.id, amount: input.amount, fee } });
-  notify(customer.id, 'Cash-in received', `${formatMoney(input.amount - fee, cur)} was added to your wallet by agent ${agent.business_name || agent.full_name}.`, { kind: 'agent_cash_in', transactionId: tx.id });
+  if (commission > 0)
+    recordCommission({ agentUserId: agent.id, transactionId: tx.id, kind: 'cash_in', amountMinor: commission, currency: cur.code, metadata: { customerId: customer.id, amount: input.amount, fee } });
+  notify(customer.id, 'Cash-in received', `${formatMoney(input.amount - fee, cur)} was added to your wallet by agent ${agent.business_name || agent.full_name}.`, {
+    kind: 'agent_cash_in',
+    transactionId: tx.id,
+  });
   onDepositCompleted(customer.id);
   return tx;
 }
@@ -83,9 +91,7 @@ export function createCashOutRequest(customer: UserRow, input: { agent: string; 
 }
 
 export function listCashRequests(user: UserRow) {
-  const rows = getDb()
-    .prepare("SELECT * FROM cash_requests WHERE (user_id = ? OR agent_id = ?) ORDER BY created_at DESC LIMIT 50")
-    .all(user.id, user.id) as any[];
+  const rows = getDb().prepare('SELECT * FROM cash_requests WHERE (user_id = ? OR agent_id = ?) ORDER BY created_at DESC LIMIT 50').all(user.id, user.id) as any[];
   return rows.map((r) => ({
     id: r.id,
     code: r.code,
@@ -132,8 +138,19 @@ export function confirmCashOut(agent: UserRow, code: string): TransactionRow {
       feeSplits: [{ walletId: agentWallet.id, amount: commission }],
     });
     db.prepare("UPDATE cash_requests SET status = 'completed', transaction_id = ? WHERE id = ?").run(tx.id, req.id);
-    if (commission > 0) recordCommission({ agentUserId: agent.id, transactionId: tx.id, kind: 'cash_out', amountMinor: commission, currency: cur.code, metadata: { customerId: customer.id, amount: req.amount, fee, cashRequestId: req.id } });
-    notify(customer.id, 'Cash-out completed', `${formatMoney(req.amount, cur)} was paid out in cash by agent ${agent.business_name || agent.full_name}.`, { kind: 'agent_cash_out', transactionId: tx.id });
+    if (commission > 0)
+      recordCommission({
+        agentUserId: agent.id,
+        transactionId: tx.id,
+        kind: 'cash_out',
+        amountMinor: commission,
+        currency: cur.code,
+        metadata: { customerId: customer.id, amount: req.amount, fee, cashRequestId: req.id },
+      });
+    notify(customer.id, 'Cash-out completed', `${formatMoney(req.amount, cur)} was paid out in cash by agent ${agent.business_name || agent.full_name}.`, {
+      kind: 'agent_cash_out',
+      transactionId: tx.id,
+    });
     return tx;
   })();
 }
@@ -150,11 +167,26 @@ export function cancelCashRequest(user: UserRow, code: string) {
 export function agentStats(agent: UserRow) {
   const db = getDb();
   const since = new Date(Date.now() - 30 * 86400_000).toISOString();
-  const cashIn = db.prepare("SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM transactions WHERE sender_user_id = ? AND type = 'agent_cash_in' AND status = 'completed' AND created_at >= ?").get(agent.id, since) as any;
-  const cashOut = db.prepare("SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM transactions WHERE receiver_user_id = ? AND type = 'agent_cash_out' AND status = 'completed' AND created_at >= ?").get(agent.id, since) as any;
+  const cashIn = db
+    .prepare("SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM transactions WHERE sender_user_id = ? AND type = 'agent_cash_in' AND status = 'completed' AND created_at >= ?")
+    .get(agent.id, since) as any;
+  const cashOut = db
+    .prepare("SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM transactions WHERE receiver_user_id = ? AND type = 'agent_cash_out' AND status = 'completed' AND created_at >= ?")
+    .get(agent.id, since) as any;
   const pickups = db.prepare("SELECT COUNT(*) c FROM remittances WHERE pickup_agent_id = ? AND status = 'completed'").get(agent.id) as any;
-  const commissionRows = db.prepare("SELECT metadata FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND type IN ('agent_cash_in','agent_cash_out') AND status = 'completed' AND created_at >= ?").all(agent.id, agent.id, since) as any[];
+  const commissionRows = db
+    .prepare("SELECT metadata FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND type IN ('agent_cash_in','agent_cash_out') AND status = 'completed' AND created_at >= ?")
+    .all(agent.id, agent.id, since) as any[];
   const commission = commissionRows.reduce((s, r) => s + (JSON.parse(r.metadata || '{}').commission || 0), 0);
   const pending = (db.prepare("SELECT COUNT(*) c FROM cash_requests WHERE agent_id = ? AND status = 'pending' AND expires_at > ?").get(agent.id, now()) as any).c;
-  return { cashInCount: cashIn.c, cashInVolume: cashIn.s, cashOutCount: cashOut.c, cashOutVolume: cashOut.s, cashPickups: pickups.c, commissionEarned: commission, pendingRequests: pending, commissionBps: agentCommissionBps(agent) };
+  return {
+    cashInCount: cashIn.c,
+    cashInVolume: cashIn.s,
+    cashOutCount: cashOut.c,
+    cashOutVolume: cashOut.s,
+    cashPickups: pickups.c,
+    commissionEarned: commission,
+    pendingRequests: pending,
+    commissionBps: agentCommissionBps(agent),
+  };
 }

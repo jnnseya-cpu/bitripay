@@ -3,6 +3,7 @@
  * Run: npm run seed -w @bitripay/api
  */
 import { bootstrap } from './app';
+import { config } from './config';
 import { getDb } from './db';
 import { createUser, findUserByEmail, getUserById, updateUser } from './services/users';
 import { ensureWallet } from './services/wallets';
@@ -21,19 +22,26 @@ import path from 'node:path';
 bootstrap();
 const db = getDb();
 
-const seedAdmin = () => findUserByEmail(process.env.ADMIN_EMAIL || 'admin@bitripay.local')!;
+const seedAdmin = () => findUserByEmail(config.admin.email)!;
+const SEED_CURRENCIES = Array.from(new Set([config.baseCurrency, 'EUR', 'NGN']));
+const base = config.baseCurrency;
 
 function demoUser(email: string, fullName: string, role: 'user' | 'merchant' | 'agent', tag: string, extra: Record<string, unknown> = {}) {
   let u = findUserByEmail(email);
   if (!u) {
-    u = createUser({ email, fullName, role, tag, password: 'Password123!', emailVerified: true, phone: extra.phone as string, country: (extra.country as string) || 'US' });
+    u = createUser({ email, fullName, role, tag, password: 'Password123!', emailVerified: true, phone: extra.phone as string, country: (extra.country as string) || config.seed.country });
     updateUser(u.id, { pin_hash: hashPassword('1234'), kyc_status: 'verified', ...(extra.business ? { business_name: extra.business as string } : {}) });
     if (role === 'merchant') upgradeToMerchant(getUserById(u.id), (extra.business as string) || fullName);
-    for (const cur of ['USD', 'EUR', 'NGN']) {
+    for (const cur of SEED_CURRENCIES) {
       const w = ensureWallet(u.id, cur);
       void w;
       // Demo funding is an administrator issuance; the seed self-approves (a real issuance needs a second admin).
-      const v = proposeVerification(seedAdmin(), u.id, { subjectType: 'issuance', action: 'confirm', note: 'Demo seed funding', payload: { direction: 'credit', amount: cur === 'NGN' ? 50_000_000 : 250_000, currency: cur, reason: 'Demo seed funding' } });
+      const v = proposeVerification(seedAdmin(), u.id, {
+        subjectType: 'issuance',
+        action: 'confirm',
+        note: 'Demo seed funding',
+        payload: { direction: 'credit', amount: cur === 'NGN' ? 50_000_000 : 250_000, currency: cur, reason: 'Demo seed funding' },
+      });
       approveVerification(seedAdmin(), v.id, undefined, { headers: {}, body: {} }, true);
     }
     console.log(`created ${role}: ${email} / Password123! (PIN 1234)`);
@@ -47,19 +55,29 @@ const shop = demoUser('merchant@example.com', 'Coffee Corner', 'merchant', 'coff
 const agent = demoUser('agent@example.com', 'Kwame Agent Services', 'agent', 'kwameagent', { phone: '+233550000004', country: 'GH', business: 'Kwame Mobile Money Shop' });
 
 if ((db.prepare("SELECT COUNT(*) c FROM transactions WHERE type = 'transfer'").get() as any).c === 0) {
-  sendMoney(alice, { to: 'bob', amount: 2500, currency: 'USD', note: 'Lunch 🍜' });
-  sendMoney(bob, { to: 'alice', amount: 1200, currency: 'USD', note: 'Movie tickets' });
-  sendMoney(alice, { to: 'coffeecorner', amount: 450, currency: 'USD', note: 'Latte' });
-  createPaymentRequest(shop, { kind: 'link', amount: 1999, currency: 'USD', description: 'Order #1042 – 2x Cappuccino' });
-  createPaymentRequest(shop, { kind: 'qr', amount: 750, currency: 'USD', description: 'Counter 1' });
-  createPaymentRequest(alice, { kind: 'request', amount: 3000, currency: 'USD', description: 'Your share of dinner', payer: 'bob' });
+  sendMoney(alice, { to: 'bob', amount: 2500, currency: base, note: 'Lunch 🍜' });
+  sendMoney(bob, { to: 'alice', amount: 1200, currency: base, note: 'Movie tickets' });
+  sendMoney(alice, { to: 'coffeecorner', amount: 450, currency: base, note: 'Latte' });
+  createPaymentRequest(shop, { kind: 'link', amount: 1999, currency: base, description: 'Order #1042 – 2x Cappuccino' });
+  createPaymentRequest(shop, { kind: 'qr', amount: 750, currency: base, description: 'Counter 1' });
+  createPaymentRequest(alice, { kind: 'request', amount: 3000, currency: base, description: 'Your share of dinner', payer: 'bob' });
   console.log('seeded demo transactions and payment requests');
 }
 // ---- Corridors, prefunded payout accounts and a demo payout device (sandbox only)
-const admin = findUserByEmail(process.env.ADMIN_EMAIL || 'admin@bitripay.local')!;
+const admin = seedAdmin();
 const drcAgent = demoUser('agent.kinshasa@example.com', 'Kinshasa Payout Point', 'agent', 'kinagent', { phone: '+243810000001', country: 'CD', business: 'Kinshasa Payout Point' });
 if (listCorridors().length === 0) {
-  upsertCorridor({ sourceCountry: 'GB', sourceCurrency: 'GBP', destCountry: 'CD', destCurrency: 'CDF', operatorId: 'orange_cd', rail: 'mobile_money', status: 'sandbox', estimatedPayoutMinutes: 30, notes: 'Demo corridor: UK card → Orange Money DRC. Sandbox only until authorised.' });
+  upsertCorridor({
+    sourceCountry: 'GB',
+    sourceCurrency: 'GBP',
+    destCountry: 'CD',
+    destCurrency: 'CDF',
+    operatorId: 'orange_cd',
+    rail: 'mobile_money',
+    status: 'sandbox',
+    estimatedPayoutMinutes: 30,
+    notes: 'Demo corridor: UK card → Orange Money DRC. Sandbox only until authorised.',
+  });
   upsertCorridor({ sourceCountry: 'GB', sourceCurrency: 'GBP', destCountry: 'SN', destCurrency: 'XOF', operatorId: 'orange_sn', rail: 'mobile_money', status: 'sandbox', estimatedPayoutMinutes: 30 });
   upsertCorridor({ sourceCountry: 'GB', sourceCurrency: 'GBP', destCountry: 'KE', destCurrency: 'KES', operatorId: 'mpesa_ke', rail: 'mobile_money', status: 'sandbox', estimatedPayoutMinutes: 15 });
   upsertCorridor({ sourceCurrency: '*', destCountry: 'CD', destCurrency: 'CDF', operatorId: 'airtel_cd', rail: 'mobile_money', status: 'sandbox', estimatedPayoutMinutes: 30 });
@@ -67,21 +85,63 @@ if (listCorridors().length === 0) {
 }
 db.prepare("UPDATE currencies SET enabled = 1 WHERE code IN ('CDF', 'GBP', 'KES', 'XOF')").run(); // demo corridor currencies
 if (listPayoutAccounts().length === 0) {
-  const orange = createPayoutAccount({ rail: 'mobile_money', operatorId: 'orange_cd', country: 'CD', currency: 'CDF', label: 'Orange Money DRC – merchant SIM 1', msisdn: '+243890000100', simIccid: '8924300000000000100', agentUserId: drcAgent.id, dailyLimit: 0, perTxLimit: 0 }, { type: 'system' });
+  const orange = createPayoutAccount(
+    {
+      rail: 'mobile_money',
+      operatorId: 'orange_cd',
+      country: 'CD',
+      currency: 'CDF',
+      label: 'Orange Money DRC – merchant SIM 1',
+      msisdn: '+243890000100',
+      simIccid: '8924300000000000100',
+      agentUserId: drcAgent.id,
+      dailyLimit: 0,
+      perTxLimit: 0,
+    },
+    { type: 'system' },
+  );
   prefundAccount(orange.id, 5_000_000_00, { reference: 'SEED-PREFUND-CDF', note: 'Demo prefunding' }, admin);
-  const mpesa = createPayoutAccount({ rail: 'mobile_money', operatorId: 'mpesa_ke', country: 'KE', currency: 'KES', label: 'M-Pesa Kenya – merchant SIM', msisdn: '+254700000100', simIccid: '8925400000000000100' }, { type: 'system' });
+  const mpesa = createPayoutAccount(
+    { rail: 'mobile_money', operatorId: 'mpesa_ke', country: 'KE', currency: 'KES', label: 'M-Pesa Kenya – merchant SIM', msisdn: '+254700000100', simIccid: '8925400000000000100' },
+    { type: 'system' },
+  );
   prefundAccount(mpesa.id, 500_000_00, { reference: 'SEED-PREFUND-KES', note: 'Demo prefunding' }, admin);
-  const senegal = createPayoutAccount({ rail: 'mobile_money', operatorId: 'orange_sn', country: 'SN', currency: 'XOF', label: 'Orange Money Senegal – merchant SIM', msisdn: '+221770000100' }, { type: 'system' });
+  const senegal = createPayoutAccount(
+    { rail: 'mobile_money', operatorId: 'orange_sn', country: 'SN', currency: 'XOF', label: 'Orange Money Senegal – merchant SIM', msisdn: '+221770000100' },
+    { type: 'system' },
+  );
   prefundAccount(senegal.id, 2_000_000, { reference: 'SEED-PREFUND-XOF', note: 'Demo prefunding' }, admin);
   if (!listDevices().some((d) => d.kind === 'payout')) {
-    // Demo payout device: the private key is written to backend/api/data/demo-payout-device.json for the smoke test / a forwarder simulator. Never ship this.
+    // Demo payout device. The private key is only written to disk (backend/api/data/demo-payout-device.json, for
+    // scripts/e2e-corridor.mjs) when SEED_WRITE_DEVICE_KEY=1; by default it is discarded after registration.
     const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-    const device = registerDevice(admin, { name: 'Demo Android payout device (Kinshasa)', publicKey: publicKey.export({ type: 'spki', format: 'pem' }).toString(), operatorIds: ['orange_cd'], kind: 'payout', simMsisdn: '+243890000100', simIccid: '8924300000000000100', agentUserId: drcAgent.id, payoutAccountId: orange.id }, admin.id);
-    const out = path.join(path.dirname(process.env.DATABASE_PATH || './data/bitripay.db'), 'demo-payout-device.json');
-    fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, JSON.stringify({ deviceId: device.id, payoutAccountId: orange.id, simIdentity: '+243890000100', privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString() }, null, 2));
-    console.log(`seeded prefunded payout accounts (CDF, KES, XOF) and a demo payout device – key in ${out}`);
+    const device = registerDevice(
+      admin,
+      {
+        name: 'Demo Android payout device (Kinshasa)',
+        publicKey: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+        operatorIds: ['orange_cd'],
+        kind: 'payout',
+        simMsisdn: '+243890000100',
+        simIccid: '8924300000000000100',
+        agentUserId: drcAgent.id,
+        payoutAccountId: orange.id,
+      },
+      admin.id,
+    );
+    if (config.seed.writeDeviceKey) {
+      const out = path.join(path.dirname(config.databasePath), 'demo-payout-device.json');
+      fs.mkdirSync(path.dirname(out), { recursive: true });
+      fs.writeFileSync(
+        out,
+        JSON.stringify({ deviceId: device.id, payoutAccountId: orange.id, simIdentity: '+243890000100', privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString() }, null, 2),
+        { mode: 0o600 },
+      );
+      console.log(`seeded prefunded payout accounts (CDF, KES, XOF) and a demo payout device – key in ${out}`);
+    } else {
+      console.log('seeded prefunded payout accounts (CDF, KES, XOF) and a demo payout device (set SEED_WRITE_DEVICE_KEY=1 to keep its private key for scripts/e2e-corridor.mjs)');
+    }
   }
 }
-console.log(`admin login: see ADMIN_EMAIL / ADMIN_PASSWORD in .env (default admin@bitripay.local / Admin123!)`);
+console.log(`admin login: ${config.admin.email} (password from ADMIN_PASSWORD in .env)`);
 console.log(`agent: ${agent.email}  merchant: ${shop.email}`);

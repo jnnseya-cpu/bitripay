@@ -17,7 +17,8 @@ let app: ReturnType<typeof setupApp>;
 beforeAll(() => {
   app = setupApp();
 });
-const balanceOf = async (auth: Record<string, string>, currency = 'USD') => ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
+const balanceOf = async (auth: Record<string, string>, currency = 'USD') =>
+  ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
 const setFraud = async (admin: Awaited<ReturnType<typeof adminToken>>, body: Record<string, unknown>) => {
   const r = await request(app).put('/api/admin/risk/fraud/settings').set(admin.auth).send(body);
   expect(r.status, JSON.stringify(r.body)).toBe(200);
@@ -34,12 +35,28 @@ describe('policy engine and fraud bands', () => {
     const sim = await request(app).post('/api/admin/risk/policies/simulate').set(admin.auth).send({ kind: 'transfer', baseMinor: 1000, score: 45 });
     expect(sim.body.action).toBe('step_up');
     expect(sim.body.rule.id).toBe('FRD-002');
-    const sanctioned = await request(app).post('/api/admin/risk/policies/simulate').set(admin.auth).send({ kind: 'transfer', baseMinor: 1000, score: 0, flags: ['sanctions:name:X'] });
+    const sanctioned = await request(app)
+      .post('/api/admin/risk/policies/simulate')
+      .set(admin.auth)
+      .send({ kind: 'transfer', baseMinor: 1000, score: 0, flags: ['sanctions:name:X'] });
     expect(sanctioned.body.action).toBe('block');
     expect(sanctioned.body.rule.id).toBe('SAN-001');
-    const bad = await request(app).post('/api/admin/risk/policies').set(admin.auth).send({ name: 'No allow', rules: [{ id: 'FRD-001', description: 'block all', when: { minScore: 0 }, action: 'block', reason: 'x' }] });
+    const bad = await request(app)
+      .post('/api/admin/risk/policies')
+      .set(admin.auth)
+      .send({ name: 'No allow', rules: [{ id: 'FRD-001', description: 'block all', when: { minScore: 0 }, action: 'block', reason: 'x' }] });
     expect(bad.status).toBe(400);
-    const draft = await request(app).post('/api/admin/risk/policies').set(admin.auth).send({ name: 'Stricter', rules: [{ id: 'SAN-001', description: 'sanctions', when: { flags: ['sanctions:'] }, action: 'block', reason: 'sanctions_hit' }, { id: 'FRD-002', description: 'score 70+', when: { minScore: 70 }, action: 'block', reason: 'fraud_block' }, { id: 'FRD-001', description: 'rest', when: { maxScore: 69 }, action: 'allow', reason: 'clear' }] });
+    const draft = await request(app)
+      .post('/api/admin/risk/policies')
+      .set(admin.auth)
+      .send({
+        name: 'Stricter',
+        rules: [
+          { id: 'SAN-001', description: 'sanctions', when: { flags: ['sanctions:'] }, action: 'block', reason: 'sanctions_hit' },
+          { id: 'FRD-002', description: 'score 70+', when: { minScore: 70 }, action: 'block', reason: 'fraud_block' },
+          { id: 'FRD-001', description: 'rest', when: { maxScore: 69 }, action: 'allow', reason: 'clear' },
+        ],
+      });
     expect(draft.status, JSON.stringify(draft.body)).toBe(201);
     expect(draft.body.version).toBe(2);
     expect((await request(app).post(`/api/admin/risk/policies/${draft.body.id}/approve`).set(admin.auth)).status).toBe(409);
@@ -94,7 +111,10 @@ describe('policy engine and fraud bands', () => {
     expect(c.indicators.some((i: string) => i.startsWith('method_risk'))).toBe(true);
     expect(cases.body.sarDrafts).toBeGreaterThanOrEqual(1);
     expect((await request(app).post(`/api/admin/risk/cases/${c.id}/assign`).set(admin.auth).send({})).body.status).toBe('ASSIGNED');
-    const edited = await request(app).put(`/api/admin/risk/cases/${c.id}/sar`).set(admin.auth).send({ text: `${c.sarDraft}\n\n6. Officer note\n   Reviewed.` });
+    const edited = await request(app)
+      .put(`/api/admin/risk/cases/${c.id}/sar`)
+      .set(admin.auth)
+      .send({ text: `${c.sarDraft}\n\n6. Officer note\n   Reviewed.` });
     expect(edited.body.sarDraft).toContain('Officer note');
     expect((await request(app).post(`/api/admin/risk/cases/${c.id}/decide`).set(admin.auth).send({ decision: 'SAR_FILED', reason: 'Pattern confirmed' })).status).toBe(400); // needs the filing reference
     const decided = await request(app).post(`/api/admin/risk/cases/${c.id}/decide`).set(admin.auth).send({ decision: 'SAR_FILED', reason: 'Pattern confirmed', sarReference: 'CENAREF-2026-0042' });
@@ -119,7 +139,9 @@ describe('policy engine and fraud bands', () => {
     expect(await balanceOf(listed.auth)).toBe(0);
     const cases = await request(app).get('/api/admin/risk/cases').set(admin.auth).query({ user: listed.user.id, kind: 'SANCTIONS' });
     expect(cases.body.items.length).toBeGreaterThanOrEqual(1);
-    await request(app).delete(`/api/admin/sanctions/${sanction.body.entry?.id ?? sanction.body.id}`).set(admin.auth);
+    await request(app)
+      .delete(`/api/admin/sanctions/${sanction.body.entry?.id ?? sanction.body.id}`)
+      .set(admin.auth);
   });
 });
 
@@ -149,17 +171,40 @@ describe('KYC tiers, KYB and per-country limits', () => {
     expect(daily.status).toBe(422);
     expect(daily.body.error.code).toBe('daily_limit_exceeded');
     // a country override raises Tier 1 in the DRC without touching anyone else
-    const cfg = await request(app).put('/api/admin/risk/kyc/tiers').set(admin.auth).send({ countries: { CD: { '1': { perTransaction: 20_000, daily: 100_000, monthly: 1_000_000 } } } });
+    const cfg = await request(app)
+      .put('/api/admin/risk/kyc/tiers')
+      .set(admin.auth)
+      .send({ countries: { CD: { '1': { perTransaction: 20_000, daily: 100_000, monthly: 1_000_000 } } } });
     expect(cfg.status).toBe(200);
     expect((await request(app).post('/api/transfers').set(u.auth).send({ to: peer.user.tag, amount: '60.00', currency: 'USD', pin: '1234' })).status).toBe(201);
     v = await request(app).get('/api/risk/verification').set(u.auth);
     expect(v.body.limits.perTransaction).toBe(20_000);
     expect(v.body.usage.daily).toBeGreaterThanOrEqual(9_000);
     // a KYC submission with a fresh proof of address asks for Tier 3; review grants it
-    const stale = await request(app).post('/api/kyc').set(u.auth).send({ docType: 'national_id', docNumber: 'CD-123', fullName: u.user.fullName, proofOfAddress: 'data:image/png;base64,AAAA', addressDocDate: new Date(Date.now() - 200 * 86_400_000).toISOString() });
+    const stale = await request(app)
+      .post('/api/kyc')
+      .set(u.auth)
+      .send({
+        docType: 'national_id',
+        docNumber: 'CD-123',
+        fullName: u.user.fullName,
+        proofOfAddress: 'data:image/png;base64,AAAA',
+        addressDocDate: new Date(Date.now() - 200 * 86_400_000).toISOString(),
+      });
     expect(stale.status).toBe(400);
     expect(stale.body.error.code).toBe('address_doc_too_old');
-    const sub = await request(app).post('/api/kyc').set(u.auth).send({ docType: 'national_id', docNumber: 'CD-123', fullName: u.user.fullName, selfie: 'data:image/png;base64,AAAA', liveness: true, proofOfAddress: 'data:image/png;base64,AAAA', addressDocDate: new Date(Date.now() - 10 * 86_400_000).toISOString() });
+    const sub = await request(app)
+      .post('/api/kyc')
+      .set(u.auth)
+      .send({
+        docType: 'national_id',
+        docNumber: 'CD-123',
+        fullName: u.user.fullName,
+        selfie: 'data:image/png;base64,AAAA',
+        liveness: true,
+        proofOfAddress: 'data:image/png;base64,AAAA',
+        addressDocDate: new Date(Date.now() - 10 * 86_400_000).toISOString(),
+      });
     expect(sub.status, JSON.stringify(sub.body)).toBe(201);
     expect(sub.body.submission.requestedTier).toBe(3);
     expect(sub.body.submission.liveness).toBe(true);
@@ -172,11 +217,34 @@ describe('KYC tiers, KYB and per-country limits', () => {
     // KYB: directors need Tier 2; verification grants Tier 4; volume above the threshold requires it
     const m = await registerUser(app, { role: 'merchant', businessName: 'Kin Wholesale', country: 'CD' });
     const director = await registerUser(app);
-    const needsKyc = await request(app).post('/api/risk/kyb').set(m.auth).send({ legalName: 'Kin Wholesale SARL', registrationNumber: 'CD/KIN/RCCM/24-B-1234', country: 'CD', address: '12 Avenue du Commerce, Gombe, Kinshasa', expectedMonthlyVolume: 5_000_000, directors: [{ name: director.user.fullName, userId: director.user.id, role: 'Gérant' }] });
+    const needsKyc = await request(app)
+      .post('/api/risk/kyb')
+      .set(m.auth)
+      .send({
+        legalName: 'Kin Wholesale SARL',
+        registrationNumber: 'CD/KIN/RCCM/24-B-1234',
+        country: 'CD',
+        address: '12 Avenue du Commerce, Gombe, Kinshasa',
+        expectedMonthlyVolume: 5_000_000,
+        directors: [{ name: director.user.fullName, userId: director.user.id, role: 'Gérant' }],
+      });
     expect(needsKyc.status).toBe(422);
     expect(needsKyc.body.error.code).toBe('director_kyc_required');
     await request(app).put(`/api/admin/risk/kyc/users/${director.user.id}/tier`).set(admin.auth).send({ tier: 2, reason: 'verified' });
-    const kyb = await request(app).post('/api/risk/kyb').set(m.auth).send({ legalName: 'Kin Wholesale SARL', registrationNumber: 'CD/KIN/RCCM/24-B-1234', country: 'CD', address: '12 Avenue du Commerce, Gombe, Kinshasa', mcc: '5311', expectedMonthlyVolume: 5_000_000, licenceRef: 'BCC-AGG-2026-07', directors: [{ name: director.user.fullName, userId: director.user.id, role: 'Gérant' }], documents: [{ kind: 'registration', ref: 'rccm.pdf' }] });
+    const kyb = await request(app)
+      .post('/api/risk/kyb')
+      .set(m.auth)
+      .send({
+        legalName: 'Kin Wholesale SARL',
+        registrationNumber: 'CD/KIN/RCCM/24-B-1234',
+        country: 'CD',
+        address: '12 Avenue du Commerce, Gombe, Kinshasa',
+        mcc: '5311',
+        expectedMonthlyVolume: 5_000_000,
+        licenceRef: 'BCC-AGG-2026-07',
+        directors: [{ name: director.user.fullName, userId: director.user.id, role: 'Gérant' }],
+        documents: [{ kind: 'registration', ref: 'rccm.pdf' }],
+      });
     expect(kyb.status, JSON.stringify(kyb.body)).toBe(201);
     expect(kyb.body.submission.status).toBe('pending');
     const reviewed = await request(app).post(`/api/admin/risk/kyb/${kyb.body.submission.id}/review`).set(admin.auth).send({ decision: 'verified', note: 'Registry checked' });
@@ -204,8 +272,14 @@ describe('settlement-account change protection', () => {
     const admin = await adminToken(app);
     const u = await registerUser(app);
     await fund(app, u.user.id, '200.00');
-    await request(app).put('/api/admin/settings/risk').set(admin.auth).send({ value: { coolingOffMinutes: 0 } }); // isolate the destination rule from the legacy beneficiary cooling-off
-    await request(app).put('/api/admin/settings/accountProtection').set(admin.auth).send({ value: { coolingAmountBase: 1_000, coolingOffHours: 24 } });
+    await request(app)
+      .put('/api/admin/settings/risk')
+      .set(admin.auth)
+      .send({ value: { coolingOffMinutes: 0 } }); // isolate the destination rule from the legacy beneficiary cooling-off
+    await request(app)
+      .put('/api/admin/settings/accountProtection')
+      .set(admin.auth)
+      .send({ value: { coolingAmountBase: 1_000, coolingOffHours: 24 } });
     const bank = await request(app).post('/api/bank-accounts').set(u.auth).send({ bankName: 'Rawbank', accountName: u.user.fullName, accountNumber: '00998877', currency: 'USD', pin: '1234' });
     expect(bank.status).toBe(201);
     const changes = await request(app).get('/api/risk/destination-changes').set(u.auth);
@@ -240,8 +314,14 @@ describe('settlement-account change protection', () => {
     expect(blocked.status, JSON.stringify(blocked.body)).toBe(403);
     expect(blocked.body.error.code).toBe('destination_locked');
     expect(blocked.body.error.bp).toBe('BP-5011');
-    await request(app).put('/api/admin/settings/risk').set(admin.auth).send({ value: { coolingOffMinutes: 60 } });
-    await request(app).put('/api/admin/settings/accountProtection').set(admin.auth).send({ value: { coolingAmountBase: null } });
+    await request(app)
+      .put('/api/admin/settings/risk')
+      .set(admin.auth)
+      .send({ value: { coolingOffMinutes: 60 } });
+    await request(app)
+      .put('/api/admin/settings/accountProtection')
+      .set(admin.auth)
+      .send({ value: { coolingAmountBase: null } });
   });
 });
 
@@ -263,14 +343,20 @@ describe('sanctions sources and the AML monitor', () => {
     const blocked = await request(app).post('/api/transfers').set(sender.auth).send({ to: target.user.tag, amount: '1.00', currency: 'USD', pin: '1234' });
     expect(blocked.status).toBe(403);
     expect(blocked.body.error.code).toBe('risk_blocked');
-    const next = await request(app).post('/api/admin/risk/sanctions/sources/ofac_sdn/import').set(admin.auth).send({ version: '2026-09-12', rows: [{ kind: 'name', value: 'AEROCARIBBEAN AIRLINES', externalId: '36' }] });
+    const next = await request(app)
+      .post('/api/admin/risk/sanctions/sources/ofac_sdn/import')
+      .set(admin.auth)
+      .send({ version: '2026-09-12', rows: [{ kind: 'name', value: 'AEROCARIBBEAN AIRLINES', externalId: '36' }] });
     expect(next.body.replaced).toBe(3);
     expect(next.body.imported).toBe(1);
     expect((await request(app).post('/api/transfers').set(sender.auth).send({ to: target.user.tag, amount: '1.00', currency: 'USD', pin: '1234' })).status).toBe(201);
     expect((await request(app).post('/api/admin/risk/sanctions/sources/ofac_sdn/import').set(admin.auth).send({ version: 'v3', rows: [] })).status).toBe(400);
 
     // structuring: three movements at 80–100% of the per-transaction limit inside a day
-    await request(app).put('/api/admin/risk/kyc/tiers').set(admin.auth).send({ countries: { KE: { '1': { perTransaction: 5_000, daily: 100_000, monthly: 1_000_000 } } } });
+    await request(app)
+      .put('/api/admin/risk/kyc/tiers')
+      .set(admin.auth)
+      .send({ countries: { KE: { '1': { perTransaction: 5_000, daily: 100_000, monthly: 1_000_000 } } } });
     const s = await registerUser(app, { country: 'KE' });
     const peer = await registerUser(app);
     await fund(app, s.user.id, '500.00');
@@ -281,7 +367,10 @@ describe('sanctions sources and the AML monitor', () => {
     expect(pepSrc.body.kind).toBe('pep');
     const pep = await registerUser(app, { fullName: 'Honourable Deputy Mwamba' });
     await fund(app, pep.user.id, '50.00');
-    await request(app).post('/api/admin/risk/sanctions/sources/pep_list/import').set(admin.auth).send({ version: '1', rows: [{ kind: 'pep', value: 'Honourable Deputy Mwamba' }] });
+    await request(app)
+      .post('/api/admin/risk/sanctions/sources/pep_list/import')
+      .set(admin.auth)
+      .send({ version: '1', rows: [{ kind: 'pep', value: 'Honourable Deputy Mwamba' }] });
     const pepTransfer = await request(app).post('/api/transfers').set(peer.auth).send({ to: pep.user.tag, amount: '1.00', currency: 'USD', pin: '1234' });
     expect(pepTransfer.status, JSON.stringify(pepTransfer.body)).toBe(403); // 45 points → step-up, not a block
     expect(pepTransfer.body.error.code).toBe('step_up_required');
@@ -305,7 +394,8 @@ describe('agent intelligence', () => {
     const agent = await registerUser(app, { role: 'agent', tag: 'intelagent', businessName: 'Intel Agent', country: 'CD' });
     await registerUser(app, { tag: 'intelcust1' });
     await fund(app, agent.user.id, '100.00');
-    for (const amt of ['30.00', '30.00']) expect((await request(app).post('/api/agents/me/cash-in').set(agent.auth).send({ customer: 'intelcust1', amount: amt, currency: 'USD', pin: '1234' })).status).toBe(201);
+    for (const amt of ['30.00', '30.00'])
+      expect((await request(app).post('/api/agents/me/cash-in').set(agent.auth).send({ customer: 'intelcust1', amount: amt, currency: 'USD', pin: '1234' })).status).toBe(201);
     const float = await request(app).get('/api/risk/agents/me/float').set(agent.auth);
     expect(float.status).toBe(200);
     const usd = float.body.forecasts.find((f: any) => f.currency === 'USD');
@@ -321,7 +411,10 @@ describe('agent intelligence', () => {
     expect(trust.body.commission.cashIn.base).toBe(50);
     expect(trust.body.commission.cashIn.trustBonus).toBe(0);
     // with tenure waived, the score decides the band and the bonus flows into the next commission
-    await request(app).put('/api/admin/risk/agents/settings').set(admin.auth).send({ minTenureDays: 0, bonusByBand: { bronze: 7 }, liquidityBonusBps: 0 });
+    await request(app)
+      .put('/api/admin/risk/agents/settings')
+      .set(admin.auth)
+      .send({ minTenureDays: 0, bonusByBand: { bronze: 7 }, liquidityBonusBps: 0 });
     const scored = computeTrustScore(agent.user.id, true);
     expect(scored.band).not.toBe('new');
     const bonus = scored.commissionBonusBps;
@@ -345,7 +438,10 @@ describe('agent intelligence', () => {
     expect((await balanceOf(agent.auth)) - balBefore).toBe(5_000);
     expect((await request(app).get('/api/admin/risk/agents/float-requests').set(admin.auth).query({ agent: agent.user.id })).body.items[0].status).toBe('FULFILLED');
     // assisted onboarding: Tier 1 account, temporary PIN, onboarding commission accrued
-    const onboarded = await request(app).post('/api/risk/agents/me/onboard').set(agent.auth).send({ fullName: 'Marie Kabila', phone: '+243991234567', country: 'CD', livePhoto: 'data:image/png;base64,AAAA', pin: '1234' });
+    const onboarded = await request(app)
+      .post('/api/risk/agents/me/onboard')
+      .set(agent.auth)
+      .send({ fullName: 'Marie Kabila', phone: '+243991234567', country: 'CD', livePhoto: 'data:image/png;base64,AAAA', pin: '1234' });
     expect(onboarded.status, JSON.stringify(onboarded.body)).toBe(201);
     expect(onboarded.body.tier).toBe(1);
     expect(onboarded.body.temporaryPin).toMatch(/^\d{4}$/);
@@ -355,6 +451,6 @@ describe('agent intelligence', () => {
     expect(newUser.phone_verified).toBe(1);
     const st = await request(app).get(`/api/admin/finops/commissions/${agent.user.id}`).set(admin.auth);
     expect(st.body.entries.some((e: any) => e.kind === 'onboarding' && e.status === 'ACCRUED' && e.amountMinor === 200)).toBe(true);
-    expect(getDb().prepare("SELECT requested_tier FROM kyc_submissions WHERE user_id = ?").pluck().get(newUser.id)).toBe(2);
+    expect(getDb().prepare('SELECT requested_tier FROM kyc_submissions WHERE user_id = ?').pluck().get(newUser.id)).toBe(2);
   });
 });

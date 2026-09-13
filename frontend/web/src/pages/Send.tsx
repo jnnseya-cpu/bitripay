@@ -25,13 +25,19 @@ export function Send() {
 
   useEffect(() => {
     if (!debouncedTo || debouncedTo.length < 3) return setRecipient(null);
-    api.get<{ user: PublicUser }>(`/api/account/lookup?q=${encodeURIComponent(debouncedTo)}`).then((r) => setRecipient(r.user)).catch(() => setRecipient(null));
+    api
+      .get<{ user: PublicUser }>(`/api/account/lookup?q=${encodeURIComponent(debouncedTo)}`)
+      .then((r) => setRecipient(r.user))
+      .catch(() => setRecipient(null));
   }, [debouncedTo]);
 
   useEffect(() => {
     if (!debouncedAmount || !cur) return setFee(null);
     const type = recipient?.role === 'merchant' ? 'merchant_payment' : 'transfer';
-    api.get<{ fee: number; total: number }>(`/api/transfers/fee?amount=${debouncedAmount}&currency=${cur}&type=${type}`).then(setFee).catch(() => setFee(null));
+    api
+      .get<{ fee: number; total: number }>(`/api/transfers/fee?amount=${debouncedAmount}&currency=${cur}&type=${type}`)
+      .then(setFee)
+      .catch(() => setFee(null));
   }, [debouncedAmount, cur, recipient]);
 
   const wallet = wallets.find((w) => w.currency === cur);
@@ -42,7 +48,7 @@ export function Send() {
     minor = -1;
   }
   const feeOnSender = recipient?.role !== 'merchant';
-  const total = minor + (feeOnSender ? fee?.fee ?? 0 : 0);
+  const total = minor + (feeOnSender ? (fee?.fee ?? 0) : 0);
   const canSubmit = !!recipient && minor > 0 && !!wallet && wallet.balance >= total;
 
   const submit = async (pin: string) => {
@@ -74,7 +80,9 @@ export function Send() {
             <Avatar user={recipient} />
             <div>
               <div className="main-text">{recipient.businessName || recipient.fullName}</div>
-              <div className="sub-text">@{recipient.tag} · {recipient.role}</div>
+              <div className="sub-text">
+                @{recipient.tag} · {recipient.role}
+              </div>
             </div>
           </div>
         )}

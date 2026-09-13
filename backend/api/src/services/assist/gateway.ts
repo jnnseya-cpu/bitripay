@@ -18,7 +18,11 @@ import { modelApiKey } from './runtime';
 import { publish } from '../bus';
 
 export class GatewayError extends AppError {
-  constructor(code: 'UNAUTHENTICATED' | 'TENANT_MISMATCH' | 'RATE_LIMITED' | 'NEURAL_QUOTA_EXCEEDED' | 'MARGIN_PROTECTION_VIOLATION' | 'PROVIDER_UNAVAILABLE' | 'OUTPUT_SCHEMA_INVALID', message: string, details?: unknown) {
+  constructor(
+    code: 'UNAUTHENTICATED' | 'TENANT_MISMATCH' | 'RATE_LIMITED' | 'NEURAL_QUOTA_EXCEEDED' | 'MARGIN_PROTECTION_VIOLATION' | 'PROVIDER_UNAVAILABLE' | 'OUTPUT_SCHEMA_INVALID',
+    message: string,
+    details?: unknown,
+  ) {
     super(code === 'UNAUTHENTICATED' ? 401 : code === 'TENANT_MISMATCH' ? 403 : code === 'RATE_LIMITED' ? 429 : code === 'PROVIDER_UNAVAILABLE' ? 503 : 422, code.toLowerCase(), message, details);
   }
 }
@@ -40,7 +44,18 @@ export interface AcuPolicy {
   expectedTokensDeep: number;
   alertBelowMargin: number;
 }
-const DEFAULT_ACU: AcuPolicy = { acuPriceMicros: 10_000, acuPerKiloToken: 1, minGrossMargin: 0.66, monthlyBudgetPerUser: 0, monthlyBudgetPerTenant: 0, overage: 'block', expectedTokensPerRun: 6_000, expectedTokensStandard: 2_000, expectedTokensDeep: 6_000, alertBelowMargin: 0.7 };
+const DEFAULT_ACU: AcuPolicy = {
+  acuPriceMicros: 10_000,
+  acuPerKiloToken: 1,
+  minGrossMargin: 0.66,
+  monthlyBudgetPerUser: 0,
+  monthlyBudgetPerTenant: 0,
+  overage: 'block',
+  expectedTokensPerRun: 6_000,
+  expectedTokensStandard: 2_000,
+  expectedTokensDeep: 6_000,
+  alertBelowMargin: 0.7,
+};
 export const MIN_GROSS_MARGIN = 0.66;
 export const getAcuPolicy = (): AcuPolicy => {
   const s = { ...DEFAULT_ACU, ...getSetting<Partial<AcuPolicy>>('acuPolicy', {}) };
@@ -60,16 +75,33 @@ export interface AiRouting {
   rateLimits: { perUserPerMinute: number; perTenantPerMinute: number; perAgentPerMinute: number };
 }
 const DEFAULT_ROUTING: AiRouting = {
-  taskTypes: { classify: ['claude-haiku-4-5-20251001', 'claude-sonnet-5'], extract: ['claude-haiku-4-5-20251001', 'claude-sonnet-5'], score: ['claude-haiku-4-5-20251001', 'claude-sonnet-5'], summarise: ['claude-sonnet-5', 'claude-haiku-4-5-20251001'], draft: ['claude-sonnet-5', 'claude-opus-5'], reason: ['claude-opus-5', 'claude-sonnet-5'] },
+  taskTypes: {
+    classify: ['claude-haiku-4-5-20251001', 'claude-sonnet-5'],
+    extract: ['claude-haiku-4-5-20251001', 'claude-sonnet-5'],
+    score: ['claude-haiku-4-5-20251001', 'claude-sonnet-5'],
+    summarise: ['claude-sonnet-5', 'claude-haiku-4-5-20251001'],
+    draft: ['claude-sonnet-5', 'claude-opus-5'],
+    reason: ['claude-opus-5', 'claude-sonnet-5'],
+  },
   timeoutMs: 8000,
   circuitFailures: 3,
   circuitWindowMs: 5 * 60_000,
-  providers: { anthropic: { enabled: true }, openai: { enabled: false, apiKey: null, baseUrl: 'https://api.openai.com/v1' }, gemini: { enabled: false, apiKey: null, baseUrl: 'https://generativelanguage.googleapis.com/v1beta' } },
+  providers: {
+    anthropic: { enabled: true },
+    openai: { enabled: false, apiKey: null, baseUrl: 'https://api.openai.com/v1' },
+    gemini: { enabled: false, apiKey: null, baseUrl: 'https://generativelanguage.googleapis.com/v1beta' },
+  },
   rateLimits: { perUserPerMinute: 30, perTenantPerMinute: 600, perAgentPerMinute: 300 },
 };
 export const getAiRouting = (): AiRouting => {
   const s = getSetting<Partial<AiRouting>>('aiRouting', {});
-  return { ...DEFAULT_ROUTING, ...s, taskTypes: { ...DEFAULT_ROUTING.taskTypes, ...(s.taskTypes ?? {}) }, providers: { ...DEFAULT_ROUTING.providers, ...(s.providers ?? {}) }, rateLimits: { ...DEFAULT_ROUTING.rateLimits, ...(s.rateLimits ?? {}) } };
+  return {
+    ...DEFAULT_ROUTING,
+    ...s,
+    taskTypes: { ...DEFAULT_ROUTING.taskTypes, ...(s.taskTypes ?? {}) },
+    providers: { ...DEFAULT_ROUTING.providers, ...(s.providers ?? {}) },
+    rateLimits: { ...DEFAULT_ROUTING.rateLimits, ...(s.rateLimits ?? {}) },
+  };
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -123,7 +155,12 @@ export function assertPricingAboveFloor(prices: { standard: number; deep: number
     const half = Math.ceil(tokens / 2);
     const cost = projectCostMicros(models[tier], half, tokens - half);
     const margin = marginOf(revenueMicros, cost);
-    if (margin < p.minGrossMargin) throw new GatewayError('MARGIN_PROTECTION_VIOLATION', `The ${tier} price gives a ${(margin * 100).toFixed(0)}% gross margin on ${models[tier]}; the floor is ${(p.minGrossMargin * 100).toFixed(0)}%.`, { tier, model: models[tier], margin, floor: p.minGrossMargin, revenueMicros, costMicros: cost });
+    if (margin < p.minGrossMargin)
+      throw new GatewayError(
+        'MARGIN_PROTECTION_VIOLATION',
+        `The ${tier} price gives a ${(margin * 100).toFixed(0)}% gross margin on ${models[tier]}; the floor is ${(p.minGrossMargin * 100).toFixed(0)}%.`,
+        { tier, model: models[tier], margin, floor: p.minGrossMargin, revenueMicros, costMicros: cost },
+      );
   }
 }
 
@@ -143,7 +180,11 @@ export function budgetStatus(scope: 'user' | 'tenant', scopeId: string): { budge
 function consumeBudget(scope: 'user' | 'tenant', scopeId: string, acu: number) {
   const p = getAcuPolicy();
   const budget = scope === 'user' ? p.monthlyBudgetPerUser : p.monthlyBudgetPerTenant;
-  getDb().prepare('INSERT INTO acu_budgets (scope, scope_id, month, budget_acu, used_acu, overage, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(scope, scope_id, month) DO UPDATE SET used_acu = used_acu + excluded.used_acu, budget_acu = excluded.budget_acu, updated_at = excluded.updated_at').run(scope, scopeId, monthKey(), budget, acu, p.overage, now());
+  getDb()
+    .prepare(
+      'INSERT INTO acu_budgets (scope, scope_id, month, budget_acu, used_acu, overage, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(scope, scope_id, month) DO UPDATE SET used_acu = used_acu + excluded.used_acu, budget_acu = excluded.budget_acu, updated_at = excluded.updated_at',
+    )
+    .run(scope, scopeId, monthKey(), budget, acu, p.overage, now());
   const st = budgetStatus(scope, scopeId);
   if (st.budget && st.remaining !== null && st.remaining <= st.budget * 0.1) publish('acu.budget_low', { scope, scopeId, remaining: st.remaining, budget: st.budget }, { aggregateId: scopeId });
 }
@@ -169,7 +210,13 @@ function recordFailure(model: string) {
 export function modelHealth() {
   const r = getAiRouting();
   const models = [...new Set(Object.values(r.taskTypes).flat())];
-  return models.map((m) => ({ model: m, provider: providerFor(m), circuitOpen: circuitOpen(m), recentFailures: (failures.get(m) ?? []).length, providerEnabled: !!r.providers[providerFor(m)]?.enabled }));
+  return models.map((m) => ({
+    model: m,
+    provider: providerFor(m),
+    circuitOpen: circuitOpen(m),
+    recentFailures: (failures.get(m) ?? []).length,
+    providerEnabled: !!r.providers[providerFor(m)]?.enabled,
+  }));
 }
 /** Ordered candidates for a task, skipping open circuits and disabled providers. */
 export function routeModels(taskType: TaskType): string[] {
@@ -189,7 +236,8 @@ export function stripPii(text: string): { text: string; replaced: number } {
     .replace(/(?<![\w-])\+?\d[\d\s().-]{7,}\d(?![\w-])/g, () => (n++, '[phone]'));
   return { text: out, replaced: n };
 }
-const INJECTION = /(ignore|disregard|forget)\s+(all\s+|the\s+|your\s+)?(previous|prior|above|earlier)\s+(instructions|rules|prompts?)|you are now\b|system prompt|\bjailbreak\b|reveal (the|your) (rules|prompt|instructions)/i;
+const INJECTION =
+  /(ignore|disregard|forget)\s+(all\s+|the\s+|your\s+)?(previous|prior|above|earlier)\s+(instructions|rules|prompts?)|you are now\b|system prompt|\bjailbreak\b|reveal (the|your) (rules|prompt|instructions)/i;
 export function defendInjection(untrusted: string): { text: string; flagged: boolean } {
   const flagged = INJECTION.test(untrusted);
   const cleaned = untrusted.replace(/[‪-‮⁦-⁩]/g, '');
@@ -239,12 +287,31 @@ async function callProvider(model: string, system: string, user: string, maxToke
     if (!key) throw new GatewayError('PROVIDER_UNAVAILABLE', 'No Anthropic key configured');
     const client = new Anthropic({ apiKey: key, maxRetries: 0, timeout: timeoutMs });
     const msg = await client.messages.create({ model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }, { signal: ctl });
-    return { text: msg.content.filter((b) => b.type === 'text').map((b: any) => b.text).join(''), tokensIn: msg.usage?.input_tokens ?? 0, tokensOut: msg.usage?.output_tokens ?? 0 };
+    return {
+      text: msg.content
+        .filter((b) => b.type === 'text')
+        .map((b: any) => b.text)
+        .join(''),
+      tokensIn: msg.usage?.input_tokens ?? 0,
+      tokensOut: msg.usage?.output_tokens ?? 0,
+    };
   }
   if (provider === 'openai') {
     const cfg = r.providers.openai;
     if (!cfg?.apiKey) throw new GatewayError('PROVIDER_UNAVAILABLE', 'No OpenAI key configured');
-    const res = await fetch(`${cfg.baseUrl ?? 'https://api.openai.com/v1'}/chat/completions`, { method: 'POST', signal: ctl, headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.apiKey}` }, body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }) });
+    const res = await fetch(`${cfg.baseUrl ?? 'https://api.openai.com/v1'}/chat/completions`, {
+      method: 'POST',
+      signal: ctl,
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.apiKey}` },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+      }),
+    });
     if (!res.ok) throw new Error(`openai ${res.status}`);
     const j = (await res.json()) as any;
     return { text: j.choices?.[0]?.message?.content ?? '', tokensIn: j.usage?.prompt_tokens ?? 0, tokensOut: j.usage?.completion_tokens ?? 0 };
@@ -252,7 +319,12 @@ async function callProvider(model: string, system: string, user: string, maxToke
   if (provider === 'gemini') {
     const cfg = r.providers.gemini;
     if (!cfg?.apiKey) throw new GatewayError('PROVIDER_UNAVAILABLE', 'No Gemini key configured');
-    const res = await fetch(`${cfg.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta'}/models/${model}:generateContent?key=${cfg.apiKey}`, { method: 'POST', signal: ctl, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { maxOutputTokens: maxTokens } }) });
+    const res = await fetch(`${cfg.baseUrl ?? 'https://generativelanguage.googleapis.com/v1beta'}/models/${model}:generateContent?key=${cfg.apiKey}`, {
+      method: 'POST',
+      signal: ctl,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: { maxOutputTokens: maxTokens } }),
+    });
     if (!res.ok) throw new Error(`gemini ${res.status}`);
     const j = (await res.json()) as any;
     return { text: j.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ?? '', tokensIn: j.usageMetadata?.promptTokenCount ?? 0, tokensOut: j.usageMetadata?.candidatesTokenCount ?? 0 };
@@ -267,8 +339,48 @@ function extractJson(text: string): unknown {
   const slice = start >= 0 && end > start ? candidate.slice(start, end + 1) : candidate;
   return JSON.parse(slice);
 }
-function ledger(row: { tenantId: string; userId: string | null; agent: string; taskType: string; provider: string; model: string; tokensIn: number; tokensOut: number; rawCostMicros: number; acuUsed: number; acuRevenueMicros: number; margin: number | null; latencyMs: number; outcome: string; errorCode?: string | null; billedTo: string }) {
-  getDb().prepare('INSERT INTO ai_usage_ledger (id, tenant_id, user_id, agent, task_type, provider, model, tokens_in, tokens_out, raw_cost_micros, acu_used, acu_revenue_micros, margin, latency_ms, outcome, error_code, billed_to, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(uuid(), row.tenantId, row.userId, row.agent, row.taskType, row.provider, row.model, row.tokensIn, row.tokensOut, row.rawCostMicros, row.acuUsed, row.acuRevenueMicros, row.margin, row.latencyMs, row.outcome, row.errorCode ?? null, row.billedTo, now());
+function ledger(row: {
+  tenantId: string;
+  userId: string | null;
+  agent: string;
+  taskType: string;
+  provider: string;
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
+  rawCostMicros: number;
+  acuUsed: number;
+  acuRevenueMicros: number;
+  margin: number | null;
+  latencyMs: number;
+  outcome: string;
+  errorCode?: string | null;
+  billedTo: string;
+}) {
+  getDb()
+    .prepare(
+      'INSERT INTO ai_usage_ledger (id, tenant_id, user_id, agent, task_type, provider, model, tokens_in, tokens_out, raw_cost_micros, acu_used, acu_revenue_micros, margin, latency_ms, outcome, error_code, billed_to, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    )
+    .run(
+      uuid(),
+      row.tenantId,
+      row.userId,
+      row.agent,
+      row.taskType,
+      row.provider,
+      row.model,
+      row.tokensIn,
+      row.tokensOut,
+      row.rawCostMicros,
+      row.acuUsed,
+      row.acuRevenueMicros,
+      row.margin,
+      row.latencyMs,
+      row.outcome,
+      row.errorCode ?? null,
+      row.billedTo,
+      now(),
+    );
 }
 
 /** The single entry point. Throws GatewayError with one of the seven codes; never leaks provider details to the caller. */
@@ -296,7 +408,8 @@ export async function executeNeuralKernelTask<I, O>(ctx: KernelContext, spec: Ag
     if (b.budget && b.remaining !== null && b.remaining <= 0 && p.overage === 'block') throw new GatewayError('NEURAL_QUOTA_EXCEEDED', 'AI paused: ACU depleted for this month.', { scope: 'user' });
   }
   const tb = budgetStatus('tenant', ctx.tenantId);
-  if (tb.budget && tb.remaining !== null && tb.remaining <= 0 && p.overage === 'block' && billedTo === 'user') throw new GatewayError('NEURAL_QUOTA_EXCEEDED', 'AI paused: the tenant ACU budget is used up.', { scope: 'tenant' });
+  if (tb.budget && tb.remaining !== null && tb.remaining <= 0 && p.overage === 'block' && billedTo === 'user')
+    throw new GatewayError('NEURAL_QUOTA_EXCEEDED', 'AI paused: the tenant ACU budget is used up.', { scope: 'tenant' });
   // 4. prompt normalisation
   const dataWrap = (untrusted: string) => {
     const pii = spec.piiPolicy === 'strip' ? stripPii(untrusted).text : untrusted;
@@ -307,7 +420,23 @@ export async function executeNeuralKernelTask<I, O>(ctx: KernelContext, spec: Ag
     const output = spec.offline(input);
     const parsed = spec.outputSchema.safeParse(output);
     if (!parsed.success) throw new GatewayError('OUTPUT_SCHEMA_INVALID', 'Rule-based output did not match the schema', parsed.error.issues);
-    ledger({ tenantId: ctx.tenantId, userId: ctx.uid, agent: spec.name, taskType: spec.taskType, provider: 'offline', model: 'offline', tokensIn: 0, tokensOut: 0, rawCostMicros: 0, acuUsed: 0, acuRevenueMicros: 0, margin: null, latencyMs: Date.now() - started, outcome: 'rules', billedTo });
+    ledger({
+      tenantId: ctx.tenantId,
+      userId: ctx.uid,
+      agent: spec.name,
+      taskType: spec.taskType,
+      provider: 'offline',
+      model: 'offline',
+      tokensIn: 0,
+      tokensOut: 0,
+      rawCostMicros: 0,
+      acuUsed: 0,
+      acuRevenueMicros: 0,
+      margin: null,
+      latencyMs: Date.now() - started,
+      outcome: 'rules',
+      billedTo,
+    });
     return { requestId, output: parsed.data, source: 'rules', latencyMs: Date.now() - started };
   };
   if (offlineOnly) return useRules();
@@ -317,8 +446,29 @@ export async function executeNeuralKernelTask<I, O>(ctx: KernelContext, spec: Ag
   const viable = candidates.filter((m) => projectEconomics(m, spec.maxTokens).ok);
   if (!viable.length) {
     const best = candidates.map((m) => projectEconomics(m, spec.maxTokens)).sort((a, b) => b.margin - a.margin)[0];
-    ledger({ tenantId: ctx.tenantId, userId: ctx.uid, agent: spec.name, taskType: spec.taskType, provider: best ? providerFor(best.model) : 'none', model: best?.model ?? 'none', tokensIn: 0, tokensOut: 0, rawCostMicros: best?.rawCostMicros ?? 0, acuUsed: best?.acuUsed ?? 0, acuRevenueMicros: best?.acuRevenueMicros ?? 0, margin: best?.margin ?? null, latencyMs: Date.now() - started, outcome: 'refused', errorCode: 'MARGIN_PROTECTION_VIOLATION', billedTo });
-    throw new GatewayError('MARGIN_PROTECTION_VIOLATION', `No routed model meets the ${(p.minGrossMargin * 100).toFixed(0)}% margin floor for this task`, best ? { model: best.model, margin: best.margin, floor: best.floor } : undefined);
+    ledger({
+      tenantId: ctx.tenantId,
+      userId: ctx.uid,
+      agent: spec.name,
+      taskType: spec.taskType,
+      provider: best ? providerFor(best.model) : 'none',
+      model: best?.model ?? 'none',
+      tokensIn: 0,
+      tokensOut: 0,
+      rawCostMicros: best?.rawCostMicros ?? 0,
+      acuUsed: best?.acuUsed ?? 0,
+      acuRevenueMicros: best?.acuRevenueMicros ?? 0,
+      margin: best?.margin ?? null,
+      latencyMs: Date.now() - started,
+      outcome: 'refused',
+      errorCode: 'MARGIN_PROTECTION_VIOLATION',
+      billedTo,
+    });
+    throw new GatewayError(
+      'MARGIN_PROTECTION_VIOLATION',
+      `No routed model meets the ${(p.minGrossMargin * 100).toFixed(0)}% margin floor for this task`,
+      best ? { model: best.model, margin: best.margin, floor: best.floor } : undefined,
+    );
   }
   let lastError: unknown = null;
   for (const model of viable) {
@@ -338,7 +488,24 @@ export async function executeNeuralKernelTask<I, O>(ctx: KernelContext, spec: Ag
       const acuRevenueMicros = Math.round(acuUsed * p.acuPriceMicros);
       const margin = marginOf(acuRevenueMicros, rawCostMicros);
       // 8. usage + cost ledger (administrators only)
-      ledger({ tenantId: ctx.tenantId, userId: ctx.uid, agent: spec.name, taskType: spec.taskType, provider: providerFor(model), model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, rawCostMicros, acuUsed, acuRevenueMicros, margin, latencyMs: Date.now() - t0, outcome: parsedOut.success ? 'ok' : 'schema_invalid', errorCode: parsedOut.success ? null : 'OUTPUT_SCHEMA_INVALID', billedTo });
+      ledger({
+        tenantId: ctx.tenantId,
+        userId: ctx.uid,
+        agent: spec.name,
+        taskType: spec.taskType,
+        provider: providerFor(model),
+        model,
+        tokensIn: res.tokensIn,
+        tokensOut: res.tokensOut,
+        rawCostMicros,
+        acuUsed,
+        acuRevenueMicros,
+        margin,
+        latencyMs: Date.now() - t0,
+        outcome: parsedOut.success ? 'ok' : 'schema_invalid',
+        errorCode: parsedOut.success ? null : 'OUTPUT_SCHEMA_INVALID',
+        billedTo,
+      });
       if (billedTo === 'user' && ctx.uid) consumeBudget('user', ctx.uid, acuUsed);
       consumeBudget('tenant', ctx.tenantId, acuUsed);
       if (margin < p.alertBelowMargin) recordEvent('admin', requestId, 'ai.margin_alert', { type: 'system' }, { model, margin, floor: p.minGrossMargin, agent: spec.name });
@@ -348,7 +515,24 @@ export async function executeNeuralKernelTask<I, O>(ctx: KernelContext, spec: Ag
       if (err instanceof GatewayError && err.code === 'output_schema_invalid') throw err;
       lastError = err;
       recordFailure(model);
-      ledger({ tenantId: ctx.tenantId, userId: ctx.uid, agent: spec.name, taskType: spec.taskType, provider: providerFor(model), model, tokensIn: 0, tokensOut: 0, rawCostMicros: 0, acuUsed: 0, acuRevenueMicros: 0, margin: null, latencyMs: Date.now() - t0, outcome: 'failover', errorCode: (err as any)?.code ?? (err as Error)?.name ?? 'error', billedTo });
+      ledger({
+        tenantId: ctx.tenantId,
+        userId: ctx.uid,
+        agent: spec.name,
+        taskType: spec.taskType,
+        provider: providerFor(model),
+        model,
+        tokensIn: 0,
+        tokensOut: 0,
+        rawCostMicros: 0,
+        acuUsed: 0,
+        acuRevenueMicros: 0,
+        margin: null,
+        latencyMs: Date.now() - t0,
+        outcome: 'failover',
+        errorCode: (err as any)?.code ?? (err as Error)?.name ?? 'error',
+        billedTo,
+      });
     }
   }
   if (spec.offline) return useRules();
@@ -361,24 +545,60 @@ export async function executeNeuralKernelTask<I, O>(ctx: KernelContext, spec: Ag
 export function gatewayReport(days = 30) {
   const db = getDb();
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
-  const rows = db.prepare('SELECT provider, model, agent, task_type, outcome, COUNT(*) n, SUM(tokens_in) tin, SUM(tokens_out) tout, SUM(raw_cost_micros) cost, SUM(acu_used) acu, SUM(acu_revenue_micros) rev, AVG(latency_ms) lat FROM ai_usage_ledger WHERE created_at >= ? GROUP BY provider, model, agent, task_type, outcome ORDER BY n DESC').all(since) as any[];
-  const totals = rows.reduce((a, r) => ({ requests: a.requests + r.n, tokensIn: a.tokensIn + r.tin, tokensOut: a.tokensOut + r.tout, rawCostMicros: a.rawCostMicros + r.cost, acuUsed: a.acuUsed + r.acu, acuRevenueMicros: a.acuRevenueMicros + r.rev }), { requests: 0, tokensIn: 0, tokensOut: 0, rawCostMicros: 0, acuUsed: 0, acuRevenueMicros: 0 });
+  const rows = db
+    .prepare(
+      'SELECT provider, model, agent, task_type, outcome, COUNT(*) n, SUM(tokens_in) tin, SUM(tokens_out) tout, SUM(raw_cost_micros) cost, SUM(acu_used) acu, SUM(acu_revenue_micros) rev, AVG(latency_ms) lat FROM ai_usage_ledger WHERE created_at >= ? GROUP BY provider, model, agent, task_type, outcome ORDER BY n DESC',
+    )
+    .all(since) as any[];
+  const totals = rows.reduce(
+    (a, r) => ({
+      requests: a.requests + r.n,
+      tokensIn: a.tokensIn + r.tin,
+      tokensOut: a.tokensOut + r.tout,
+      rawCostMicros: a.rawCostMicros + r.cost,
+      acuUsed: a.acuUsed + r.acu,
+      acuRevenueMicros: a.acuRevenueMicros + r.rev,
+    }),
+    { requests: 0, tokensIn: 0, tokensOut: 0, rawCostMicros: 0, acuUsed: 0, acuRevenueMicros: 0 },
+  );
   const margin = marginOf(totals.acuRevenueMicros, totals.rawCostMicros);
   const p = getAcuPolicy();
   const s = getAssistSettings();
   return {
     days,
     totals: { ...totals, margin, floor: p.minGrossMargin, belowFloor: totals.acuRevenueMicros > 0 && margin < p.minGrossMargin },
-    rows: rows.map((r) => ({ provider: r.provider, model: r.model, agent: r.agent, taskType: r.task_type, outcome: r.outcome, requests: r.n, tokensIn: r.tin, tokensOut: r.tout, rawCostMicros: r.cost, acuUsed: Math.round(r.acu * 1000) / 1000, acuRevenueMicros: r.rev, margin: marginOf(r.rev, r.cost), avgLatencyMs: Math.round(r.lat ?? 0) })),
+    rows: rows.map((r) => ({
+      provider: r.provider,
+      model: r.model,
+      agent: r.agent,
+      taskType: r.task_type,
+      outcome: r.outcome,
+      requests: r.n,
+      tokensIn: r.tin,
+      tokensOut: r.tout,
+      rawCostMicros: r.cost,
+      acuUsed: Math.round(r.acu * 1000) / 1000,
+      acuRevenueMicros: r.rev,
+      margin: marginOf(r.rev, r.cost),
+      avgLatencyMs: Math.round(r.lat ?? 0),
+    })),
     policy: p,
     routing: getAiRouting(),
     models: modelHealth().map((m) => ({ ...m, economics: projectEconomics(m.model, p.expectedTokensPerRun), listPrice: s.pricing[m.model] ?? null })),
-    budgets: (db.prepare('SELECT * FROM acu_budgets WHERE month = ? ORDER BY used_acu DESC LIMIT 50').all(monthKey()) as any[]).map((b) => ({ scope: b.scope, scopeId: b.scope_id, budget: b.budget_acu, used: b.used_acu, overage: b.overage })),
+    budgets: (db.prepare('SELECT * FROM acu_budgets WHERE month = ? ORDER BY used_acu DESC LIMIT 50').all(monthKey()) as any[]).map((b) => ({
+      scope: b.scope,
+      scopeId: b.scope_id,
+      budget: b.budget_acu,
+      used: b.used_acu,
+      overage: b.overage,
+    })),
   };
 }
 /** Monthly reconciliation of the margin floor: alerts administrators when realised margin fell below it. */
 export function reconcileMargin(month = monthKey()): { month: string; margin: number | null; belowFloor: boolean; revenueMicros: number; costMicros: number } {
-  const r = getDb().prepare('SELECT SUM(raw_cost_micros) cost, SUM(acu_revenue_micros) rev FROM ai_usage_ledger WHERE created_at >= ? AND created_at < ?').get(`${month}-01`, `${month}-31T23:59:59.999Z`) as any;
+  const r = getDb()
+    .prepare('SELECT SUM(raw_cost_micros) cost, SUM(acu_revenue_micros) rev FROM ai_usage_ledger WHERE created_at >= ? AND created_at < ?')
+    .get(`${month}-01`, `${month}-31T23:59:59.999Z`) as any;
   const cost = r?.cost ?? 0;
   const rev = r?.rev ?? 0;
   const margin = rev > 0 ? marginOf(rev, cost) : null;

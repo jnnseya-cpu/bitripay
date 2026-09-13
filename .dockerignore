@@ -1,6 +1,17 @@
 node_modules
 **/node_modules
 **/dist
+**/build
+**/.expo
 frontend/mobile
+frontend/payout-device
 backend/api/data
+shots
+docs
 .git
+.github
+*.md
+.env
+.env.*
+**/.env
+**/*.test.ts

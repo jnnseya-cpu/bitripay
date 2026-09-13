@@ -1,0 +1,38 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.mjs"],
+      "project": ["scripts/**/*.mjs"]
+    },
+    "backend/api": {
+      "entry": ["src/docs/httpFile.ts", "src/tests/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "frontend/web": {
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "frontend/admin": {
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "shared/core": {
+      "entry": ["src/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "shared/bitriqr": {
+      "entry": ["src/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "shared/sdk-node": {
+      "entry": ["src/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    }
+  },
+  "ignoreDependencies": [],
+  "ignore": ["frontend/mobile/**", "frontend/payout-device/**", "integrations/**"],
+  "ignoreExportsUsedInFile": true,
+  "ignoreBinaries": ["expo"],
+  "rules": {
+    "duplicates": "off"
+  }
+}

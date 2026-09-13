@@ -19,7 +19,13 @@ const createSchema = z.object({
   currency: z.string().length(3),
   description: z.string().max(300).optional().nullable(),
   payer: z.string().optional().nullable(),
-  expiresInMinutes: z.number().int().positive().max(60 * 24 * 90).optional().nullable(),
+  expiresInMinutes: z
+    .number()
+    .int()
+    .positive()
+    .max(60 * 24 * 90)
+    .optional()
+    .nullable(),
   successUrl: z.string().url().optional().nullable(),
   cancelUrl: z.string().url().optional().nullable(),
   metadata: z.record(z.unknown()).optional(),
@@ -44,7 +50,11 @@ paymentRequestsRouter.post(
 paymentRequestsRouter.get('/', (req, res) => {
   const { page, pageSize } = parsePagination(req.query);
   const role = req.query.role === 'payer' ? 'payer' : 'requester';
-  res.json({ ...listPaymentRequests(req.user!.id, { role, status: req.query.status ? String(req.query.status) : undefined, kind: req.query.kind ? String(req.query.kind) : undefined, page, pageSize }), page, pageSize });
+  res.json({
+    ...listPaymentRequests(req.user!.id, { role, status: req.query.status ? String(req.query.status) : undefined, kind: req.query.kind ? String(req.query.kind) : undefined, page, pageSize }),
+    page,
+    pageSize,
+  });
 });
 
 paymentRequestsRouter.get(

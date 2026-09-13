@@ -25,7 +25,11 @@ const PAGE_H = 841.89;
 const MARGIN = 40;
 
 function esc(s: string): string {
-  return s.replace(/[^\x20-\x7e\xa0-\xff]/g, '?').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  return s
+    .replace(/[^\x20-\x7e\xa0-\xff]/g, '?')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
 }
 /** Approximate Helvetica width (avg 0.5em) – used only for alignment and truncation. */
 export function textWidth(s: string, size: number): number {
@@ -144,13 +148,17 @@ export class PdfDocument {
       }
       const stream = parts.join('\n');
       const contentId = add(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`);
-      const pageId = add(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /Font << /F1 ${fontRegular} 0 R /F2 ${fontBold} 0 R >> >> /Contents ${contentId} 0 R >>`);
+      const pageId = add(
+        `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /Font << /F1 ${fontRegular} 0 R /F2 ${fontBold} 0 R >> >> /Contents ${contentId} 0 R >>`,
+      );
       pageIds.push(pageId);
     });
     const realPagesId = add(`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`);
     // Page objects referenced the reserved id; patch it in.
     for (const id of pageIds) objects[id - 1] = objects[id - 1].replace(`/Parent ${pagesId} 0 R`, `/Parent ${realPagesId} 0 R`);
-    const infoId = add(`<< /Title (${esc(this.meta.title)}) /Author (${esc(this.meta.author ?? 'BitriPay')}) /Producer (BitriPay) /CreationDate (D:${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)}Z) >>`);
+    const infoId = add(
+      `<< /Title (${esc(this.meta.title)}) /Author (${esc(this.meta.author ?? 'BitriPay')}) /Producer (BitriPay) /CreationDate (D:${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)}Z) >>`,
+    );
     const catalogId = add(`<< /Type /Catalog /Pages ${realPagesId} 0 R >>`);
     let out = '%PDF-1.4\n%\xe2\xe3\xcf\xd3\n';
     const offsets: number[] = [];

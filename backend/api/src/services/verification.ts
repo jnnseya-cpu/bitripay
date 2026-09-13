@@ -50,7 +50,24 @@ function pub(id: string | null) {
   return u ? toPublicUser(u) : null;
 }
 function toView(r: any): VerificationView {
-  return { id: r.id, paymentId: r.payment_id, subjectType: r.subject_type ?? 'payment', externalRef: r.external_ref ?? null, payload: r.payload ? JSON.parse(r.payload) : null, action: r.action, note: r.note, evidenceId: r.evidence_id, proposedBy: pub(r.proposed_by), proposedAt: r.proposed_at, approvedBy: pub(r.approved_by), approvedAt: r.approved_at, declinedBy: pub(r.declined_by), declinedAt: r.declined_at, declineReason: r.decline_reason, status: r.status };
+  return {
+    id: r.id,
+    paymentId: r.payment_id,
+    subjectType: r.subject_type ?? 'payment',
+    externalRef: r.external_ref ?? null,
+    payload: r.payload ? JSON.parse(r.payload) : null,
+    action: r.action,
+    note: r.note,
+    evidenceId: r.evidence_id,
+    proposedBy: pub(r.proposed_by),
+    proposedAt: r.proposed_at,
+    approvedBy: pub(r.approved_by),
+    approvedAt: r.approved_at,
+    declinedBy: pub(r.declined_by),
+    declinedAt: r.declined_at,
+    declineReason: r.decline_reason,
+    status: r.status,
+  };
 }
 
 function actorOf(user: UserRow): Actor {
@@ -68,7 +85,11 @@ export function assertAdminStepUp(user: UserRow, pin: string | undefined, req: {
   }
 }
 
-export function proposeVerification(user: UserRow, paymentId: string, input: { action: 'confirm' | 'reject'; note?: string | null; evidenceId?: string | null; subjectType?: VerificationSubject; externalRef?: string | null; payload?: Record<string, unknown> | null }): VerificationView {
+export function proposeVerification(
+  user: UserRow,
+  paymentId: string,
+  input: { action: 'confirm' | 'reject'; note?: string | null; evidenceId?: string | null; subjectType?: VerificationSubject; externalRef?: string | null; payload?: Record<string, unknown> | null },
+): VerificationView {
   const subjectType: VerificationSubject = input.subjectType ?? 'payment';
   const db = getDb();
   if (subjectType === 'payment') {
@@ -79,12 +100,14 @@ export function proposeVerification(user: UserRow, paymentId: string, input: { a
     if (!p) throw badRequest('No payout instruction for this transaction');
     if (['SETTLED', 'CANCELLED'].includes(p.stage)) throw conflict(`Payout is ${p.stage.toLowerCase()}`, 'invalid_stage_transition');
     // Administrative settlement requires documentary evidence: the operator / bank reference and what was checked.
-    if (input.action === 'confirm' && (!input.externalRef || !input.note || input.note.trim().length < 8)) throw badRequest('Administrative settlement needs the operator/bank transaction reference and a note describing the documentary evidence checked', 'documentary_evidence_required');
+    if (input.action === 'confirm' && (!input.externalRef || !input.note || input.note.trim().length < 8))
+      throw badRequest('Administrative settlement needs the operator/bank transaction reference and a note describing the documentary evidence checked', 'documentary_evidence_required');
   } else if (subjectType === 'issuance') {
     // Creating (or destroying) e-money by hand: only administrators holding the issuance permission may propose, and the payload must be complete.
     if (user.role !== 'admin' || !hasPermission(user as any, 'issuance')) throw forbidden('Only administrators with the issuance permission can create e-money', 'permission_denied');
     const p = input.payload as IssuancePayload | undefined;
-    if (!p || !['credit', 'debit'].includes(p.direction) || !Number.isInteger(p.amount) || p.amount <= 0 || !p.currency || !p.reason) throw badRequest('Issuance payload needs direction, amount, currency and reason', 'validation_error');
+    if (!p || !['credit', 'debit'].includes(p.direction) || !Number.isInteger(p.amount) || p.amount <= 0 || !p.currency || !p.reason)
+      throw badRequest('Issuance payload needs direction, amount, currency and reason', 'validation_error');
     if (!p.poolId && !findUserById(paymentId)) throw badRequest('Target user not found');
     // The reserve rule is checked when the request is made and again when it is executed: a maker cannot queue an unbacked amount.
     validateIssuanceRequest(p);
@@ -100,8 +123,29 @@ export function proposeVerification(user: UserRow, paymentId: string, input: { a
   if (open) throw conflict('A decision is already awaiting approval for this item', 'verification_pending');
   if (input.evidenceId) getEvidence(input.evidenceId);
   const id = uuid();
-  db.prepare('INSERT INTO manual_verifications (id, payment_id, action, note, evidence_id, proposed_by, proposed_at, status, subject_type, external_ref, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, paymentId, input.action, input.note ?? null, input.evidenceId ?? null, user.id, now(), 'proposed', subjectType, input.externalRef ?? null, input.payload ? JSON.stringify(input.payload) : null);
-  recordEvent('approval', paymentId, 'verification.proposed', actorOf(user), { verificationId: id, subjectType, action: input.action, note: input.note ?? null, evidenceId: input.evidenceId ?? null, externalRef: input.externalRef ?? null });
+  db.prepare(
+    'INSERT INTO manual_verifications (id, payment_id, action, note, evidence_id, proposed_by, proposed_at, status, subject_type, external_ref, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(
+    id,
+    paymentId,
+    input.action,
+    input.note ?? null,
+    input.evidenceId ?? null,
+    user.id,
+    now(),
+    'proposed',
+    subjectType,
+    input.externalRef ?? null,
+    input.payload ? JSON.stringify(input.payload) : null,
+  );
+  recordEvent('approval', paymentId, 'verification.proposed', actorOf(user), {
+    verificationId: id,
+    subjectType,
+    action: input.action,
+    note: input.note ?? null,
+    evidenceId: input.evidenceId ?? null,
+    externalRef: input.externalRef ?? null,
+  });
   if (subjectType === 'payment' && getPayment(paymentId).stage !== 'VERIFYING') transitionStage(paymentId, 'VERIFYING', actorOf(user), { verificationId: id, action: input.action });
   const controls = getGatewayControls();
   if (!controls.makerChecker) return approveVerification(user, id, undefined, { headers: {}, body: {} }, true);
@@ -121,12 +165,19 @@ export function approveVerification(user: UserRow, id: string, pin: string | und
   }
   const db = getDb();
   db.prepare("UPDATE manual_verifications SET status = 'approved', approved_by = ?, approved_at = ? WHERE id = ?").run(user.id, now(), id);
-  recordEvent('approval', row.payment_id, 'verification.approved', actorOf(user), { verificationId: id, subjectType: row.subject_type, action: row.action, proposedBy: row.proposed_by, stepUp: !skipChecks });
+  recordEvent('approval', row.payment_id, 'verification.approved', actorOf(user), {
+    verificationId: id,
+    subjectType: row.subject_type,
+    action: row.action,
+    proposedBy: row.proposed_by,
+    stepUp: !skipChecks,
+  });
   const subject: VerificationSubject = row.subject_type ?? 'payment';
   const actor = actorOf(user);
   if (subject === 'payment') {
     const payment = getPayment(row.payment_id);
-    if (row.action === 'confirm') confirmAndSettle(payment, { actor, source: 'manual', verificationId: id, evidenceId: row.evidence_id, details: { proposedBy: row.proposed_by, approvedBy: user.id, note: row.note } });
+    if (row.action === 'confirm')
+      confirmAndSettle(payment, { actor, source: 'manual', verificationId: id, evidenceId: row.evidence_id, details: { proposedBy: row.proposed_by, approvedBy: user.id, note: row.note } });
     else rejectPayment(payment.id, actor, row.note || 'Rejected after manual verification');
   } else if (subject === 'payout') {
     if (row.action === 'confirm') settlePayout(row.payment_id, actor, { source: 'manual', externalRef: row.external_ref, verificationId: id, evidenceId: row.evidence_id, note: row.note });
@@ -178,7 +229,9 @@ export function listVerifications(filter: { status?: string | null; paymentId?: 
     where.push('payment_id = ?');
     params.push(filter.paymentId);
   }
-  const rows = getDb().prepare(`SELECT * FROM manual_verifications ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY proposed_at DESC LIMIT 200`).all(...params) as any[];
+  const rows = getDb()
+    .prepare(`SELECT * FROM manual_verifications ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY proposed_at DESC LIMIT 200`)
+    .all(...params) as any[];
   return rows.map(toView);
 }
 

@@ -1,3 +1,4 @@
+import { config } from '../config';
 import { getDb } from '../db';
 import { parseJson } from '../lib/json';
 import { now } from '../lib/ids';
@@ -31,9 +32,7 @@ export interface AppSettings {
   p2pFeeBps: number;
 }
 
-const DEFAULT_FEES: Record<string, FeeConfig> = Object.fromEntries(
-  FEE_TYPES.map((t) => [t, { fixed: 0, bps: 0 }]),
-);
+const DEFAULT_FEES: Record<string, FeeConfig> = Object.fromEntries(FEE_TYPES.map((t) => [t, { fixed: 0, bps: 0 }]));
 Object.assign(DEFAULT_FEES, {
   transfer: { fixed: 0, bps: 50 },
   qr_payment: { fixed: 0, bps: 50 },
@@ -89,7 +88,15 @@ export interface GatewayControls {
   /** Administrative approvals require a fresh biometric (passkey) or PIN step-up. */
   adminStepUp: boolean;
 }
-const DEFAULT_GATEWAY: GatewayControls = { intentExpiryHours: 48, evidenceWindowHours: 48, autoConfirmScore: 80, reviewScore: 50, sharedSecretAutoConfirm: false, makerChecker: true, adminStepUp: true };
+const DEFAULT_GATEWAY: GatewayControls = {
+  intentExpiryHours: 48,
+  evidenceWindowHours: 48,
+  autoConfirmScore: 80,
+  reviewScore: 50,
+  sharedSecretAutoConfirm: false,
+  makerChecker: true,
+  adminStepUp: true,
+};
 
 export interface FxSettings {
   /** Seconds a quoted rate stays guaranteed. */
@@ -128,7 +135,14 @@ export interface ComplianceSettings {
   /** Minutes a claimed payout may stay in progress before it is released back to the queue. */
   payoutClaimMinutes: number;
 }
-const DEFAULT_COMPLIANCE: ComplianceSettings = { mode: 'sandbox', cardPayoutHoldMinutes: 0, cardReviewAmount: 100_000, sourceOfFundsThreshold: 500_000, maxPayoutsPerRecipientPerDay: 5, payoutClaimMinutes: 30 };
+const DEFAULT_COMPLIANCE: ComplianceSettings = {
+  mode: 'sandbox',
+  cardPayoutHoldMinutes: 0,
+  cardReviewAmount: 100_000,
+  sourceOfFundsThreshold: 500_000,
+  maxPayoutsPerRecipientPerDay: 5,
+  payoutClaimMinutes: 30,
+};
 
 export interface EmoneySettings {
   /** Promotional credit may cover platform fees on internal transactions; it is never money. */
@@ -303,13 +317,33 @@ const DEFAULT_SEO: SeoSettings = {
   siteUrl: '',
   defaultTitle: 'BitriPay – QR code payments, mobile money, cards and remittance for everyone',
   titleSuffix: ' · BitriPay',
-  defaultDescription: 'Send, receive and accept money with a QR code. Wallets, virtual cards, mobile money, bank transfers, agents and remittance that work for market traders, moto-taxi riders and businesses alike.',
+  defaultDescription:
+    'Send, receive and accept money with a QR code. Wallets, virtual cards, mobile money, bank transfers, agents and remittance that work for market traders, moto-taxi riders and businesses alike.',
   ogImage: null,
   twitterHandle: '@bitripay',
   languages: ['en', 'fr', 'sw', 'ln'],
   organization: { legalName: 'BitriPay', foundingCountry: 'CD', email: 'hello@bitripay.app', phone: '', address: '', sameAs: [] },
   indexNowKey: '',
-  agent: { enabled: true, provider: 'anthropic', model: 'claude-opus-5', apiKey: '', autoPublish: false, postsPerWeek: 2, topics: ['How mobile money agents keep cash flowing in markets', 'QR code payments for street food vendors: a practical guide', 'Sending money from the UK to Congo: fees, speed and safety compared', 'What safeguarding means for your e-money balance', 'Virtual cards for online shopping without a bank card', 'How moto-taxi riders can get paid without cash'], audience: 'Everyday people, market traders, moto-taxi riders, small merchants, agents and diaspora senders in Africa and their families abroad', tone: 'Plain, warm, concrete and honest. Short sentences. No hype.', languages: ['en'], markets: ['CD', 'KE', 'NG', 'SN', 'UG', 'GB', 'FR'] },
+  agent: {
+    enabled: true,
+    provider: 'anthropic',
+    model: 'claude-opus-5',
+    apiKey: '',
+    autoPublish: false,
+    postsPerWeek: 2,
+    topics: [
+      'How mobile money agents keep cash flowing in markets',
+      'QR code payments for street food vendors: a practical guide',
+      'Sending money from the UK to Congo: fees, speed and safety compared',
+      'What safeguarding means for your e-money balance',
+      'Virtual cards for online shopping without a bank card',
+      'How moto-taxi riders can get paid without cash',
+    ],
+    audience: 'Everyday people, market traders, moto-taxi riders, small merchants, agents and diaspora senders in Africa and their families abroad',
+    tone: 'Plain, warm, concrete and honest. Short sentences. No hype.',
+    languages: ['en'],
+    markets: ['CD', 'KE', 'NG', 'SN', 'UG', 'GB', 'FR'],
+  },
 };
 
 const DEFAULT_ASSIST: AssistSettings = {
@@ -325,25 +359,48 @@ const DEFAULT_ASSIST: AssistSettings = {
   paused: [],
   killSwitch: false,
   scheduledSystemAgents: true,
-  billing: { mode: 'per_use', priceCurrency: 'GBP', prices: { standard: 5, deep: 90 }, taxRateBps: 2000, freeRunsPerMonth: 5, freeRunsRequireActivity: true, dailyCapPerUser: 20, platformCapPctOfFees: 15, platformCapFloorMinor: 5_000, deepRoles: ['merchant', 'agent', 'admin'], disclosureVersion: 1, simulateLive: false },
-  addon: { enabled: false, priceCurrency: 'GBP', priceMinor: 299, periodDays: 30, freeRuns: 0, autoRenew: true },
+  billing: {
+    mode: 'per_use',
+    priceCurrency: config.baseCurrency,
+    prices: { standard: 5, deep: 90 },
+    taxRateBps: 2000,
+    freeRunsPerMonth: 5,
+    freeRunsRequireActivity: true,
+    dailyCapPerUser: 20,
+    platformCapPctOfFees: 15,
+    platformCapFloorMinor: 5_000,
+    deepRoles: ['merchant', 'agent', 'admin'],
+    disclosureVersion: 1,
+    simulateLive: false,
+  },
+  addon: { enabled: false, priceCurrency: config.baseCurrency, priceMinor: 299, periodDays: 30, freeRuns: 0, autoRenew: true },
 };
 
 const DEFAULT_CHANNELS: ChannelSettings = {
-  ussd: { enabled: true, serviceCode: '*384*247#', provider: 'africastalking', maxPerTransaction: 20_000, maxPerTransactionCurrency: 'GBP', sessionTtlMinutes: 5, secret: '', allowRegistration: true },
-  sms: { enabled: true, secret: '', replyFormat: 'plain', maxPerTransaction: 10_000, maxPerTransactionCurrency: 'GBP', allowRegistration: true },
+  ussd: {
+    enabled: true,
+    serviceCode: '*149*01#',
+    provider: 'africastalking',
+    maxPerTransaction: 20_000,
+    maxPerTransactionCurrency: config.baseCurrency,
+    sessionTtlMinutes: 1.5,
+    secret: '',
+    allowRegistration: true,
+  },
+  sms: { enabled: true, secret: '', replyFormat: 'plain', maxPerTransaction: 10_000, maxPerTransactionCurrency: config.baseCurrency, allowRegistration: true },
   lite: { enabled: true },
 };
 
 const DEFAULT_GATEWAY_PRODUCTS: GatewayProductSettings = {
-  koda: { freePerMonth: 30, priceMinor: 25, priceCurrency: 'USD', windowHours: 72 },
+  koda: { freePerMonth: 30, priceMinor: 25, priceCurrency: config.baseCurrency, windowHours: 72 },
   checkout: { defaultMinutes: 30, maxMinutes: 1440 },
   links: { defaultDays: 7 },
   sandboxSimulation: true,
 };
 
 const DEFAULT_WEBHOOKS: WebhookSettings = {
-  retryScheduleSeconds: [10, 30, 120, 600, 1800, 7200, 7200, 7200, 7200, 7200, 7200, 7200, 7200, 7200, 7200, 7200, 7200],
+  // Eight attempts with exponential backoff spanning roughly 24 hours (10 s, 30 s, 2 min, 10 min, 1 h, 3 h, 8 h, 11.7 h).
+  retryScheduleSeconds: [10, 30, 120, 600, 3600, 10_800, 28_800, 42_000],
   jitterPct: 10,
   disableAfterConsecutiveFailures: 50,
   toleranceSeconds: 300,
@@ -399,11 +456,21 @@ export const getEmoneySettings = () => getSetting<EmoneySettings>('emoney');
 export const getSeoSettings = () => getSetting<SeoSettings>('seo');
 export const getAssistSettings = () => {
   const s = getSetting<AssistSettings>('assist');
-  return { ...s, addon: { ...DEFAULT_ASSIST.addon, ...(s.addon ?? {}) }, billing: { ...DEFAULT_ASSIST.billing, ...(s.billing ?? {}), prices: { ...DEFAULT_ASSIST.billing.prices, ...(s.billing?.prices ?? {}) } } };
+  return {
+    ...s,
+    addon: { ...DEFAULT_ASSIST.addon, ...(s.addon ?? {}) },
+    billing: { ...DEFAULT_ASSIST.billing, ...(s.billing ?? {}), prices: { ...DEFAULT_ASSIST.billing.prices, ...(s.billing?.prices ?? {}) } },
+  };
 };
 export const getGatewayProductSettings = (): GatewayProductSettings => {
   const s = getSetting<Partial<GatewayProductSettings>>('gateway_products');
-  return { ...DEFAULT_GATEWAY_PRODUCTS, ...s, koda: { ...DEFAULT_GATEWAY_PRODUCTS.koda, ...(s.koda ?? {}) }, checkout: { ...DEFAULT_GATEWAY_PRODUCTS.checkout, ...(s.checkout ?? {}) }, links: { ...DEFAULT_GATEWAY_PRODUCTS.links, ...(s.links ?? {}) } };
+  return {
+    ...DEFAULT_GATEWAY_PRODUCTS,
+    ...s,
+    koda: { ...DEFAULT_GATEWAY_PRODUCTS.koda, ...(s.koda ?? {}) },
+    checkout: { ...DEFAULT_GATEWAY_PRODUCTS.checkout, ...(s.checkout ?? {}) },
+    links: { ...DEFAULT_GATEWAY_PRODUCTS.links, ...(s.links ?? {}) },
+  };
 };
 export const getWebhookSettings = (): WebhookSettings => ({ ...DEFAULT_WEBHOOKS, ...getSetting<Partial<WebhookSettings>>('webhooks') });
 export const getChannelSettings = () => {
@@ -411,4 +478,5 @@ export const getChannelSettings = () => {
   return { ussd: { ...DEFAULT_CHANNELS.ussd, ...(s.ussd ?? {}) }, sms: { ...DEFAULT_CHANNELS.sms, ...(s.sms ?? {}) }, lite: { ...DEFAULT_CHANNELS.lite, ...(s.lite ?? {}) } };
 };
 /** Site settings without importing the CMS module (used by the SEO renderer). */
-export const getSiteSettingsSafe = () => getSetting<any>('site', null) as { siteName?: string; logoUrl?: string | null; contactEmail?: string; social?: Record<string, string>; appUrls?: Record<string, string> } | null;
+export const getSiteSettingsSafe = () =>
+  getSetting<any>('site', null) as { siteName?: string; logoUrl?: string | null; contactEmail?: string; social?: Record<string, string>; appUrls?: Record<string, string> } | null;

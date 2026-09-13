@@ -5,8 +5,8 @@ how it is proven. Three layers of proof are used:
 
 | Proof | Command | What it covers |
 | --- | --- | --- |
-| **Unit and integration tests** | `npm run verify` (CI runs the same) | 137 API tests across 20 suites against an in-memory ledger, plus the shared packages (money math, QR codec, BitriQR signing, Node SDK) and the payout-device protocol tests |
-| **Builds and type checks** | `npm run verify` | shared packages, backend, web, admin, mobile and payout device |
+| **Unit and integration tests** | `npm run verify` (CI runs the same) | every API suite under `backend/api/src/tests` against an in-memory ledger (the run prints the current count), plus the shared packages (money math, QR codec, phone normalisation, locale parity, BitriQR signing, Node SDK) and the payout-device protocol tests |
+| **Builds and type checks** | `npm run verify` | ESLint over every layer, then shared packages, backend, web, admin, mobile and payout device |
 | **Live smoke** | `npm run dev && npm run seed`, then `npm run smoke` | the real servers, 51 checks: public site, user / merchant / agent flows, every admin console, BitriPay Lite without JavaScript, the partner API (last run: 51 passed, 0 failed) |
 
 The API test suites (`backend/api/src/tests`) are named after what they prove; the table below maps each requirement
@@ -62,7 +62,9 @@ area to them.
 | Requirement | Where | Proof |
 | --- | --- | --- |
 | Partner API v1: intents, checkout sessions, links, refunds, payouts, balance, wallets, transfers, remittances, routes, plans / subscriptions, payout batches, agents, credit readiness; scoped keys; `BitriPay-Signature` webhooks with 8 retries / 24 h and replay | `routes/v1.ts`, `routes/v1ext.ts`, `services/webhooks.ts`, `docs/openapi.ts` | `gateway_v1.test.ts` (checkout, webhooks, scoped keys, sandbox simulator); `v1ext.test.ts`; `growth.test.ts` billing |
-| Developer portal, OpenAPI 3.1, SDKs (Node, PHP, Python), WooCommerce plugin | `frontend/web/src/pages/Developer.tsx`, `shared/sdk-*`, `integrations/woocommerce-bitripay` | Node SDK tests; smoke "OpenAPI 3.1 document", "Developer portal" |
+| Developer portal, OpenAPI 3.1, SDKs (Node, PHP, Python), WooCommerce plugin, generated `docs-api.http`, one sandbox magic-number table shared by the simulator | `frontend/web/src/pages/Developer.tsx`, `shared/sdk-*`, `integrations/woocommerce-bitripay`, `backend/api/src/docs/httpFile.ts`, `backend/api/src/payments/sandbox.ts` | Node SDK tests; `hardening.test.ts` "developer surface", "sandbox magic-number table"; smoke "OpenAPI 3.1 document", "Developer portal" |
+| One partner API at `/api/v1` and `/v1` (gateway, switch, financial operations, intelligence, merchant profile); one available-balance rule (holds and frozen wallets) used by balance classes, wallets, savings and forwards | `backend/api/src/app.ts`, `services/finops/holds.ts` `availableBalance` | `hardening.test.ts` "same partner API", "one available-balance rule" |
+| Signing-key registry: public `/v1/keys`, administrator listing and step-up revocation with audit | `services/keys.ts`, `routes/admin/index.ts` | `hardening.test.ts` "platform signing keys" |
 | Merchant command centre (balance classes, settlement, disputes, fees, bulk payouts, plans, offline kit) and QR centre | `frontend/web/src/pages/{MerchantCentre,QrCentre}.tsx` | smoke merchant section |
 | Fees with history, commissions, settlement profiles / cycles / statements, disputes as objects, split payments, processor reconciliation workbench | `services/finops/*` | `finops.test.ts` (7 suites) |
 | Subscriptions and billing: plans, trials, tax, metered usage, mandates, dunning | `services/billing.ts` | `growth.test.ts` "subscriptions and billing"; `openBanking.test.ts` mandate top-up |
@@ -92,7 +94,9 @@ area to them.
 | Offline-signed QR promises (device subkeys, nonces, counters, ceilings, in-order sync, restore on failure, signed receipts) on web, mobile and API | `services/offline.ts`, `frontend/web/src/lib/offline.ts`, `frontend/mobile/src/lib/offline.ts` | `intelligence.test.ts` "offline-signed QR protocol"; `acceptance.test.ts` "offline batch" (50 promises) |
 | USSD sessions, SMS commands, BitriPay Lite without JavaScript, PWA with service worker | `services/channels/*`, `site/lite.ts`, `frontend/web/public/sw.js` | `channels.test.ts` (USSD, SMS commands, Lite web); smoke Lite section |
 | Language chain (explicit → device → IP country → default) and currency chain (explicit → wallet → IP country → browser → default), Arabic RTL, launch languages | `services/locale.ts`, `services/cms.ts`, `shared/core/src/locales` | `acceptance.test.ts` "language and currency chains"; smoke "Locale chain" |
-| Loud money alerts (push, sound, vibration) | `frontend/mobile/src/lib/alerts.ts`, `services/notifications.ts` | `channels.test.ts`; mobile type check |
+| Loud money alerts (push, sound, vibration) with a per-device toggle on web, admin and mobile | `frontend/mobile/src/lib/alerts.ts`, `frontend/web/src/lib/alerts.ts`, `frontend/admin/src/lib/alerts.ts`, `services/notifications.ts` | `channels.test.ts`; mobile type check; smoke settings |
+| Every locale pack carries every English key with the same placeholders; shared phone normalisation (E.164 and national significant number) used by accounts, evidence matching and sanctions | `shared/core/src/locales`, `shared/core/src/phone.ts` | `shared/core/src/shared.test.ts` |
+| Production refuses development secrets and the sample admin password; compose requires them; settings defaults follow `BASE_CURRENCY`, USSD `*149*01#`, 90 s sessions, 8 webhook attempts within 24 h; every documented settings group is administrator-editable | `backend/api/src/config.ts`, `docker-compose.yml`, `services/settings.ts`, `routes/admin/index.ts` | `hardening.test.ts` "refuses to start", "defaults follow", "edit every documented settings group" |
 
 ### Personal finance
 

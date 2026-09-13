@@ -73,7 +73,8 @@ export function buildStatement(user: UserRow, currency: string, from: string, to
   const db = getDb();
   const start = dayStart(from);
   const end = dayEnd(to);
-  const before = db.prepare('SELECT balance_after FROM ledger_entries WHERE wallet_id = ? AND created_at < ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(wallet.id, start) as { balance_after: number } | undefined;
+  const before = db.prepare('SELECT balance_after FROM ledger_entries WHERE wallet_id = ? AND created_at < ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(wallet.id, start) as
+    { balance_after: number } | undefined;
   const opening = before?.balance_after ?? 0;
   const rows = db
     .prepare(
@@ -95,20 +96,46 @@ export function buildStatement(user: UserRow, currency: string, from: string, to
     if (meta.externalRef) parts.push(`operator ref ${meta.externalRef}`);
     if (r.status === 'pending') parts.push('(held)');
     if (['rejected', 'cancelled', 'failed'].includes(r.status) && outgoing === false) parts.push('(returned)');
-    return { date: r.created_at, reference: r.reference, type: r.type, typeLabel: label, description: parts.join(' · '), counterparty: other ? (other.businessName || other.fullName) + (other.tag ? ` (@${other.tag})` : '') : null, status: r.status, debit: outgoing ? r.amount : 0, credit: outgoing ? 0 : r.amount, balance: r.balance_after, transactionId: r.tx_id };
+    return {
+      date: r.created_at,
+      reference: r.reference,
+      type: r.type,
+      typeLabel: label,
+      description: parts.join(' · '),
+      counterparty: other ? (other.businessName || other.fullName) + (other.tag ? ` (@${other.tag})` : '') : null,
+      status: r.status,
+      debit: outgoing ? r.amount : 0,
+      credit: outgoing ? 0 : r.amount,
+      balance: r.balance_after,
+      transactionId: r.tx_id,
+    };
   });
   const closing = lines.length ? lines[lines.length - 1].balance : opening;
   const promoRows = db.prepare('SELECT * FROM promo_credits WHERE wallet_id = ? ORDER BY created_at ASC').all(wallet.id) as any[];
-  const promoMovements = promoRows.filter((p) => p.created_at >= start && p.created_at <= end).map((p) => ({ date: p.created_at, description: `${p.programme.replace(/_/g, ' ')}: ${p.reason ?? ''}`.trim(), amount: p.amount }));
+  const promoMovements = promoRows
+    .filter((p) => p.created_at >= start && p.created_at <= end)
+    .map((p) => ({ date: p.created_at, description: `${p.programme.replace(/_/g, ' ')}: ${p.reason ?? ''}`.trim(), amount: p.amount }));
   const promoBefore = promoRows.filter((p) => p.created_at < start).reduce((s, p) => s + p.amount, 0);
   const promoClosing = wallet.promo_balance ?? 0;
   const id = uuid();
   const seq = ((db.prepare('SELECT COALESCE(MAX(number), 0) n FROM statements').get() as any).n as number) + 1;
   const number = `ST-${String(seq).padStart(8, '0')}`;
   const generatedAt = now();
-  const canonical = JSON.stringify({ number, userId: user.id, walletId: wallet.id, currency: cur.code, from: from.slice(0, 10), to: to.slice(0, 10), opening, closing, lines: lines.map((l) => [l.date, l.reference, l.debit, l.credit, l.balance]) });
+  const canonical = JSON.stringify({
+    number,
+    userId: user.id,
+    walletId: wallet.id,
+    currency: cur.code,
+    from: from.slice(0, 10),
+    to: to.slice(0, 10),
+    opening,
+    closing,
+    lines: lines.map((l) => [l.date, l.reference, l.debit, l.credit, l.balance]),
+  });
   const hash = createHash('sha256').update(canonical).digest('hex');
-  db.prepare('INSERT INTO statements (id, number, user_id, currency, period_from, period_to, opening_balance, closing_balance, entry_count, hash, generated_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, seq, user.id, cur.code, from.slice(0, 10), to.slice(0, 10), opening, closing, lines.length, hash, generatedBy ?? user.id, generatedAt);
+  db.prepare(
+    'INSERT INTO statements (id, number, user_id, currency, period_from, period_to, opening_balance, closing_balance, entry_count, hash, generated_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(id, seq, user.id, cur.code, from.slice(0, 10), to.slice(0, 10), opening, closing, lines.length, hash, generatedBy ?? user.id, generatedAt);
   const classification = classifyBalance(user, cur.code);
   return {
     id,
@@ -127,27 +154,63 @@ export function buildStatement(user: UserRow, currency: string, from: string, to
     hash,
     verifyUrl: `${config.apiUrl}/api/statements/verify/${id}`,
     issuer: classification.issuer ?? config.appName,
-    disclaimer: classification.class === 'sandbox' ? 'SANDBOX STATEMENT – balances shown have no real-world value.' : `Balances are ${classification.label.toLowerCase()} issued by ${classification.issuer ?? config.appName} and backed 1:1 by safeguarded funds. Promotional credit is not money and cannot be withdrawn.`,
+    disclaimer:
+      classification.class === 'sandbox'
+        ? 'SANDBOX STATEMENT – balances shown have no real-world value.'
+        : `Balances are ${classification.label.toLowerCase()} issued by ${classification.issuer ?? config.appName} and backed 1:1 by safeguarded funds. Promotional credit is not money and cannot be withdrawn.`,
   };
 }
 
 export function verifyStatement(id: string) {
-  const r = getDb().prepare('SELECT * FROM statements WHERE id = ? OR number = ?').get(id, Number(String(id).replace(/^ST-/, '')) || -1) as any;
+  const r = getDb()
+    .prepare('SELECT * FROM statements WHERE id = ? OR number = ?')
+    .get(id, Number(String(id).replace(/^ST-/, '')) || -1) as any;
   if (!r) throw notFound('Statement not found', 'statement_not_found');
-  return { id: r.id, number: `ST-${String(r.number).padStart(8, '0')}`, currency: r.currency, period: { from: r.period_from, to: r.period_to }, opening: r.opening_balance, closing: r.closing_balance, entryCount: r.entry_count, hash: r.hash, generatedAt: r.created_at, holderRef: r.user_id.slice(0, 8) };
+  return {
+    id: r.id,
+    number: `ST-${String(r.number).padStart(8, '0')}`,
+    currency: r.currency,
+    period: { from: r.period_from, to: r.period_to },
+    opening: r.opening_balance,
+    closing: r.closing_balance,
+    entryCount: r.entry_count,
+    hash: r.hash,
+    generatedAt: r.created_at,
+    holderRef: r.user_id.slice(0, 8),
+  };
 }
 
 export function listStatements(userId: string, limit = 50) {
-  return (getDb().prepare('SELECT * FROM statements WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(userId, limit) as any[]).map((r) => ({ id: r.id, number: `ST-${String(r.number).padStart(8, '0')}`, currency: r.currency, period: { from: r.period_from, to: r.period_to }, opening: r.opening_balance, closing: r.closing_balance, entryCount: r.entry_count, hash: r.hash, generatedAt: r.created_at }));
+  return (getDb().prepare('SELECT * FROM statements WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(userId, limit) as any[]).map((r) => ({
+    id: r.id,
+    number: `ST-${String(r.number).padStart(8, '0')}`,
+    currency: r.currency,
+    period: { from: r.period_from, to: r.period_to },
+    opening: r.opening_balance,
+    closing: r.closing_balance,
+    entryCount: r.entry_count,
+    hash: r.hash,
+    generatedAt: r.created_at,
+  }));
 }
 
 export function statementCsv(s: Statement): string {
   const cur = getCurrency(s.account.currency, false);
   const money = (n: number) => (n / 10 ** cur.decimals).toFixed(cur.decimals);
   const q = (v: string | null | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const head = [`# ${config.appName} statement ${s.number}`, `# Holder: ${s.holder.name} (@${s.holder.tag})`, `# Account: ${s.account.iban} ${s.account.currency}`, `# Period: ${s.period.from} to ${s.period.to}`, `# Opening balance: ${money(s.opening)}`, `# Closing balance: ${money(s.closing)}`, `# Hash: ${s.hash}`, `# Verify: ${s.verifyUrl}`];
+  const head = [
+    `# ${config.appName} statement ${s.number}`,
+    `# Holder: ${s.holder.name} (@${s.holder.tag})`,
+    `# Account: ${s.account.iban} ${s.account.currency}`,
+    `# Period: ${s.period.from} to ${s.period.to}`,
+    `# Opening balance: ${money(s.opening)}`,
+    `# Closing balance: ${money(s.closing)}`,
+    `# Hash: ${s.hash}`,
+    `# Verify: ${s.verifyUrl}`,
+  ];
   const rows = [['Date', 'Reference', 'Type', 'Description', 'Counterparty', 'Status', 'Debit', 'Credit', 'Balance'].join(',')];
-  for (const l of s.lines) rows.push([l.date, l.reference, l.typeLabel, q(l.description), q(l.counterparty), l.status, l.debit ? money(l.debit) : '', l.credit ? money(l.credit) : '', money(l.balance)].join(','));
+  for (const l of s.lines)
+    rows.push([l.date, l.reference, l.typeLabel, q(l.description), q(l.counterparty), l.status, l.debit ? money(l.debit) : '', l.credit ? money(l.credit) : '', money(l.balance)].join(','));
   return [...head, ...rows].join('\n') + '\n';
 }
 
@@ -184,19 +247,37 @@ export function statementPdf(s: Statement): Buffer {
     { title: 'Credit', width: 60, align: 'right' as const },
     { title: 'Balance', width: 62, align: 'right' as const },
   ];
-  const rows = s.lines.map((l) => [l.date.slice(0, 16).replace('T', ' '), l.reference, `${l.description}${l.counterparty ? ` · ${l.counterparty}` : ''}`, l.debit ? money(l.debit) : '', l.credit ? money(l.credit) : '', money(l.balance)]);
+  const rows = s.lines.map((l) => [
+    l.date.slice(0, 16).replace('T', ' '),
+    l.reference,
+    `${l.description}${l.counterparty ? ` · ${l.counterparty}` : ''}`,
+    l.debit ? money(l.debit) : '',
+    l.credit ? money(l.credit) : '',
+    money(l.balance),
+  ]);
   if (rows.length) doc.table(columns, rows, { zebra: true });
   else doc.text('No transactions in this period.', { gray: 0.4 });
   if (s.promo.movements.length || s.promo.closing) {
     doc.space(12);
     doc.text('Promotional credit (not money – covers BitriPay fees only, cannot be withdrawn)', { size: 11, bold: true });
     doc.space(4);
-    doc.table([{ title: 'Date', width: 78 }, { title: 'Programme', width: 315 }, { title: 'Amount', width: 122, align: 'right' as const }], s.promo.movements.map((m) => [m.date.slice(0, 10), m.description, money(m.amount)]), { zebra: true });
+    doc.table(
+      [
+        { title: 'Date', width: 78 },
+        { title: 'Programme', width: 315 },
+        { title: 'Amount', width: 122, align: 'right' as const },
+      ],
+      s.promo.movements.map((m) => [m.date.slice(0, 10), m.description, money(m.amount)]),
+      { zebra: true },
+    );
     doc.pair('Promotional credit balance', money(s.promo.closing));
   }
   doc.space(12);
   doc.rule();
   doc.text(s.disclaimer, { size: 8, gray: 0.35 });
-  doc.text(`Issuer: ${s.issuer}. This statement was generated from the immutable double-entry ledger; every line carries the ledger reference. Integrity hash (SHA-256): ${s.hash}`, { size: 8, gray: 0.35 });
+  doc.text(`Issuer: ${s.issuer}. This statement was generated from the immutable double-entry ledger; every line carries the ledger reference. Integrity hash (SHA-256): ${s.hash}`, {
+    size: 8,
+    gray: 0.35,
+  });
   return doc.render();
 }

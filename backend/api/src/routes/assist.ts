@@ -8,7 +8,23 @@ import { validate, wrap } from '../lib/http';
 import { requireAuth } from '../middleware/auth';
 import { hasPermission } from '../middleware/permissions';
 import { rateLimit } from '../middleware/rateLimit';
-import { agentsAvailable, startRun, listRuns, getRun, cancelRun, subscribe, getInstance, setInstance, listMemories, addMemory, deleteMemory, usageSummary, runtimeStatus, listApprovals, publicRunView } from '../services/assist/runtime';
+import {
+  agentsAvailable,
+  startRun,
+  listRuns,
+  getRun,
+  cancelRun,
+  subscribe,
+  getInstance,
+  setInstance,
+  listMemories,
+  addMemory,
+  deleteMemory,
+  usageSummary,
+  runtimeStatus,
+  listApprovals,
+  publicRunView,
+} from '../services/assist/runtime';
 import { toolCatalogue } from '../services/assist/tools';
 import { addonStatus, activateAddon, cancelAddon, setAutoRenew } from '../services/assist/addon';
 import { billingStatus, acceptConsent, disclosureText } from '../services/assist/billing';
@@ -20,21 +36,43 @@ assistRouter.use(requireAuth);
 
 assistRouter.get('/agents', (req, res) => {
   const status = runtimeStatus();
-  res.json({ agents: agentsAvailable(req.user!), usage: usageSummary(req.user!), addon: addonStatus(req.user!), billing: billingStatus(req.user!), runtime: { mode: status.mode, enabled: status.enabled, model: status.model } });
+  res.json({
+    agents: agentsAvailable(req.user!),
+    usage: usageSummary(req.user!),
+    addon: addonStatus(req.user!),
+    billing: billingStatus(req.user!),
+    runtime: { mode: status.mode, enabled: status.enabled, model: status.model },
+  });
 });
 assistRouter.get('/tools', (req, res) => res.json({ tools: toolCatalogue(req.user!.role, (p) => hasPermission(req.user as any, p)) }));
 
-const startSchema = z.object({ agent: z.string().min(2).max(40), input: z.string().min(1).max(4000), context: z.record(z.string(), z.unknown()).optional().nullable(), depth: z.enum(['standard', 'deep']).optional().nullable(), currency: z.string().length(3).optional().nullable() });
+const startSchema = z.object({
+  agent: z.string().min(2).max(40),
+  input: z.string().min(1).max(4000),
+  context: z.record(z.string(), z.unknown()).optional().nullable(),
+  depth: z.enum(['standard', 'deep']).optional().nullable(),
+  currency: z.string().length(3).optional().nullable(),
+});
 assistRouter.post(
   '/runs',
   rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'assist' }),
   wrap(async (req, res) => {
     const body = validate(startSchema, req.body);
-    const run = await startRun(req.user!, body.agent, body.input, { context: body.context ?? null, depth: body.depth ?? null, currency: body.currency ?? null, trigger: 'user', wait: req.query.wait === '1' || req.query.wait === 'true' });
+    const run = await startRun(req.user!, body.agent, body.input, {
+      context: body.context ?? null,
+      depth: body.depth ?? null,
+      currency: body.currency ?? null,
+      trigger: 'user',
+      wait: req.query.wait === '1' || req.query.wait === 'true',
+    });
     res.status(202).json({ run: publicRun(run, req.user!.role) });
   }),
 );
-assistRouter.get('/runs', (req, res) => res.json({ items: listRuns({ userId: req.user!.id, agentKey: req.query.agent ? String(req.query.agent) : null, limit: Math.min(100, Number(req.query.limit) || 30) }).map((r) => publicRun(r, req.user!.role)) }));
+assistRouter.get('/runs', (req, res) =>
+  res.json({
+    items: listRuns({ userId: req.user!.id, agentKey: req.query.agent ? String(req.query.agent) : null, limit: Math.min(100, Number(req.query.limit) || 30) }).map((r) => publicRun(r, req.user!.role)),
+  }),
+);
 assistRouter.get('/runs/:id', (req, res) => res.json({ run: publicRun(getRun(String(req.params.id), req.user!.id), req.user!.role) }));
 assistRouter.post('/runs/:id/cancel', (req, res) => res.json({ run: publicRun(cancelRun(String(req.params.id), req.user!.id), req.user!.role) }));
 

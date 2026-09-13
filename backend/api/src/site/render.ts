@@ -156,17 +156,46 @@ export function blogIndexPage(posts: PostSummary[], opts: { tag?: string | null;
 <h1>${escapeHtml(title)}</h1>
 <p class="lede">Practical writing for people who pay and get paid on a phone: mobile money, QR payments, cards, remittance costs, agents and how your money is protected.</p>
 <form action="/blog" method="get" style="margin-bottom:28px;display:flex;gap:8px;max-width:520px"><input name="q" value="${escapeHtml(opts.q ?? '')}" placeholder="Search the blog" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font:inherit;background:var(--paper);color:var(--ink)"><button style="padding:10px 14px;border-radius:9px;border:0;background:var(--ink);color:var(--bg);font:inherit;font-weight:600">Search</button></form>
-<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:28px">${opts.tags.slice(0, 14).map((t) => `<a class="tag" href="/blog?tag=${encodeURIComponent(t.tag)}">${escapeHtml(t.tag)} · ${t.count}</a>`).join('')}</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:28px">${opts.tags
+    .slice(0, 14)
+    .map((t) => `<a class="tag" href="/blog?tag=${encodeURIComponent(t.tag)}">${escapeHtml(t.tag)} · ${t.count}</a>`)
+    .join('')}</div>
 ${first && !opts.tag && !opts.q && opts.page === 1 ? `<section class="hero-post"><div class="eyebrow">Latest</div><h1><a href="${first.url}" style="color:#fff;text-decoration:none">${escapeHtml(first.title)}</a></h1><p>${escapeHtml(first.excerpt)}</p><a class="btn" href="${first.url}">Read the guide →</a></section>` : ''}
 <div class="grid">${(first && !opts.tag && !opts.q && opts.page === 1 ? rest : posts).map(cardHtml).join('')}</div>
 ${posts.length === 0 ? '<p class="notice">No articles match yet. Try another search or browse the tags above.</p>' : ''}
 ${opts.total > opts.pageSize ? `<p style="margin-top:28px;font-family:var(--mono);font-size:13px">${opts.page > 1 ? `<a href="/blog?page=${opts.page - 1}${opts.tag ? `&tag=${encodeURIComponent(opts.tag)}` : ''}">← Newer</a> · ` : ''}Page ${opts.page} of ${Math.ceil(opts.total / opts.pageSize)}${opts.page * opts.pageSize < opts.total ? ` · <a href="/blog?page=${opts.page + 1}${opts.tag ? `&tag=${encodeURIComponent(opts.tag)}` : ''}">Older →</a>` : ''}</p>` : ''}
 ${ctaBand()}`;
-  return layout({ title: pageTitle(opts.tag ? `${title}` : 'Blog: money guides for people who pay and get paid on a phone'), description: 'Guides on mobile money, QR payments, virtual cards, remittance costs, agents and safeguarding, written for market traders, riders, merchants and families sending money home.', path: opts.tag ? `/blog?tag=${encodeURIComponent(opts.tag)}` : '/blog', jsonLd: [breadcrumbJsonLd([{ name: seo.siteName, url: '/' }, { name: 'Blog', url: '/blog' }]), { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${siteUrl()}/blog#blog`, name: `${seo.siteName} blog`, url: absoluteUrl('/blog'), publisher: { '@id': `${siteUrl()}/#organization` }, blogPost: posts.map((p) => ({ '@type': 'BlogPosting', headline: p.title, url: absoluteUrl(p.url), datePublished: p.publishedAt })) }], noindex: !!opts.q }, body);
+  return layout(
+    {
+      title: pageTitle(opts.tag ? `${title}` : 'Blog: money guides for people who pay and get paid on a phone'),
+      description: 'Guides on mobile money, QR payments, virtual cards, remittance costs, agents and safeguarding, written for market traders, riders, merchants and families sending money home.',
+      path: opts.tag ? `/blog?tag=${encodeURIComponent(opts.tag)}` : '/blog',
+      jsonLd: [
+        breadcrumbJsonLd([
+          { name: seo.siteName, url: '/' },
+          { name: 'Blog', url: '/blog' },
+        ]),
+        {
+          '@context': 'https://schema.org',
+          '@type': 'Blog',
+          '@id': `${siteUrl()}/blog#blog`,
+          name: `${seo.siteName} blog`,
+          url: absoluteUrl('/blog'),
+          publisher: { '@id': `${siteUrl()}/#organization` },
+          blogPost: posts.map((p) => ({ '@type': 'BlogPosting', headline: p.title, url: absoluteUrl(p.url), datePublished: p.publishedAt })),
+        },
+      ],
+      noindex: !!opts.q,
+    },
+    body,
+  );
 }
 
 function cardHtml(p: PostSummary): string {
-  return `<article class="card">${p.coverUrl ? `<a href="${p.url}"><img src="${escapeHtml(p.coverUrl)}" alt="${escapeHtml(p.coverAlt ?? p.title)}" style="display:block;width:100%;aspect-ratio:16/9;object-fit:cover" loading="lazy"></a>` : `<a href="${p.url}" class="cover" style="text-decoration:none"><span>${escapeHtml(p.category)}</span></a>`}<div class="body"><div class="meta"><span>${fmtDate(p.publishedAt)}</span><span>${p.readingMinutes} min read</span></div><h3><a href="${p.url}">${escapeHtml(p.title)}</a></h3><p style="margin:0;color:var(--muted);font-size:15px">${escapeHtml(p.excerpt)}</p><div>${p.tags.slice(0, 3).map((t) => `<a class="tag" href="/blog?tag=${encodeURIComponent(t)}">${escapeHtml(t)}</a> `).join('')}</div></div></article>`;
+  return `<article class="card">${p.coverUrl ? `<a href="${p.url}"><img src="${escapeHtml(p.coverUrl)}" alt="${escapeHtml(p.coverAlt ?? p.title)}" style="display:block;width:100%;aspect-ratio:16/9;object-fit:cover" loading="lazy"></a>` : `<a href="${p.url}" class="cover" style="text-decoration:none"><span>${escapeHtml(p.category)}</span></a>`}<div class="body"><div class="meta"><span>${fmtDate(p.publishedAt)}</span><span>${p.readingMinutes} min read</span></div><h3><a href="${p.url}">${escapeHtml(p.title)}</a></h3><p style="margin:0;color:var(--muted);font-size:15px">${escapeHtml(p.excerpt)}</p><div>${p.tags
+    .slice(0, 3)
+    .map((t) => `<a class="tag" href="/blog?tag=${encodeURIComponent(t)}">${escapeHtml(t)}</a> `)
+    .join('')}</div></div></article>`;
 }
 
 function ctaBand(): string {
@@ -206,7 +235,20 @@ ${post.headings.length ? `<div class="tocbox"><b>In this article</b>${post.headi
 <div class="tocbox"><b>Get the app</b><p style="margin:0 0 10px;font-size:14px;color:var(--muted)">Send with a QR code, add money by card or mobile money, get a virtual card.</p><a href="/register" style="display:inline-block;background:var(--accent);color:#fff;padding:9px 14px;border-radius:9px;text-decoration:none;font-weight:600;font-size:14px">Open an account</a></div>
 </aside>
 </article>`;
-  return layout({ title: post.metaTitle ?? pageTitle(post.title), description: post.metaDescription ?? post.excerpt, path: post.canonicalUrl ?? post.url, type: 'article', image: post.coverUrl, publishedAt: post.publishedAt, modifiedAt: post.updatedAt, jsonLd: post.jsonLd, language: post.language }, body);
+  return layout(
+    {
+      title: post.metaTitle ?? pageTitle(post.title),
+      description: post.metaDescription ?? post.excerpt,
+      path: post.canonicalUrl ?? post.url,
+      type: 'article',
+      image: post.coverUrl,
+      publishedAt: post.publishedAt,
+      modifiedAt: post.updatedAt,
+      jsonLd: post.jsonLd,
+      language: post.language,
+    },
+    body,
+  );
 }
 
 export function legalPage(page: { slug: string; title: string; html: string; updatedAt: string }, kind: 'legal' | 'about' | 'contact'): string {
@@ -216,7 +258,25 @@ export function legalPage(page: { slug: string; title: string; html: string; upd
 <div class="breadcrumb"><a href="/">${escapeHtml(seo.siteName)}</a> / ${kind === 'legal' ? 'Legal' : kind === 'about' ? 'Company' : 'Contact'}</div>
 <article class="post"><div><h1>${escapeHtml(page.title)}</h1><div class="byline"><span>Last updated ${fmtDate(page.updatedAt)}</span></div><div class="prose">${page.html}</div></div>
 <aside class="toc"><div class="tocbox"><b>${kind === 'legal' ? 'Policies' : 'Company'}</b>${(kind === 'legal' ? FOOTER_LINKS.legal : FOOTER_LINKS.company).map((l) => `<a href="${l.href}"${l.href === path ? ' style="color:var(--accent-2);font-weight:600"' : ''}>${l.label}</a>`).join('')}</div></aside></article>`;
-  return layout({ title: pageTitle(page.title), description: page.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 155), path, jsonLd: [breadcrumbJsonLd([{ name: seo.siteName, url: '/' }, { name: page.title, url: path }]), ...(kind === 'about' ? [{ '@context': 'https://schema.org', '@type': 'AboutPage', name: page.title, url: absoluteUrl(path), mainEntity: { '@id': `${siteUrl()}/#organization` } }] : [])] }, body);
+  return layout(
+    {
+      title: pageTitle(page.title),
+      description: page.html
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 155),
+      path,
+      jsonLd: [
+        breadcrumbJsonLd([
+          { name: seo.siteName, url: '/' },
+          { name: page.title, url: path },
+        ]),
+        ...(kind === 'about' ? [{ '@context': 'https://schema.org', '@type': 'AboutPage', name: page.title, url: absoluteUrl(path), mainEntity: { '@id': `${siteUrl()}/#organization` } }] : []),
+      ],
+    },
+    body,
+  );
 }
 
 export function rssXml(posts: RenderedPost[]): string {

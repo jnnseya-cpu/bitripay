@@ -69,7 +69,19 @@ function tool<S extends z.ZodTypeAny>(def: ToolDef<S>): ToolDef<S> {
 
 /** Actions the account holder must confirm in the app; the agent only prepares them. */
 export const PROPOSABLE_ACTIONS = ['send', 'move', 'add_money', 'withdraw', 'exchange', 'request', 'statement', 'topup', 'bill', 'kyc', 'security'] as const;
-const ACTION_PATHS: Record<(typeof PROPOSABLE_ACTIONS)[number], string> = { send: '/app/send', move: '/app/move', add_money: '/app/add-money', withdraw: '/app/withdraw', exchange: '/app/exchange', request: '/app/requests', statement: '/app/statements', topup: '/app/topup', bill: '/app/bills', kyc: '/app/settings?tab=kyc', security: '/app/settings?tab=security' };
+const ACTION_PATHS: Record<(typeof PROPOSABLE_ACTIONS)[number], string> = {
+  send: '/app/send',
+  move: '/app/move',
+  add_money: '/app/add-money',
+  withdraw: '/app/withdraw',
+  exchange: '/app/exchange',
+  request: '/app/requests',
+  statement: '/app/statements',
+  topup: '/app/topup',
+  bill: '/app/bills',
+  kyc: '/app/settings?tab=kyc',
+  security: '/app/settings?tab=security',
+};
 
 export const TOOLS: ToolDef<any>[] = [
   tool({
@@ -85,10 +97,40 @@ export const TOOLS: ToolDef<any>[] = [
     description: 'Recent transactions of the account holder. Filter by direction (in/out), currency, free text, and date range.',
     roles: EVERYONE,
     sideEffect: false,
-    schema: z.object({ direction: z.enum(['in', 'out']).optional(), currency: z.string().length(3).optional(), search: z.string().max(80).optional(), from: isoDate.optional(), to: isoDate.optional(), limit: z.number().int().min(1).max(50).default(20) }),
+    schema: z.object({
+      direction: z.enum(['in', 'out']).optional(),
+      currency: z.string().length(3).optional(),
+      search: z.string().max(80).optional(),
+      from: isoDate.optional(),
+      to: isoDate.optional(),
+      limit: z.number().int().min(1).max(50).default(20),
+    }),
     run: (ctx, i) => {
-      const r = listTransactions({ userId: ctx.user.id, direction: i.direction, currency: i.currency?.toUpperCase(), search: i.search, from: i.from, to: i.to ? `${i.to}T23:59:59.999Z` : undefined, page: 1, pageSize: i.limit });
-      return { total: r.total, items: r.items.map((t) => ({ id: t.id, type: t.type, status: t.status, amount: t.amount, fee: t.fee, currency: t.currency, direction: t.direction, counterparty: t.counterparty?.fullName ?? null, description: t.note, createdAt: t.createdAt })) };
+      const r = listTransactions({
+        userId: ctx.user.id,
+        direction: i.direction,
+        currency: i.currency?.toUpperCase(),
+        search: i.search,
+        from: i.from,
+        to: i.to ? `${i.to}T23:59:59.999Z` : undefined,
+        page: 1,
+        pageSize: i.limit,
+      });
+      return {
+        total: r.total,
+        items: r.items.map((t) => ({
+          id: t.id,
+          type: t.type,
+          status: t.status,
+          amount: t.amount,
+          fee: t.fee,
+          currency: t.currency,
+          direction: t.direction,
+          counterparty: t.counterparty?.fullName ?? null,
+          description: t.note,
+          createdAt: t.createdAt,
+        })),
+      };
     },
   }),
   tool({
@@ -111,7 +153,21 @@ export const TOOLS: ToolDef<any>[] = [
     schema: z.object({ currency: z.string().length(3), from: isoDate.default(monthStart), to: isoDate.default(today) }),
     run: (ctx, i) => {
       const s = buildStatement(ctx.user, i.currency.toUpperCase(), i.from, i.to, `agent:${ctx.agentKey}`);
-      return { id: s.id, number: s.number, period: s.period, currency: s.account.currency, opening: s.opening, closing: s.closing, totalCredits: s.totalCredits, totalDebits: s.totalDebits, entryCount: s.entryCount, hash: s.hash, verifyUrl: s.verifyUrl, lines: s.lines.slice(0, 15), link: '/app/statements' };
+      return {
+        id: s.id,
+        number: s.number,
+        period: s.period,
+        currency: s.account.currency,
+        opening: s.opening,
+        closing: s.closing,
+        totalCredits: s.totalCredits,
+        totalDebits: s.totalDebits,
+        entryCount: s.entryCount,
+        hash: s.hash,
+        verifyUrl: s.verifyUrl,
+        lines: s.lines.slice(0, 15),
+        link: '/app/statements',
+      };
     },
   }),
   tool({
@@ -132,10 +188,19 @@ export const TOOLS: ToolDef<any>[] = [
     description: 'Quote for moving money from one currency to another (fees, FX margin, guaranteed recipient amount, delivery time, receiving currency options). Amount in major units.',
     roles: EVERYONE,
     sideEffect: false,
-    schema: z.object({ amount: z.number().positive(), currency: z.string().length(3), targetCurrency: z.string().length(3), sourceMethod: z.enum(['wallet', 'card', 'mobile_money', 'bank']).default('wallet') }),
+    schema: z.object({
+      amount: z.number().positive(),
+      currency: z.string().length(3),
+      targetCurrency: z.string().length(3),
+      sourceMethod: z.enum(['wallet', 'card', 'mobile_money', 'bank']).default('wallet'),
+    }),
     run: (ctx, i) => {
       const c = getCurrency(i.currency.toUpperCase());
-      const q = quoteRoute(Math.round(i.amount * 10 ** c.decimals), c.code, i.targetCurrency.toUpperCase(), i.sourceMethod, undefined, { userId: ctx.user.id, country: ctx.user.country, persistQuote: false });
+      const q = quoteRoute(Math.round(i.amount * 10 ** c.decimals), c.code, i.targetCurrency.toUpperCase(), i.sourceMethod, undefined, {
+        userId: ctx.user.id,
+        country: ctx.user.country,
+        persistQuote: false,
+      });
       return { quote: q };
     },
   }),
@@ -147,8 +212,21 @@ export const TOOLS: ToolDef<any>[] = [
     schema: z.object({ openOnly: z.boolean().default(false), limit: z.number().int().min(1).max(30).default(10) }),
     run: (ctx, i) => {
       const terminal = new Set(['SETTLED', 'EXPIRED', 'FAILED', 'REVERSED', 'REFUNDED']);
-      const items = listRoutes(ctx.user.id).filter((r) => !i.openOnly || !terminal.has(r.stage)).slice(0, i.limit);
-      return { items: items.map((r) => ({ id: r.id, amount: r.amount, currency: r.currency, targetCurrency: r.targetCurrency, stage: r.stage, stageLabel: r.stageLabel, destination: r.destination, createdAt: (r as any).createdAt })) };
+      const items = listRoutes(ctx.user.id)
+        .filter((r) => !i.openOnly || !terminal.has(r.stage))
+        .slice(0, i.limit);
+      return {
+        items: items.map((r) => ({
+          id: r.id,
+          amount: r.amount,
+          currency: r.currency,
+          targetCurrency: r.targetCurrency,
+          stage: r.stage,
+          stageLabel: r.stageLabel,
+          destination: r.destination,
+          createdAt: (r as any).createdAt,
+        })),
+      };
     },
   }),
   tool({
@@ -165,7 +243,10 @@ export const TOOLS: ToolDef<any>[] = [
     roles: EVERYONE,
     sideEffect: false,
     schema: z.object({}),
-    run: () => ({ freshness: rateFreshness(), currencies: listCurrencies(true).map((c) => ({ code: c.code, name: c.name, symbol: c.symbol, decimals: c.decimals, rateToBase: c.rateToBase, updatedAt: c.rateUpdatedAt })) }),
+    run: () => ({
+      freshness: rateFreshness(),
+      currencies: listCurrencies(true).map((c) => ({ code: c.code, name: c.name, symbol: c.symbol, decimals: c.decimals, rateToBase: c.rateToBase, updatedAt: c.rateUpdatedAt })),
+    }),
   }),
   tool({
     name: 'profile.summary',
@@ -177,7 +258,18 @@ export const TOOLS: ToolDef<any>[] = [
       const u = ctx.user;
       const limits = getLimits();
       const loud = (getDb().prepare('SELECT loud_alerts FROM users WHERE id = ?').get(u.id) as any)?.loud_alerts ?? 1;
-      return { profile: { ...toPublicUser(u), email: u.email, phone: u.phone, language: u.language, kycStatus: u.kyc_status, memberSince: u.created_at }, protection: { pinSet: !!u.pin_hash, twoFactor: !!u.two_factor_enabled, passkeys: listPasskeys(u.id).length, loudAlerts: loud === 1, emailVerified: !!u.email_verified, phoneVerified: !!u.phone_verified }, limits: u.kyc_status === 'verified' ? limits.verified : limits.unverified };
+      return {
+        profile: { ...toPublicUser(u), email: u.email, phone: u.phone, language: u.language, kycStatus: u.kyc_status, memberSince: u.created_at },
+        protection: {
+          pinSet: !!u.pin_hash,
+          twoFactor: !!u.two_factor_enabled,
+          passkeys: listPasskeys(u.id).length,
+          loudAlerts: loud === 1,
+          emailVerified: !!u.email_verified,
+          phoneVerified: !!u.phone_verified,
+        },
+        limits: u.kyc_status === 'verified' ? limits.verified : limits.unverified,
+      };
     },
   }),
   tool({
@@ -198,14 +290,31 @@ export const TOOLS: ToolDef<any>[] = [
   }),
   tool({
     name: 'actions.propose',
-    description: 'Prepare an action for the account holder to confirm themselves in the app (send, move, add_money, withdraw, exchange, request, statement, topup, bill, kyc, security). Never executes anything. Include the amounts and recipient you gathered.',
+    description:
+      'Prepare an action for the account holder to confirm themselves in the app (send, move, add_money, withdraw, exchange, request, statement, topup, bill, kyc, security). Never executes anything. Include the amounts and recipient you gathered.',
     roles: EVERYONE,
     sideEffect: false,
-    schema: z.object({ type: z.enum(PROPOSABLE_ACTIONS), title: z.string().min(3).max(120), params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}), why: z.string().max(300).optional() }),
+    schema: z.object({
+      type: z.enum(PROPOSABLE_ACTIONS),
+      title: z.string().min(3).max(120),
+      params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
+      why: z.string().max(300).optional(),
+    }),
     run: (_ctx, i) => {
-      const query = Object.entries(i.params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&');
+      const query = Object.entries(i.params)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+        .join('&');
       const base = ACTION_PATHS[i.type];
-      return { action: { type: i.type, title: i.title, params: i.params, why: i.why ?? null, link: query ? `${base}${base.includes('?') ? '&' : '?'}${query}` : base, confirmation: 'The account holder confirms this in the app with PIN, passkey or biometrics. Nothing has been executed.' } };
+      return {
+        action: {
+          type: i.type,
+          title: i.title,
+          params: i.params,
+          why: i.why ?? null,
+          link: query ? `${base}${base.includes('?') ? '&' : '?'}${query}` : base,
+          confirmation: 'The account holder confirms this in the app with PIN, passkey or biometrics. Nothing has been executed.',
+        },
+      };
     },
   }),
   tool({
@@ -218,7 +327,9 @@ export const TOOLS: ToolDef<any>[] = [
     run: (ctx, i) => {
       if (/\b(pin|password|otp|cvv|passcode)\b/i.test(i.content) && /\d{3,}/.test(i.content)) return { error: 'refused', reason: 'Secrets are never stored.' };
       const id = `mem_${Math.random().toString(36).slice(2, 12)}`;
-      getDb().prepare('INSERT INTO agent_memories (id, user_id, agent_key, kind, content, source_run_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, ctx.user.id, ctx.agentKey, i.kind, i.content.trim(), ctx.runId, now());
+      getDb()
+        .prepare('INSERT INTO agent_memories (id, user_id, agent_key, kind, content, source_run_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(id, ctx.user.id, ctx.agentKey, i.kind, i.content.trim(), ctx.runId, now());
       return { memory: { id, kind: i.kind, content: i.content.trim() } };
     },
   }),
@@ -265,7 +376,11 @@ export const TOOLS: ToolDef<any>[] = [
     roles: ['merchant', 'agent', 'user', 'admin'],
     sideEffect: false,
     schema: z.object({ status: z.enum(['open', 'paid', 'expired', 'cancelled']).default('open'), limit: z.number().int().min(1).max(30).default(10) }),
-    run: (ctx, i) => ({ items: getDb().prepare('SELECT code, kind, amount, currency, description, status, expires_at, created_at FROM payment_requests WHERE requester_user_id = ? AND status = ? ORDER BY created_at DESC LIMIT ?').all(ctx.user.id, i.status, i.limit) }),
+    run: (ctx, i) => ({
+      items: getDb()
+        .prepare('SELECT code, kind, amount, currency, description, status, expires_at, created_at FROM payment_requests WHERE requester_user_id = ? AND status = ? ORDER BY created_at DESC LIMIT ?')
+        .all(ctx.user.id, i.status, i.limit),
+    }),
   }),
   tool({
     name: 'merchant.webhooks',
@@ -285,7 +400,17 @@ export const TOOLS: ToolDef<any>[] = [
     roles: ['agent', 'admin'],
     sideEffect: false,
     schema: z.object({}),
-    run: (ctx) => ({ items: queueFor({ agent: ctx.user }).map((p) => ({ id: p.id, reference: p.reference, amount: p.amount, currency: p.currency, stage: p.stage, recipient: p.recipientMasked, operator: p.operatorName })) }),
+    run: (ctx) => ({
+      items: queueFor({ agent: ctx.user }).map((p) => ({
+        id: p.id,
+        reference: p.reference,
+        amount: p.amount,
+        currency: p.currency,
+        stage: p.stage,
+        recipient: p.recipientMasked,
+        operator: p.operatorName,
+      })),
+    }),
   }),
   tool({
     name: 'agent.stats',
@@ -295,8 +420,16 @@ export const TOOLS: ToolDef<any>[] = [
     schema: z.object({}),
     run: (ctx) => {
       const since = new Date(Date.now() - 30 * 86400_000).toISOString();
-      const rows = getDb().prepare("SELECT type, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND status = 'completed' AND created_at >= ? GROUP BY type, currency").all(ctx.user.id, ctx.user.id, since);
-      const commissions = getDb().prepare("SELECT currency, COALESCE(SUM(amount),0) total, COUNT(*) c FROM transactions WHERE receiver_user_id = ? AND type = 'commission' AND status = 'completed' AND created_at >= ? GROUP BY currency").all(ctx.user.id, since);
+      const rows = getDb()
+        .prepare(
+          "SELECT type, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND status = 'completed' AND created_at >= ? GROUP BY type, currency",
+        )
+        .all(ctx.user.id, ctx.user.id, since);
+      const commissions = getDb()
+        .prepare(
+          "SELECT currency, COALESCE(SUM(amount),0) total, COUNT(*) c FROM transactions WHERE receiver_user_id = ? AND type = 'commission' AND status = 'completed' AND created_at >= ? GROUP BY currency",
+        )
+        .all(ctx.user.id, since);
       return { since, byType: rows, commissions };
     },
   }),
@@ -310,7 +443,12 @@ export const TOOLS: ToolDef<any>[] = [
     schema: z.object({}),
     run: () => {
       const o = emoneyOverview();
-      return { programmes: o.programmes.map((p: any) => ({ id: p.id, name: p.name, currency: p.currency, type: p.type, status: p.status, position: p.position })), pools: o.pools.length, promotionalLiability: o.promotionalLiability, lastReconciliation: o.lastReconciliation.slice(0, 5) };
+      return {
+        programmes: o.programmes.map((p: any) => ({ id: p.id, name: p.name, currency: p.currency, type: p.type, status: p.status, position: p.position })),
+        pools: o.pools.length,
+        promotionalLiability: o.promotionalLiability,
+        lastReconciliation: o.lastReconciliation.slice(0, 5),
+      };
     },
   }),
   tool({
@@ -329,7 +467,20 @@ export const TOOLS: ToolDef<any>[] = [
     permission: 'approvals',
     sideEffect: false,
     schema: z.object({}),
-    run: () => ({ items: listCorridors().map((c) => ({ id: c.id, from: `${c.sourceCountry ?? '*'}/${c.sourceCurrency}`, to: `${c.destCountry}/${c.destCurrency}`, rail: c.rail, status: c.status, ready: c.readiness.ready, missing: c.readiness.missing, warnings: c.readiness.warnings, licenceExpiresAt: c.licenceExpiresAt, maxAmount: c.maxAmount })) }),
+    run: () => ({
+      items: listCorridors().map((c) => ({
+        id: c.id,
+        from: `${c.sourceCountry ?? '*'}/${c.sourceCurrency}`,
+        to: `${c.destCountry}/${c.destCurrency}`,
+        rail: c.rail,
+        status: c.status,
+        ready: c.readiness.ready,
+        missing: c.readiness.missing,
+        warnings: c.readiness.warnings,
+        licenceExpiresAt: c.licenceExpiresAt,
+        maxAmount: c.maxAmount,
+      })),
+    }),
   }),
   tool({
     name: 'admin.routes_stuck',
@@ -341,8 +492,17 @@ export const TOOLS: ToolDef<any>[] = [
     run: (_ctx, i) => {
       const terminal = ['SETTLED', 'EXPIRED', 'FAILED', 'REVERSED', 'REFUNDED', 'CREATED', 'QUOTED'];
       const cutoff = new Date(Date.now() - i.olderThanMinutes * 60_000).toISOString();
-      const rows = getDb().prepare(`SELECT id, user_id, amount, currency, target_currency, stage, updated_at, created_at FROM money_routes WHERE stage NOT IN (${terminal.map(() => '?').join(',')}) AND COALESCE(updated_at, created_at) < ? ORDER BY amount DESC LIMIT ?`).all(...terminal, cutoff, i.limit) as any[];
-      return { cutoff, count: rows.length, items: rows.map((r) => ({ id: r.id, userId: r.user_id, amount: r.amount, currency: r.currency, targetCurrency: r.target_currency, stage: r.stage, since: r.updated_at ?? r.created_at })), stages: ROUTE_STAGES };
+      const rows = getDb()
+        .prepare(
+          `SELECT id, user_id, amount, currency, target_currency, stage, updated_at, created_at FROM money_routes WHERE stage NOT IN (${terminal.map(() => '?').join(',')}) AND COALESCE(updated_at, created_at) < ? ORDER BY amount DESC LIMIT ?`,
+        )
+        .all(...terminal, cutoff, i.limit) as any[];
+      return {
+        cutoff,
+        count: rows.length,
+        items: rows.map((r) => ({ id: r.id, userId: r.user_id, amount: r.amount, currency: r.currency, targetCurrency: r.target_currency, stage: r.stage, since: r.updated_at ?? r.created_at })),
+        stages: ROUTE_STAGES,
+      };
     },
   }),
   tool({
@@ -402,7 +562,15 @@ export const TOOLS: ToolDef<any>[] = [
     schema: z.object({ query: z.string().min(2).max(80), limit: z.number().int().min(1).max(20).default(10) }),
     run: (_ctx, i) => {
       const q = `%${i.query.toLowerCase()}%`;
-      return { items: (getDb().prepare('SELECT id, tag, full_name, role, email, phone, kyc_status, status, created_at FROM users WHERE is_system = 0 AND (lower(full_name) LIKE ? OR lower(tag) LIKE ? OR lower(email) LIKE ? OR phone LIKE ?) LIMIT ?').all(q, q, q, q, i.limit) as any[]).map((u) => ({ id: u.id, tag: u.tag, name: u.full_name, role: u.role, email: u.email, phone: u.phone, kycStatus: u.kyc_status, status: u.status, createdAt: u.created_at })) };
+      return {
+        items: (
+          getDb()
+            .prepare(
+              'SELECT id, tag, full_name, role, email, phone, kyc_status, status, created_at FROM users WHERE is_system = 0 AND (lower(full_name) LIKE ? OR lower(tag) LIKE ? OR lower(email) LIKE ? OR phone LIKE ?) LIMIT ?',
+            )
+            .all(q, q, q, q, i.limit) as any[]
+        ).map((u) => ({ id: u.id, tag: u.tag, name: u.full_name, role: u.role, email: u.email, phone: u.phone, kycStatus: u.kyc_status, status: u.status, createdAt: u.created_at })),
+      };
     },
   }),
   tool({
@@ -416,7 +584,12 @@ export const TOOLS: ToolDef<any>[] = [
       const u = getDb().prepare('SELECT * FROM users WHERE id = ?').get(i.userId) as UserRow | undefined;
       if (!u) return { error: 'not_found' };
       const tx = listTransactions({ userId: u.id, page: 1, pageSize: 10 });
-      return { user: { ...toPublicUser(u), email: u.email, phone: u.phone, kycStatus: u.kyc_status, status: u.status, createdAt: u.created_at }, wallets: listWallets(u.id).map((w) => toWallet(w, u)), recentTransactions: tx.items.map((t) => ({ id: t.id, type: t.type, amount: t.amount, currency: t.currency, status: t.status, createdAt: t.createdAt })), riskEvents: getDb().prepare('SELECT kind, severity, details, created_at FROM risk_events WHERE user_id = ? ORDER BY created_at DESC LIMIT 5').all(u.id) };
+      return {
+        user: { ...toPublicUser(u), email: u.email, phone: u.phone, kycStatus: u.kyc_status, status: u.status, createdAt: u.created_at },
+        wallets: listWallets(u.id).map((w) => toWallet(w, u)),
+        recentTransactions: tx.items.map((t) => ({ id: t.id, type: t.type, amount: t.amount, currency: t.currency, status: t.status, createdAt: t.createdAt })),
+        riskEvents: getDb().prepare('SELECT kind, severity, details, created_at FROM risk_events WHERE user_id = ? ORDER BY created_at DESC LIMIT 5').all(u.id),
+      };
     },
   }),
   tool({
@@ -426,7 +599,10 @@ export const TOOLS: ToolDef<any>[] = [
     permission: 'support',
     sideEffect: false,
     schema: z.object({ limit: z.number().int().min(1).max(50).default(20) }),
-    run: (_ctx, i) => ({ tickets: getDb().prepare("SELECT id, user_id, subject, category, priority, status, created_at FROM support_tickets WHERE status = 'open' ORDER BY created_at ASC LIMIT ?").all(i.limit), openCount: (getDb().prepare("SELECT COUNT(*) c FROM support_tickets WHERE status = 'open'").get() as any).c }),
+    run: (_ctx, i) => ({
+      tickets: getDb().prepare("SELECT id, user_id, subject, category, priority, status, created_at FROM support_tickets WHERE status = 'open' ORDER BY created_at ASC LIMIT ?").all(i.limit),
+      openCount: (getDb().prepare("SELECT COUNT(*) c FROM support_tickets WHERE status = 'open'").get() as any).c,
+    }),
   }),
   tool({
     name: 'admin.usage',
@@ -435,7 +611,14 @@ export const TOOLS: ToolDef<any>[] = [
     permission: 'reports',
     sideEffect: false,
     schema: z.object({}),
-    run: () => ({ month: new Date().toISOString().slice(0, 7), byAgent: getDb().prepare("SELECT agent_key, model, SUM(runs) runs, SUM(tokens_in) tokens_in, SUM(tokens_out) tokens_out, SUM(cost_micros) cost_micros, SUM(acu) acu FROM agent_usage WHERE day >= ? GROUP BY agent_key, model ORDER BY acu DESC").all(monthStart()) }),
+    run: () => ({
+      month: new Date().toISOString().slice(0, 7),
+      byAgent: getDb()
+        .prepare(
+          'SELECT agent_key, model, SUM(runs) runs, SUM(tokens_in) tokens_in, SUM(tokens_out) tokens_out, SUM(cost_micros) cost_micros, SUM(acu) acu FROM agent_usage WHERE day >= ? GROUP BY agent_key, model ORDER BY acu DESC',
+        )
+        .all(monthStart()),
+    }),
   }),
   // Administrators (act, under checker approval)
   tool({
@@ -458,7 +641,14 @@ export const TOOLS: ToolDef<any>[] = [
     requiresApproval: true,
     schema: z.object({ reason: z.string().min(4).max(300) }),
     summarize: (i) => `Run reserve reconciliation: ${i.reason}`,
-    run: (ctx) => ({ reconciliations: reconcileReserves(`agent:${ctx.agentKey}:${ctx.actor.id}`).map((r: any) => ({ programmeId: r.programmeId, status: r.status, headroom: r.position?.headroom, coverage: r.position?.coverage })) }),
+    run: (ctx) => ({
+      reconciliations: reconcileReserves(`agent:${ctx.agentKey}:${ctx.actor.id}`).map((r: any) => ({
+        programmeId: r.programmeId,
+        status: r.status,
+        headroom: r.position?.headroom,
+        coverage: r.position?.coverage,
+      })),
+    }),
   }),
   tool({
     name: 'admin.notify_admins',
@@ -510,7 +700,10 @@ function zodToJson(schema: any): Record<string, unknown> {
       for (const c of def.checks ?? []) {
         if (c.kind === 'min') out.minLength = c.value;
         if (c.kind === 'max') out.maxLength = c.value;
-        if (c.kind === 'length') { out.minLength = c.value; out.maxLength = c.value; }
+        if (c.kind === 'length') {
+          out.minLength = c.value;
+          out.maxLength = c.value;
+        }
         if (c.kind === 'regex') out.pattern = String(c.regex.source);
       }
       return out;
@@ -550,7 +743,11 @@ function zodToJson(schema: any): Record<string, unknown> {
 
 /** Text search over CMS pages and published articles; excerpts around the first match. */
 export function searchKnowledge(query: string, limit = 5): { title: string; slug: string; kind: 'page' | 'article'; excerpt: string; link: string }[] {
-  const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 2).slice(0, 6);
+  const terms = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 2)
+    .slice(0, 6);
   const score = (title: string, text: string) => {
     const lt = text.toLowerCase();
     const ltitle = title.toLowerCase();
@@ -558,7 +755,11 @@ export function searchKnowledge(query: string, limit = 5): { title: string; slug
   };
   const excerpt = (text: string) => {
     const plain = text.replace(/[#*_>`|]/g, ' ').replace(/\s+/g, ' ');
-    const idx = terms.map((t) => plain.toLowerCase().indexOf(t)).filter((i) => i >= 0).sort((a, b) => a - b)[0] ?? 0;
+    const idx =
+      terms
+        .map((t) => plain.toLowerCase().indexOf(t))
+        .filter((i) => i >= 0)
+        .sort((a, b) => a - b)[0] ?? 0;
     return plain.slice(Math.max(0, idx - 80), idx + 240).trim();
   };
   const out: { title: string; slug: string; kind: 'page' | 'article'; excerpt: string; link: string; s: number }[] = [];
@@ -574,10 +775,18 @@ export function searchKnowledge(query: string, limit = 5): { title: string; slug
   } catch {
     /* blog optional */
   }
-  return out.sort((a, b) => b.s - a.s).slice(0, limit).map(({ s: _s, ...r }) => r);
+  return out
+    .sort((a, b) => b.s - a.s)
+    .slice(0, limit)
+    .map(({ s: _s, ...r }) => r);
 }
 
 export function toolCatalogue(role: Role, permissions: (p: AdminPermission) => boolean) {
-  return TOOLS.filter((t) => t.roles.includes(role) && (!t.permission || permissions(t.permission))).map((t) => ({ name: t.name, description: t.description, sideEffect: t.sideEffect, requiresApproval: !!t.requiresApproval, permission: t.permission ?? null }));
+  return TOOLS.filter((t) => t.roles.includes(role) && (!t.permission || permissions(t.permission))).map((t) => ({
+    name: t.name,
+    description: t.description,
+    sideEffect: t.sideEffect,
+    requiresApproval: !!t.requiresApproval,
+    permission: t.permission ?? null,
+  }));
 }
-

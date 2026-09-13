@@ -35,7 +35,21 @@ export interface FeeScheduleView {
   notes: string | null;
   createdAt: string;
 }
-const toView = (r: any): FeeScheduleView => ({ id: r.id, version: r.version, scope: r.scope, scopeRef: r.scope_ref, rules: parseJson(r.rules, {}), effectiveFrom: r.effective_from, effectiveTo: r.effective_to, status: r.status, authorId: r.author_id, approvedBy: r.approved_by, approvedAt: r.approved_at, notes: r.notes, createdAt: r.created_at });
+const toView = (r: any): FeeScheduleView => ({
+  id: r.id,
+  version: r.version,
+  scope: r.scope,
+  scopeRef: r.scope_ref,
+  rules: parseJson(r.rules, {}),
+  effectiveFrom: r.effective_from,
+  effectiveTo: r.effective_to,
+  status: r.status,
+  authorId: r.author_id,
+  approvedBy: r.approved_by,
+  approvedAt: r.approved_at,
+  notes: r.notes,
+  createdAt: r.created_at,
+});
 
 export function listFeeSchedules(filter: { scope?: FeeScope | null; scopeRef?: string | null; status?: string | null } = {}): FeeScheduleView[] {
   const where: string[] = [];
@@ -52,7 +66,11 @@ export function listFeeSchedules(filter: { scope?: FeeScope | null; scopeRef?: s
     where.push('status = ?');
     params.push(filter.status);
   }
-  return (getDb().prepare(`SELECT * FROM fee_schedules ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY scope, scope_ref, version DESC`).all(...params) as any[]).map(toView);
+  return (
+    getDb()
+      .prepare(`SELECT * FROM fee_schedules ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY scope, scope_ref, version DESC`)
+      .all(...params) as any[]
+  ).map(toView);
 }
 export function getFeeSchedule(id: string): FeeScheduleView {
   const r = getDb().prepare('SELECT * FROM fee_schedules WHERE id = ?').get(id);
@@ -60,7 +78,10 @@ export function getFeeSchedule(id: string): FeeScheduleView {
   return toView(r);
 }
 
-export function createFeeSchedule(input: { scope: FeeScope; scopeRef?: string | null; rules: Record<string, Partial<FeeRule>>; effectiveFrom?: string | null; effectiveTo?: string | null; notes?: string | null }, authorId: string): FeeScheduleView {
+export function createFeeSchedule(
+  input: { scope: FeeScope; scopeRef?: string | null; rules: Record<string, Partial<FeeRule>>; effectiveFrom?: string | null; effectiveTo?: string | null; notes?: string | null },
+  authorId: string,
+): FeeScheduleView {
   if (input.scope !== 'platform' && !input.scopeRef) throw badRequest(`${input.scope} schedules need a scope reference (country code, tier name or merchant id)`, 'scope_ref_required');
   const rules: Record<string, FeeRule> = {};
   for (const [type, rule] of Object.entries(input.rules)) {
@@ -74,7 +95,19 @@ export function createFeeSchedule(input: { scope: FeeScope; scopeRef?: string | 
   const db = getDb();
   const version = ((db.prepare('SELECT MAX(version) v FROM fee_schedules WHERE scope = ? AND scope_ref IS ?').get(input.scope, input.scopeRef ?? null) as any).v ?? 0) + 1;
   const id = `fs_${shortCode(12).toLowerCase()}`;
-  db.prepare('INSERT INTO fee_schedules (id, version, scope, scope_ref, rules, effective_from, effective_to, status, author_id, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, version, input.scope, input.scopeRef ?? null, JSON.stringify(rules), input.effectiveFrom ?? now(), input.effectiveTo ?? null, 'DRAFT', authorId, input.notes ?? null, now());
+  db.prepare('INSERT INTO fee_schedules (id, version, scope, scope_ref, rules, effective_from, effective_to, status, author_id, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id,
+    version,
+    input.scope,
+    input.scopeRef ?? null,
+    JSON.stringify(rules),
+    input.effectiveFrom ?? now(),
+    input.effectiveTo ?? null,
+    'DRAFT',
+    authorId,
+    input.notes ?? null,
+    now(),
+  );
   recordEvent('ledger', id, 'fee_schedule.drafted', { type: 'admin', id: authorId }, { scope: input.scope, scopeRef: input.scopeRef ?? null, version });
   return getFeeSchedule(id);
 }
@@ -120,7 +153,11 @@ export interface ResolvedFee {
 
 function activeFor(scope: FeeScope, scopeRef: string | null, type: string): FeeScheduleView | null {
   const t = now();
-  const r = getDb().prepare("SELECT * FROM fee_schedules WHERE scope = ? AND scope_ref IS ? AND status = 'ACTIVE' AND effective_from <= ? AND (effective_to IS NULL OR effective_to > ?) ORDER BY version DESC LIMIT 1").get(scope, scopeRef, t, t) as any;
+  const r = getDb()
+    .prepare(
+      "SELECT * FROM fee_schedules WHERE scope = ? AND scope_ref IS ? AND status = 'ACTIVE' AND effective_from <= ? AND (effective_to IS NULL OR effective_to > ?) ORDER BY version DESC LIMIT 1",
+    )
+    .get(scope, scopeRef, t, t) as any;
   if (!r) return null;
   const v = toView(r);
   return v.rules[type] ? v : null;
@@ -130,7 +167,12 @@ function activeFor(scope: FeeScope, scopeRef: string | null, type: string): FeeS
 export function resolveFeeRule(type: string, ctx: FeeContext = {}): ResolvedFee | null {
   const tier = ctx.tier ?? (ctx.userId ? ((getDb().prepare('SELECT fee_tier FROM users WHERE id = ?').get(ctx.userId) as any)?.fee_tier ?? null) : null);
   const country = ctx.country ?? (ctx.userId ? ((getDb().prepare('SELECT country FROM users WHERE id = ?').get(ctx.userId) as any)?.country ?? null) : null);
-  const chain: [FeeScope, string | null][] = [['merchant', ctx.userId ?? null], ['tier', tier], ['country', country ? country.toUpperCase() : null], ['platform', null]];
+  const chain: [FeeScope, string | null][] = [
+    ['merchant', ctx.userId ?? null],
+    ['tier', tier],
+    ['country', country ? country.toUpperCase() : null],
+    ['platform', null],
+  ];
   for (const [scope, ref] of chain) {
     if (scope !== 'platform' && !ref) continue;
     const s = activeFor(scope, ref, type);

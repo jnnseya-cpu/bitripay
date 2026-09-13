@@ -12,10 +12,26 @@ export const DEFAULT_ARTICLES: PostInput[] = [
     metaTitle: 'Get paid by QR code at the market (no card machine)',
     metaDescription: 'Set up a printed QR code for your market stall, hear a loud alert when money arrives and turn balance into cash at an agent. Step-by-step, no card machine needed.',
     faq: [
-      { question: 'Does the customer need the BitriPay app to pay my QR code?', answer: 'A BitriPay user pays in one scan. Someone without the app can open the same code in their phone camera and pay by card, mobile money or bank transfer through the checkout page, and you still receive it as balance.' },
-      { question: 'What if I cannot read well?', answer: 'The stall QR code never changes, so you print it once. When a payment arrives the phone rings loudly and vibrates, and the screen shows the amount in large numbers with a green tick. You do not have to read anything else.' },
-      { question: 'How do I turn the balance into cash?', answer: 'Go to Agents & cash, choose a nearby agent and the amount, approve with your fingerprint, and hand the code to the agent. The agent gives you the cash once the app shows the payout as settled.' },
-      { question: 'What does it cost?', answer: 'Receiving into your wallet is free for you as a customer. Merchant accounts pay a small percentage shown in the dashboard, and agents charge the commission the app shows before you confirm.' },
+      {
+        question: 'Does the customer need the BitriPay app to pay my QR code?',
+        answer:
+          'A BitriPay user pays in one scan. Someone without the app can open the same code in their phone camera and pay by card, mobile money or bank transfer through the checkout page, and you still receive it as balance.',
+      },
+      {
+        question: 'What if I cannot read well?',
+        answer:
+          'The stall QR code never changes, so you print it once. When a payment arrives the phone rings loudly and vibrates, and the screen shows the amount in large numbers with a green tick. You do not have to read anything else.',
+      },
+      {
+        question: 'How do I turn the balance into cash?',
+        answer:
+          'Go to Agents & cash, choose a nearby agent and the amount, approve with your fingerprint, and hand the code to the agent. The agent gives you the cash once the app shows the payout as settled.',
+      },
+      {
+        question: 'What does it cost?',
+        answer:
+          'Receiving into your wallet is free for you as a customer. Merchant accounts pay a small percentage shown in the dashboard, and agents charge the commission the app shows before you confirm.',
+      },
     ],
     sources: [
       { title: 'GSMA – State of the Industry Report on Mobile Money', url: 'https://www.gsma.com/sotir/' },
@@ -68,16 +84,28 @@ Move to a merchant account when you have more than one seller on the stall, want
   {
     title: 'Moto-taxi riders: how to collect fares without carrying cash',
     slug: 'moto-taxi-riders-collect-fares-without-cash',
-    excerpt: 'Thirty small fares a day add up to a lot of cash on a motorbike. A wewa can be paid by QR code or @tag in seconds, hear every payment over the traffic, and cash out once at the end of the day.',
+    excerpt:
+      'Thirty small fares a day add up to a lot of cash on a motorbike. A wewa can be paid by QR code or @tag in seconds, hear every payment over the traffic, and cash out once at the end of the day.',
     category: 'guides',
     tags: ['moto-taxi', 'qr payments', 'daily earners'],
     keywords: ['moto taxi mobile payment', 'wewa payment app', 'get paid by passengers without cash', 'boda boda digital payments'],
     metaTitle: 'Moto-taxi fares without cash: a rider’s guide',
-    metaDescription: 'How wewa and boda riders take fares by QR code or @tag, hear every payment over the traffic, and cash out once a day at an agent. Fees, safety and what to do when a passenger claims they paid.',
+    metaDescription:
+      'How wewa and boda riders take fares by QR code or @tag, hear every payment over the traffic, and cash out once a day at an agent. Fees, safety and what to do when a passenger claims they paid.',
     faq: [
-      { question: 'What if the passenger says they paid but I heard nothing?', answer: 'Money that arrived is on your screen with a green tick and your phone rang. If it is not there, the payment did not arrive. Ask them to show the transfer in their app: a payment that is still pending is not yours yet.' },
-      { question: 'Can I be paid if I have no data?', answer: 'The passenger needs data to send. Your phone will show the payment and ring as soon as it reconnects, and the money is already in your balance in the meantime.' },
-      { question: 'How do I get cash?', answer: 'Once a day, visit an agent: choose the amount in Agents & cash, approve with your fingerprint, show the code. The agent pays out when the app shows the payout as settled.' },
+      {
+        question: 'What if the passenger says they paid but I heard nothing?',
+        answer:
+          'Money that arrived is on your screen with a green tick and your phone rang. If it is not there, the payment did not arrive. Ask them to show the transfer in their app: a payment that is still pending is not yours yet.',
+      },
+      {
+        question: 'Can I be paid if I have no data?',
+        answer: 'The passenger needs data to send. Your phone will show the payment and ring as soon as it reconnects, and the money is already in your balance in the meantime.',
+      },
+      {
+        question: 'How do I get cash?',
+        answer: 'Once a day, visit an agent: choose the amount in Agents & cash, approve with your fingerprint, show the code. The agent pays out when the app shows the payout as settled.',
+      },
     ],
     sources: [
       { title: 'International Labour Organization – Motorcycle taxis in Africa', url: 'https://www.ilo.org/' },
@@ -125,12 +153,29 @@ We designed the loud alert, the sticker-sized QR code and the once-a-day cash-ou
     tags: ['remittance', 'congo', 'uk', 'orange money'],
     keywords: ['send money to congo from uk', 'uk to drc money transfer', 'orange money congo transfer from london', 'cheapest way to send money to kinshasa'],
     metaTitle: 'Send money UK → Congo (DRC): fees, speed, safety',
-    metaDescription: 'How a UK card payment becomes an Orange Money or Airtel Money payout in Kinshasa: the real fees, the exchange margin, delivery times, recipient currency choice and the safety checks in between.',
+    metaDescription:
+      'How a UK card payment becomes an Orange Money or Airtel Money payout in Kinshasa: the real fees, the exchange margin, delivery times, recipient currency choice and the safety checks in between.',
     faq: [
-      { question: 'Can my family receive US dollars instead of Congolese francs?', answer: 'In the DRC many mobile money wallets hold USD. When the corridor permits it and there is prefunded USD liquidity, BitriPay offers USD as a receiving currency and, in regulated corridors, asks the recipient to confirm the currency before paying out. The local currency is always the default.' },
-      { question: 'How long does it take?', answer: 'Card funding is confirmed within seconds by the processor. The mobile money payout is then executed from a prefunded account in the DRC, typically within minutes during business hours, and you can follow every stage in the app.' },
-      { question: 'What if the operator confirmation does not match?', answer: 'The payout is held and reviewed by a person before anything is marked as delivered. Your money is never lost between stages; if the payout cannot complete you can cancel for a full refund.' },
-      { question: 'Is it authorised?', answer: 'Cross-border transfers are a regulated service. BitriPay offers each corridor for real money only once the licence, partners and safeguarded liquidity are in place; the app shows a corridor as sandbox until then.' },
+      {
+        question: 'Can my family receive US dollars instead of Congolese francs?',
+        answer:
+          'In the DRC many mobile money wallets hold USD. When the corridor permits it and there is prefunded USD liquidity, BitriPay offers USD as a receiving currency and, in regulated corridors, asks the recipient to confirm the currency before paying out. The local currency is always the default.',
+      },
+      {
+        question: 'How long does it take?',
+        answer:
+          'Card funding is confirmed within seconds by the processor. The mobile money payout is then executed from a prefunded account in the DRC, typically within minutes during business hours, and you can follow every stage in the app.',
+      },
+      {
+        question: 'What if the operator confirmation does not match?',
+        answer:
+          'The payout is held and reviewed by a person before anything is marked as delivered. Your money is never lost between stages; if the payout cannot complete you can cancel for a full refund.',
+      },
+      {
+        question: 'Is it authorised?',
+        answer:
+          'Cross-border transfers are a regulated service. BitriPay offers each corridor for real money only once the licence, partners and safeguarded liquidity are in place; the app shows a corridor as sandbox until then.',
+      },
     ],
     sources: [
       { title: 'World Bank – Remittance Prices Worldwide', url: 'https://remittanceprices.worldbank.org/' },
@@ -191,7 +236,8 @@ Check the recipient's number and operator, tell them to expect the operator's SM
     tags: ['safeguarding', 'e-money', 'trust'],
     keywords: ['what is e-money safeguarding', 'is my mobile wallet balance safe', 'e-money vs bank deposit', 'safeguarded funds explained'],
     metaTitle: 'Safeguarding explained: is your e-money balance safe?',
-    metaDescription: 'E-money is not a bank deposit. Learn how safeguarding keeps customer funds apart from the company, how BitriPay reconciles reserves daily, and what promotional and sandbox balances are.',
+    metaDescription:
+      'E-money is not a bank deposit. Learn how safeguarding keeps customer funds apart from the company, how BitriPay reconciles reserves daily, and what promotional and sandbox balances are.',
     faq: [
       { question: 'Do I earn interest on my balance?', answer: 'No. E-money does not earn interest; the safeguarded funds belong to customers and are not lent out.' },
       { question: 'What happens if BitriPay closed down?', answer: 'Safeguarded funds are held apart from the company’s own money and are returned to customers ahead of other creditors.' },
@@ -240,9 +286,19 @@ Your statement shows the balance type on every page. The [regulatory information
     metaTitle: 'Agent float and liquidity: a practical guide',
     metaDescription: 'How BitriPay agents hold float, prefund it, execute cash-in and cash-out approved on the customer’s own phone, reconcile daily and stay liquid on the busiest days.',
     faq: [
-      { question: 'Do I need a shop?', answer: 'No. Many agents work from a kiosk, a pharmacy counter or a phone-charging stand. You need an ID, a business registration where the law requires one, a phone and a starting float.' },
-      { question: 'Who confirms a cash-out?', answer: 'The customer approves it on their own phone with their fingerprint or PIN. You never touch their phone or their PIN, and you hand over cash only when your app shows the payout as settled.' },
-      { question: 'What happens to the money I pay out?', answer: 'Your float is a prefunded balance reconciled against the platform every day. Each payout reduces it and each cash-in increases it, and you can see every movement in your history.' },
+      {
+        question: 'Do I need a shop?',
+        answer: 'No. Many agents work from a kiosk, a pharmacy counter or a phone-charging stand. You need an ID, a business registration where the law requires one, a phone and a starting float.',
+      },
+      {
+        question: 'Who confirms a cash-out?',
+        answer:
+          'The customer approves it on their own phone with their fingerprint or PIN. You never touch their phone or their PIN, and you hand over cash only when your app shows the payout as settled.',
+      },
+      {
+        question: 'What happens to the money I pay out?',
+        answer: 'Your float is a prefunded balance reconciled against the platform every day. Each payout reduces it and each cash-in increases it, and you can see every movement in your history.',
+      },
     ],
     sources: [
       { title: 'CGAP – Agent network management', url: 'https://www.cgap.org/topics/collections/agent-networks' },
@@ -297,7 +353,11 @@ Register with an **agent** account, upload your ID and business documents, and a
     metaTitle: 'Virtual cards without a bank card: how they work',
     metaDescription: 'Issue a virtual card from your BitriPay balance, fund only what you plan to spend, freeze it when you are not using it and reveal the details only with your PIN.',
     faq: [
-      { question: 'Where can I use it?', answer: 'At any merchant that accepts BitriPay checkout, and, where a card programme is live in your country, at online merchants that accept the card network. The app tells you which applies to your card.' },
+      {
+        question: 'Where can I use it?',
+        answer:
+          'At any merchant that accepts BitriPay checkout, and, where a card programme is live in your country, at online merchants that accept the card network. The app tells you which applies to your card.',
+      },
       { question: 'Is my main balance at risk?', answer: 'No. The card only holds what you moved onto it. Freeze it when you are not shopping and move any balance back to your wallet at any time.' },
       { question: 'What does it cost?', answer: 'Issuing a card is free. Some online merchants charge their own fees; the app never adds hidden ones.' },
     ],

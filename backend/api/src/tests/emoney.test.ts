@@ -15,7 +15,16 @@ let app: ReturnType<typeof setupApp>;
 
 async function createLiveProgramme(currency = 'GBP') {
   const admin = await adminToken(app);
-  const p = await request(app).put('/api/admin/emoney/programmes/new').set(admin.auth).send({ currency, jurisdiction: 'GB', issuerModel: 'own_authorisation', issuerName: 'BitriPay Ltd', licenceRef: 'FRN 900000', regulator: 'FCA', safeguardingBank: 'Barclays', safeguardingAccountRef: 'GB00 SAFE 0001' });
+  const p = await request(app).put('/api/admin/emoney/programmes/new').set(admin.auth).send({
+    currency,
+    jurisdiction: 'GB',
+    issuerModel: 'own_authorisation',
+    issuerName: 'BitriPay Ltd',
+    licenceRef: 'FRN 900000',
+    regulator: 'FCA',
+    safeguardingBank: 'Barclays',
+    safeguardingAccountRef: 'GB00 SAFE 0001',
+  });
   expect(p.status).toBe(200);
   expect(p.body.programme.readiness.ready).toBe(true);
   // The platform is in sandbox mode in tests, so go-live is refused by the API; simulate an authorised live programme directly.
@@ -29,7 +38,10 @@ async function createLiveProgramme(currency = 'GBP') {
 async function confirmReserve(programmeId: string, amount: string, reference: string) {
   const admin = await adminToken(app);
   const checker = await checkerToken(app);
-  const r = await request(app).post(`/api/admin/emoney/programmes/${programmeId}/reserves`).set(admin.auth).send({ amount, reference, note: 'Bank statement line checked by treasury', evidence: { statementLine: reference } });
+  const r = await request(app)
+    .post(`/api/admin/emoney/programmes/${programmeId}/reserves`)
+    .set(admin.auth)
+    .send({ amount, reference, note: 'Bank statement line checked by treasury', evidence: { statementLine: reference } });
   expect(r.status).toBe(201);
   expect(r.body.movement.status).toBe('pending');
   // maker cannot check their own confirmation
@@ -101,7 +113,10 @@ describe('e-money issuance engine', () => {
     expect(p.body.programme.position.pendingRedemptions).toBe(held);
     expect(p.body.programme.position.liabilities).toBe(60_000 - held);
     const checker = await checkerToken(app);
-    const proposed = await request(app).post(`/api/admin/withdrawals/${wd.body.transaction.id}/approve`).set(admin.auth).send({ payoutReference: 'BANKOUT-1', note: 'Faster payment sent from safeguarding account' });
+    const proposed = await request(app)
+      .post(`/api/admin/withdrawals/${wd.body.transaction.id}/approve`)
+      .set(admin.auth)
+      .send({ payoutReference: 'BANKOUT-1', note: 'Faster payment sent from safeguarding account' });
     expect(proposed.status).toBe(200);
     await request(app).post(`/api/admin/verifications/${proposed.body.verification.id}/approve`).set(checker.auth).send({ pin: checker.pin });
     p = await request(app).get(`/api/admin/emoney/programmes/${id}`).set(admin.auth);
@@ -141,7 +156,10 @@ describe('e-money issuance engine', () => {
     const country = await request(app).post('/api/admin/emoney/pools').set(admin.auth).send({ programmeId: id, name: 'Kenya pool', level: 'country', country: 'KE' });
     expect(country.status).toBe(201);
     const agentUser = await registerUser(app);
-    const master = await request(app).post('/api/admin/emoney/pools').set(admin.auth).send({ programmeId: id, name: 'Nairobi master agent', level: 'master_agent', parentId: country.body.pool.id, ownerUserId: agentUser.user.id });
+    const master = await request(app)
+      .post('/api/admin/emoney/pools')
+      .set(admin.auth)
+      .send({ programmeId: id, name: 'Nairobi master agent', level: 'master_agent', parentId: country.body.pool.id, ownerUserId: agentUser.user.id });
     expect(master.status).toBe(201);
     const bad = await request(app).post('/api/admin/emoney/pools').set(admin.auth).send({ programmeId: id, name: 'Upside down', level: 'country', parentId: master.body.pool.id });
     expect(bad.status).toBe(400);
@@ -150,12 +168,21 @@ describe('e-money issuance engine', () => {
     expect(mint.status).toBe(201);
     await request(app).post(`/api/admin/verifications/${mint.body.verification.id}/approve`).set(checker.auth).send({ pin: checker.pin });
     // allocation down the hierarchy moves money; nothing is created
-    const a1 = await request(app).post(`/api/admin/emoney/pools/${country.body.pool.id}/allocate`).set(admin.auth).send({ toPoolId: master.body.pool.id, amount: '500.00', reason: 'Master agent float', pin: admin.pin });
+    const a1 = await request(app)
+      .post(`/api/admin/emoney/pools/${country.body.pool.id}/allocate`)
+      .set(admin.auth)
+      .send({ toPoolId: master.body.pool.id, amount: '500.00', reason: 'Master agent float', pin: admin.pin });
     expect(a1.status).toBe(200);
     const holder = await registerUser(app);
-    const a2 = await request(app).post(`/api/admin/emoney/pools/${master.body.pool.id}/allocate`).set(admin.auth).send({ toUserId: holder.user.id, amount: '120.00', reason: 'Cash-in at agent', pin: admin.pin });
+    const a2 = await request(app)
+      .post(`/api/admin/emoney/pools/${master.body.pool.id}/allocate`)
+      .set(admin.auth)
+      .send({ toUserId: holder.user.id, amount: '120.00', reason: 'Cash-in at agent', pin: admin.pin });
     expect(a2.status).toBe(200);
-    const tooMuch = await request(app).post(`/api/admin/emoney/pools/${master.body.pool.id}/allocate`).set(admin.auth).send({ toUserId: holder.user.id, amount: '900.00', reason: 'Too much', pin: admin.pin });
+    const tooMuch = await request(app)
+      .post(`/api/admin/emoney/pools/${master.body.pool.id}/allocate`)
+      .set(admin.auth)
+      .send({ toUserId: holder.user.id, amount: '900.00', reason: 'Too much', pin: admin.pin });
     expect(tooMuch.status).toBe(422);
     expect(tooMuch.body.error.code).toBe('insufficient_funds');
     const pools = await request(app).get('/api/admin/emoney/pools').set(admin.auth);
@@ -175,11 +202,17 @@ describe('e-money issuance engine', () => {
     const frozen = await request(app).post(`/api/admin/users/${holder.user.id}/wallets/KES/freeze`).set(admin.auth).send({ reason: 'Court order 12/2026', pin: admin.pin });
     expect(frozen.status).toBe(200);
     expect(frozen.body.wallet.frozen).toBe(true);
-    const blocked = await request(app).post('/api/transfers').set(holder.auth).send({ pin: '1234', to: `@${agentUser.user.tag}`, amount: '10.00', currency: 'KES' });
+    const blocked = await request(app)
+      .post('/api/transfers')
+      .set(holder.auth)
+      .send({ pin: '1234', to: `@${agentUser.user.tag}`, amount: '10.00', currency: 'KES' });
     expect(blocked.status).toBe(403);
     expect(blocked.body.error.code).toBe('wallet_frozen');
     await request(app).post(`/api/admin/users/${holder.user.id}/wallets/KES/freeze`).set(admin.auth).send({ freeze: false, reason: 'Order lifted', pin: admin.pin });
-    const okTx = await request(app).post('/api/transfers').set(holder.auth).send({ pin: '1234', to: `@${agentUser.user.tag}`, amount: '10.00', currency: 'KES' });
+    const okTx = await request(app)
+      .post('/api/transfers')
+      .set(holder.auth)
+      .send({ pin: '1234', to: `@${agentUser.user.tag}`, amount: '10.00', currency: 'KES' });
     expect(okTx.status).toBe(201);
   });
 
@@ -193,7 +226,18 @@ describe('e-money issuance engine', () => {
     expect(live.body.error.code).toBe('programme_arrangements_required');
     const events = await request(app).get('/api/admin/events?stream=issuance&limit=200').set(admin.auth);
     const kinds = events.body.items.map((e: any) => e.event);
-    for (const k of ['programme.created', 'reserve.funding.pending', 'reserve.funding.cleared', 'emoney.minted', 'pool.allocated', 'reconciliation.breach', 'programme.suspended', 'wallet.frozen', 'reserve.redemption.cleared']) expect(kinds).toContain(k);
+    for (const k of [
+      'programme.created',
+      'reserve.funding.pending',
+      'reserve.funding.cleared',
+      'emoney.minted',
+      'pool.allocated',
+      'reconciliation.breach',
+      'programme.suspended',
+      'wallet.frozen',
+      'reserve.redemption.cleared',
+    ])
+      expect(kinds).toContain(k);
     expect(events.body.chain.ok).toBe(true);
   });
 });

@@ -39,7 +39,27 @@ export interface Participant {
   createdAt: string;
   updatedAt: string;
 }
-const toView = (r: any): Participant => ({ id: r.id, name: r.name, kind: r.kind, country: r.country, currencies: parseJson(r.currencies, []), services: parseJson(r.services, []), channels: parseJson(r.channels, []), routingIds: parseJson(r.routing_ids, {}), status: r.status, source: r.source, evidenceRef: r.evidence_ref, validFrom: r.valid_from, validTo: r.valid_to, version: r.version, authorId: r.author_id, approvedBy: r.approved_by, approvedAt: r.approved_at, createdAt: r.created_at, updatedAt: r.updated_at });
+const toView = (r: any): Participant => ({
+  id: r.id,
+  name: r.name,
+  kind: r.kind,
+  country: r.country,
+  currencies: parseJson(r.currencies, []),
+  services: parseJson(r.services, []),
+  channels: parseJson(r.channels, []),
+  routingIds: parseJson(r.routing_ids, {}),
+  status: r.status,
+  source: r.source,
+  evidenceRef: r.evidence_ref,
+  validFrom: r.valid_from,
+  validTo: r.valid_to,
+  version: r.version,
+  authorId: r.author_id,
+  approvedBy: r.approved_by,
+  approvedAt: r.approved_at,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
 
 export function listParticipants(filter: { country?: string | null; status?: string | null; kind?: string | null } = {}): Participant[] {
   const where: string[] = [];
@@ -56,7 +76,11 @@ export function listParticipants(filter: { country?: string | null; status?: str
     where.push('kind = ?');
     params.push(filter.kind);
   }
-  return (getDb().prepare(`SELECT * FROM participants ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY country, kind, name`).all(...params) as any[]).map(toView);
+  return (
+    getDb()
+      .prepare(`SELECT * FROM participants ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY country, kind, name`)
+      .all(...params) as any[]
+  ).map(toView);
 }
 export function getParticipant(id: string): Participant {
   const r = getDb().prepare('SELECT * FROM participants WHERE id = ?').get(id);
@@ -87,11 +111,54 @@ export function upsertParticipant(input: ParticipantInput, authorId: string | nu
   if (input.source === 'OFFICIAL' && !input.evidenceRef) throw badRequest('Official entries need the signed directory/file reference', 'evidence_required');
   const existing = db.prepare('SELECT * FROM participants WHERE id = ?').get(input.id) as any;
   if (!existing) {
-    db.prepare('INSERT INTO participants (id, name, kind, country, currencies, services, channels, routing_ids, status, source, evidence_ref, valid_from, valid_to, version, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)').run(input.id, input.name, input.kind, input.country.toUpperCase(), JSON.stringify(input.currencies.map((c) => c.toUpperCase())), JSON.stringify(input.services), JSON.stringify(input.channels ?? ['api', 'qr']), JSON.stringify(input.routingIds ?? {}), 'PENDING', input.source ?? 'SIMULATION', input.evidenceRef ?? null, input.validFrom ?? null, input.validTo ?? null, authorId, now(), now());
+    db.prepare(
+      'INSERT INTO participants (id, name, kind, country, currencies, services, channels, routing_ids, status, source, evidence_ref, valid_from, valid_to, version, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)',
+    ).run(
+      input.id,
+      input.name,
+      input.kind,
+      input.country.toUpperCase(),
+      JSON.stringify(input.currencies.map((c) => c.toUpperCase())),
+      JSON.stringify(input.services),
+      JSON.stringify(input.channels ?? ['api', 'qr']),
+      JSON.stringify(input.routingIds ?? {}),
+      'PENDING',
+      input.source ?? 'SIMULATION',
+      input.evidenceRef ?? null,
+      input.validFrom ?? null,
+      input.validTo ?? null,
+      authorId,
+      now(),
+      now(),
+    );
   } else {
-    db.prepare('UPDATE participants SET name = ?, kind = ?, country = ?, currencies = ?, services = ?, channels = ?, routing_ids = ?, status = ?, source = ?, evidence_ref = ?, valid_from = ?, valid_to = ?, version = version + 1, author_id = ?, approved_by = NULL, approved_at = NULL, updated_at = ? WHERE id = ?').run(input.name, input.kind, input.country.toUpperCase(), JSON.stringify(input.currencies.map((c) => c.toUpperCase())), JSON.stringify(input.services), JSON.stringify(input.channels ?? parseJson(existing.channels, ['api', 'qr'])), JSON.stringify(input.routingIds ?? parseJson(existing.routing_ids, {})), existing.status === 'RETIRED' ? 'RETIRED' : 'PENDING', input.source ?? existing.source, input.evidenceRef ?? existing.evidence_ref, input.validFrom ?? existing.valid_from, input.validTo ?? existing.valid_to, authorId, now(), input.id);
+    db.prepare(
+      'UPDATE participants SET name = ?, kind = ?, country = ?, currencies = ?, services = ?, channels = ?, routing_ids = ?, status = ?, source = ?, evidence_ref = ?, valid_from = ?, valid_to = ?, version = version + 1, author_id = ?, approved_by = NULL, approved_at = NULL, updated_at = ? WHERE id = ?',
+    ).run(
+      input.name,
+      input.kind,
+      input.country.toUpperCase(),
+      JSON.stringify(input.currencies.map((c) => c.toUpperCase())),
+      JSON.stringify(input.services),
+      JSON.stringify(input.channels ?? parseJson(existing.channels, ['api', 'qr'])),
+      JSON.stringify(input.routingIds ?? parseJson(existing.routing_ids, {})),
+      existing.status === 'RETIRED' ? 'RETIRED' : 'PENDING',
+      input.source ?? existing.source,
+      input.evidenceRef ?? existing.evidence_ref,
+      input.validFrom ?? existing.valid_from,
+      input.validTo ?? existing.valid_to,
+      authorId,
+      now(),
+      input.id,
+    );
   }
-  recordEvent('corridor', input.id, existing ? 'participant.revised' : 'participant.created', { type: authorId ? 'admin' : 'system', id: authorId }, { version: existing ? existing.version + 1 : 1, source: input.source ?? 'SIMULATION' });
+  recordEvent(
+    'corridor',
+    input.id,
+    existing ? 'participant.revised' : 'participant.created',
+    { type: authorId ? 'admin' : 'system', id: authorId },
+    { version: existing ? existing.version + 1 : 1, source: input.source ?? 'SIMULATION' },
+  );
   return getParticipant(input.id);
 }
 
@@ -131,17 +198,39 @@ export interface ParticipantPair {
   authorId: string | null;
   approvedBy: string | null;
 }
-const toPair = (r: any): ParticipantPair => ({ id: r.id, connectionId: r.connection_id, debtorId: r.debtor_id, creditorId: r.creditor_id, currency: r.currency, product: r.product, channel: r.channel, status: r.status, testedAt: r.tested_at, evidenceRef: r.evidence_ref, validFrom: r.valid_from, validTo: r.valid_to, authorId: r.author_id, approvedBy: r.approved_by });
+const toPair = (r: any): ParticipantPair => ({
+  id: r.id,
+  connectionId: r.connection_id,
+  debtorId: r.debtor_id,
+  creditorId: r.creditor_id,
+  currency: r.currency,
+  product: r.product,
+  channel: r.channel,
+  status: r.status,
+  testedAt: r.tested_at,
+  evidenceRef: r.evidence_ref,
+  validFrom: r.valid_from,
+  validTo: r.valid_to,
+  authorId: r.author_id,
+  approvedBy: r.approved_by,
+});
 
-export function upsertPair(input: { connectionId: string; debtorId: string; creditorId: string; currency: string; product: string; channel?: string }, authorId: string | null): ParticipantPair {
+export function upsertPair(
+  input: { connectionId: string; debtorId: string; creditorId: string; currency: string; product: SwitchProduct; channel?: string },
+  authorId: string | null,
+): ParticipantPair {
   getParticipant(input.debtorId);
   getParticipant(input.creditorId);
   const db = getDb();
   const channel = input.channel ?? 'api';
-  const existing = db.prepare('SELECT * FROM participant_pairs WHERE connection_id = ? AND debtor_id = ? AND creditor_id = ? AND currency = ? AND product = ? AND channel = ?').get(input.connectionId, input.debtorId, input.creditorId, input.currency.toUpperCase(), input.product, channel) as any;
+  const existing = db
+    .prepare('SELECT * FROM participant_pairs WHERE connection_id = ? AND debtor_id = ? AND creditor_id = ? AND currency = ? AND product = ? AND channel = ?')
+    .get(input.connectionId, input.debtorId, input.creditorId, input.currency.toUpperCase(), input.product, channel) as any;
   if (existing) return toPair(existing);
   const id = `pair_${shortCode(12).toLowerCase()}`;
-  db.prepare('INSERT INTO participant_pairs (id, connection_id, debtor_id, creditor_id, currency, product, channel, status, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, input.connectionId, input.debtorId, input.creditorId, input.currency.toUpperCase(), input.product, channel, 'UNTESTED', authorId, now(), now());
+  db.prepare(
+    'INSERT INTO participant_pairs (id, connection_id, debtor_id, creditor_id, currency, product, channel, status, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(id, input.connectionId, input.debtorId, input.creditorId, input.currency.toUpperCase(), input.product, channel, 'UNTESTED', authorId, now(), now());
   return toPair(db.prepare('SELECT * FROM participant_pairs WHERE id = ?').get(id));
 }
 
@@ -153,13 +242,21 @@ export function setPairStatus(id: string, status: 'OPEN' | 'FAILED' | 'CLOSED', 
     if (!input.evidenceRef) throw badRequest('Opening a pair needs the test evidence reference', 'evidence_required');
     if (r.author_id && r.author_id === approverId) throw badRequest('The approver must differ from the author', 'approver_required');
   }
-  getDb().prepare('UPDATE participant_pairs SET status = ?, tested_at = ?, evidence_ref = COALESCE(?, evidence_ref), valid_from = COALESCE(valid_from, ?), valid_to = ?, approved_by = ?, updated_at = ? WHERE id = ?').run(status, now(), input.evidenceRef ?? null, now(), input.validTo ?? null, approverId, now(), id);
+  getDb()
+    .prepare(
+      'UPDATE participant_pairs SET status = ?, tested_at = ?, evidence_ref = COALESCE(?, evidence_ref), valid_from = COALESCE(valid_from, ?), valid_to = ?, approved_by = ?, updated_at = ? WHERE id = ?',
+    )
+    .run(status, now(), input.evidenceRef ?? null, now(), input.validTo ?? null, approverId, now(), id);
   recordEvent('corridor', id, `pair.${status.toLowerCase()}`, { type: 'admin', id: approverId }, { evidenceRef: input.evidenceRef ?? null });
   return toPair(getDb().prepare('SELECT * FROM participant_pairs WHERE id = ?').get(id));
 }
 
 export function listPairs(connectionId?: string | null): ParticipantPair[] {
-  return (getDb().prepare(`SELECT * FROM participant_pairs ${connectionId ? 'WHERE connection_id = ?' : ''} ORDER BY created_at`).all(...(connectionId ? [connectionId] : [])) as any[]).map(toPair);
+  return (
+    getDb()
+      .prepare(`SELECT * FROM participant_pairs ${connectionId ? 'WHERE connection_id = ?' : ''} ORDER BY created_at`)
+      .all(...(connectionId ? [connectionId] : [])) as any[]
+  ).map(toPair);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -180,7 +277,16 @@ export function registryStatus(country: string) {
     if (seen.has(rid) && seen.get(rid) !== p.id) contradictions.push(`routing id ${rid} shared by ${seen.get(rid)} and ${p.id}`);
     seen.set(rid, p.id);
   }
-  return { country: country.toUpperCase(), participants: active.length, pending: rows.filter((p) => p.status === 'PENDING').length, lastApprovedAt: last, ageHours: Number.isFinite(ageHours) ? ageHours : null, stale: rows.length > 0 && ageHours > settings.registryToleranceHours, contradictions, sources: [...new Set(rows.map((p) => p.source))] };
+  return {
+    country: country.toUpperCase(),
+    participants: active.length,
+    pending: rows.filter((p) => p.status === 'PENDING').length,
+    lastApprovedAt: last,
+    ageHours: Number.isFinite(ageHours) ? ageHours : null,
+    stale: rows.length > 0 && ageHours > settings.registryToleranceHours,
+    contradictions,
+    sources: [...new Set(rows.map((p) => p.source))],
+  };
 }
 
 export interface Availability {
@@ -190,7 +296,17 @@ export interface Availability {
 }
 
 /** §5: authorisation × switch admission × debtor capability × creditor capability × currency × product × channel × validity. */
-export function serviceAvailability(q: { connectionId: string; connectionEnabled: boolean; environmentCertified: boolean; country: string; debtorId: string; creditorId: string; currency: string; product: string; channel: string }): Availability {
+export function serviceAvailability(q: {
+  connectionId: string;
+  connectionEnabled: boolean;
+  environmentCertified: boolean;
+  country: string;
+  debtorId: string;
+  creditorId: string;
+  currency: string;
+  product: string;
+  channel: string;
+}): Availability {
   const reasons: string[] = [];
   const factors: Record<string, boolean> = {};
   const caps = countryCapabilities(q.country);
@@ -208,14 +324,26 @@ export function serviceAvailability(q: { connectionId: string; connectionEnabled
       factors[`${role}Capability`] = false;
       return null;
     }
-    const ok = p.status === 'ACTIVE' && p.services.includes(q.product === 'INQUIRY' ? 'MERCHANT_PAYMENT' : q.product) && p.currencies.includes(q.currency.toUpperCase()) && p.channels.includes(q.channel) && (!p.validFrom || p.validFrom <= t) && (!p.validTo || p.validTo >= t) && p.country === q.country.toUpperCase();
+    const ok =
+      p.status === 'ACTIVE' &&
+      p.services.includes(q.product === 'INQUIRY' ? 'MERCHANT_PAYMENT' : q.product) &&
+      p.currencies.includes(q.currency.toUpperCase()) &&
+      p.channels.includes(q.channel) &&
+      (!p.validFrom || p.validFrom <= t) &&
+      (!p.validTo || p.validTo >= t) &&
+      p.country === q.country.toUpperCase();
     factors[`${role}Capability`] = ok;
-    if (!ok) reasons.push(`${role} ${p.id}: ${p.status !== 'ACTIVE' ? p.status.toLowerCase() : !p.services.includes(q.product) ? `no ${q.product} service` : !p.currencies.includes(q.currency.toUpperCase()) ? `${q.currency} not admitted` : !p.channels.includes(q.channel) ? `channel ${q.channel} not admitted` : p.country !== q.country.toUpperCase() ? 'foreign participant' : 'outside validity dates'}`);
+    if (!ok)
+      reasons.push(
+        `${role} ${p.id}: ${p.status !== 'ACTIVE' ? p.status.toLowerCase() : !p.services.includes(q.product) ? `no ${q.product} service` : !p.currencies.includes(q.currency.toUpperCase()) ? `${q.currency} not admitted` : !p.channels.includes(q.channel) ? `channel ${q.channel} not admitted` : p.country !== q.country.toUpperCase() ? 'foreign participant' : 'outside validity dates'}`,
+      );
     return p;
   };
   check(q.debtorId, 'debtor');
   check(q.creditorId, 'creditor');
-  const pair = getDb().prepare('SELECT * FROM participant_pairs WHERE connection_id = ? AND debtor_id = ? AND creditor_id = ? AND currency = ? AND product = ? AND channel = ?').get(q.connectionId, q.debtorId, q.creditorId, q.currency.toUpperCase(), q.product === 'INQUIRY' ? 'MERCHANT_PAYMENT' : q.product, q.channel) as any;
+  const pair = getDb()
+    .prepare('SELECT * FROM participant_pairs WHERE connection_id = ? AND debtor_id = ? AND creditor_id = ? AND currency = ? AND product = ? AND channel = ?')
+    .get(q.connectionId, q.debtorId, q.creditorId, q.currency.toUpperCase(), q.product === 'INQUIRY' ? 'MERCHANT_PAYMENT' : q.product, q.channel) as any;
   factors.pairTested = !!pair && pair.status === 'OPEN' && (!pair.valid_to || pair.valid_to >= t);
   if (!factors.pairTested) reasons.push(pair ? `pair ${q.debtorId}→${q.creditorId} is ${pair.status}` : `pair ${q.debtorId}→${q.creditorId} has no ${q.product} test for ${q.currency}/${q.channel}`);
   factors.currency = caps.collectionCurrencies.length === 0 || caps.collectionCurrencies.includes(q.currency.toUpperCase());
@@ -230,7 +358,22 @@ export function ensureSimulationParticipants(connectionId = 'NATIONAL_SWITCH_CD'
   const seed = 'seed';
   const approver = 'seed-approver';
   const mk = (id: string, name: string, kind: ParticipantKind, services: string[], rid: string, extra: Partial<ParticipantInput> = {}) => {
-    upsertParticipant({ id, name, kind, country: 'CD', currencies: ['CDF', 'USD'], services, channels: ['api', 'qr', 'ussd'], routingIds: { switchParticipantId: rid, reconciliationFeed: `sim://${id.toLowerCase()}/recon` }, source: 'SIMULATION', validFrom: '2026-01-01T00:00:00.000Z', ...extra }, seed);
+    upsertParticipant(
+      {
+        id,
+        name,
+        kind,
+        country: 'CD',
+        currencies: ['CDF', 'USD'],
+        services,
+        channels: ['api', 'qr', 'ussd'],
+        routingIds: { switchParticipantId: rid, reconciliationFeed: `sim://${id.toLowerCase()}/recon` },
+        source: 'SIMULATION',
+        validFrom: '2026-01-01T00:00:00.000Z',
+        ...extra,
+      },
+      seed,
+    );
   };
   mk('BITRIPAY_CD', 'BitriPay (aggregator, SIMULATION)', 'AGGREGATOR', ['MERCHANT_PAYMENT', 'INQUIRY', 'REFUND'], 'SIM-AGG-001');
   mk('DEMO_BANK_A', 'Demo Bank A (SIMULATION)', 'BANK', ['MERCHANT_PAYMENT', 'P2P', 'REFUND', 'REVERSAL', 'INQUIRY'], 'SIM-BNK-001');

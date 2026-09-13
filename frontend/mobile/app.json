@@ -19,18 +19,11 @@
         "NSCameraUsageDescription": "BitriPay uses the camera to scan payment QR codes.",
         "NSFaceIDUsageDescription": "BitriPay uses Face ID to unlock the app."
       },
-      "associatedDomains": [
-        "applinks:pay.bitripay.app"
-      ]
+      "associatedDomains": ["applinks:pay.bitripay.app"]
     },
     "android": {
       "package": "com.bitripay.app",
-      "permissions": [
-        "CAMERA",
-        "USE_BIOMETRIC",
-        "USE_FINGERPRINT",
-        "POST_NOTIFICATIONS"
-      ],
+      "permissions": ["CAMERA", "USE_BIOMETRIC", "USE_FINGERPRINT", "POST_NOTIFICATIONS"],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -47,10 +40,7 @@
               "pathPrefix": "/pay"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ],
       "adaptiveIcon": {
@@ -75,9 +65,7 @@
         "expo-notifications",
         {
           "color": "#2563eb",
-          "sounds": [
-            "./assets/sounds/loud_alert.wav"
-          ]
+          "sounds": ["./assets/sounds/loud_alert.wav"]
         }
       ],
       "expo-secure-store",

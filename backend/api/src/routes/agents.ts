@@ -37,7 +37,10 @@ agentsRouter.post(
   '/me/cash-in',
   requireAgent,
   wrap(async (req, res) => {
-    const body = validate(z.object({ customer: z.string().min(2), amount: z.string(), currency: z.string().length(3), note: z.string().max(200).optional().nullable(), pin: z.string().optional() }), req.body);
+    const body = validate(
+      z.object({ customer: z.string().min(2), amount: z.string(), currency: z.string().length(3), note: z.string().max(200).optional().nullable(), pin: z.string().optional() }),
+      req.body,
+    );
     assertPin(req.user!, body.pin, req);
     const cur = getCurrency(body.currency);
     const tx = agentCashIn(req.user!, { customer: body.customer, amount: toMinor(body.amount, cur.decimals), currency: cur.code, note: body.note });

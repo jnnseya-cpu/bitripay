@@ -40,7 +40,15 @@ export interface Wallet {
   frozen?: boolean;
   frozenReason?: string | null;
   /** What this balance legally is (regulated e-money, merchant balance, agent float or sandbox money). */
-  classification?: { class: 'emoney' | 'merchant' | 'agent_float' | 'sandbox'; label: string; redeemable: boolean; transferable: boolean; backing: string; issuer: string | null; programmeStatus: string | null };
+  classification?: {
+    class: 'emoney' | 'merchant' | 'agent_float' | 'sandbox';
+    label: string;
+    redeemable: boolean;
+    transferable: boolean;
+    backing: string;
+    issuer: string | null;
+    programmeStatus: string | null;
+  };
 }
 
 export interface Transaction {

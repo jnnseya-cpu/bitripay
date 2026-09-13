@@ -81,7 +81,7 @@ export function toTransaction(row: TransactionRow, viewerId?: string, users?: Ma
     createdAt: row.created_at,
     completedAt: row.completed_at,
     direction,
-    counterparty: counterpartyId && users ? users.get(counterpartyId) ?? null : null,
+    counterparty: counterpartyId && users ? (users.get(counterpartyId) ?? null) : null,
   };
 }
 
@@ -134,7 +134,11 @@ export function enforceLimits(user: UserRow, amount: number, currency: string) {
  */
 export function assertLedgerBalanced(txId: string) {
   // Balanced per currency: a conversion is two balanced legs (source currency and target currency) through the treasury.
-  const rows = getDb().prepare("SELECT w.currency, COALESCE(SUM(CASE WHEN e.direction = 'debit' THEN e.amount ELSE 0 END), 0) d, COALESCE(SUM(CASE WHEN e.direction = 'credit' THEN e.amount ELSE 0 END), 0) c FROM ledger_entries e JOIN wallets w ON w.id = e.wallet_id WHERE e.transaction_id = ? GROUP BY w.currency").all(txId) as { currency: string; d: number; c: number }[];
+  const rows = getDb()
+    .prepare(
+      "SELECT w.currency, COALESCE(SUM(CASE WHEN e.direction = 'debit' THEN e.amount ELSE 0 END), 0) d, COALESCE(SUM(CASE WHEN e.direction = 'credit' THEN e.amount ELSE 0 END), 0) c FROM ledger_entries e JOIN wallets w ON w.id = e.wallet_id WHERE e.transaction_id = ? GROUP BY w.currency",
+    )
+    .all(txId) as { currency: string; d: number; c: number }[];
   for (const r of rows) if (r.d !== r.c) throw new Error(`Ledger imbalance on ${txId} (${r.currency}): debits ${r.d} != credits ${r.c}`);
   return { d: rows.reduce((a, r) => a + r.d, 0), c: rows.reduce((a, r) => a + r.c, 0), currencies: rows.map((r) => r.currency) };
 }
@@ -142,8 +146,14 @@ export function assertLedgerBalanced(txId: string) {
 /** Whole-ledger check used by reconciliation: every wallet balance equals the sum of its entries and every transaction balances. */
 export function reconcileLedger(): { ok: boolean; transactionsChecked: number; unbalancedTransactions: string[]; walletMismatches: { walletId: string; balance: number; computed: number }[] } {
   const db = getDb();
-  const unbalanced = db.prepare("SELECT DISTINCT transaction_id id FROM (SELECT e.transaction_id, w.currency FROM ledger_entries e JOIN wallets w ON w.id = e.wallet_id GROUP BY e.transaction_id, w.currency HAVING SUM(CASE WHEN e.direction = 'debit' THEN e.amount ELSE -e.amount END) != 0)").all() as { id: string }[];
-  const wallets = db.prepare("SELECT w.id, w.balance, COALESCE((SELECT SUM(CASE WHEN direction = 'credit' THEN amount ELSE -amount END) FROM ledger_entries e WHERE e.wallet_id = w.id), 0) computed FROM wallets w").all() as { id: string; balance: number; computed: number }[];
+  const unbalanced = db
+    .prepare(
+      "SELECT DISTINCT transaction_id id FROM (SELECT e.transaction_id, w.currency FROM ledger_entries e JOIN wallets w ON w.id = e.wallet_id GROUP BY e.transaction_id, w.currency HAVING SUM(CASE WHEN e.direction = 'debit' THEN e.amount ELSE -e.amount END) != 0)",
+    )
+    .all() as { id: string }[];
+  const wallets = db
+    .prepare("SELECT w.id, w.balance, COALESCE((SELECT SUM(CASE WHEN direction = 'credit' THEN amount ELSE -amount END) FROM ledger_entries e WHERE e.wallet_id = w.id), 0) computed FROM wallets w")
+    .all() as { id: string; balance: number; computed: number }[];
   const mismatches = wallets.filter((w) => w.balance !== w.computed).map((w) => ({ walletId: w.id, balance: w.balance, computed: w.computed }));
   const total = (db.prepare('SELECT COUNT(DISTINCT transaction_id) c FROM ledger_entries').get() as any).c as number;
   return { ok: unbalanced.length === 0 && mismatches.length === 0, transactionsChecked: total, unbalancedTransactions: unbalanced.map((u) => u.id), walletMismatches: mismatches };
@@ -219,13 +229,18 @@ export interface Issuance {
 
 /** Validate that a creation of e-money is authorised. Users, agents and merchants can never create balance. */
 export function assertIssuanceAuthorised(issuance: Issuance | undefined, type: string): Issuance {
-  if (!issuance) throw forbidden(`E-money cannot be created by a ${type} posting without an issuance authority; only confirmed external funding, administrator issuance, liquidity prefunding or an administrator-configured programme may create balance`, 'issuance_unauthorised');
+  if (!issuance)
+    throw forbidden(
+      `E-money cannot be created by a ${type} posting without an issuance authority; only confirmed external funding, administrator issuance, liquidity prefunding or an administrator-configured programme may create balance`,
+      'issuance_unauthorised',
+    );
   switch (issuance.authority) {
     case 'external_funding':
       if (!issuance.paymentId) throw forbidden('External funding issuance needs the confirmed payment id', 'issuance_unauthorised');
       break;
     case 'admin':
-      if (!issuance.verificationId || !issuance.adminId) throw forbidden('Administrator issuance requires maker-checker approval (verification id) and the approving administrator', 'issuance_unauthorised');
+      if (!issuance.verificationId || !issuance.adminId)
+        throw forbidden('Administrator issuance requires maker-checker approval (verification id) and the approving administrator', 'issuance_unauthorised');
       break;
     case 'liquidity':
       if (!issuance.adminId) throw forbidden('Liquidity prefunding must be performed by an administrator', 'issuance_unauthorised');
@@ -279,12 +294,15 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     const issuance = creates ? assertIssuanceAuthorised(input.issuance, input.type) : null;
     if (!isSenderSystem && fromWallet.frozen_at) throw forbidden(`This ${fromWallet.currency} balance is frozen: ${fromWallet.frozen_reason ?? 'contact support'}`, 'wallet_frozen');
     if (preCommitHooks.length) {
-      const fromUser = isSenderSystem ? null : findUserById(fromWallet.user_id) ?? null;
-      const toUser = toWallet.user_id === treasury.id ? null : findUserById(toWallet.user_id) ?? null;
+      const fromUser = isSenderSystem ? null : (findUserById(fromWallet.user_id) ?? null);
+      const toUser = toWallet.user_id === treasury.id ? null : (findUserById(toWallet.user_id) ?? null);
       for (const h of preCommitHooks) h({ input, fromUser, toUser });
     }
     // Promotional credit may cover platform fees on completed internal transactions – it never becomes money.
-    const promoCover = status === 'completed' && feeFrom === 'sender' && fee > 0 && !isSenderSystem && PROMO_FEE_TYPES.has(input.type) && getEmoneySettings().promoCoversFees ? Math.min(fee, fromWallet.promo_balance ?? 0) : 0;
+    const promoCover =
+      status === 'completed' && feeFrom === 'sender' && fee > 0 && !isSenderSystem && PROMO_FEE_TYPES.has(input.type) && getEmoneySettings().promoCoversFees
+        ? Math.min(fee, fromWallet.promo_balance ?? 0)
+        : 0;
     const totalDebit = (feeFrom === 'receiver' ? input.amount : input.amount + fee) - promoCover;
     if (!isSenderSystem && !input.allowNegativeSender && fromWallet.balance < totalDebit) {
       throw unprocessable('Insufficient balance', 'insufficient_funds');
@@ -292,7 +310,8 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     // Ring-fenced money (holds: disputes, reserves, savings goals…) stays in the wallet but is not spendable.
     if (!isSenderSystem && !input.allowNegativeSender && !input.allowHeld) {
       const held = heldOnWallet(fromWallet.id);
-      if (held > 0 && fromWallet.balance - held < totalDebit) throw unprocessable('Insufficient available balance: part of this balance is set aside (savings goal, dispute or reserve)', 'insufficient_funds', { balance: fromWallet.balance, held });
+      if (held > 0 && fromWallet.balance - held < totalDebit)
+        throw unprocessable('Insufficient available balance: part of this balance is set aside (savings goal, dispute or reserve)', 'insufficient_funds', { balance: fromWallet.balance, held });
     }
     const id = uuid();
     const ts = now();
@@ -320,14 +339,36 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
       status === 'completed' ? ts : null,
       issuance?.authority ?? null,
     );
-    if (issuance) recordEvent('issuance', id, `issuance.${issuance.authority}`, issuance.authority === 'admin' || issuance.authority === 'liquidity' ? { type: 'admin', id: issuance.adminId ?? null } : { type: 'system' }, { type: input.type, amount: receiveAmount, currency: receiveCurrency, receiverUserId: input.receiverUserId ?? toWallet.user_id, paymentId: issuance.paymentId ?? null, verificationId: issuance.verificationId ?? null, programme: issuance.programme ?? null, reference: issuance.reference ?? null });
+    if (issuance)
+      recordEvent(
+        'issuance',
+        id,
+        `issuance.${issuance.authority}`,
+        issuance.authority === 'admin' || issuance.authority === 'liquidity' ? { type: 'admin', id: issuance.adminId ?? null } : { type: 'system' },
+        {
+          type: input.type,
+          amount: receiveAmount,
+          currency: receiveCurrency,
+          receiverUserId: input.receiverUserId ?? toWallet.user_id,
+          paymentId: issuance.paymentId ?? null,
+          verificationId: issuance.verificationId ?? null,
+          programme: issuance.programme ?? null,
+          reference: issuance.reference ?? null,
+        },
+      );
     // Debit sender (held even while pending)
     insertLedgerEntry(id, fromWallet, 'debit', totalDebit);
     if (promoCover > 0) {
       // The covered part of the fee is paid by the platform's marketing budget (treasury → revenue), booked as a programme issuance.
       consumePromoCredit(fromWallet, promoCover, id);
       insertLedgerEntry(id, ensureWallet(treasury.id, input.currency), 'debit', promoCover);
-      recordEvent('issuance', id, 'issuance.programme', { type: 'system' }, { type: input.type, amount: promoCover, currency: input.currency, programme: 'promo_fee_cover', receiverUserId: revenue.id });
+      recordEvent(
+        'issuance',
+        id,
+        'issuance.programme',
+        { type: 'system' },
+        { type: input.type, amount: promoCover, currency: input.currency, programme: 'promo_fee_cover', receiverUserId: revenue.id },
+      );
     }
     if (status === 'completed') {
       insertLedgerEntry(id, toWallet, 'credit', receiveAmount);
@@ -339,11 +380,35 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
       insertLedgerEntry(id, escrow, 'credit', totalDebit);
     }
     const balance = assertLedgerBalanced(id);
-    recordEvent('ledger', id, `ledger.posted.${status}`, { type: 'system' }, { type: input.type, amount: input.amount, fee, currency: input.currency, debits: balance.d, credits: balance.c, senderUserId: input.senderUserId ?? null, receiverUserId: input.receiverUserId ?? null });
+    recordEvent(
+      'ledger',
+      id,
+      `ledger.posted.${status}`,
+      { type: 'system' },
+      {
+        type: input.type,
+        amount: input.amount,
+        fee,
+        currency: input.currency,
+        debits: balance.d,
+        credits: balance.c,
+        senderUserId: input.senderUserId ?? null,
+        receiverUserId: input.receiverUserId ?? null,
+      },
+    );
     const posted = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id) as TransactionRow;
     if (issuance?.authority === 'external_funding' && status === 'completed') reserveHooks.externalFunding(posted);
-    publish('transaction.created', { transactionId: id, type: input.type, status, amountMinor: input.amount, currency: input.currency, senderUserId: input.senderUserId ?? null, receiverUserId: input.receiverUserId ?? null }, { aggregateId: id, tenantId: input.receiverUserId ?? input.senderUserId ?? 'platform' });
-    if (status === 'completed' && input.receiverUserId && input.receiverUserId !== input.senderUserId && toWallet.user_id !== treasury.id) publish('income.received', { userId: input.receiverUserId, transactionId: id, type: input.type, amountMinor: receiveAmount, currency: receiveCurrency, senderUserId: input.senderUserId ?? null }, { aggregateId: id, tenantId: input.receiverUserId });
+    publish(
+      'transaction.created',
+      { transactionId: id, type: input.type, status, amountMinor: input.amount, currency: input.currency, senderUserId: input.senderUserId ?? null, receiverUserId: input.receiverUserId ?? null },
+      { aggregateId: id, tenantId: input.receiverUserId ?? input.senderUserId ?? 'platform' },
+    );
+    if (status === 'completed' && input.receiverUserId && input.receiverUserId !== input.senderUserId && toWallet.user_id !== treasury.id)
+      publish(
+        'income.received',
+        { userId: input.receiverUserId, transactionId: id, type: input.type, amountMinor: receiveAmount, currency: receiveCurrency, senderUserId: input.senderUserId ?? null },
+        { aggregateId: id, tenantId: input.receiverUserId },
+      );
     return posted;
   })();
 }
@@ -386,7 +451,8 @@ export function completeTransaction(id: string, extraMetadata?: Record<string, u
     const toWallet = getWallet(tx.receiver_wallet_id!);
     insertLedgerEntry(tx.id, toWallet, 'credit', tx.receive_amount ?? tx.amount);
     creditFees(tx.id, tx.fee, tx.currency, getSystemUser('fees').id, feeSplits);
-    if (tx.receive_currency && tx.receive_currency !== tx.currency) postConversionLegs(tx.id, tx.currency, heldAmount(tx) - tx.fee, tx.receive_currency, tx.receive_amount ?? tx.amount, getSystemUser('treasury').id);
+    if (tx.receive_currency && tx.receive_currency !== tx.currency)
+      postConversionLegs(tx.id, tx.currency, heldAmount(tx) - tx.fee, tx.receive_currency, tx.receive_amount ?? tx.amount, getSystemUser('treasury').id);
     const metadata = { ...parseJson(tx.metadata, {}), ...(extraMetadata ?? {}) };
     db.prepare("UPDATE transactions SET status = 'completed', completed_at = ?, metadata = ? WHERE id = ?").run(now(), JSON.stringify(metadata), tx.id);
     const balance = assertLedgerBalanced(tx.id);
@@ -395,8 +461,24 @@ export function completeTransaction(id: string, extraMetadata?: Record<string, u
     // E-money redeemed: a holder's balance left the platform through the treasury (withdrawal / external payout).
     if (toWallet.user_id === getSystemUser('treasury').id && done.sender_user_id && !findUserById(done.sender_user_id)?.is_system) reserveHooks.redemption(done);
     for (const h of transactionStatusHooks) h(done, 'completed');
-    publish('transaction.settled', { transactionId: done.id, type: done.type, amountMinor: done.amount, currency: done.currency, senderUserId: done.sender_user_id, receiverUserId: done.receiver_user_id }, { aggregateId: done.id, tenantId: done.receiver_user_id ?? done.sender_user_id ?? 'platform' });
-    if (done.receiver_user_id && done.receiver_user_id !== done.sender_user_id) publish('income.received', { userId: done.receiver_user_id, transactionId: done.id, type: done.type, amountMinor: done.receive_amount ?? done.amount - (done.fee ?? 0), currency: done.receive_currency ?? done.currency, senderUserId: done.sender_user_id }, { aggregateId: done.id, tenantId: done.receiver_user_id });
+    publish(
+      'transaction.settled',
+      { transactionId: done.id, type: done.type, amountMinor: done.amount, currency: done.currency, senderUserId: done.sender_user_id, receiverUserId: done.receiver_user_id },
+      { aggregateId: done.id, tenantId: done.receiver_user_id ?? done.sender_user_id ?? 'platform' },
+    );
+    if (done.receiver_user_id && done.receiver_user_id !== done.sender_user_id)
+      publish(
+        'income.received',
+        {
+          userId: done.receiver_user_id,
+          transactionId: done.id,
+          type: done.type,
+          amountMinor: done.receive_amount ?? done.amount - (done.fee ?? 0),
+          currency: done.receive_currency ?? done.currency,
+          senderUserId: done.sender_user_id,
+        },
+        { aggregateId: done.id, tenantId: done.receiver_user_id },
+      );
     return done;
   })();
 }
@@ -459,10 +541,25 @@ export function refundTransaction(id: string, options: { refundFee?: boolean; no
 /** Outstanding e-money per currency (balances held by non-system users) and how it was issued. */
 export function emoneySupply() {
   const db = getDb();
-  const outstanding = db.prepare("SELECT w.currency, SUM(w.balance) total, COUNT(*) wallets FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.is_system = 0 GROUP BY w.currency ORDER BY w.currency").all() as { currency: string; total: number; wallets: number }[];
-  const issued = db.prepare("SELECT COALESCE(receive_currency, currency) currency, issuance_authority authority, SUM(COALESCE(receive_amount, amount)) total, COUNT(*) count FROM transactions WHERE issuance_authority IS NOT NULL AND status = 'completed' GROUP BY 1, 2").all() as { currency: string; authority: string; total: number; count: number }[];
-  const floats = db.prepare("SELECT w.currency, SUM(w.balance) total FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.is_system = 1 AND u.tag LIKE 'payout_%' GROUP BY w.currency").all() as { currency: string; total: number }[];
-  return outstanding.map((o) => ({ currency: o.currency, outstanding: o.total, wallets: o.wallets, issued: issued.filter((i) => i.currency === o.currency).map((i) => ({ authority: i.authority, total: i.total, count: i.count })), payoutFloat: floats.find((f) => f.currency === o.currency)?.total ?? 0 }));
+  const outstanding = db
+    .prepare('SELECT w.currency, SUM(w.balance) total, COUNT(*) wallets FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.is_system = 0 GROUP BY w.currency ORDER BY w.currency')
+    .all() as { currency: string; total: number; wallets: number }[];
+  const issued = db
+    .prepare(
+      "SELECT COALESCE(receive_currency, currency) currency, issuance_authority authority, SUM(COALESCE(receive_amount, amount)) total, COUNT(*) count FROM transactions WHERE issuance_authority IS NOT NULL AND status = 'completed' GROUP BY 1, 2",
+    )
+    .all() as { currency: string; authority: string; total: number; count: number }[];
+  const floats = db.prepare("SELECT w.currency, SUM(w.balance) total FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.is_system = 1 AND u.tag LIKE 'payout_%' GROUP BY w.currency").all() as {
+    currency: string;
+    total: number;
+  }[];
+  return outstanding.map((o) => ({
+    currency: o.currency,
+    outstanding: o.total,
+    wallets: o.wallets,
+    issued: issued.filter((i) => i.currency === o.currency).map((i) => ({ authority: i.authority, total: i.total, count: i.count })),
+    payoutFloat: floats.find((f) => f.currency === o.currency)?.total ?? 0,
+  }));
 }
 
 export interface ListTransactionsOptions {
@@ -520,9 +617,7 @@ export function listTransactions(opts: ListTransactionsOptions): { items: Transa
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const total = (db.prepare(`SELECT COUNT(*) c FROM transactions ${whereSql}`).get(...params) as any).c as number;
-  const rows = db
-    .prepare(`SELECT * FROM transactions ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
-    .all(...params, opts.pageSize, (opts.page - 1) * opts.pageSize) as TransactionRow[];
+  const rows = db.prepare(`SELECT * FROM transactions ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, opts.pageSize, (opts.page - 1) * opts.pageSize) as TransactionRow[];
   const users = usersById(rows.flatMap((r) => [r.sender_user_id!, r.receiver_user_id!]));
   return { items: rows.map((r) => toTransaction(r, opts.userId, users)), total };
 }

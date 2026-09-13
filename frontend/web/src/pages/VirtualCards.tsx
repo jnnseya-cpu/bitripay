@@ -50,27 +50,73 @@ export function VirtualCards() {
 
   return (
     <div>
-      <PageHeader title={t('nav.cards')} subtitle="Create virtual cards for online purchases without exposing your real card. Merchants on BitriPay checkout accept them." actions={<Button onClick={() => setAction({ type: 'issue' })}>+ New virtual card</Button>} />
+      <PageHeader
+        title={t('nav.cards')}
+        subtitle="Create virtual cards for online purchases without exposing your real card. Merchants on BitriPay checkout accept them."
+        actions={<Button onClick={() => setAction({ type: 'issue' })}>+ New virtual card</Button>}
+      />
       {error && <Alert kind="error">{error}</Alert>}
-      {cards.data?.items.length === 0 && <div className="card"><Empty icon="💳" text="No virtual cards yet" /></div>}
+      {cards.data?.items.length === 0 && (
+        <div className="card">
+          <Empty icon="💳" text="No virtual cards yet" />
+        </div>
+      )}
       <div className="grid cols-2">
         {cards.data?.items.map((c) => (
           <div key={c.id}>
             <div className={`vcard ${c.status === 'frozen' ? 'frozen' : ''}`} onClick={() => setSelected(c)} style={{ cursor: 'pointer' }}>
-              <div className="row between"><span className="bold">BitriPay Virtual</span><span className="chip" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>{c.status}</span></div>
+              <div className="row between">
+                <span className="bold">BitriPay Virtual</span>
+                <span className="chip" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
+                  {c.status}
+                </span>
+              </div>
               <div className="num">{c.maskedNumber}</div>
               <div className="row between">
-                <div><div className="tiny" style={{ opacity: 0.7 }}>CARD HOLDER</div><div className="bold">{c.holderName}</div></div>
-                <div><div className="tiny" style={{ opacity: 0.7 }}>EXPIRES</div><div className="bold">{String(c.expMonth).padStart(2, '0')}/{String(c.expYear).slice(-2)}</div></div>
-                <div><div className="tiny" style={{ opacity: 0.7 }}>BALANCE</div><div className="bold">{money(c.balance, c.currency)}</div></div>
+                <div>
+                  <div className="tiny" style={{ opacity: 0.7 }}>
+                    CARD HOLDER
+                  </div>
+                  <div className="bold">{c.holderName}</div>
+                </div>
+                <div>
+                  <div className="tiny" style={{ opacity: 0.7 }}>
+                    EXPIRES
+                  </div>
+                  <div className="bold">
+                    {String(c.expMonth).padStart(2, '0')}/{String(c.expYear).slice(-2)}
+                  </div>
+                </div>
+                <div>
+                  <div className="tiny" style={{ opacity: 0.7 }}>
+                    BALANCE
+                  </div>
+                  <div className="bold">{money(c.balance, c.currency)}</div>
+                </div>
               </div>
             </div>
             <div className="row wrap mt-sm">
-              <Button size="sm" onClick={() => setAction({ type: 'fund', card: c })} disabled={c.status !== 'active'}>Fund</Button>
-              <Button size="sm" variant="secondary" onClick={() => setAction({ type: 'withdraw', card: c })}>Withdraw</Button>
-              <Button size="sm" variant="secondary" onClick={() => setAction({ type: 'reveal', card: c })}>Show details</Button>
-              {c.status === 'active' ? <Button size="sm" variant="ghost" onClick={() => setStatus(c, 'freeze')}>Freeze</Button> : <Button size="sm" variant="ghost" onClick={() => setStatus(c, 'unfreeze')}>Unfreeze</Button>}
-              <Button size="sm" variant="ghost" onClick={() => confirm('Close this card? Remaining balance returns to your wallet.') && setStatus(c, 'close')}>Close</Button>
+              <Button size="sm" onClick={() => setAction({ type: 'fund', card: c })} disabled={c.status !== 'active'}>
+                Fund
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setAction({ type: 'withdraw', card: c })}>
+                Withdraw
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setAction({ type: 'reveal', card: c })}>
+                Show details
+              </Button>
+              {c.status === 'active' ? (
+                <Button size="sm" variant="ghost" onClick={() => setStatus(c, 'freeze')}>
+                  Freeze
+                </Button>
+              ) : (
+                <Button size="sm" variant="ghost" onClick={() => setStatus(c, 'unfreeze')}>
+                  Unfreeze
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => confirm('Close this card? Remaining balance returns to your wallet.') && setStatus(c, 'close')}>
+                Close
+              </Button>
             </div>
           </div>
         ))}
@@ -79,16 +125,32 @@ export function VirtualCards() {
         <div className="card mt">
           <h3>Card activity · •••• {selected.maskedNumber.slice(-4)}</h3>
           {txs.data?.items.length === 0 && <Empty icon="🧾" />}
-          <div className="list">{txs.data?.items.map((tx) => <TxRow key={tx.id} tx={tx} />)}</div>
+          <div className="list">
+            {txs.data?.items.map((tx) => (
+              <TxRow key={tx.id} tx={tx} />
+            ))}
+          </div>
         </div>
       )}
-      <Modal open={!!action && action.type !== 'reveal'} onClose={() => setAction(null)} title={action?.type === 'issue' ? 'New virtual card' : action?.type === 'fund' ? 'Fund card' : 'Withdraw from card'}>
+      <Modal
+        open={!!action && action.type !== 'reveal'}
+        onClose={() => setAction(null)}
+        title={action?.type === 'issue' ? 'New virtual card' : action?.type === 'fund' ? 'Fund card' : 'Withdraw from card'}
+      >
         {action?.type === 'issue' ? (
           <>
             <Field label={t('common.currency')}>
-              <Select value={cur} onChange={(e) => setCur(e.target.value)}>{(config?.currencies ?? []).map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}</Select>
+              <Select value={cur} onChange={(e) => setCur(e.target.value)}>
+                {(config?.currencies ?? []).map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code}
+                  </option>
+                ))}
+              </Select>
             </Field>
-            <Field label="Label (optional)"><Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Subscriptions" /></Field>
+            <Field label="Label (optional)">
+              <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Subscriptions" />
+            </Field>
           </>
         ) : (
           <Field label={`${t('common.amount')} (${action?.card?.currency})`}>
@@ -118,8 +180,12 @@ function PinInline({ onSubmit, loading, disabled }: { onSubmit: (pin: string) =>
   const [pin, setPin] = useState('');
   return (
     <>
-      <Field label={t('common.pin')}><Input className="pin-input" type="password" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} /></Field>
-      <Button block loading={loading} disabled={disabled || pin.length < 4} onClick={() => onSubmit(pin)}>{t('common.confirm')}</Button>
+      <Field label={t('common.pin')}>
+        <Input className="pin-input" type="password" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
+      </Field>
+      <Button block loading={loading} disabled={disabled || pin.length < 4} onClick={() => onSubmit(pin)}>
+        {t('common.confirm')}
+      </Button>
     </>
   );
 }

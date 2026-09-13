@@ -51,7 +51,14 @@ const DEFAULT: FraudSettings = {
 };
 export const getFraudSettings = (): FraudSettings => {
   const s = getSetting<Partial<FraudSettings>>('fraud', {});
-  return { ...DEFAULT, ...s, bands: { ...DEFAULT.bands, ...(s.bands ?? {}) }, methodRisk: { ...DEFAULT.methodRisk, ...(s.methodRisk ?? {}) }, velocityThresholds: { ...DEFAULT.velocityThresholds, ...(s.velocityThresholds ?? {}) }, velocityPoints: { ...DEFAULT.velocityPoints, ...(s.velocityPoints ?? {}) } };
+  return {
+    ...DEFAULT,
+    ...s,
+    bands: { ...DEFAULT.bands, ...(s.bands ?? {}) },
+    methodRisk: { ...DEFAULT.methodRisk, ...(s.methodRisk ?? {}) },
+    velocityThresholds: { ...DEFAULT.velocityThresholds, ...(s.velocityThresholds ?? {}) },
+    velocityPoints: { ...DEFAULT.velocityPoints, ...(s.velocityPoints ?? {}) },
+  };
 };
 
 export type FraudBand = 'approve' | 'step_up' | 'review' | 'block';
@@ -119,7 +126,9 @@ export function scoreFraud(input: FraudInput): FraudResult {
   }
   if (user && baseMinor >= s.minScoredBase) {
     const t = Date.now();
-    const count = (since: number) => (db.prepare("SELECT COUNT(*) c FROM transactions WHERE sender_user_id = ? AND status IN ('pending', 'completed') AND created_at >= ?").get(user.id, new Date(t - since).toISOString()) as any).c as number;
+    const count = (since: number) =>
+      (db.prepare("SELECT COUNT(*) c FROM transactions WHERE sender_user_id = ? AND status IN ('pending', 'completed') AND created_at >= ?").get(user.id, new Date(t - since).toISOString()) as any)
+        .c as number;
     const hour = count(3600_000);
     const day = count(86_400_000);
     const week = count(7 * 86_400_000);
@@ -127,7 +136,9 @@ export function scoreFraud(input: FraudInput): FraudResult {
     if (day >= s.velocityThresholds.day) add('velocity_24h', s.velocityPoints.day, `${day} outgoing movements in the last 24 hours`);
     if (week >= s.velocityThresholds.week) add('velocity_7d', s.velocityPoints.week, `${week} outgoing movements in the last 7 days`);
     // amount deviation: compared with the account's own last 30 days (needs at least 5 movements to be meaningful)
-    const hist = db.prepare("SELECT amount, currency FROM transactions WHERE sender_user_id = ? AND status = 'completed' AND created_at >= ? AND type NOT IN ('exchange') ORDER BY created_at DESC LIMIT 100").all(user.id, new Date(t - 30 * 86_400_000).toISOString()) as { amount: number; currency: string }[];
+    const hist = db
+      .prepare("SELECT amount, currency FROM transactions WHERE sender_user_id = ? AND status = 'completed' AND created_at >= ? AND type NOT IN ('exchange') ORDER BY created_at DESC LIMIT 100")
+      .all(user.id, new Date(t - 30 * 86_400_000).toISOString()) as { amount: number; currency: string }[];
     if (hist.length >= 5) {
       const bases = hist.map((h) => safeBase(h.amount, h.currency));
       const mean = bases.reduce((a, b) => a + b, 0) / bases.length;
@@ -139,7 +150,11 @@ export function scoreFraud(input: FraudInput): FraudResult {
     // structuring: several movements just under the per-transaction limit in 24h
     const limits = tierLimitsFor(user);
     if (limits?.perTransaction) {
-      const near = (db.prepare("SELECT amount, currency FROM transactions WHERE sender_user_id = ? AND status IN ('pending', 'completed') AND created_at >= ?").all(user.id, new Date(t - 86_400_000).toISOString()) as { amount: number; currency: string }[]).filter((r) => {
+      const near = (
+        db
+          .prepare("SELECT amount, currency FROM transactions WHERE sender_user_id = ? AND status IN ('pending', 'completed') AND created_at >= ?")
+          .all(user.id, new Date(t - 86_400_000).toISOString()) as { amount: number; currency: string }[]
+      ).filter((r) => {
         const b = safeBase(r.amount, r.currency);
         return b >= limits.perTransaction * 0.8 && b <= limits.perTransaction;
       }).length;
@@ -148,7 +163,11 @@ export function scoreFraud(input: FraudInput): FraudResult {
     }
     // recipient risk: prior blocks / open compliance cases on the recipient
     if (input.recipientUserId) {
-      const rr = (db.prepare("SELECT COUNT(*) c FROM fraud_scores WHERE user_id = ? AND band IN ('review', 'block') AND created_at >= ?").get(input.recipientUserId, new Date(t - 30 * 86_400_000).toISOString()) as any).c as number;
+      const rr = (
+        db
+          .prepare("SELECT COUNT(*) c FROM fraud_scores WHERE user_id = ? AND band IN ('review', 'block') AND created_at >= ?")
+          .get(input.recipientUserId, new Date(t - 30 * 86_400_000).toISOString()) as any
+      ).c as number;
       const cases = (db.prepare("SELECT COUNT(*) c FROM compliance_cases WHERE user_id = ? AND status NOT IN ('CLOSED')").get(input.recipientUserId) as any).c as number;
       if (rr > 0 || cases > 0) add('recipient_risk', s.recipientRiskPoints, `recipient has ${rr} recent adverse score(s) and ${cases} open case(s)`);
     }
@@ -157,7 +176,11 @@ export function scoreFraud(input: FraudInput): FraudResult {
     const h = new Date().getUTCHours();
     const [from, to] = s.nightHours;
     if (from <= to ? h >= from && h < to : h >= from || h < to) {
-      const recentNight = (db.prepare("SELECT COUNT(*) c FROM transactions WHERE sender_user_id = ? AND status = 'completed' AND CAST(strftime('%H', created_at) AS INTEGER) BETWEEN ? AND ?").get(user.id, from, Math.max(from, to - 1)) as any).c as number;
+      const recentNight = (
+        db
+          .prepare("SELECT COUNT(*) c FROM transactions WHERE sender_user_id = ? AND status = 'completed' AND CAST(strftime('%H', created_at) AS INTEGER) BETWEEN ? AND ?")
+          .get(user.id, from, Math.max(from, to - 1)) as any
+      ).c as number;
       if (recentNight === 0 && hist.length >= 5) add('unusual_hour', s.nightPoints, 'first movement during night hours');
     }
     if (input.deviceHash) {
@@ -165,15 +188,48 @@ export function scoreFraud(input: FraudInput): FraudResult {
       const any = db.prepare('SELECT 1 FROM fraud_scores WHERE user_id = ? AND device_hash IS NOT NULL LIMIT 1').get(user.id);
       if (!known && any) add('new_device', s.newDevicePoints, 'movement from a device not seen before on this account');
     }
-    if (input.ipCountry && user.country && input.ipCountry.toUpperCase() !== String(user.country).toUpperCase()) add('geo_mismatch', s.geoMismatchPoints, `request from ${input.ipCountry.toUpperCase()}, account registered in ${String(user.country).toUpperCase()}`);
+    if (input.ipCountry && user.country && input.ipCountry.toUpperCase() !== String(user.country).toUpperCase())
+      add('geo_mismatch', s.geoMismatchPoints, `request from ${input.ipCountry.toUpperCase()}, account registered in ${String(user.country).toUpperCase()}`);
   }
   const method = input.method ?? null;
   if (method && s.methodRisk[method]) add('method_risk', s.methodRisk[method], `${method} carries base risk`);
-  const score = Math.min(100, factors.reduce((a, f) => a + f.points, 0));
+  const score = Math.min(
+    100,
+    factors.reduce((a, f) => a + f.points, 0),
+  );
   const band = bandFor(score, s);
-  const decision = evaluatePolicy({ kind: input.kind, baseMinor, score, kycTier: user?.kyc_tier ?? null, country: user?.country ?? null, method, newBeneficiary: input.newBeneficiary ?? null, flags: [...flags, ...factors.map((f) => `fraud:${f.code}`)] });
+  const decision = evaluatePolicy({
+    kind: input.kind,
+    baseMinor,
+    score,
+    kycTier: user?.kyc_tier ?? null,
+    country: user?.country ?? null,
+    method,
+    newBeneficiary: input.newBeneficiary ?? null,
+    flags: [...flags, ...factors.map((f) => `fraud:${f.code}`)],
+  });
   const id = `fs_${shortCode(14).toLowerCase()}`;
-  db.prepare('INSERT INTO fraud_scores (id, user_id, subject_type, subject_id, kind, amount_minor, currency, base_minor, score, band, factors, action, policy_rule, policy_id, device_hash, ip_country, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, input.userId ?? null, input.subjectType, input.subjectId ?? null, input.kind, input.amount, input.currency, baseMinor, score, band, JSON.stringify(factors), decision.action, decision.rule?.id ?? null, decision.policyId, input.deviceHash ?? null, input.ipCountry ? input.ipCountry.toUpperCase() : null, now());
+  db.prepare(
+    'INSERT INTO fraud_scores (id, user_id, subject_type, subject_id, kind, amount_minor, currency, base_minor, score, band, factors, action, policy_rule, policy_id, device_hash, ip_country, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(
+    id,
+    input.userId ?? null,
+    input.subjectType,
+    input.subjectId ?? null,
+    input.kind,
+    input.amount,
+    input.currency,
+    baseMinor,
+    score,
+    band,
+    JSON.stringify(factors),
+    decision.action,
+    decision.rule?.id ?? null,
+    decision.policyId,
+    input.deviceHash ?? null,
+    input.ipCountry ? input.ipCountry.toUpperCase() : null,
+    now(),
+  );
   return { id, score, band, factors, decision, baseMinor };
 }
 
@@ -192,8 +248,27 @@ export function listFraudScores(filter: { userId?: string | null; band?: string 
     where.push('action = ?');
     params.push(filter.action);
   }
-  const rows = getDb().prepare(`SELECT * FROM fraud_scores ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT ?`).all(...params, Math.min(500, filter.limit ?? 100)) as any[];
-  return rows.map((r) => ({ id: r.id, userId: r.user_id, subjectType: r.subject_type, subjectId: r.subject_id, kind: r.kind, amount: { valueMinor: r.amount_minor, currency: r.currency }, baseMinor: r.base_minor, score: r.score, band: r.band, factors: parseJson(r.factors, []), action: r.action, policyRule: r.policy_rule, policyId: r.policy_id, deviceHash: r.device_hash, ipCountry: r.ip_country, createdAt: r.created_at }));
+  const rows = getDb()
+    .prepare(`SELECT * FROM fraud_scores ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT ?`)
+    .all(...params, Math.min(500, filter.limit ?? 100)) as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    subjectType: r.subject_type,
+    subjectId: r.subject_id,
+    kind: r.kind,
+    amount: { valueMinor: r.amount_minor, currency: r.currency },
+    baseMinor: r.base_minor,
+    score: r.score,
+    band: r.band,
+    factors: parseJson(r.factors, []),
+    action: r.action,
+    policyRule: r.policy_rule,
+    policyId: r.policy_id,
+    deviceHash: r.device_hash,
+    ipCountry: r.ip_country,
+    createdAt: r.created_at,
+  }));
 }
 
 export function fraudOverview(days = 7) {
@@ -205,6 +280,8 @@ export function fraudOverview(days = 7) {
     byBand[r.band] = (byBand[r.band] ?? 0) + r.n;
     byAction[r.action] = (byAction[r.action] ?? 0) + r.n;
   }
-  const topFactors = (getDb().prepare('SELECT factors FROM fraud_scores WHERE created_at >= ? AND score > 0').all(since) as any[]).flatMap((r) => parseJson<FraudFactor[]>(r.factors, [])).reduce<Record<string, number>>((acc, f) => ({ ...acc, [f.code]: (acc[f.code] ?? 0) + 1 }), {});
+  const topFactors = (getDb().prepare('SELECT factors FROM fraud_scores WHERE created_at >= ? AND score > 0').all(since) as any[])
+    .flatMap((r) => parseJson<FraudFactor[]>(r.factors, []))
+    .reduce<Record<string, number>>((acc, f) => ({ ...acc, [f.code]: (acc[f.code] ?? 0) + 1 }), {});
   return { days, byBand, byAction, topFactors, settings: getFraudSettings() };
 }

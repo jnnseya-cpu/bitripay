@@ -77,12 +77,8 @@ export function normalizeEmail(email?: string | null): string | null {
   return e ? e : null;
 }
 
-export function normalizePhone(phone?: string | null): string | null {
-  if (!phone) return null;
-  const digits = phone.replace(/[^\d+]/g, '');
-  if (!digits) return null;
-  return digits.startsWith('+') ? digits : `+${digits}`;
-}
+import { normalizePhone } from '@bitripay/shared';
+export { normalizePhone };
 
 export function normalizeTag(tag: string): string {
   return tag.trim().replace(/^@/, '').toLowerCase();
@@ -122,7 +118,11 @@ export function findUserByIdentifier(identifier: string): UserRow | undefined {
 
 function uniqueTag(base: string): string {
   const db = getDb();
-  let candidate = base.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20) || 'user';
+  let candidate =
+    base
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, '')
+      .slice(0, 20) || 'user';
   if (candidate.length < 3) candidate = candidate.padEnd(3, '0');
   let attempt = candidate;
   let i = 0;
@@ -204,7 +204,9 @@ export function updateUser(id: string, fields: Partial<Record<keyof UserRow, unk
   if (keys.length === 0) return getUserById(id);
   const sets = keys.map((k) => `${k} = ?`).join(', ');
   const values = keys.map((k) => fields[k as keyof UserRow]);
-  getDb().prepare(`UPDATE users SET ${sets}, updated_at = ? WHERE id = ?`).run(...values, now(), id);
+  getDb()
+    .prepare(`UPDATE users SET ${sets}, updated_at = ? WHERE id = ?`)
+    .run(...values, now(), id);
   return getUserById(id);
 }
 
@@ -240,7 +242,9 @@ export function usersById(ids: string[]): Map<string, PublicUser> {
   const unique = Array.from(new Set(ids.filter(Boolean)));
   const map = new Map<string, PublicUser>();
   if (unique.length === 0) return map;
-  const rows = getDb().prepare(`SELECT * FROM users WHERE id IN (${unique.map(() => '?').join(',')})`).all(...unique) as UserRow[];
+  const rows = getDb()
+    .prepare(`SELECT * FROM users WHERE id IN (${unique.map(() => '?').join(',')})`)
+    .all(...unique) as UserRow[];
   for (const r of rows) map.set(r.id, toPublicUser(r));
   return map;
 }

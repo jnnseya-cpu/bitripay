@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-core';
 import { generateKeyPairSync, sign, randomUUID } from 'node:crypto';
 const API = 'http://127.0.0.1:4000';
 const WEB = 'http://localhost:5173'; // must match WEB_URL for WebAuthn origin checks
@@ -22,7 +22,14 @@ const pem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH });
 const errors = [];
-const mk = async (w = 1280) => { const p = await browser.newPage({ viewport: { width: w, height: 900 } }); p.on('pageerror', (e) => errors.push(e.message)); p.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('favicon')) errors.push(m.text()); }); return p; };
+const mk = async (w = 1280) => {
+  const p = await browser.newPage({ viewport: { width: w, height: 900 } });
+  p.on('pageerror', (e) => errors.push(e.message));
+  p.on('console', (m) => {
+    if (m.type() === 'error' && !m.text().includes('favicon')) errors.push(m.text());
+  });
+  return p;
+};
 
 // ---- admin: configure MTN GH + register evidence device through the UI
 const admin = await mk(1360);
@@ -84,7 +91,14 @@ await page.click('button:has-text("I have sent the money")');
 await page.waitForSelector('text=Reported as sent');
 await page.screenshot({ path: 'shots/gw-user-sent.png' });
 // forged evidence is rejected; signed evidence from the registered device settles
-const fields = { deviceId, nonce: randomUUID(), receivedAt: new Date().toISOString(), from: 'MobileMoney', operatorId: 'mtn_gh', text: `Payment received for GHS 50.00 from 0244111222 (Alice). Transaction ID: 8811223344. Reference: ${ref}. Current Balance: GHS 1,250.00` };
+const fields = {
+  deviceId,
+  nonce: randomUUID(),
+  receivedAt: new Date().toISOString(),
+  from: 'MobileMoney',
+  operatorId: 'mtn_gh',
+  text: `Payment received for GHS 50.00 from 0244111222 (Alice). Transaction ID: 8811223344. Reference: ${ref}. Current Balance: GHS 1,250.00`,
+};
 const canonical = [fields.deviceId, fields.nonce, fields.receivedAt, fields.from, fields.operatorId, fields.text].join('\n');
 const forged = await j('POST', '/api/evidence/sms', { ...fields, signature: Buffer.from('x'.repeat(64)).toString('base64') });
 console.log('forged evidence ->', forged.status, forged.body.error?.code);
@@ -96,7 +110,11 @@ await page.screenshot({ path: 'shots/gw-user-settled.png' });
 // ---- bank transfer intent → maker-checker in the console
 await page.click('button:has-text("Done")');
 await page.click('button.tab:has-text("Bank")');
-await page.locator('.field', { hasText: 'Amount' }).locator('select').selectOption('USD').catch(() => {});
+await page
+  .locator('.field', { hasText: 'Amount' })
+  .locator('select')
+  .selectOption('USD')
+  .catch(() => {});
 await page.fill('input[placeholder="0.00"]', '30');
 await page.click('button:has-text("Confirm and add 30 USD")');
 await page.fill('input.pin-input', '1234');
@@ -111,7 +129,9 @@ await admin.click('button:has-text("Propose: confirm received")');
 await admin.click('.modal button:has-text("Confirm")');
 await admin.waitForSelector('text=Awaiting a second approver');
 await admin.screenshot({ path: 'shots/gw-admin-proposed.png' });
-const walletBefore = (await j('GET', '/api/wallets', null, (await j('POST', '/api/auth/login', { identifier: 'alice@example.com', password: 'Password123!' })).body.token)).body.items.find((w) => w.currency === 'USD').balance;
+const walletBefore = (await j('GET', '/api/wallets', null, (await j('POST', '/api/auth/login', { identifier: 'alice@example.com', password: 'Password123!' })).body.token)).body.items.find(
+  (w) => w.currency === 'USD',
+).balance;
 const chk = await mk(1360);
 await chk.goto(ADMIN + '/login');
 await chk.fill('input:not([type=password])', 'checker@bitripay.local');
@@ -127,13 +147,17 @@ await chk.fill('.modal input[type=password]', '2222');
 await chk.click('.modal button:has-text("Confirm")');
 await chk.waitForSelector('text=payment settled', { timeout: 10000 });
 await chk.screenshot({ path: 'shots/gw-checker-approved.png' });
-const walletAfter = (await j('GET', '/api/wallets', null, (await j('POST', '/api/auth/login', { identifier: 'alice@example.com', password: 'Password123!' })).body.token)).body.items.find((w) => w.currency === 'USD').balance;
+const walletAfter = (await j('GET', '/api/wallets', null, (await j('POST', '/api/auth/login', { identifier: 'alice@example.com', password: 'Password123!' })).body.token)).body.items.find(
+  (w) => w.currency === 'USD',
+).balance;
 console.log('USD wallet before/after maker-checker settlement', walletBefore, walletAfter);
 
 // ---- passkey: register with a virtual authenticator, sign out, sign in biometrically, pay with biometric step-up
 const cdp = await page.context().newCDPSession(page);
 await cdp.send('WebAuthn.enable');
-await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+await cdp.send('WebAuthn.addVirtualAuthenticator', {
+  options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+});
 await page.goto(WEB + '/app/settings?tab=security');
 await page.waitForSelector('text=Biometric login & payment confirmation');
 await page.click('button:has-text("Add this device")');

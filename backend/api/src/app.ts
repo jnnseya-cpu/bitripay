@@ -28,7 +28,7 @@ import { billsRouter, topupRouter, giftCardsRouter } from './routes/services';
 import { kycRouter } from './routes/kyc';
 import { supportRouter } from './routes/support';
 import { p2pRouter } from './routes/p2p';
-import { merchantRouter, v1Router } from './routes/merchant';
+import { merchantRouter, v1Router as merchantV1Router } from './routes/merchant';
 import { adminRouter } from './routes/admin';
 import { switchRouter } from './routes/switch';
 import { finopsRouter } from './routes/finops';
@@ -136,17 +136,17 @@ export function createApp() {
   app.use('/api/merchant', merchantRouter);
   app.use('/api/assist', assistRouter);
   app.use('/api', channelsRouter);
-  // Gateway v1 (intents, QR, resolver, keys) first; the merchant v1 alias below keeps serving its existing paths.
-  app.use('/api/v1', gatewayV1Router);
-  app.use('/v1', gatewayV1Router);
-  app.use('/api/v1', switchRouter);
-  app.use('/v1', switchRouter);
-  app.use('/api/v1', finopsRouter);
-  app.use('/v1', finopsRouter);
-  app.use('/api/v1', intelligenceRouter);
-  app.use('/v1', intelligenceRouter);
+  // One partner API, served identically at /api/v1 and /v1: gateway (intents, QR, resolver, keys, balance), switch,
+  // financial operations, intelligence, then the legacy merchant paths (/me, payment-requests, transactions).
+  const partnerV1 = express.Router();
+  partnerV1.use(gatewayV1Router);
+  partnerV1.use(switchRouter);
+  partnerV1.use(finopsRouter);
+  partnerV1.use(intelligenceRouter);
+  partnerV1.use(merchantV1Router);
+  app.use('/api/v1', partnerV1);
+  app.use('/v1', partnerV1);
   app.use('/lite', liteRouter);
-  app.use('/v1', v1Router);
   app.use('/api/admin', adminRouter);
 
   app.get('/', (_req, res) => res.json({ name: `${config.appName} API`, docs: '/api/health', web: config.webUrl }));

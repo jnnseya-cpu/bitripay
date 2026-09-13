@@ -1,28 +1,45 @@
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-core';
 import { createPrivateKey, sign, randomUUID, createHash } from 'node:crypto';
 import fs from 'node:fs';
 const API = 'http://127.0.0.1:4000';
 const WEB = 'http://localhost:5173';
 const ADMIN = 'http://127.0.0.1:5174';
 const j = async (method, path, body, token, headers = {}) => {
-  const r = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers }, body: body ? JSON.stringify(body) : undefined });
+  const r = await fetch(API + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
+    body: body ? JSON.stringify(body) : undefined,
+  });
   return { status: r.status, body: await r.json().catch(() => ({})) };
 };
 const demo = JSON.parse(fs.readFileSync('backend/api/data/demo-payout-device.json', 'utf8'));
 const pk = createPrivateKey(demo.privateKeyPem);
-const devHeaders = (method, path) => { const ts = new Date().toISOString(); return { 'X-Device-Id': demo.deviceId, 'X-Device-Timestamp': ts, 'X-Device-Signature': sign(null, Buffer.from([demo.deviceId, ts, method, path].join('\n')), pk).toString('base64') }; };
+const devHeaders = (method, path) => {
+  const ts = new Date().toISOString();
+  return { 'X-Device-Id': demo.deviceId, 'X-Device-Timestamp': ts, 'X-Device-Signature': sign(null, Buffer.from([demo.deviceId, ts, method, path].join('\n')), pk).toString('base64') };
+};
 // setup: admin + checker PINs; alice KYC verified (card-funded payouts otherwise hold for review)
 const admin = (await j('POST', '/api/auth/login', { identifier: 'admin@bitripay.local', password: 'Admin123!' })).body.token;
 await j('POST', '/api/account/pin', { pin: '9999' }, admin);
 let checker = await j('POST', '/api/auth/login', { identifier: 'checker@bitripay.local', password: 'Checker123!' });
-if (checker.status !== 200) { await j('POST', '/api/admin/users', { fullName: 'Checker Admin', email: 'checker@bitripay.local', password: 'Checker123!', role: 'admin', permissions: [] }, admin); checker = await j('POST', '/api/auth/login', { identifier: 'checker@bitripay.local', password: 'Checker123!' }); }
+if (checker.status !== 200) {
+  await j('POST', '/api/admin/users', { fullName: 'Checker Admin', email: 'checker@bitripay.local', password: 'Checker123!', role: 'admin', permissions: [] }, admin);
+  checker = await j('POST', '/api/auth/login', { identifier: 'checker@bitripay.local', password: 'Checker123!' });
+}
 await j('POST', '/api/account/pin', { pin: '2222' }, checker.body.token);
 const alice = (await j('POST', '/api/auth/login', { identifier: 'alice@example.com', password: 'Password123!' })).body;
 await j('PATCH', `/api/admin/users/${alice.user.id}`, { kycStatus: 'verified' }, admin);
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH });
 const errors = [];
-const mk = async (w = 1280) => { const p = await browser.newPage({ viewport: { width: w, height: 900 } }); p.on('pageerror', (e) => errors.push(e.message)); p.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('favicon')) errors.push(m.text()); }); return p; };
+const mk = async (w = 1280) => {
+  const p = await browser.newPage({ viewport: { width: w, height: 900 } });
+  p.on('pageerror', (e) => errors.push(e.message));
+  p.on('console', (m) => {
+    if (m.type() === 'error' && !m.text().includes('favicon')) errors.push(m.text());
+  });
+  return p;
+};
 
 // ---- sender: GBP card → Orange Money DRC through Move money
 const page = await mk();
@@ -34,10 +51,12 @@ await page.waitForURL('**/app');
 await page.goto(WEB + '/app/move');
 await page.waitForSelector('text=Move money');
 await page.click('button.tab:has-text("Card")');
-await page.fill('input[placeholder*="4242"]', '4242 4242 4242 4242').catch(async () => { await page.locator('input').filter({ hasText: '' }).first(); });
+await page.fill('input[placeholder*="4242"]', '4242 4242 4242 4242').catch(async () => {
+  await page.locator('input').filter({ hasText: '' }).first();
+});
 await page.locator('.field', { hasText: 'Amount' }).locator('select').selectOption('GBP');
 await page.fill('input[placeholder="0.00"]', '20');
-await page.locator("button.tab:has-text(\"Mobile money\")").nth(1).click();
+await page.locator('button.tab:has-text("Mobile money")').nth(1).click();
 const dstCountry = page.locator('.field', { hasText: 'Country' }).locator('select').last();
 await dstCountry.selectOption('CD');
 await page.waitForTimeout(600);
@@ -74,7 +93,13 @@ await page.screenshot({ path: 'shots/cor-in-progress.png', fullPage: true });
 const text = `Transfert de ${(p.amount / 100).toFixed(2)} CDF vers Marie Kabila 243990000123 effectue. ID: PP240912.1200.D4410. Solde: 4,990,000.00 CDF`;
 const f = { deviceId: demo.deviceId, nonce: randomUUID(), receivedAt: new Date().toISOString(), from: 'OrangeMoney', operatorId: 'orange_cd', text };
 const sig = sign(null, Buffer.from([f.deviceId, f.nonce, f.receivedAt, f.from, f.operatorId, f.text].join('\n')), pk).toString('base64');
-const ev = await j('POST', `/api/payouts/device/${p.id}/evidence`, { ...f, signature: sig, simIdentity: demo.simIdentity, deviceTimestamp: new Date().toISOString(), clientHash: createHash('sha256').update(text).digest('hex') });
+const ev = await j('POST', `/api/payouts/device/${p.id}/evidence`, {
+  ...f,
+  signature: sig,
+  simIdentity: demo.simIdentity,
+  deviceTimestamp: new Date().toISOString(),
+  clientHash: createHash('sha256').update(text).digest('hex'),
+});
 console.log('evidence', ev.status, ev.body.evidence?.outcome, ev.body.evidence?.reasons);
 await page.waitForSelector('text=Settled', { timeout: 20000 });
 await page.waitForSelector('text=Operator confirmation');

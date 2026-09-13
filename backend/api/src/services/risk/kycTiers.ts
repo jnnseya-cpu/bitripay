@@ -54,11 +54,13 @@ export function tierLimitsFor(user: { kyc_tier?: number | null; country?: string
   const s = getKycTierSettings();
   const cc = (user.country ?? '').toUpperCase();
   const byCountry = cc && s.countries[cc] ? s.countries[cc][String(tier)] : undefined;
-  return byCountry !== undefined ? byCountry : s.default[String(tier)] ?? null;
+  return byCountry !== undefined ? byCountry : (s.default[String(tier)] ?? null);
 }
 
 function usedBase(userId: string, sinceMs: number): number {
-  const rows = getDb().prepare("SELECT amount, currency FROM transactions WHERE sender_user_id = ? AND status IN ('pending','completed') AND created_at >= ? AND type NOT IN ('exchange')").all(userId, new Date(Date.now() - sinceMs).toISOString()) as { amount: number; currency: string }[];
+  const rows = getDb()
+    .prepare("SELECT amount, currency FROM transactions WHERE sender_user_id = ? AND status IN ('pending','completed') AND created_at >= ? AND type NOT IN ('exchange')")
+    .all(userId, new Date(Date.now() - sinceMs).toISOString()) as { amount: number; currency: string }[];
   return rows.reduce((sum, r) => sum + toBase(r.amount, r.currency), 0);
 }
 
@@ -73,9 +75,15 @@ export function enforceTierLimits(user: UserRow & { kyc_tier?: number | null }, 
     recordEvent('risk', user.id, 'kyc_limit.breach', { type: 'system' }, { tier, code, base, currency, amount, ...detail });
     throw unprocessable(message, code, { tier, label: TIER_LABELS[tier], ...detail });
   };
-  if (limits.perTransaction && base > limits.perTransaction) breach('kyc_tier_limit', `Amount exceeds the per-transaction limit of your ${TIER_LABELS[tier]} level. Upgrade your verification to send more.`, { limit: limits.perTransaction, scope: 'per_transaction' });
-  if (limits.daily && usedBase(user.id, 86_400_000) + base > limits.daily) breach('daily_limit_exceeded', `This would exceed the daily limit of your ${TIER_LABELS[tier]} level.`, { limit: limits.daily, scope: 'daily' });
-  if (limits.monthly && usedBase(user.id, 30 * 86_400_000) + base > limits.monthly) breach('monthly_limit_exceeded', `This would exceed the 30-day limit of your ${TIER_LABELS[tier]} level.`, { limit: limits.monthly, scope: 'monthly' });
+  if (limits.perTransaction && base > limits.perTransaction)
+    breach('kyc_tier_limit', `Amount exceeds the per-transaction limit of your ${TIER_LABELS[tier]} level. Upgrade your verification to send more.`, {
+      limit: limits.perTransaction,
+      scope: 'per_transaction',
+    });
+  if (limits.daily && usedBase(user.id, 86_400_000) + base > limits.daily)
+    breach('daily_limit_exceeded', `This would exceed the daily limit of your ${TIER_LABELS[tier]} level.`, { limit: limits.daily, scope: 'daily' });
+  if (limits.monthly && usedBase(user.id, 30 * 86_400_000) + base > limits.monthly)
+    breach('monthly_limit_exceeded', `This would exceed the 30-day limit of your ${TIER_LABELS[tier]} level.`, { limit: limits.monthly, scope: 'monthly' });
   return true;
 }
 
@@ -88,7 +96,16 @@ export function tierStatus(user: UserRow & { kyc_tier?: number | null; kyb_statu
     limits: limits === undefined ? null : limits,
     usage: tier ? { daily: usedBase(user.id, 86_400_000), monthly: usedBase(user.id, 30 * 86_400_000) } : null,
     kybStatus: user.kyb_status ?? 'none',
-    next: tier === 0 ? 'Activate Tier 1 with a verified phone or email, your name and country.' : tier === 1 ? 'Submit an identity document and a selfie for Tier 2.' : tier === 2 ? 'Add a proof of address (≤ 90 days) for Tier 3.' : tier === 3 ? 'Businesses can complete KYB for Tier 4.' : null,
+    next:
+      tier === 0
+        ? 'Activate Tier 1 with a verified phone or email, your name and country.'
+        : tier === 1
+          ? 'Submit an identity document and a selfie for Tier 2.'
+          : tier === 2
+            ? 'Add a proof of address (≤ 90 days) for Tier 3.'
+            : tier === 3
+              ? 'Businesses can complete KYB for Tier 4.'
+              : null,
   };
 }
 
@@ -126,7 +143,25 @@ export interface KybInput {
   directors: { name: string; userId?: string | null; role?: string | null }[];
   documents?: { kind: string; ref: string }[];
 }
-const toKyb = (r: any) => ({ id: r.id, userId: r.user_id, legalName: r.legal_name, registrationNumber: r.registration_number, country: r.country, address: r.address, mcc: r.mcc, expectedMonthlyVolume: r.expected_monthly_volume, licenceRef: r.licence_ref, directors: parseJson(r.directors, []), documents: parseJson(r.documents, []), status: r.status, note: r.note, reviewedBy: r.reviewed_by, reviewedAt: r.reviewed_at, createdAt: r.created_at, user: findUserById(r.user_id) ? toPublicUser(findUserById(r.user_id)!) : null });
+const toKyb = (r: any) => ({
+  id: r.id,
+  userId: r.user_id,
+  legalName: r.legal_name,
+  registrationNumber: r.registration_number,
+  country: r.country,
+  address: r.address,
+  mcc: r.mcc,
+  expectedMonthlyVolume: r.expected_monthly_volume,
+  licenceRef: r.licence_ref,
+  directors: parseJson(r.directors, []),
+  documents: parseJson(r.documents, []),
+  status: r.status,
+  note: r.note,
+  reviewedBy: r.reviewed_by,
+  reviewedAt: r.reviewed_at,
+  createdAt: r.created_at,
+  user: findUserById(r.user_id) ? toPublicUser(findUserById(r.user_id)!) : null,
+});
 
 export function submitKyb(user: UserRow, input: KybInput) {
   const db = getDb();
@@ -143,9 +178,31 @@ export function submitKyb(user: UserRow, input: KybInput) {
     }
   }
   const id = uuid();
-  db.prepare('INSERT INTO kyb_submissions (id, user_id, legal_name, registration_number, country, address, mcc, expected_monthly_volume, licence_ref, directors, documents, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, user.id, input.legalName.trim(), input.registrationNumber.trim(), input.country.toUpperCase(), input.address.trim(), input.mcc ?? null, Math.max(0, Math.round(input.expectedMonthlyVolume)), input.licenceRef ?? null, JSON.stringify(input.directors), JSON.stringify(input.documents ?? []), 'pending', now());
+  db.prepare(
+    'INSERT INTO kyb_submissions (id, user_id, legal_name, registration_number, country, address, mcc, expected_monthly_volume, licence_ref, directors, documents, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(
+    id,
+    user.id,
+    input.legalName.trim(),
+    input.registrationNumber.trim(),
+    input.country.toUpperCase(),
+    input.address.trim(),
+    input.mcc ?? null,
+    Math.max(0, Math.round(input.expectedMonthlyVolume)),
+    input.licenceRef ?? null,
+    JSON.stringify(input.directors),
+    JSON.stringify(input.documents ?? []),
+    'pending',
+    now(),
+  );
   updateUser(user.id, { kyb_status: 'pending' } as any);
-  recordEvent('risk', user.id, 'kyb.submitted', { type: user.role === 'agent' ? 'agent' : 'merchant', id: user.id }, { submissionId: id, country: input.country.toUpperCase(), expectedMonthlyVolume: input.expectedMonthlyVolume });
+  recordEvent(
+    'risk',
+    user.id,
+    'kyb.submitted',
+    { type: user.role === 'agent' ? 'agent' : 'merchant', id: user.id },
+    { submissionId: id, country: input.country.toUpperCase(), expectedMonthlyVolume: input.expectedMonthlyVolume },
+  );
   return toKyb(db.prepare('SELECT * FROM kyb_submissions WHERE id = ?').get(id));
 }
 export function latestKyb(userId: string) {
@@ -153,7 +210,11 @@ export function latestKyb(userId: string) {
   return r ? toKyb(r) : null;
 }
 export function listKyb(status?: string | null, limit = 100) {
-  return (getDb().prepare(`SELECT * FROM kyb_submissions ${status ? 'WHERE status = ?' : ''} ORDER BY created_at DESC LIMIT ?`).all(...(status ? [status] : []), limit) as any[]).map(toKyb);
+  return (
+    getDb()
+      .prepare(`SELECT * FROM kyb_submissions ${status ? 'WHERE status = ?' : ''} ORDER BY created_at DESC LIMIT ?`)
+      .all(...(status ? [status] : []), limit) as any[]
+  ).map(toKyb);
 }
 export function getKyb(id: string) {
   const r = getDb().prepare('SELECT * FROM kyb_submissions WHERE id = ?').get(id);
@@ -169,7 +230,12 @@ export function reviewKyb(id: string, adminId: string, decision: 'verified' | 'r
   updateUser(r.user_id, { kyb_status: decision } as any);
   if (decision === 'verified') setTier(r.user_id, 4, { type: 'admin', id: adminId }, `KYB ${id} verified`);
   recordEvent('risk', r.user_id, `kyb.${decision}`, { type: 'admin', id: adminId }, { submissionId: id, note: note ?? null });
-  notify(r.user_id, decision === 'verified' ? 'Business verified' : 'Business verification rejected', decision === 'verified' ? 'Your business is verified (Tier 4). Business limits are now active.' : `Your KYB submission was rejected${note ? `: ${note}` : ''}. You can submit again.`, { kind: 'kyc' });
+  notify(
+    r.user_id,
+    decision === 'verified' ? 'Business verified' : 'Business verification rejected',
+    decision === 'verified' ? 'Your business is verified (Tier 4). Business limits are now active.' : `Your KYB submission was rejected${note ? `: ${note}` : ''}. You can submit again.`,
+    { kind: 'kyc' },
+  );
   return getKyb(id);
 }
 
@@ -178,7 +244,9 @@ export function assertKybIfRequired(merchant: UserRow & { kyb_status?: string })
   if ((merchant.kyb_status ?? 'none') === 'verified') return;
   const threshold = getKycTierSettings().kybMonthlyVolumeThreshold;
   if (!threshold) return;
-  const rows = getDb().prepare("SELECT amount, currency FROM transactions WHERE receiver_user_id = ? AND status = 'completed' AND type IN ('merchant_payment', 'qr_payment') AND created_at >= ?").all(merchant.id, new Date(Date.now() - 30 * 86_400_000).toISOString()) as { amount: number; currency: string }[];
+  const rows = getDb()
+    .prepare("SELECT amount, currency FROM transactions WHERE receiver_user_id = ? AND status = 'completed' AND type IN ('merchant_payment', 'qr_payment') AND created_at >= ?")
+    .all(merchant.id, new Date(Date.now() - 30 * 86_400_000).toISOString()) as { amount: number; currency: string }[];
   const volume = rows.reduce((s, r) => s + toBase(r.amount, r.currency), 0);
   if (volume >= threshold) {
     recordEvent('risk', merchant.id, 'kyb.required', { type: 'system' }, { volume, threshold });

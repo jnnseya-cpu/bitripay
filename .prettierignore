@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+.expo
+shots
+docs-api.http
+**/*.md
+**/*.php
+**/*.py
+package-lock.json
+frontend/*/package-lock.json
+**/*.db
+docs/**/*.html
+**/*.html

@@ -1,11 +1,13 @@
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-core';
 const base = 'http://127.0.0.1:5173';
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('console', (m) => {
+  if (m.type() === 'error') errors.push(m.text());
+});
 // admin: configure MTN Ghana collection number
 const admin = await browser.newPage({ viewport: { width: 1360, height: 900 } });
 admin.on('pageerror', (e) => errors.push('admin: ' + e.message));

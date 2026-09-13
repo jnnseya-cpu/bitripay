@@ -30,7 +30,20 @@ export interface CanonicalPayment {
   occurredAt: string;
   description: string | null;
 }
-export type ObservationKind = 'ACK' | 'PENDING' | 'AUTHORIZED' | 'COMPLETED' | 'REJECTED' | 'NOT_FOUND' | 'UNKNOWN' | 'MALFORMED' | 'REFUND_ACCEPTED' | 'REFUND_COMPLETED' | 'REFUND_REJECTED' | 'REVERSAL_COMPLETED' | 'REVERSAL_REJECTED';
+export type ObservationKind =
+  | 'ACK'
+  | 'PENDING'
+  | 'AUTHORIZED'
+  | 'COMPLETED'
+  | 'REJECTED'
+  | 'NOT_FOUND'
+  | 'UNKNOWN'
+  | 'MALFORMED'
+  | 'REFUND_ACCEPTED'
+  | 'REFUND_COMPLETED'
+  | 'REFUND_REJECTED'
+  | 'REVERSAL_COMPLETED'
+  | 'REVERSAL_REJECTED';
 export type ObservationAuthority = 'NETWORK' | 'SWITCH' | 'DEBTOR' | 'CREDITOR' | 'SPONSOR';
 export interface ExternalObservation {
   kind: ObservationKind;
@@ -91,7 +104,20 @@ export interface VerifiedReport {
   signatureValid: boolean;
 }
 export interface ImportResult {
-  lines: { externalReference: string; correlationId: string | null; debtorId: string | null; creditorId: string | null; amountMinor: string; currency: string; status: string; feeMinor: string | null; settlementRef: string | null; businessDate: string | null; occurredAt: string | null; raw: Record<string, unknown> }[];
+  lines: {
+    externalReference: string;
+    correlationId: string | null;
+    debtorId: string | null;
+    creditorId: string | null;
+    amountMinor: string;
+    currency: string;
+    status: string;
+    feeMinor: string | null;
+    settlementRef: string | null;
+    businessDate: string | null;
+    occurredAt: string | null;
+    raw: Record<string, unknown>;
+  }[];
   controlTotalMinor: string;
   lineCount: number;
 }
@@ -129,7 +155,10 @@ export interface NationalSwitchAdapter {
 }
 
 export class SwitchTimeoutError extends Error {
-  constructor(public readonly stableMessageId: string, public readonly afterEffect: boolean) {
+  constructor(
+    public readonly stableMessageId: string,
+    public readonly afterEffect: boolean,
+  ) {
     super(`no response for ${stableMessageId} within the timeout`);
   }
 }
@@ -198,14 +227,53 @@ export class SimulatorAdapter implements NationalSwitchAdapter {
   }
   private obs(kind: ObservationKind, code: string, rec: SimRecord | null, extra: Partial<ExternalObservation> = {}): ExternalObservation {
     const externalMessageId = extra.externalMessageId ?? this.nextId('SIMMSG');
-    const body = { kind, code, externalMessageId, stableMessageId: rec?.stableMessageId ?? extra.stableMessageId ?? null, externalReference: rec?.externalReference ?? extra.externalReference ?? null, correlationId: rec?.correlationId ?? null, amountMinor: rec?.command.amountMinor ?? null, currency: rec?.command.currency ?? null, occurredAt: new Date().toISOString(), simulation: true };
+    const body = {
+      kind,
+      code,
+      externalMessageId,
+      stableMessageId: rec?.stableMessageId ?? extra.stableMessageId ?? null,
+      externalReference: rec?.externalReference ?? extra.externalReference ?? null,
+      correlationId: rec?.correlationId ?? null,
+      amountMinor: rec?.command.amountMinor ?? null,
+      currency: rec?.command.currency ?? null,
+      occurredAt: new Date().toISOString(),
+      simulation: true,
+    };
     const payload = JSON.stringify(body);
     const raw = Buffer.from(JSON.stringify({ body, mac: simSign(payload) })).toString('base64');
-    return { kind, externalCode: code, externalMessageId, stableMessageId: body.stableMessageId, externalReference: body.externalReference, correlationId: body.correlationId, authority: extra.authority ?? (kind === 'ACK' ? 'NETWORK' : kind === 'REJECTED' ? 'DEBTOR' : kind === 'COMPLETED' ? 'CREDITOR' : 'SWITCH'), amountMinor: body.amountMinor, currency: body.currency, occurredAt: body.occurredAt, receivedAt: new Date().toISOString(), reason: extra.reason ?? null, signatureValid: true, raw, resolvesAuthorization: extra.resolvesAuthorization, definitive: extra.definitive, simulation: true };
+    return {
+      kind,
+      externalCode: code,
+      externalMessageId,
+      stableMessageId: body.stableMessageId,
+      externalReference: body.externalReference,
+      correlationId: body.correlationId,
+      authority: extra.authority ?? (kind === 'ACK' ? 'NETWORK' : kind === 'REJECTED' ? 'DEBTOR' : kind === 'COMPLETED' ? 'CREDITOR' : 'SWITCH'),
+      amountMinor: body.amountMinor,
+      currency: body.currency,
+      occurredAt: body.occurredAt,
+      receivedAt: new Date().toISOString(),
+      reason: extra.reason ?? null,
+      signatureValid: true,
+      raw,
+      resolvesAuthorization: extra.resolvesAuthorization,
+      definitive: extra.definitive,
+      simulation: true,
+    };
   }
 
   async capabilities(profileVersion: string): Promise<Capabilities> {
-    return { profileVersion: profileVersion || this.connection.profileVersion || 'sim-1.0', products: ['MERCHANT_PAYMENT', 'REFUND', 'REVERSAL', 'INQUIRY'], currencies: ['CDF', 'USD'], supportsInquiry: true, supportsReversal: true, supportsRefund: true, supportsDeferredCapture: false, notFoundDefinitiveAfterSeconds: 120, simulation: true };
+    return {
+      profileVersion: profileVersion || this.connection.profileVersion || 'sim-1.0',
+      products: ['MERCHANT_PAYMENT', 'REFUND', 'REVERSAL', 'INQUIRY'],
+      currencies: ['CDF', 'USD'],
+      supportsInquiry: true,
+      supportsReversal: true,
+      supportsRefund: true,
+      supportsDeferredCapture: false,
+      notFoundDefinitiveAfterSeconds: 120,
+      simulation: true,
+    };
   }
 
   async submit(command: CanonicalPayment, stableMessageId: string): Promise<ExternalObservation> {
@@ -262,7 +330,10 @@ export class SimulatorAdapter implements NationalSwitchAdapter {
     rec.inquiries += 1;
     switch (rec.scenario) {
       case 'tok_timeout_nf':
-        return this.obs('NOT_FOUND', rec.inquiries >= 3 ? 'N02' : 'N01', rec, { definitive: rec.inquiries >= 3, reason: rec.inquiries >= 3 ? 'no record of this message: definitive per scheme rules' : 'no record yet: provisional' });
+        return this.obs('NOT_FOUND', rec.inquiries >= 3 ? 'N02' : 'N01', rec, {
+          definitive: rec.inquiries >= 3,
+          reason: rec.inquiries >= 3 ? 'no record of this message: definitive per scheme rules' : 'no record yet: provisional',
+        });
       case 'tok_slow':
         return rec.inquiries >= 3 ? this.obs('COMPLETED', '000', rec) : this.obs('PENDING', 'P01', rec);
       case 'tok_ack_only':
@@ -301,20 +372,70 @@ export class SimulatorAdapter implements NationalSwitchAdapter {
     try {
       parsed = JSON.parse(Buffer.from(raw).toString('utf8'));
     } catch {
-      return { kind: 'MALFORMED', externalCode: 'MALFORMED', externalMessageId: `malformed-${Date.now()}`, stableMessageId: null, externalReference: null, correlationId: null, authority: transport.source, amountMinor: null, currency: null, occurredAt: transport.receivedAt, receivedAt: transport.receivedAt, reason: 'unparseable message', signatureValid: false, raw: Buffer.from(raw).toString('base64'), transport, simulation: true };
+      return {
+        kind: 'MALFORMED',
+        externalCode: 'MALFORMED',
+        externalMessageId: `malformed-${Date.now()}`,
+        stableMessageId: null,
+        externalReference: null,
+        correlationId: null,
+        authority: transport.source,
+        amountMinor: null,
+        currency: null,
+        occurredAt: transport.receivedAt,
+        receivedAt: transport.receivedAt,
+        reason: 'unparseable message',
+        signatureValid: false,
+        raw: Buffer.from(raw).toString('base64'),
+        transport,
+        simulation: true,
+      };
     }
     const expected = simSign(JSON.stringify(parsed.body));
     const valid = typeof parsed.mac === 'string' && parsed.mac.length === expected.length && timingSafeEqual(Buffer.from(parsed.mac), Buffer.from(expected));
     const b = parsed.body ?? {};
-    return { kind: b.kind ?? 'UNKNOWN', externalCode: b.code ?? 'Z99', externalMessageId: b.externalMessageId ?? `inb-${Date.now()}`, stableMessageId: b.stableMessageId ?? null, externalReference: b.externalReference ?? null, correlationId: b.correlationId ?? null, authority: transport.source, amountMinor: b.amountMinor ?? null, currency: b.currency ?? null, occurredAt: b.occurredAt ?? transport.receivedAt, receivedAt: transport.receivedAt, reason: b.reason ?? null, signatureValid: valid, raw: Buffer.from(raw).toString('base64'), resolvesAuthorization: !!b.resolvesAuthorization, transport, simulation: true };
+    return {
+      kind: b.kind ?? 'UNKNOWN',
+      externalCode: b.code ?? 'Z99',
+      externalMessageId: b.externalMessageId ?? `inb-${Date.now()}`,
+      stableMessageId: b.stableMessageId ?? null,
+      externalReference: b.externalReference ?? null,
+      correlationId: b.correlationId ?? null,
+      authority: transport.source,
+      amountMinor: b.amountMinor ?? null,
+      currency: b.currency ?? null,
+      occurredAt: b.occurredAt ?? transport.receivedAt,
+      receivedAt: transport.receivedAt,
+      reason: b.reason ?? null,
+      signatureValid: valid,
+      raw: Buffer.from(raw).toString('base64'),
+      resolvesAuthorization: !!b.resolvesAuthorization,
+      transport,
+      simulation: true,
+    };
   }
 
   /** Build inbound raw messages for scenarios (duplicate success, contradictory reject, bad signature, unknown code). */
-  inboundFor(stableMessageId: string, variant: 'completed' | 'completed_dup' | 'reject_contradiction' | 'bad_signature' | 'unknown_code' | 'pending_stale' | 'tampered_same_id', opts: { externalMessageId?: string } = {}): { raw: Uint8Array; externalMessageId: string } {
+  inboundFor(
+    stableMessageId: string,
+    variant: 'completed' | 'completed_dup' | 'reject_contradiction' | 'bad_signature' | 'unknown_code' | 'pending_stale' | 'tampered_same_id',
+    opts: { externalMessageId?: string } = {},
+  ): { raw: Uint8Array; externalMessageId: string } {
     const rec = this.store.get(stableMessageId);
     if (!rec) throw new AppError(404, 'simulator_unknown_message', 'The simulator has no record of this message');
     const externalMessageId = opts.externalMessageId ?? this.nextId('SIMINB');
-    const body: Record<string, unknown> = { kind: 'COMPLETED', code: '000', externalMessageId, stableMessageId, externalReference: rec.externalReference, correlationId: rec.correlationId, amountMinor: rec.command.amountMinor, currency: rec.command.currency, occurredAt: new Date().toISOString(), simulation: true };
+    const body: Record<string, unknown> = {
+      kind: 'COMPLETED',
+      code: '000',
+      externalMessageId,
+      stableMessageId,
+      externalReference: rec.externalReference,
+      correlationId: rec.correlationId,
+      amountMinor: rec.command.amountMinor,
+      currency: rec.command.currency,
+      occurredAt: new Date().toISOString(),
+      simulation: true,
+    };
     if (variant === 'reject_contradiction') Object.assign(body, { kind: 'REJECTED', code: 'R99', reason: 'late contradictory rejection (SIMULATION)' });
     if (variant === 'unknown_code') Object.assign(body, { kind: 'UNKNOWN', code: 'Q42' });
     if (variant === 'pending_stale') Object.assign(body, { kind: 'PENDING', code: 'P01', occurredAt: new Date(Date.now() - 60_000).toISOString() });
@@ -326,7 +447,20 @@ export class SimulatorAdapter implements NationalSwitchAdapter {
 
   async importReconciliation(input: VerifiedReport): Promise<ImportResult> {
     const lines = JSON.parse(Buffer.from(input.raw, 'base64').toString('utf8')) as any[];
-    const out = lines.map((l) => ({ externalReference: String(l.externalReference ?? l.ref ?? ''), correlationId: l.correlationId ?? null, debtorId: l.debtorId ?? null, creditorId: l.creditorId ?? null, amountMinor: String(l.amountMinor ?? l.amount ?? '0'), currency: String(l.currency ?? input.currency), status: String(l.status ?? 'COMPLETED'), feeMinor: l.feeMinor != null ? String(l.feeMinor) : null, settlementRef: l.settlementRef ?? null, businessDate: l.businessDate ?? null, occurredAt: l.occurredAt ?? null, raw: l }));
+    const out = lines.map((l) => ({
+      externalReference: String(l.externalReference ?? l.ref ?? ''),
+      correlationId: l.correlationId ?? null,
+      debtorId: l.debtorId ?? null,
+      creditorId: l.creditorId ?? null,
+      amountMinor: String(l.amountMinor ?? l.amount ?? '0'),
+      currency: String(l.currency ?? input.currency),
+      status: String(l.status ?? 'COMPLETED'),
+      feeMinor: l.feeMinor != null ? String(l.feeMinor) : null,
+      settlementRef: l.settlementRef ?? null,
+      businessDate: l.businessDate ?? null,
+      occurredAt: l.occurredAt ?? null,
+      raw: l,
+    }));
     const total = out.reduce((s, l) => s + Number(l.amountMinor), 0);
     return { lines: out, controlTotalMinor: String(total), lineCount: out.length };
   }
@@ -337,7 +471,15 @@ export class SimulatorAdapter implements NationalSwitchAdapter {
 
   /** Records for the operations console. */
   records() {
-    return [...this.store.values()].map((r) => ({ stableMessageId: r.stableMessageId, scenario: r.scenario, externalReference: r.externalReference, correlationId: r.correlationId, inquiries: r.inquiries, effect: r.effect, finalKind: r.finalKind }));
+    return [...this.store.values()].map((r) => ({
+      stableMessageId: r.stableMessageId,
+      scenario: r.scenario,
+      externalReference: r.externalReference,
+      correlationId: r.correlationId,
+      inquiries: r.inquiries,
+      effect: r.effect,
+      finalKind: r.finalKind,
+    }));
   }
 }
 
@@ -360,12 +502,12 @@ let certified: { modulePath: string; adapter: NationalSwitchAdapter } | null = n
  * connection cannot emit — there is no emulation of a real switch.
  */
 export function loadCertifiedAdapter(connection: SwitchConnection): NationalSwitchAdapter {
-  if (connection.certification.status !== 'CERTIFIED') throw new AppError(409, 'connector_not_certified', `Connection ${connection.id} is ${connection.certification.status}; the certified adapter is only loaded once certification is CERTIFIED`);
+  if (connection.certification.status !== 'CERTIFIED')
+    throw new AppError(409, 'connector_not_certified', `Connection ${connection.id} is ${connection.certification.status}; the certified adapter is only loaded once certification is CERTIFIED`);
   const modulePath = config.switch.adapterModule;
   if (!modulePath) throw new AppError(503, 'adapter_not_available', 'SWITCH_ADAPTER_MODULE is not configured: the official codec has not been delivered');
   if (certified && certified.modulePath === modulePath) return certified.adapter;
   const resolved = path.isAbsolute(modulePath) ? modulePath : path.resolve(process.cwd(), modulePath);
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require(resolved);
   const factory = mod.createAdapter ?? mod.default?.createAdapter;
   if (typeof factory !== 'function') throw new AppError(503, 'adapter_invalid', 'The switch adapter module must export createAdapter(connection)');

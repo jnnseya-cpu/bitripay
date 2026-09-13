@@ -14,7 +14,10 @@ supportRouter.get('/tickets', (req, res) => {
 supportRouter.post(
   '/tickets',
   wrap(async (req, res) => {
-    const body = validate(z.object({ subject: z.string().min(3).max(200), category: z.string().max(40).optional(), priority: z.enum(['low', 'normal', 'high']).optional(), body: z.string().min(3).max(5000) }), req.body);
+    const body = validate(
+      z.object({ subject: z.string().min(3).max(200), category: z.string().max(40).optional(), priority: z.enum(['low', 'normal', 'high']).optional(), body: z.string().min(3).max(5000) }),
+      req.body,
+    );
     res.status(201).json({ ticket: createTicket(req.user!, body) });
   }),
 );

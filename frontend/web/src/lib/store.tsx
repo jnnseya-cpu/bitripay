@@ -48,7 +48,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('bitripay.theme') as 'light' | 'dark') || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  const [theme, setTheme] = useState<'light' | 'dark'>(
+    () => (localStorage.getItem('bitripay.theme') as 'light' | 'dark') || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+  );
   const [lang, setLangState] = useState(() => localStorage.getItem('bitripay.lang') || 'en');
   const [toasts, setToasts] = useState<Store['toasts']>([]);
   const [hasPasskeys, setHasPasskeys] = useState(false);
@@ -76,7 +78,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const me = await api.get<{ user: User }>('/api/auth/me');
         setUserState(me.user);
         await refreshWallets();
-        api.get<{ items: unknown[] }>('/api/account/passkeys').then((r) => setHasPasskeys(r.items.length > 0)).catch(() => {});
+        api
+          .get<{ items: unknown[] }>('/api/account/passkeys')
+          .then((r) => setHasPasskeys(r.items.length > 0))
+          .catch(() => {});
       }
     } catch {
       setUserState(null);
@@ -130,7 +135,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setToken(token);
         setUserState(u);
         await refreshWallets();
-        api.get<{ items: unknown[] }>('/api/account/passkeys').then((r) => setHasPasskeys(r.items.length > 0)).catch(() => {});
+        api
+          .get<{ items: unknown[] }>('/api/account/passkeys')
+          .then((r) => setHasPasskeys(r.items.length > 0))
+          .catch(() => {});
       },
       logout: () => {
         setToken(null);

@@ -11,7 +11,10 @@ import { toUser } from '../services/users';
 export const passkeysRouter = Router();
 passkeysRouter.use(requireAuth);
 passkeysRouter.get('/', (req, res) => res.json({ items: listPasskeys(req.user!.id) }));
-passkeysRouter.post('/register/options', wrap(async (req, res) => res.json(await registrationOptions(req.user!))));
+passkeysRouter.post(
+  '/register/options',
+  wrap(async (req, res) => res.json(await registrationOptions(req.user!))),
+);
 passkeysRouter.post(
   '/register/verify',
   wrap(async (req, res) => {
@@ -24,7 +27,10 @@ passkeysRouter.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 /** Biometric confirmation for payments: returns a 5-minute step-up token accepted instead of the PIN. */
-passkeysRouter.post('/step-up/options', wrap(async (req, res) => res.json(await authenticationOptions('step_up', req.user!))));
+passkeysRouter.post(
+  '/step-up/options',
+  wrap(async (req, res) => res.json(await authenticationOptions('step_up', req.user!))),
+);
 passkeysRouter.post(
   '/step-up/verify',
   wrap(async (req, res) => {
@@ -37,7 +43,11 @@ passkeysRouter.post(
 /** Passwordless biometric sign-in (public). */
 export const passkeyAuthRouter = Router();
 const limit = rateLimit({ windowMs: 15 * 60_000, max: 40, keyPrefix: 'passkey-auth' });
-passkeyAuthRouter.post('/options', limit, wrap(async (_req, res) => res.json(await authenticationOptions('login'))));
+passkeyAuthRouter.post(
+  '/options',
+  limit,
+  wrap(async (_req, res) => res.json(await authenticationOptions('login'))),
+);
 passkeyAuthRouter.post(
   '/verify',
   limit,

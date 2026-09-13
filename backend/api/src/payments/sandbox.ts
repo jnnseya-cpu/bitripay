@@ -12,12 +12,13 @@ import type { GatewayProvider, InitiateContext, InitiateResult, VerifyResult, Ga
  *   +243000000500  timeout then success (pending for 6 seconds, then the customer approves)
  *   +243000000503  provider unavailable (retryable failure)
  */
-export const SANDBOX_MAGIC_MSISDNS: { msisdn: string; behaviour: string }[] = [
-  { msisdn: '+243000000404', behaviour: 'Wallet not found → attempt fails (invalid_msisdn), intent returns to REQUIRES_PAYMENT_METHOD' },
-  { msisdn: '+243000000408', behaviour: 'Provider outcome unknown → payment parked in MANUAL_REVIEW, intent AMBIGUOUS, payment_intent.ambiguous_hold webhook' },
-  { msisdn: '+243000000500', behaviour: 'Timeout then success → pending for 6 seconds, then succeeds and settles' },
-  { msisdn: '+243000000503', behaviour: 'Provider unavailable → retryable failure (provider_unavailable)' },
-  { msisdn: 'any number ending in 0000', behaviour: 'Customer rejects the prompt → declined' },
+export const SANDBOX_MAGIC_MSISDNS: { msisdn: string; outcome: string; behaviour: string }[] = [
+  { msisdn: '+243000000501', outcome: 'succeed', behaviour: 'Customer approves → captured, settled to the test balance, payment_intent.succeeded webhook' },
+  { msisdn: '+243000000404', outcome: 'fail', behaviour: 'Wallet not found → attempt fails (invalid_msisdn), intent returns to REQUIRES_PAYMENT_METHOD' },
+  { msisdn: '+243000000408', outcome: 'ambiguous', behaviour: 'Provider outcome unknown → payment parked in MANUAL_REVIEW, intent AMBIGUOUS, payment_intent.ambiguous_hold webhook' },
+  { msisdn: '+243000000500', outcome: 'timeout_then_succeed', behaviour: 'Timeout then success → pending for 6 seconds, then succeeds and settles' },
+  { msisdn: '+243000000503', outcome: 'provider_unavailable', behaviour: 'Provider unavailable → retryable failure (provider_unavailable)' },
+  { msisdn: 'any number ending in 0000', outcome: 'declined', behaviour: 'Customer rejects the prompt → declined' },
 ];
 const MAGIC_DELAY_MS = 6000;
 function magic(phone: string | null | undefined): string | null {

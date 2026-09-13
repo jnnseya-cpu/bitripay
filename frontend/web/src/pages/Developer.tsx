@@ -24,30 +24,121 @@ export function Developer() {
   const [ep, setEp] = useState<any>({ url: '', events: ['payment_intent.succeeded', 'refund.succeeded'] });
   const [epSecret, setEpSecret] = useState<any>(null);
   const err = (e: any) => toast(e.message, 'error');
-  if (user?.role !== 'merchant' && user?.role !== 'admin') return <Alert kind="info">The developer portal is for merchant accounts. <Link to="/app/merchant">Upgrade</Link> first.</Alert>;
+  if (user?.role !== 'merchant' && user?.role !== 'admin')
+    return (
+      <Alert kind="info">
+        The developer portal is for merchant accounts. <Link to="/app/merchant">Upgrade</Link> first.
+      </Alert>
+    );
   const allTypes: string[] = types.data?.data ?? types.data?.types ?? [];
   return (
     <div>
-      <PageHeader title="Developer portal" subtitle="One integration, every eligible rail. Keys, webhooks, events, sandbox and docs." actions={<a className="btn secondary" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">OpenAPI ↗</a>} />
-      <Tabs tabs={[{ id: 'keys', label: 'API keys' }, { id: 'webhooks', label: 'Webhooks' }, { id: 'events', label: 'Events' }, { id: 'sandbox', label: 'Sandbox' }, { id: 'docs', label: 'Docs & SDKs' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <PageHeader
+        title="Developer portal"
+        subtitle="One integration, every eligible rail. Keys, webhooks, events, sandbox and docs."
+        actions={
+          <a className="btn secondary" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">
+            OpenAPI ↗
+          </a>
+        }
+      />
+      <Tabs
+        tabs={[
+          { id: 'keys', label: 'API keys' },
+          { id: 'webhooks', label: 'Webhooks' },
+          { id: 'events', label: 'Events' },
+          { id: 'sandbox', label: 'Sandbox' },
+          { id: 'docs', label: 'Docs & SDKs' },
+        ]}
+        value={tab}
+        onChange={(v) => setTab(v as any)}
+      />
       {tab === 'keys' && (
         <div className="grid cols-2">
           <div className="card">
             <h3>New key</h3>
-            <p className="small muted"><b>sk_</b> secret keys act for your whole account; <b>rk_</b> restricted keys carry only the scopes you tick; <b>pk_</b> publishable keys are safe in browsers and apps. Test keys only touch the sandbox.</p>
+            <p className="small muted">
+              <b>sk_</b> secret keys act for your whole account; <b>rk_</b> restricted keys carry only the scopes you tick; <b>pk_</b> publishable keys are safe in browsers and apps. Test keys only
+              touch the sandbox.
+            </p>
             <div className="grid cols-2">
-              <Field label="Label"><Input value={key.label} onChange={(e) => setKey({ ...key, label: e.target.value })} placeholder="Shop backend" /></Field>
-              <Field label="Kind"><Select value={key.kind} onChange={(e) => setKey({ ...key, kind: e.target.value })}><option value="secret">secret (sk_)</option><option value="restricted">restricted (rk_)</option><option value="publishable">publishable (pk_)</option></Select></Field>
-              <Field label="Mode"><Select value={key.mode} onChange={(e) => setKey({ ...key, mode: e.target.value })}><option value="test">test</option><option value="live">live</option></Select></Field>
+              <Field label="Label">
+                <Input value={key.label} onChange={(e) => setKey({ ...key, label: e.target.value })} placeholder="Shop backend" />
+              </Field>
+              <Field label="Kind">
+                <Select value={key.kind} onChange={(e) => setKey({ ...key, kind: e.target.value })}>
+                  <option value="secret">secret (sk_)</option>
+                  <option value="restricted">restricted (rk_)</option>
+                  <option value="publishable">publishable (pk_)</option>
+                </Select>
+              </Field>
+              <Field label="Mode">
+                <Select value={key.mode} onChange={(e) => setKey({ ...key, mode: e.target.value })}>
+                  <option value="test">test</option>
+                  <option value="live">live</option>
+                </Select>
+              </Field>
             </div>
-            {key.kind === 'restricted' && <Field label="Scopes"><div className="row wrap">{(scopes.data?.data ?? scopes.data?.scopes ?? []).map((s: string) => <Chip key={s} kind={key.scopes.includes(s) ? 'primary' : undefined} onClick={() => setKey({ ...key, scopes: key.scopes.includes(s) ? key.scopes.filter((x: string) => x !== s) : [...key.scopes, s] })}>{s}</Chip>)}</div></Field>}
-            <Button onClick={() => api.post<any>('/api/v1/api_keys', { label: key.label, kind: key.kind, mode: key.mode, scopes: key.kind === 'restricted' ? key.scopes : undefined }).then((r) => { setCreated(r); keys.reload(); }).catch(err)} disabled={key.label.length < 2}>Create key</Button>
-            <Modal open={!!created} onClose={() => setCreated(null)} title="Your new key"><Alert kind="warning">Copy it now — it is shown once.</Alert><div className="card soft compact mono small" style={{ wordBreak: 'break-all' }}>{created?.secret ?? created?.key ?? created?.apiKey?.secret}</div><div className="mt"><CopyButton text={created?.secret ?? created?.key ?? created?.apiKey?.secret ?? ''} /></div></Modal>
+            {key.kind === 'restricted' && (
+              <Field label="Scopes">
+                <div className="row wrap">
+                  {(scopes.data?.data ?? scopes.data?.scopes ?? []).map((s: string) => (
+                    <Chip
+                      key={s}
+                      kind={key.scopes.includes(s) ? 'primary' : undefined}
+                      onClick={() => setKey({ ...key, scopes: key.scopes.includes(s) ? key.scopes.filter((x: string) => x !== s) : [...key.scopes, s] })}
+                    >
+                      {s}
+                    </Chip>
+                  ))}
+                </div>
+              </Field>
+            )}
+            <Button
+              onClick={() =>
+                api
+                  .post<any>('/api/v1/api_keys', { label: key.label, kind: key.kind, mode: key.mode, scopes: key.kind === 'restricted' ? key.scopes : undefined })
+                  .then((r) => {
+                    setCreated(r);
+                    keys.reload();
+                  })
+                  .catch(err)
+              }
+              disabled={key.label.length < 2}
+            >
+              Create key
+            </Button>
+            <Modal open={!!created} onClose={() => setCreated(null)} title="Your new key">
+              <Alert kind="warning">Copy it now — it is shown once.</Alert>
+              <div className="card soft compact mono small" style={{ wordBreak: 'break-all' }}>
+                {created?.secret ?? created?.key ?? created?.apiKey?.secret}
+              </div>
+              <div className="mt">
+                <CopyButton text={created?.secret ?? created?.key ?? created?.apiKey?.secret ?? ''} />
+              </div>
+            </Modal>
           </div>
           <div className="card">
             <h3>Keys</h3>
             {(keys.data?.data ?? keys.data?.items ?? []).length === 0 && <Empty icon="🔑" text="No keys yet" />}
-            <div className="list">{(keys.data?.data ?? keys.data?.items ?? []).map((k: any) => <div key={k.id} className="list-item"><div className="flex1"><div className="main-text">{k.label} <Chip>{k.kind ?? 'secret'}</Chip> <Chip kind={k.mode === 'live' ? 'success' : 'warning'}>{k.mode}</Chip></div><div className="sub-text mono">{k.prefix} · {(k.scopes ?? ['*']).join(', ')}{k.lastUsedAt ? ` · last used ${new Date(k.lastUsedAt).toLocaleString()}` : ''}</div></div><Button size="sm" variant="ghost" onClick={() => api.del(`/api/v1/api_keys/${k.id}`).then(keys.reload).catch(err)}>Revoke</Button></div>)}</div>
+            <div className="list">
+              {(keys.data?.data ?? keys.data?.items ?? []).map((k: any) => (
+                <div key={k.id} className="list-item">
+                  <div className="flex1">
+                    <div className="main-text">
+                      {k.label} <Chip>{k.kind ?? 'secret'}</Chip> <Chip kind={k.mode === 'live' ? 'success' : 'warning'}>{k.mode}</Chip>
+                    </div>
+                    <div className="sub-text mono">
+                      {k.prefix} · {(k.scopes ?? ['*']).join(', ')}
+                      {k.lastUsedAt ? ` · last used ${new Date(k.lastUsedAt).toLocaleString()}` : ''}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => api.del(`/api/v1/api_keys/${k.id}`).then(keys.reload).catch(err)}>
+                    Revoke
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -55,24 +146,150 @@ export function Developer() {
         <div className="grid cols-2">
           <div className="card">
             <h3>Endpoints</h3>
-            <p className="small muted">Every delivery carries <code>BitriPay-Signature</code> (HMAC, <code>t=…,v1=…</code>, 5-minute tolerance) and <code>BitriPay-Signature-Ed25519</code> (platform key from <code>/v1/keys</code>). Retries: 10s, 30s, 2m, 10m, 30m, then every 2h for 24h; dead letters can be replayed here.</p>
-            <Field label="URL"><Input value={ep.url} onChange={(e) => setEp({ ...ep, url: e.target.value })} placeholder="https://shop.example/webhooks/bitripay" /></Field>
-            <Field label="Events"><div className="row wrap">{allTypes.map((t: string) => <Chip key={t} kind={ep.events.includes(t) ? 'primary' : undefined} onClick={() => setEp({ ...ep, events: ep.events.includes(t) ? ep.events.filter((x: string) => x !== t) : [...ep.events, t] })}>{t}</Chip>)}</div></Field>
-            <Button onClick={() => api.post<any>('/api/v1/webhook_endpoints', ep).then((r) => { setEpSecret(r); endpoints.reload(); }).catch(err)} disabled={!/^https?:\/\//.test(ep.url)}>Add endpoint</Button>
-            <Modal open={!!epSecret} onClose={() => setEpSecret(null)} title="Endpoint secret"><Alert kind="warning">Store this signing secret now.</Alert><div className="card soft compact mono small">{epSecret?.secret}</div><CopyButton text={epSecret?.secret ?? ''} /></Modal>
-            <div className="list mt">{(endpoints.data?.data ?? endpoints.data?.items ?? []).map((e: any) => <div key={e.id} className="list-item"><div className="flex1"><div className="main-text">{e.url}</div><div className="sub-text">{(e.events ?? []).join(', ')} · {e.status ?? (e.active ? 'active' : 'disabled')}</div></div><div className="row"><Button size="sm" variant="secondary" onClick={() => api.post(`/api/v1/webhook_endpoints/${e.id}/ping`, {}).then(() => toast('Ping sent', 'success')).catch(err)}>Ping</Button><Button size="sm" variant="ghost" onClick={() => api.post<any>(`/api/v1/webhook_endpoints/${e.id}/rotate`, {}).then((r) => setEpSecret(r)).catch(err)}>Rotate</Button><Button size="sm" variant="ghost" onClick={() => api.del(`/api/v1/webhook_endpoints/${e.id}`).then(endpoints.reload).catch(err)}>Delete</Button></div></div>)}</div>
+            <p className="small muted">
+              Every delivery carries <code>BitriPay-Signature</code> (HMAC, <code>t=…,v1=…</code>, 5-minute tolerance) and <code>BitriPay-Signature-Ed25519</code> (platform key from{' '}
+              <code>/v1/keys</code>). Retries: 10s, 30s, 2m, 10m, 30m, then every 2h for 24h; dead letters can be replayed here.
+            </p>
+            <Field label="URL">
+              <Input value={ep.url} onChange={(e) => setEp({ ...ep, url: e.target.value })} placeholder="https://shop.example/webhooks/bitripay" />
+            </Field>
+            <Field label="Events">
+              <div className="row wrap">
+                {allTypes.map((t: string) => (
+                  <Chip
+                    key={t}
+                    kind={ep.events.includes(t) ? 'primary' : undefined}
+                    onClick={() => setEp({ ...ep, events: ep.events.includes(t) ? ep.events.filter((x: string) => x !== t) : [...ep.events, t] })}
+                  >
+                    {t}
+                  </Chip>
+                ))}
+              </div>
+            </Field>
+            <Button
+              onClick={() =>
+                api
+                  .post<any>('/api/v1/webhook_endpoints', ep)
+                  .then((r) => {
+                    setEpSecret(r);
+                    endpoints.reload();
+                  })
+                  .catch(err)
+              }
+              disabled={!/^https?:\/\//.test(ep.url)}
+            >
+              Add endpoint
+            </Button>
+            <Modal open={!!epSecret} onClose={() => setEpSecret(null)} title="Endpoint secret">
+              <Alert kind="warning">Store this signing secret now.</Alert>
+              <div className="card soft compact mono small">{epSecret?.secret}</div>
+              <CopyButton text={epSecret?.secret ?? ''} />
+            </Modal>
+            <div className="list mt">
+              {(endpoints.data?.data ?? endpoints.data?.items ?? []).map((e: any) => (
+                <div key={e.id} className="list-item">
+                  <div className="flex1">
+                    <div className="main-text">{e.url}</div>
+                    <div className="sub-text">
+                      {(e.events ?? []).join(', ')} · {e.status ?? (e.active ? 'active' : 'disabled')}
+                    </div>
+                  </div>
+                  <div className="row">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() =>
+                        api
+                          .post(`/api/v1/webhook_endpoints/${e.id}/ping`, {})
+                          .then(() => toast('Ping sent', 'success'))
+                          .catch(err)
+                      }
+                    >
+                      Ping
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        api
+                          .post<any>(`/api/v1/webhook_endpoints/${e.id}/rotate`, {})
+                          .then((r) => setEpSecret(r))
+                          .catch(err)
+                      }
+                    >
+                      Rotate
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => api.del(`/api/v1/webhook_endpoints/${e.id}`).then(endpoints.reload).catch(err)}>
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="card">
             <h3>Deliveries</h3>
             {(deliveries.data?.data ?? deliveries.data?.items ?? []).length === 0 && <Empty icon="📬" text="No deliveries yet" />}
-            <div className="list">{(deliveries.data?.data ?? deliveries.data?.items ?? []).map((d: any) => <div key={d.id} className="list-item"><div className="flex1"><div className="main-text">{d.type ?? d.eventType}</div><div className="sub-text">{d.url} · attempt {d.attempts ?? d.attempt} · {d.lastStatus ?? d.statusCode ?? ''} · {new Date(d.createdAt).toLocaleString()}</div></div><StatusBadge status={d.status} />{d.status !== 'succeeded' && <Button size="sm" variant="ghost" onClick={() => api.post(`/api/v1/webhook_deliveries/${d.id}/replay`, {}).then(() => { toast('Replayed', 'success'); deliveries.reload(); }).catch(err)}>Replay</Button>}</div>)}</div>
+            <div className="list">
+              {(deliveries.data?.data ?? deliveries.data?.items ?? []).map((d: any) => (
+                <div key={d.id} className="list-item">
+                  <div className="flex1">
+                    <div className="main-text">{d.type ?? d.eventType}</div>
+                    <div className="sub-text">
+                      {d.url} · attempt {d.attempts ?? d.attempt} · {d.lastStatus ?? d.statusCode ?? ''} · {new Date(d.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+                  <StatusBadge status={d.status} />
+                  {d.status !== 'succeeded' && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        api
+                          .post(`/api/v1/webhook_deliveries/${d.id}/replay`, {})
+                          .then(() => {
+                            toast('Replayed', 'success');
+                            deliveries.reload();
+                          })
+                          .catch(err)
+                      }
+                    >
+                      Replay
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
       {tab === 'events' && (
         <div className="card">
           <h3>Events</h3>
-          <div className="list">{(events.data?.data ?? []).map((e: any) => <div key={e.id} className="list-item"><div className="flex1"><div className="main-text">{e.type}</div><div className="sub-text mono">{e.id} · {new Date(e.createdAt).toLocaleString()}</div></div><Button size="sm" variant="ghost" onClick={() => api.post(`/api/v1/events/${e.id}/replay`, {}).then(() => toast('Replayed to every endpoint', 'success')).catch(err)}>Replay</Button></div>)}</div>
+          <div className="list">
+            {(events.data?.data ?? []).map((e: any) => (
+              <div key={e.id} className="list-item">
+                <div className="flex1">
+                  <div className="main-text">{e.type}</div>
+                  <div className="sub-text mono">
+                    {e.id} · {new Date(e.createdAt).toLocaleString()}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    api
+                      .post(`/api/v1/events/${e.id}/replay`, {})
+                      .then(() => toast('Replayed to every endpoint', 'success'))
+                      .catch(err)
+                  }
+                >
+                  Replay
+                </Button>
+              </div>
+            ))}
+          </div>
           {events.data?.data?.length === 0 && <Empty icon="⚡" text="No events yet" />}
         </div>
       )}
@@ -80,8 +297,14 @@ export function Developer() {
         <div className="card">
           <h3>Sandbox</h3>
           <p className="small muted">Test keys drive the real intent and attempt state machine against the simulator. These numbers force outcomes:</p>
-          {(sandbox.data?.magic ?? sandbox.data?.outcomes ?? []).map((m: any) => <KV key={m.msisdn ?? m.value} k={<span className="mono">{m.msisdn ?? m.value}</span>} v={m.outcome ?? m.description} />)}
-          {sandbox.data && !sandbox.data.magic && !sandbox.data.outcomes && <pre className="mono tiny" style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(sandbox.data, null, 2)}</pre>}
+          {(sandbox.data?.magic ?? sandbox.data?.outcomes ?? []).map((m: any) => (
+            <KV key={m.msisdn ?? m.value} k={<span className="mono">{m.msisdn ?? m.value}</span>} v={m.outcome ?? m.description} />
+          ))}
+          {sandbox.data && !sandbox.data.magic && !sandbox.data.outcomes && (
+            <pre className="mono tiny" style={{ whiteSpace: 'pre-wrap' }}>
+              {JSON.stringify(sandbox.data, null, 2)}
+            </pre>
+          )}
         </div>
       )}
       {tab === 'docs' && <Docs />}
@@ -112,28 +335,67 @@ const CURL = `curl -X POST https://api.bitripay.com/v1/payment_intents \\
 function Docs() {
   const [lang, setLang] = useState<'node' | 'php' | 'python' | 'curl'>('node');
   const code = { node: NODE, php: PHP, python: PY, curl: CURL }[lang];
-  const errors = [['BP-1xxx', 'authentication & authorisation (invalid key, scope, step-up required)'], ['BP-2xxx', 'validation (idempotency key reused, malformed body)'], ['BP-3xxx', 'ledger (insufficient funds, limits, frozen)'], ['BP-4xxx', 'rails (connector unavailable, degraded mode)'], ['BP-5xxx', 'compliance (risk block, KYC tier, KYB, cooling-off)'], ['BP-6xxx', 'intelligence & ACU (rate limited, margin protection, quota)']];
+  const errors = [
+    ['BP-1xxx', 'authentication & authorisation (invalid key, scope, step-up required)'],
+    ['BP-2xxx', 'validation (idempotency key reused, malformed body)'],
+    ['BP-3xxx', 'ledger (insufficient funds, limits, frozen)'],
+    ['BP-4xxx', 'rails (connector unavailable, degraded mode)'],
+    ['BP-5xxx', 'compliance (risk block, KYC tier, KYB, cooling-off)'],
+    ['BP-6xxx', 'intelligence & ACU (rate limited, margin protection, quota)'],
+  ];
   return (
     <div className="grid cols-2">
       <div className="card">
         <h3>Quick start</h3>
         <ol className="small">
-          <li>Create a <b>test</b> secret key under API keys.</li>
+          <li>
+            Create a <b>test</b> secret key under API keys.
+          </li>
           <li>Create a payment intent (amount in minor units) — you get a hosted checkout URL and a BitriQR payload.</li>
           <li>Show the QR or redirect to the checkout; the customer pays over the eligible rail Smart Route picks.</li>
-          <li>Listen to <code>payment_intent.succeeded</code> (verify both signatures), then <code>payment_intent.settled</code>.</li>
-          <li>Refund, verify (KODA), pay out and reconcile with the same key. Switch to a <b>live</b> key when you go live.</li>
+          <li>
+            Listen to <code>payment_intent.succeeded</code> (verify both signatures), then <code>payment_intent.settled</code>.
+          </li>
+          <li>
+            Refund, verify (KODA), pay out and reconcile with the same key. Switch to a <b>live</b> key when you go live.
+          </li>
         </ol>
-        <div className="row wrap mb">{(['node', 'php', 'python', 'curl'] as const).map((l) => <Chip key={l} kind={lang === l ? 'primary' : undefined} onClick={() => setLang(l)}>{l}</Chip>)}</div>
-        <pre className="mono tiny card soft compact" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{code}</pre>
-        <div className="row"><a className="btn secondary" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">OpenAPI 3.1</a><a className="btn ghost" href="/api/v1/keys" target="_blank" rel="noreferrer">Key registry</a><a className="btn ghost" href="/api/v1/status" target="_blank" rel="noreferrer">Status</a></div>
+        <div className="row wrap mb">
+          {(['node', 'php', 'python', 'curl'] as const).map((l) => (
+            <Chip key={l} kind={lang === l ? 'primary' : undefined} onClick={() => setLang(l)}>
+              {l}
+            </Chip>
+          ))}
+        </div>
+        <pre className="mono tiny card soft compact" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {code}
+        </pre>
+        <div className="row">
+          <a className="btn secondary" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">
+            OpenAPI 3.1
+          </a>
+          <a className="btn ghost" href="/api/v1/keys" target="_blank" rel="noreferrer">
+            Key registry
+          </a>
+          <a className="btn ghost" href="/api/v1/status" target="_blank" rel="noreferrer">
+            Status
+          </a>
+        </div>
       </div>
       <div className="card">
         <h3>Error catalogue</h3>
-        {errors.map(([k, v]) => <KV key={k} k={<span className="mono">{k}</span>} v={v} />)}
-        <p className="small muted mt">Every error body is <code>{'{ error: { code, bp, message, details } }'}</code>. Idempotency: send <code>Idempotency-Key</code> on every money-moving POST; a replay returns the same object (200), a reuse with a different body is refused (422).</p>
+        {errors.map(([k, v]) => (
+          <KV key={k} k={<span className="mono">{k}</span>} v={v} />
+        ))}
+        <p className="small muted mt">
+          Every error body is <code>{'{ error: { code, bp, message, details } }'}</code>. Idempotency: send <code>Idempotency-Key</code> on every money-moving POST; a replay returns the same object
+          (200), a reuse with a different body is refused (422).
+        </p>
         <h3 className="mt">Objects</h3>
-        <p className="small">payment_intents · checkout_sessions · payment_links · qr_codes · locations · refunds · verifications · payouts · balance · webhook_endpoints · events · settlement_profiles · settlement_cycles · disputes · offline · diaspora · payments (national switch)</p>
+        <p className="small">
+          payment_intents · checkout_sessions · payment_links · qr_codes · locations · refunds · verifications · payouts · balance · webhook_endpoints · events · settlement_profiles ·
+          settlement_cycles · disputes · offline · diaspora · payments (national switch)
+        </p>
       </div>
     </div>
   );

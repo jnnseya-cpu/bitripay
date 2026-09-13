@@ -71,7 +71,16 @@ const RECOMMENDED: { key: keyof CorridorCompliance; label: string }[] = [
 ];
 
 /** What still stands between this corridor and live funds. */
-export function corridorReadiness(r: { collection_partner: string | null; payout_partner: string | null; licence_ref: string | null; compliance: string; licence_expires_at: string | null; operator_id: string | null; dest_currency: string; rail: string }): Corridor['readiness'] {
+export function corridorReadiness(r: {
+  collection_partner: string | null;
+  payout_partner: string | null;
+  licence_ref: string | null;
+  compliance: string;
+  licence_expires_at: string | null;
+  operator_id: string | null;
+  dest_currency: string;
+  rail: string;
+}): Corridor['readiness'] {
   const c: CorridorCompliance = parseJson(r.compliance, {});
   const missing: string[] = [];
   const warnings: string[] = [];
@@ -84,14 +93,44 @@ export function corridorReadiness(r: { collection_partner: string | null; payout
   else if (new Date(r.licence_expires_at).getTime() < Date.now() + 30 * 86_400_000) warnings.push('Licence expires within 30 days');
   for (const m of RECOMMENDED) if (!c[m.key]) warnings.push(`${m.label} not recorded`);
   const db = getDb();
-  const accounts = db.prepare("SELECT a.agent_user_id, u.kyc_status FROM payout_accounts a LEFT JOIN users u ON u.id = a.agent_user_id WHERE a.rail = ? AND a.currency = ? AND (a.operator_id = ? OR ? IS NULL) AND a.status = 'active'").all(r.rail, r.dest_currency, r.operator_id, r.operator_id) as any[];
+  const accounts = db
+    .prepare(
+      "SELECT a.agent_user_id, u.kyc_status FROM payout_accounts a LEFT JOIN users u ON u.id = a.agent_user_id WHERE a.rail = ? AND a.currency = ? AND (a.operator_id = ? OR ? IS NULL) AND a.status = 'active'",
+    )
+    .all(r.rail, r.dest_currency, r.operator_id, r.operator_id) as any[];
   if (!accounts.length) warnings.push('No active prefunded payout account for this corridor');
   if (accounts.some((a) => a.agent_user_id && a.kyc_status !== 'verified')) missing.push('Every operating agent must pass due diligence (KYC verified)');
   return { ready: missing.length === 0, missing, warnings };
 }
 
 function toCorridor(r: any): Corridor {
-  return { compliance: parseJson(r.compliance, {}), licenceExpiresAt: r.licence_expires_at ?? null, readiness: corridorReadiness(r), payoutCurrencies: parseJson<string[]>(r.payout_currencies, []), beneficiaryConsent: !!r.beneficiary_consent, payoutConfirmation: r.payout_confirmation ?? null, id: r.id, sourceCountry: r.source_country, sourceCurrency: r.source_currency, destCountry: r.dest_country, destCurrency: r.dest_currency, operatorId: r.operator_id, rail: r.rail, status: r.status, collectionPartner: r.collection_partner, payoutPartner: r.payout_partner, licenceRef: r.licence_ref, approvedBy: r.approved_by, approvedAt: r.approved_at, estimatedPayoutMinutes: r.estimated_payout_minutes, maxAmount: r.max_amount, notes: r.notes, enabled: !!r.enabled, createdAt: r.created_at, updatedAt: r.updated_at };
+  return {
+    compliance: parseJson(r.compliance, {}),
+    licenceExpiresAt: r.licence_expires_at ?? null,
+    readiness: corridorReadiness(r),
+    payoutCurrencies: parseJson<string[]>(r.payout_currencies, []),
+    beneficiaryConsent: !!r.beneficiary_consent,
+    payoutConfirmation: r.payout_confirmation ?? null,
+    id: r.id,
+    sourceCountry: r.source_country,
+    sourceCurrency: r.source_currency,
+    destCountry: r.dest_country,
+    destCurrency: r.dest_currency,
+    operatorId: r.operator_id,
+    rail: r.rail,
+    status: r.status,
+    collectionPartner: r.collection_partner,
+    payoutPartner: r.payout_partner,
+    licenceRef: r.licence_ref,
+    approvedBy: r.approved_by,
+    approvedAt: r.approved_at,
+    estimatedPayoutMinutes: r.estimated_payout_minutes,
+    maxAmount: r.max_amount,
+    notes: r.notes,
+    enabled: !!r.enabled,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
 }
 
 export function listCorridors(): Corridor[] {
@@ -103,11 +142,28 @@ export function getCorridor(id: string): Corridor {
   return toCorridor(r);
 }
 
-export function upsertCorridor(input: Partial<Omit<Corridor, 'compliance' | 'payoutCurrencies' | 'beneficiaryConsent' | 'payoutConfirmation'>> & { sourceCurrency: string; destCountry: string; destCurrency: string; rail?: Corridor['rail']; compliance?: CorridorCompliance | null; licenceExpiresAt?: string | null; payoutCurrencies?: string[] | null; beneficiaryConsent?: boolean | null; payoutConfirmation?: string | null }, actor?: Actor): Corridor {
+export function upsertCorridor(
+  input: Partial<Omit<Corridor, 'compliance' | 'payoutCurrencies' | 'beneficiaryConsent' | 'payoutConfirmation'>> & {
+    sourceCurrency: string;
+    destCountry: string;
+    destCurrency: string;
+    rail?: Corridor['rail'];
+    compliance?: CorridorCompliance | null;
+    licenceExpiresAt?: string | null;
+    payoutCurrencies?: string[] | null;
+    beneficiaryConsent?: boolean | null;
+    payoutConfirmation?: string | null;
+  },
+  actor?: Actor,
+): Corridor {
   const db = getDb();
   if (input.operatorId) getOperator(input.operatorId);
   // One corridor per (source currency, destination, operator, rail): re-registering updates it instead of duplicating.
-  const byKey = !input.id ? (db.prepare('SELECT * FROM corridors WHERE source_currency = ? AND dest_country = ? AND dest_currency = ? AND rail = ? AND operator_id IS ?').get(input.sourceCurrency.toUpperCase(), input.destCountry.toUpperCase(), input.destCurrency.toUpperCase(), input.rail ?? 'mobile_money', input.operatorId ?? null) as any) : null;
+  const byKey = !input.id
+    ? (db
+        .prepare('SELECT * FROM corridors WHERE source_currency = ? AND dest_country = ? AND dest_currency = ? AND rail = ? AND operator_id IS ?')
+        .get(input.sourceCurrency.toUpperCase(), input.destCountry.toUpperCase(), input.destCurrency.toUpperCase(), input.rail ?? 'mobile_money', input.operatorId ?? null) as any)
+    : null;
   const id = input.id ?? byKey?.id ?? uuid();
   const existing = input.id ? (db.prepare('SELECT * FROM corridors WHERE id = ?').get(id) as any) : byKey;
   const status = input.status ?? existing?.status ?? 'sandbox';
@@ -115,29 +171,79 @@ export function upsertCorridor(input: Partial<Omit<Corridor, 'compliance' | 'pay
     `INSERT INTO corridors (id, source_country, source_currency, dest_country, dest_currency, operator_id, rail, status, collection_partner, payout_partner, licence_ref, approved_by, approved_at, estimated_payout_minutes, max_amount, notes, enabled, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET source_country = excluded.source_country, source_currency = excluded.source_currency, dest_country = excluded.dest_country, dest_currency = excluded.dest_currency, operator_id = excluded.operator_id, rail = excluded.rail, status = excluded.status, collection_partner = excluded.collection_partner, payout_partner = excluded.payout_partner, licence_ref = excluded.licence_ref, approved_by = excluded.approved_by, approved_at = excluded.approved_at, estimated_payout_minutes = excluded.estimated_payout_minutes, max_amount = excluded.max_amount, notes = excluded.notes, enabled = excluded.enabled, updated_at = excluded.updated_at`,
-  ).run(id, input.sourceCountry ?? existing?.source_country ?? null, input.sourceCurrency.toUpperCase(), input.destCountry.toUpperCase(), input.destCurrency.toUpperCase(), input.operatorId ?? existing?.operator_id ?? null, input.rail ?? existing?.rail ?? 'mobile_money', status, input.collectionPartner ?? existing?.collection_partner ?? null, input.payoutPartner ?? existing?.payout_partner ?? null, input.licenceRef ?? existing?.licence_ref ?? null, existing?.approved_by ?? null, existing?.approved_at ?? null, input.estimatedPayoutMinutes ?? existing?.estimated_payout_minutes ?? 60, input.maxAmount ?? existing?.max_amount ?? 0, input.notes ?? existing?.notes ?? null, input.enabled === false ? 0 : 1, existing?.created_at ?? now(), now());
-  if (input.compliance !== undefined || input.licenceExpiresAt !== undefined) db.prepare('UPDATE corridors SET compliance = ?, licence_expires_at = ? WHERE id = ?').run(JSON.stringify({ ...parseJson(existing?.compliance, {}), ...(input.compliance ?? {}) }), input.licenceExpiresAt === undefined ? existing?.licence_expires_at ?? null : input.licenceExpiresAt, id);
+  ).run(
+    id,
+    input.sourceCountry ?? existing?.source_country ?? null,
+    input.sourceCurrency.toUpperCase(),
+    input.destCountry.toUpperCase(),
+    input.destCurrency.toUpperCase(),
+    input.operatorId ?? existing?.operator_id ?? null,
+    input.rail ?? existing?.rail ?? 'mobile_money',
+    status,
+    input.collectionPartner ?? existing?.collection_partner ?? null,
+    input.payoutPartner ?? existing?.payout_partner ?? null,
+    input.licenceRef ?? existing?.licence_ref ?? null,
+    existing?.approved_by ?? null,
+    existing?.approved_at ?? null,
+    input.estimatedPayoutMinutes ?? existing?.estimated_payout_minutes ?? 60,
+    input.maxAmount ?? existing?.max_amount ?? 0,
+    input.notes ?? existing?.notes ?? null,
+    input.enabled === false ? 0 : 1,
+    existing?.created_at ?? now(),
+    now(),
+  );
+  if (input.compliance !== undefined || input.licenceExpiresAt !== undefined)
+    db.prepare('UPDATE corridors SET compliance = ?, licence_expires_at = ? WHERE id = ?').run(
+      JSON.stringify({ ...parseJson(existing?.compliance, {}), ...(input.compliance ?? {}) }),
+      input.licenceExpiresAt === undefined ? (existing?.licence_expires_at ?? null) : input.licenceExpiresAt,
+      id,
+    );
   if (input.payoutCurrencies !== undefined || input.beneficiaryConsent !== undefined || input.payoutConfirmation !== undefined) {
-    const currencies = input.payoutCurrencies === undefined ? parseJson<string[]>(existing?.payout_currencies, []) : (input.payoutCurrencies ?? []).map((c) => c.toUpperCase()).filter((c) => c !== input.destCurrency.toUpperCase());
-    db.prepare('UPDATE corridors SET payout_currencies = ?, beneficiary_consent = ?, payout_confirmation = ? WHERE id = ?').run(JSON.stringify([...new Set(currencies)]), input.beneficiaryConsent === undefined ? existing?.beneficiary_consent ?? 0 : input.beneficiaryConsent ? 1 : 0, input.payoutConfirmation === undefined ? existing?.payout_confirmation ?? null : input.payoutConfirmation, id);
+    const currencies =
+      input.payoutCurrencies === undefined
+        ? parseJson<string[]>(existing?.payout_currencies, [])
+        : (input.payoutCurrencies ?? []).map((c) => c.toUpperCase()).filter((c) => c !== input.destCurrency.toUpperCase());
+    db.prepare('UPDATE corridors SET payout_currencies = ?, beneficiary_consent = ?, payout_confirmation = ? WHERE id = ?').run(
+      JSON.stringify([...new Set(currencies)]),
+      input.beneficiaryConsent === undefined ? (existing?.beneficiary_consent ?? 0) : input.beneficiaryConsent ? 1 : 0,
+      input.payoutConfirmation === undefined ? (existing?.payout_confirmation ?? null) : input.payoutConfirmation,
+      id,
+    );
   }
   recordEvent('corridor', id, existing ? 'corridor.updated' : 'corridor.created', actor ?? { type: 'system' }, { status, destCountry: input.destCountry, operatorId: input.operatorId ?? null });
   return getCorridor(id);
 }
 
 /** Going live is an explicit, attributable administrative act that needs the regulatory arrangements on record. */
-export function setCorridorStatus(id: string, status: Corridor['status'], admin: { id: string }, arrangements: { collectionPartner?: string | null; payoutPartner?: string | null; licenceRef?: string | null; notes?: string | null; compliance?: CorridorCompliance | null; licenceExpiresAt?: string | null } = {}): Corridor {
+export function setCorridorStatus(
+  id: string,
+  status: Corridor['status'],
+  admin: { id: string },
+  arrangements: {
+    collectionPartner?: string | null;
+    payoutPartner?: string | null;
+    licenceRef?: string | null;
+    notes?: string | null;
+    compliance?: CorridorCompliance | null;
+    licenceExpiresAt?: string | null;
+  } = {},
+): Corridor {
   const c = getCorridor(id);
   const collection = arrangements.collectionPartner ?? c.collectionPartner;
   const payout = arrangements.payoutPartner ?? c.payoutPartner;
   const licence = arrangements.licenceRef ?? c.licenceRef;
-  if (arrangements.compliance || arrangements.licenceExpiresAt !== undefined) getDb().prepare('UPDATE corridors SET compliance = ?, licence_expires_at = ? WHERE id = ?').run(JSON.stringify({ ...c.compliance, ...(arrangements.compliance ?? {}) }), arrangements.licenceExpiresAt === undefined ? c.licenceExpiresAt : arrangements.licenceExpiresAt, id);
+  if (arrangements.compliance || arrangements.licenceExpiresAt !== undefined)
+    getDb()
+      .prepare('UPDATE corridors SET compliance = ?, licence_expires_at = ? WHERE id = ?')
+      .run(JSON.stringify({ ...c.compliance, ...(arrangements.compliance ?? {}) }), arrangements.licenceExpiresAt === undefined ? c.licenceExpiresAt : arrangements.licenceExpiresAt, id);
   if (status === 'live') {
     const row = getDb().prepare('SELECT * FROM corridors WHERE id = ?').get(id) as any;
     const readiness = corridorReadiness({ ...row, collection_partner: collection, payout_partner: payout, licence_ref: licence });
     if (!readiness.ready) throw badRequest(`This corridor cannot go live yet: ${readiness.missing.join('; ')}`, 'corridor_arrangements_required', readiness);
   }
-  getDb().prepare('UPDATE corridors SET status = ?, collection_partner = ?, payout_partner = ?, licence_ref = ?, notes = COALESCE(?, notes), approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ?').run(status, collection, payout, licence, arrangements.notes ?? null, status === 'live' ? admin.id : c.approvedBy, status === 'live' ? now() : c.approvedAt, now(), id);
+  getDb()
+    .prepare('UPDATE corridors SET status = ?, collection_partner = ?, payout_partner = ?, licence_ref = ?, notes = COALESCE(?, notes), approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ?')
+    .run(status, collection, payout, licence, arrangements.notes ?? null, status === 'live' ? admin.id : c.approvedBy, status === 'live' ? now() : c.approvedAt, now(), id);
   recordEvent('corridor', id, `corridor.${status}`, { type: 'admin', id: admin.id }, { collectionPartner: collection, payoutPartner: payout, licenceRef: licence });
   return getCorridor(id);
 }
@@ -165,7 +271,11 @@ export function deleteCorridor(id: string) {
 
 /** Best matching corridor for a destination: operator-specific first, then country-wide, for the given source currency or any. */
 export function findCorridor(q: { sourceCurrency: string; destCountry: string; destCurrency: string; operatorId?: string | null; rail: Corridor['rail'] }): Corridor | null {
-  const rows = getDb().prepare('SELECT * FROM corridors WHERE enabled = 1 AND rail = ? AND dest_country = ? AND dest_currency = ? AND (operator_id = ? OR operator_id IS NULL) AND (source_currency = ? OR source_currency = ?) ').all(q.rail, q.destCountry.toUpperCase(), q.destCurrency.toUpperCase(), q.operatorId ?? null, q.sourceCurrency.toUpperCase(), '*') as any[];
+  const rows = getDb()
+    .prepare(
+      'SELECT * FROM corridors WHERE enabled = 1 AND rail = ? AND dest_country = ? AND dest_currency = ? AND (operator_id = ? OR operator_id IS NULL) AND (source_currency = ? OR source_currency = ?) ',
+    )
+    .all(q.rail, q.destCountry.toUpperCase(), q.destCurrency.toUpperCase(), q.operatorId ?? null, q.sourceCurrency.toUpperCase(), '*') as any[];
   if (!rows.length) return null;
   rows.sort((a, b) => (b.operator_id ? 1 : 0) - (a.operator_id ? 1 : 0) || (b.source_currency !== '*' ? 1 : 0) - (a.source_currency !== '*' ? 1 : 0));
   return toCorridor(rows[0]);
@@ -175,7 +285,16 @@ export function findCorridor(q: { sourceCurrency: string; destCountry: string; d
 export function ensureCorridor(q: { sourceCountry?: string | null; sourceCurrency: string; destCountry: string; destCurrency: string; operatorId?: string | null; rail: Corridor['rail'] }): Corridor {
   const found = findCorridor(q);
   if (found) return found;
-  return upsertCorridor({ sourceCountry: q.sourceCountry ?? null, sourceCurrency: q.sourceCurrency, destCountry: q.destCountry, destCurrency: q.destCurrency, operatorId: q.operatorId ?? null, rail: q.rail, status: 'sandbox', notes: 'Auto-registered from a customer request. Sandbox only until authorised.' });
+  return upsertCorridor({
+    sourceCountry: q.sourceCountry ?? null,
+    sourceCurrency: q.sourceCurrency,
+    destCountry: q.destCountry,
+    destCurrency: q.destCurrency,
+    operatorId: q.operatorId ?? null,
+    rail: q.rail,
+    status: 'sandbox',
+    notes: 'Auto-registered from a customer request. Sandbox only until authorised.',
+  });
 }
 
 export const SANDBOX_PROVIDERS = ['sandbox', 'manual_bank', 'manual_momo'];
@@ -188,8 +307,13 @@ export const SANDBOX_PROVIDERS = ['sandbox', 'manual_bank', 'manual_momo'];
 export function assertCorridorAllowed(corridor: Corridor | null, fundingProvider: string | null | undefined) {
   const c = getComplianceSettings();
   const realProcessor = !!fundingProvider && !SANDBOX_PROVIDERS.includes(fundingProvider);
-  if (c.mode === 'sandbox' && realProcessor) throw forbidden('This platform runs in sandbox mode: live customer funds are not accepted until each corridor has authorised collection, settlement and payout arrangements.', 'compliance_sandbox_mode');
+  if (c.mode === 'sandbox' && realProcessor)
+    throw forbidden(
+      'This platform runs in sandbox mode: live customer funds are not accepted until each corridor has authorised collection, settlement and payout arrangements.',
+      'compliance_sandbox_mode',
+    );
   if (!corridor) return;
   if (corridor.status === 'suspended') throw forbidden('This corridor is suspended', 'corridor_suspended');
-  if (realProcessor && corridor.status !== 'live') throw forbidden(`The ${corridor.destCountry} corridor is not authorised for live funds yet (status: ${corridor.status}). Sandbox payments only.`, 'corridor_not_live');
+  if (realProcessor && corridor.status !== 'live')
+    throw forbidden(`The ${corridor.destCountry} corridor is not authorised for live funds yet (status: ${corridor.status}). Sandbox payments only.`, 'corridor_not_live');
 }

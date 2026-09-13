@@ -18,7 +18,10 @@ export function Exchange() {
   const d = useDebounce(amount, 300);
   useEffect(() => {
     if (!d || from === to) return setQuote(null);
-    api.get(`/api/wallets/exchange/quote?from=${from}&to=${to}&amount=${d}`).then(setQuote).catch(() => setQuote(null));
+    api
+      .get(`/api/wallets/exchange/quote?from=${from}&to=${to}&amount=${d}`)
+      .then(setQuote)
+      .catch(() => setQuote(null));
   }, [d, from, to]);
   const submit = async (pin: string) => {
     setLoading(true);
@@ -53,7 +56,13 @@ export function Exchange() {
             <AmountInput amount={amount} currency={from} onAmount={setAmount} onCurrency={setFrom} big />
           </Field>
           <Field label="To">
-            <Select value={to} onChange={(e) => setTo(e.target.value)}>{(config?.currencies ?? []).map((c) => <option key={c.code} value={c.code}>{c.code} – {c.name}</option>)}</Select>
+            <Select value={to} onChange={(e) => setTo(e.target.value)}>
+              {(config?.currencies ?? []).map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code} – {c.name}
+                </option>
+              ))}
+            </Select>
           </Field>
           {quote && (
             <div className="card soft compact mb">
@@ -61,19 +70,45 @@ export function Exchange() {
               <KV k="Mid-market" v={`${quote.midRate.toFixed(6)} (margin ${(quote.marginBps / 100).toFixed(2)}%)`} />
               <KV k="Fee" v={money(quote.fee ?? 0, from)} />
               <KV k="You receive" v={<b style={{ color: 'var(--success)' }}>{money(quote.receive, to)}</b>} />
-              {quote.fx && <KV k="Rate source" v={<span className="small">{quote.fx.providerLabel}{quote.fx.rateTimestamp ? ` · ${new Date(quote.fx.rateTimestamp).toLocaleString()}` : ''}</span>} />}
-              {quote.fx && <KV k="Guarantee" v={quote.fx.guaranteed ? <span className="chip success">locked until {new Date(quote.fx.expiresAt).toLocaleTimeString()}</span> : <span className="chip warning">indicative – executes at the current rate</span>} />}
+              {quote.fx && (
+                <KV
+                  k="Rate source"
+                  v={
+                    <span className="small">
+                      {quote.fx.providerLabel}
+                      {quote.fx.rateTimestamp ? ` · ${new Date(quote.fx.rateTimestamp).toLocaleString()}` : ''}
+                    </span>
+                  }
+                />
+              )}
+              {quote.fx && (
+                <KV
+                  k="Guarantee"
+                  v={
+                    quote.fx.guaranteed ? (
+                      <span className="chip success">locked until {new Date(quote.fx.expiresAt).toLocaleTimeString()}</span>
+                    ) : (
+                      <span className="chip warning">indicative – executes at the current rate</span>
+                    )
+                  }
+                />
+              )}
             </div>
           )}
           {quote?.fx && <RouteDisclosure fx={quote.fx} />}
-          <Button block size="lg" disabled={!quote} onClick={() => setPinOpen(true)}>Exchange</Button>
+          <Button block size="lg" disabled={!quote} onClick={() => setPinOpen(true)}>
+            Exchange
+          </Button>
         </div>
         <div className="card">
           <h3>My wallets</h3>
           <div className="list">
             {wallets.map((w) => (
               <div key={w.id} className="list-item">
-                <div className="flex1"><div className="main-text">{w.currency}</div><div className="sub-text">{config?.currencies.find((c) => c.code === w.currency)?.name}</div></div>
+                <div className="flex1">
+                  <div className="main-text">{w.currency}</div>
+                  <div className="sub-text">{config?.currencies.find((c) => c.code === w.currency)?.name}</div>
+                </div>
                 <div className="bold">{money(w.balance, w.currency)}</div>
               </div>
             ))}
@@ -83,14 +118,26 @@ export function Exchange() {
             <div className="row">
               <Select value={newCur} onChange={(e) => setNewCur(e.target.value)}>
                 <option value="">Choose…</option>
-                {(config?.currencies ?? []).filter((c) => !wallets.some((w) => w.currency === c.code)).map((c) => <option key={c.code} value={c.code}>{c.code} – {c.name}</option>)}
+                {(config?.currencies ?? [])
+                  .filter((c) => !wallets.some((w) => w.currency === c.code))
+                  .map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code} – {c.name}
+                    </option>
+                  ))}
               </Select>
-              <Button variant="secondary" onClick={addWallet} disabled={!newCur}>Add</Button>
+              <Button variant="secondary" onClick={addWallet} disabled={!newCur}>
+                Add
+              </Button>
             </div>
           </Field>
           <h4 className="mt">Reference rates (vs {config?.baseCurrency})</h4>
           <div className="row wrap">
-            {(config?.currencies ?? []).slice(0, 12).map((c) => <span key={c.code} className="chip">{c.code} {c.rateToBase}</span>)}
+            {(config?.currencies ?? []).slice(0, 12).map((c) => (
+              <span key={c.code} className="chip">
+                {c.code} {c.rateToBase}
+              </span>
+            ))}
           </div>
         </div>
       </div>

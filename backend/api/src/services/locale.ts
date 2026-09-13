@@ -43,7 +43,16 @@ export function regionalCurrency(country: string | null | undefined): string | n
 export const GLOBAL_DEFAULT_CURRENCY = 'USD';
 export function parseAcceptLanguage(header: string | null | undefined): string[] {
   if (!header) return [];
-  return header.split(',').map((p) => p.trim()).filter(Boolean).map((p) => { const [tag, q] = p.split(';q='); return { tag: tag.trim().toLowerCase(), q: q ? Number(q) : 1 }; }).sort((a, b) => b.q - a.q).map((x) => x.tag.split('-')[0]);
+  return header
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => {
+      const [tag, q] = p.split(';q=');
+      return { tag: tag.trim().toLowerCase(), q: q ? Number(q) : 1 };
+    })
+    .sort((a, b) => b.q - a.q)
+    .map((x) => x.tag.split('-')[0]);
 }
 export interface LocaleInput {
   explicitLanguage?: string | null;
@@ -72,30 +81,71 @@ export function resolveLocale(input: LocaleInput): ResolvedLocale {
   const explicitLang = input.explicitLanguage ?? (stored?.language && stored.language !== 'en' ? stored.language : null);
   let language: string;
   let languageSource: ResolvedLocale['languageSource'];
-  if (langOk(explicitLang)) { language = explicitLang!.toLowerCase(); languageSource = 'explicit'; }
-  else if (device.find(langOk)) { language = device.find(langOk)!; languageSource = 'device'; }
-  else if (country && langOk(regionalLanguage(country))) { language = regionalLanguage(country); languageSource = 'ip_country'; }
-  else { const d = regionalLanguage(stored?.country ?? country); language = langOk(d) ? d : 'en'; languageSource = 'default'; }
+  if (langOk(explicitLang)) {
+    language = explicitLang!.toLowerCase();
+    languageSource = 'explicit';
+  } else if (device.find(langOk)) {
+    language = device.find(langOk)!;
+    languageSource = 'device';
+  } else if (country && langOk(regionalLanguage(country))) {
+    language = regionalLanguage(country);
+    languageSource = 'ip_country';
+  } else {
+    const d = regionalLanguage(stored?.country ?? country);
+    language = langOk(d) ? d : 'en';
+    languageSource = 'default';
+  }
   const enabledCur = listCurrencies(true).map((c) => c.code);
   const curOk = (code: string | null | undefined) => !!code && enabledCur.includes(code.toUpperCase());
   let currency: string;
   let currencySource: ResolvedLocale['currencySource'];
-  const walletPrimary = input.userId ? (() => {
-    const ws = listWallets(input.userId!);
-    if (!ws.length) return null;
-    const usage = getDb().prepare("SELECT currency, COUNT(*) n FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND created_at >= ? GROUP BY currency ORDER BY n DESC LIMIT 1").get(input.userId, input.userId, new Date(Date.now() - 90 * 86_400_000).toISOString()) as any;
-    return usage?.currency ?? [...ws].sort((a, b) => b.balance - a.balance)[0].currency;
-  })() : null;
-  if (curOk(input.explicitCurrency)) { currency = input.explicitCurrency!.toUpperCase(); currencySource = 'explicit'; }
-  else if (curOk(walletPrimary)) { currency = walletPrimary!; currencySource = 'wallet'; }
-  else if (country && curOk(regionalCurrency(country))) { currency = regionalCurrency(country)!; currencySource = 'ip_country'; }
-  else if (curOk(input.browserCurrency)) { currency = input.browserCurrency!.toUpperCase(); currencySource = 'browser'; }
-  else { const d = regionalCurrency(stored?.country ?? country); currency = curOk(d) ? d! : curOk(GLOBAL_DEFAULT_CURRENCY) ? GLOBAL_DEFAULT_CURRENCY : getBaseCurrency().code; currencySource = 'default'; }
-  return { language, languageSource, rtl: rtlOf(language), currency, currencySource, country: country ?? stored?.country ?? null, chain: { languages: ['explicit', 'device', 'ip_country', 'default'], currencies: ['explicit', 'wallet', 'ip_country', 'browser', 'default'] } };
+  const walletPrimary = input.userId
+    ? (() => {
+        const ws = listWallets(input.userId!);
+        if (!ws.length) return null;
+        const usage = getDb()
+          .prepare('SELECT currency, COUNT(*) n FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND created_at >= ? GROUP BY currency ORDER BY n DESC LIMIT 1')
+          .get(input.userId, input.userId, new Date(Date.now() - 90 * 86_400_000).toISOString()) as any;
+        return usage?.currency ?? [...ws].sort((a, b) => b.balance - a.balance)[0].currency;
+      })()
+    : null;
+  if (curOk(input.explicitCurrency)) {
+    currency = input.explicitCurrency!.toUpperCase();
+    currencySource = 'explicit';
+  } else if (curOk(walletPrimary)) {
+    currency = walletPrimary!;
+    currencySource = 'wallet';
+  } else if (country && curOk(regionalCurrency(country))) {
+    currency = regionalCurrency(country)!;
+    currencySource = 'ip_country';
+  } else if (curOk(input.browserCurrency)) {
+    currency = input.browserCurrency!.toUpperCase();
+    currencySource = 'browser';
+  } else {
+    const d = regionalCurrency(stored?.country ?? country);
+    currency = curOk(d) ? d! : curOk(GLOBAL_DEFAULT_CURRENCY) ? GLOBAL_DEFAULT_CURRENCY : getBaseCurrency().code;
+    currencySource = 'default';
+  }
+  return {
+    language,
+    languageSource,
+    rtl: rtlOf(language),
+    currency,
+    currencySource,
+    country: country ?? stored?.country ?? null,
+    chain: { languages: ['explicit', 'device', 'ip_country', 'default'], currencies: ['explicit', 'wallet', 'ip_country', 'browser', 'default'] },
+  };
 }
 export function localeFromRequest(req: { headers: Record<string, unknown>; query?: Record<string, unknown>; user?: { id: string } | null }): ResolvedLocale {
   const h = (k: string) => (req.headers[k] as string | undefined) ?? null;
   const country = h('x-ip-country') || h('cf-ipcountry') || h('x-country') || null;
   // `?lang=` and `?currency=` are explicit choices made on the page; `x-language` / `x-currency` are hints the client derived from the device.
-  return resolveLocale({ explicitLanguage: (req.query?.lang as string) ?? null, acceptLanguage: [h('x-language'), h('accept-language')].filter(Boolean).join(',') || null, ipCountry: country, userId: req.user?.id ?? null, explicitCurrency: (req.query?.currency as string) ?? null, browserCurrency: h('x-currency') });
+  return resolveLocale({
+    explicitLanguage: (req.query?.lang as string) ?? null,
+    acceptLanguage: [h('x-language'), h('accept-language')].filter(Boolean).join(',') || null,
+    ipCountry: country,
+    userId: req.user?.id ?? null,
+    explicitCurrency: (req.query?.currency as string) ?? null,
+    browserCurrency: h('x-currency'),
+  });
 }

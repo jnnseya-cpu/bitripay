@@ -39,7 +39,14 @@ test('request headers verify against the API canonical `deviceId\\ntimestamp\\nM
 test('evidence payload verifies, hashes the text and cannot be altered', () => {
   const keys = generateDeviceKeys(rb);
   const pub = createPublicKey(keys.publicKeyPem);
-  const fields = { deviceId: 'dev_' + randomNonce(rb), nonce: randomNonce(rb), receivedAt: new Date().toISOString(), from: 'OrangeMoney', operatorId: 'orange_cd', text: 'Vous avez envoye 25000 CDF a 0899000001. Ref: PP7X9K2. Frais: 250 CDF. Nouveau solde: 1,200,000 CDF.' };
+  const fields = {
+    deviceId: 'dev_' + randomNonce(rb),
+    nonce: randomNonce(rb),
+    receivedAt: new Date().toISOString(),
+    from: 'OrangeMoney',
+    operatorId: 'orange_cd',
+    text: 'Vous avez envoye 25000 CDF a 0899000001. Ref: PP7X9K2. Frais: 250 CDF. Nouveau solde: 1,200,000 CDF.',
+  };
   const ev = buildEvidence(keys.privateKeyHex, fields, { simIdentity: '+243890000100' });
   const serverCanonical = [ev.deviceId, ev.nonce, ev.receivedAt, ev.from, ev.operatorId ?? '', ev.text].join('\n');
   assert.equal(evidenceCanonical(fields), serverCanonical);

@@ -68,23 +68,53 @@ export function runGuardian(opts: { haltOnFailure?: boolean } = {}): GuardianRes
   const ledger = reconcileLedger();
   for (const t of ledger.unbalancedTransactions) findings.push({ kind: 'unbalanced_transaction', ref: t, detail: 'debits do not equal credits' });
   for (const w of ledger.walletMismatches) findings.push({ kind: 'wallet_mismatch', ref: w.walletId, detail: `stored ${w.balance}, computed ${w.computed}` });
-  const negatives = db.prepare("SELECT w.id, w.balance, u.tag FROM wallets w JOIN users u ON u.id = w.user_id WHERE w.balance < 0 AND u.is_system = 0").all() as any[];
+  const negatives = db.prepare('SELECT w.id, w.balance, u.tag FROM wallets w JOIN users u ON u.id = w.user_id WHERE w.balance < 0 AND u.is_system = 0').all() as any[];
   for (const n of negatives) findings.push({ kind: 'negative_balance', ref: n.id, detail: `${n.tag} at ${n.balance}` });
-  const orphanEvents = db.prepare("SELECT e.event_id, e.transaction_id FROM payment_events e LEFT JOIN transactions t ON t.id = e.transaction_id WHERE e.transaction_id IS NOT NULL AND t.id IS NULL").all() as any[];
+  const orphanEvents = db
+    .prepare('SELECT e.event_id, e.transaction_id FROM payment_events e LEFT JOIN transactions t ON t.id = e.transaction_id WHERE e.transaction_id IS NOT NULL AND t.id IS NULL')
+    .all() as any[];
   for (const e of orphanEvents) findings.push({ kind: 'event_without_ledger', ref: e.event_id, detail: `transaction ${e.transaction_id} missing` });
   // Observation-only rails (national switch, aggregator phase) never post a customer balance: their proof is the observation journal.
-  const captured = db.prepare("SELECT id FROM payment_intents WHERE status IN ('CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED') AND transaction_id IS NULL AND rails NOT LIKE '%national_switch%'").all() as any[];
+  const captured = db
+    .prepare("SELECT id FROM payment_intents WHERE status IN ('CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED') AND transaction_id IS NULL AND rails NOT LIKE '%national_switch%'")
+    .all() as any[];
   for (const c of captured) findings.push({ kind: 'captured_without_posting', ref: c.id, detail: 'captured intent has no ledger transaction' });
-  const overRefunded = db.prepare("SELECT * FROM (SELECT t.id, t.amount, (SELECT COALESCE(SUM(r.amount), 0) FROM transactions r WHERE r.type = 'refund' AND json_extract(r.metadata, '$.refundOf') = t.id AND r.status = 'completed') refunded FROM transactions t WHERE t.status IN ('completed', 'reversed') AND EXISTS (SELECT 1 FROM transactions r WHERE r.type = 'refund' AND json_extract(r.metadata, '$.refundOf') = t.id)) WHERE refunded > amount").all() as any[];
+  const overRefunded = db
+    .prepare(
+      "SELECT * FROM (SELECT t.id, t.amount, (SELECT COALESCE(SUM(r.amount), 0) FROM transactions r WHERE r.type = 'refund' AND json_extract(r.metadata, '$.refundOf') = t.id AND r.status = 'completed') refunded FROM transactions t WHERE t.status IN ('completed', 'reversed') AND EXISTS (SELECT 1 FROM transactions r WHERE r.type = 'refund' AND json_extract(r.metadata, '$.refundOf') = t.id)) WHERE refunded > amount",
+    )
+    .all() as any[];
   for (const o of overRefunded) findings.push({ kind: 'refund_exceeds', ref: o.id, detail: `refunded ${o.refunded} of ${o.amount}` });
   const ok = findings.length === 0;
   const halt = !ok && (opts.haltOnFailure ?? true) && findings.some((f) => f.kind === 'unbalanced_transaction' || f.kind === 'wallet_mismatch' || f.kind === 'captured_without_posting');
   const id = uuid();
-  db.prepare('INSERT INTO guardian_checks (id, ok, transactions_checked, findings, halted, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, ok ? 1 : 0, ledger.transactionsChecked, JSON.stringify(findings), halt ? 1 : 0, now());
-  if (halt) setOperatingMode('halted', `Guardian found ${findings.length} ledger finding(s): ${findings.slice(0, 3).map((f) => `${f.kind} ${f.ref}`).join('; ')}`, null);
+  db.prepare('INSERT INTO guardian_checks (id, ok, transactions_checked, findings, halted, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+    id,
+    ok ? 1 : 0,
+    ledger.transactionsChecked,
+    JSON.stringify(findings),
+    halt ? 1 : 0,
+    now(),
+  );
+  if (halt)
+    setOperatingMode(
+      'halted',
+      `Guardian found ${findings.length} ledger finding(s): ${findings
+        .slice(0, 3)
+        .map((f) => `${f.kind} ${f.ref}`)
+        .join('; ')}`,
+      null,
+    );
   recordEvent('ledger', id, ok ? 'guardian.ok' : 'guardian.findings', { type: 'system' }, { findings: findings.length, halted: halt });
   return { id, ok, transactionsChecked: ledger.transactionsChecked, findings, halted: halt, createdAt: now() };
 }
 export function listGuardianChecks(limit = 20): GuardianResult[] {
-  return (getDb().prepare('SELECT * FROM guardian_checks ORDER BY created_at DESC LIMIT ?').all(limit) as any[]).map((r) => ({ id: r.id, ok: !!r.ok, transactionsChecked: r.transactions_checked, findings: parseJson(r.findings, []), halted: !!r.halted, createdAt: r.created_at }));
+  return (getDb().prepare('SELECT * FROM guardian_checks ORDER BY created_at DESC LIMIT ?').all(limit) as any[]).map((r) => ({
+    id: r.id,
+    ok: !!r.ok,
+    transactionsChecked: r.transactions_checked,
+    findings: parseJson(r.findings, []),
+    halted: !!r.halted,
+    createdAt: r.created_at,
+  }));
 }

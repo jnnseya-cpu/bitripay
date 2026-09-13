@@ -35,12 +35,18 @@ The database is `backend/api/data/bitripay.db` (`DATABASE_PATH` to move it). Mig
 
 | Command | What runs |
 | --- | --- |
-| `npm run verify` | shared build + tests, backend typecheck/build/tests (137 tests), web + admin typecheck/build, mobile and payout-device typecheck and protocol tests |
+| `npm run verify` | lint, shared build + tests, backend typecheck/build/tests, web + admin typecheck/build, mobile and payout-device typecheck and protocol tests |
+| `npm run lint` | ESLint over backend, shared, web, admin, mobile, payout device and the Playwright scripts |
+| `npm run format` / `format:check` | Prettier (`.prettierrc.json`; markdown, PHP, Python and generated files are excluded) |
+| `npm run deps:check` | knip: unused files, exports and dependencies across the workspaces |
+| `npm run docs:http` | regenerates `docs-api.http` from the OpenAPI operation table |
 | `npm run test:backend` | API tests only (vitest, in-memory SQLite, ~1 min) — `cd backend/api && npx vitest run src/tests/core.test.ts` for one suite |
 | `npm run smoke` | 51 live checks with Playwright against `npm run dev` + `npm run seed` (see `scripts/README.md`) |
 | `npm run typecheck:mobile` / `typecheck:payout-device` | the Expo apps (run `npm install` inside each first) |
 
-CI (`.github/workflows/ci.yml`) runs `npm ci` and `npm run verify` on every push.
+CI (`.github/workflows/ci.yml`) runs `npm ci`, `npm run verify`, `npm run format:check`, `npm run deps:check` and `npm audit` on every push.
+
+Production start-up refuses development defaults: `JWT_SECRET` and `APP_SECRET` must be 32+ random characters and `ADMIN_PASSWORD` must not be the sample value (`assertProductionSecrets` in `backend/api/src/config.ts`, covered by `hardening.test.ts`). `docker-compose.yml` enforces the same with `${VAR:?}`.
 
 ## 3. Sandbox test data
 
@@ -67,7 +73,7 @@ CI (`.github/workflows/ci.yml`) runs `npm ci` and `npm run verify` on every push
   replay from the developer portal; `POST /api/v1/webhook_endpoints/:id/ping` sends a test event.
 - Errors: `{ error: { code, bp, message, details } }`; `bp` families BP-1xxx auth · 2xxx validation · 3xxx ledger ·
   4xxx rail · 5xxx compliance · 6xxx intelligence.
-- `docs-api.http` is a VS Code REST Client collection of the main calls.
+- `docs-api.http` is a VS Code REST Client collection generated from the OpenAPI operation table (`npm run docs:http`); every partner endpoint appears with its scope and idempotency header. The complete platform reference (features, configuration, API tables, deployment, security notes) is [PLATFORM.md](PLATFORM.md).
 
 ## 5. Where things live (backend)
 

@@ -47,13 +47,19 @@ describe('config & auth', () => {
     const setup = await request(app).post('/api/account/2fa/setup').set(auth);
     expect(setup.body.secret).toBeTruthy();
     const { totpCode } = await import('../lib/totp');
-    const enable = await request(app).post('/api/account/2fa/enable').set(auth).send({ code: totpCode(setup.body.secret) });
+    const enable = await request(app)
+      .post('/api/account/2fa/enable')
+      .set(auth)
+      .send({ code: totpCode(setup.body.secret) });
     expect(enable.status).toBe(200);
     const login = await request(app).post('/api/auth/login').send({ identifier: user.email, password: 'Password123!' });
     expect(login.body.requiresTwoFactor).toBe(true);
     const blocked = await request(app).get('/api/wallets').set('Authorization', `Bearer ${login.body.token}`);
     expect(blocked.status).toBe(401);
-    const done = await request(app).post('/api/auth/2fa/verify').set('Authorization', `Bearer ${login.body.token}`).send({ code: totpCode(setup.body.secret) });
+    const done = await request(app)
+      .post('/api/auth/2fa/verify')
+      .set('Authorization', `Bearer ${login.body.token}`)
+      .send({ code: totpCode(setup.body.secret) });
     expect(done.status).toBe(200);
     expect(done.body.requiresTwoFactor).toBeUndefined();
   });
@@ -154,12 +160,18 @@ describe('deposits & checkout via sandbox gateway', () => {
     const a = await registerUser(app);
     const options = await request(app).get('/api/deposits/options?currency=USD').set(a.auth);
     expect(options.body.methods.find((m: any) => m.method === 'card').gateways[0].id).toBe('sandbox');
-    const ok = await request(app).post('/api/deposits').set(a.auth).send({ pin: '1234', method: 'card', amount: '100.00', currency: 'USD', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'A B' }, saveCard: true });
+    const ok = await request(app)
+      .post('/api/deposits')
+      .set(a.auth)
+      .send({ pin: '1234', method: 'card', amount: '100.00', currency: 'USD', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'A B' }, saveCard: true });
     expect(ok.status).toBe(201);
     expect(ok.body.payment.status).toBe('succeeded');
     const wallets = await request(app).get('/api/wallets').set(a.auth);
     expect(wallets.body.items[0].balance).toBe(10000 - 30 - 290); // fixed 0.30 + 2.9%
-    const declined = await request(app).post('/api/deposits').set(a.auth).send({ pin: '1234', method: 'card', amount: '10.00', currency: 'USD', card: { number: '4000000000000002', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'A B' } });
+    const declined = await request(app)
+      .post('/api/deposits')
+      .set(a.auth)
+      .send({ pin: '1234', method: 'card', amount: '10.00', currency: 'USD', card: { number: '4000000000000002', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'A B' } });
     expect(declined.body.payment.status).toBe('failed');
     expect(declined.body.payment.failureReason).toContain('declined');
     const cards = await request(app).get('/api/cards').set(a.auth);
@@ -201,7 +213,9 @@ describe('deposits & checkout via sandbox gateway', () => {
     const code = link.body.paymentRequest.code;
     const info = await request(app).get(`/api/checkout/${code}`);
     expect(info.body.methods).toContain('card');
-    const pay = await request(app).post(`/api/checkout/${code}/pay`).send({ method: 'card', card: { number: '5555555555554444', expMonth: 1, expYear: 2031, cvc: '999', holderName: 'Guest' }, email: 'guest@example.com' });
+    const pay = await request(app)
+      .post(`/api/checkout/${code}/pay`)
+      .send({ method: 'card', card: { number: '5555555555554444', expMonth: 1, expYear: 2031, cvc: '999', holderName: 'Guest' }, email: 'guest@example.com' });
     expect(pay.status).toBe(201);
     expect(pay.body.payment.status).toBe('succeeded');
     expect(pay.body.paymentRequest.status).toBe('paid');
@@ -217,7 +231,12 @@ describe('deposits & checkout via sandbox gateway', () => {
     const reveal = await request(app).post(`/api/virtual-cards/${card.body.card.id}/reveal`).set(holder.auth).send({ pin: '1234' });
     expect(reveal.body.card.number).toMatch(/^627311\d{10}$/);
     const link2 = await request(app).post('/api/payment-requests').set(merchant.auth).send({ kind: 'link', amount: '25.00', currency: 'USD' });
-    const vpay = await request(app).post(`/api/checkout/${link2.body.paymentRequest.code}/pay`).send({ method: 'virtual_card', card: { number: reveal.body.card.number, expMonth: reveal.body.card.expMonth, expYear: reveal.body.card.expYear, cvc: reveal.body.card.cvv, holderName: 'Card Holder' } });
+    const vpay = await request(app)
+      .post(`/api/checkout/${link2.body.paymentRequest.code}/pay`)
+      .send({
+        method: 'virtual_card',
+        card: { number: reveal.body.card.number, expMonth: reveal.body.card.expMonth, expYear: reveal.body.card.expYear, cvc: reveal.body.card.cvv, holderName: 'Card Holder' },
+      });
     expect(vpay.status).toBe(201);
     expect(vpay.body.status).toBe('succeeded');
     const cards = await request(app).get('/api/virtual-cards').set(holder.auth);
@@ -228,14 +247,19 @@ describe('deposits & checkout via sandbox gateway', () => {
     const merchant = await registerUser(app, { role: 'merchant', businessName: 'API Shop' });
     const key = await request(app).post('/api/merchant/api-keys').set(merchant.auth).send({ label: 'woo' });
     expect(key.body.apiKey.secret).toMatch(/^sk_live_/); // legacy bp_ keys keep authenticating; new keys use the sk_/rk_/pk_ prefixes
-    const v1 = await request(app).post('/v1/payment-requests').set('Authorization', `Bearer ${key.body.apiKey.secret}`).send({ amount: '9.99', currency: 'USD', description: 'Woo order', metadata: { orderId: 55 } });
+    const v1 = await request(app)
+      .post('/v1/payment-requests')
+      .set('Authorization', `Bearer ${key.body.apiKey.secret}`)
+      .send({ amount: '9.99', currency: 'USD', description: 'Woo order', metadata: { orderId: 55 } });
     expect(v1.status).toBe(201);
     expect(v1.body.checkoutUrl).toContain('/pay/');
     const get = await request(app).get(`/v1/payment-requests/${v1.body.paymentRequest.code}`).set('Authorization', `Bearer ${key.body.apiKey.secret}`);
     expect(get.body.paymentRequest.metadata.orderId).toBe(55);
     const wh = await request(app).put('/api/merchant/webhook').set(merchant.auth).send({ url: 'https://example.com/hook' });
     expect(wh.body.webhookSecret).toMatch(/^whsec_/);
-    const denied = await request(app).get('/v1/balance').set(merchant.auth.Authorization ? { Authorization: 'Bearer bp_live_invalid' } : {});
+    const denied = await request(app)
+      .get('/v1/balance')
+      .set(merchant.auth.Authorization ? { Authorization: 'Bearer sk_live_invalid' } : {});
     expect(denied.status).toBe(401);
   });
 });
@@ -303,14 +327,20 @@ describe('withdrawals, agents, remittance', () => {
     const quote = await request(app).get('/api/remittances/quote?from=USD&to=NGN&amount=100').set(sender.auth);
     expect(quote.body.targetCurrency).toBe('NGN');
     expect(quote.body.targetAmount).toBeGreaterThan(0);
-    const r1 = await request(app).post('/api/remittances').set(sender.auth).send({ amount: '100', sourceCurrency: 'USD', targetCurrency: 'NGN', payoutMethod: 'wallet', recipient: { name: 'Family', tag: 'family1' }, pin: '1234', saveRecipient: true });
+    const r1 = await request(app)
+      .post('/api/remittances')
+      .set(sender.auth)
+      .send({ amount: '100', sourceCurrency: 'USD', targetCurrency: 'NGN', payoutMethod: 'wallet', recipient: { name: 'Family', tag: 'family1' }, pin: '1234', saveRecipient: true });
     expect(r1.status).toBe(201);
     expect(r1.body.remittance.status).toBe('completed');
     const rw = await request(app).get('/api/wallets').set(recipient.auth);
     expect(rw.body.items.find((w: any) => w.currency === 'NGN').balance).toBe(quote.body.targetAmount);
     const saved = await request(app).get('/api/recipients').set(sender.auth);
     expect(saved.body.items).toHaveLength(1);
-    const r2 = await request(app).post('/api/remittances').set(sender.auth).send({ amount: '50', sourceCurrency: 'USD', targetCurrency: 'USD', payoutMethod: 'cash_pickup', recipient: { name: 'Cousin', idNumber: 'ID-1' }, pin: '1234' });
+    const r2 = await request(app)
+      .post('/api/remittances')
+      .set(sender.auth)
+      .send({ amount: '50', sourceCurrency: 'USD', targetCurrency: 'USD', payoutMethod: 'cash_pickup', recipient: { name: 'Cousin', idNumber: 'ID-1' }, pin: '1234' });
     expect(r2.body.remittance.status).toBe('ready_for_pickup');
     const pickup = await request(app).post(`/api/agents/me/pickups/${r2.body.remittance.pickupCode}/payout`).set(agent.auth).send({ recipientIdNumber: 'ID-1', pin: '1234' });
     expect(pickup.status).toBe(200);
@@ -335,7 +365,10 @@ describe('services & referrals', () => {
     expect(top.status).toBe(201);
     const products = await request(app).get('/api/gift-cards/products').set(a.auth);
     const p = products.body.items.find((x: any) => x.currency === 'USD');
-    const gift = await request(app).post('/api/gift-cards').set(a.auth).send({ productId: p.id, amount: String(p.denominations[0] / 100), pin: '1234' });
+    const gift = await request(app)
+      .post('/api/gift-cards')
+      .set(a.auth)
+      .send({ productId: p.id, amount: String(p.denominations[0] / 100), pin: '1234' });
     expect(gift.status).toBe(201);
     expect(gift.body.code).toMatch(/^[A-Z0-9]{4}-/);
     const mine = await request(app).get('/api/gift-cards').set(a.auth);
@@ -346,7 +379,10 @@ describe('services & referrals', () => {
     const l2 = await registerUser(app);
     const l1 = await registerUser(app, { referralCode: l2.user.referralCode });
     const newbie = await registerUser(app, { referralCode: l1.user.referralCode });
-    await request(app).post('/api/deposits').set(newbie.auth).send({ pin: '1234', method: 'card', amount: '50.00', currency: 'USD', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'New User' } });
+    await request(app)
+      .post('/api/deposits')
+      .set(newbie.auth)
+      .send({ pin: '1234', method: 'card', amount: '50.00', currency: 'USD', card: { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123', holderName: 'New User' } });
     const w1 = await request(app).get('/api/wallets').set(l1.auth);
     const w2 = await request(app).get('/api/wallets').set(l2.auth);
     // Referral rewards are promotional credit – a marketing liability – never redeemable e-money.
@@ -360,7 +396,10 @@ describe('services & referrals', () => {
     expect(send.status).toBe(422);
     expect(send.body.error.code).toBe('insufficient_funds');
     await fund(app, l1.user.id, '100.00', 'USD');
-    const t = await request(app).post('/api/transfers').set(l1.auth).send({ pin: '1234', to: `@${newbie.user.tag}`, amount: '50.00', currency: 'USD' });
+    const t = await request(app)
+      .post('/api/transfers')
+      .set(l1.auth)
+      .send({ pin: '1234', to: `@${newbie.user.tag}`, amount: '50.00', currency: 'USD' });
     expect(t.status).toBe(201);
     expect(t.body.transaction.fee).toBeGreaterThan(0);
     const after = await request(app).get('/api/wallets').set(l1.auth);
@@ -378,7 +417,10 @@ describe('P2P trading', () => {
     const buyer = await registerUser(app);
     await fund(app, seller.user.id, '200.00', 'USD');
     await fund(app, buyer.user.id, '500.00', 'EUR');
-    const ad = await request(app).post('/api/p2p/ads').set(seller.auth).send({ side: 'sell', currency: 'USD', priceCurrency: 'EUR', rate: 0.9, minAmount: '10', maxAmount: '100', availableAmount: '150', paymentMethods: ['wallet', 'bank_transfer'] });
+    const ad = await request(app)
+      .post('/api/p2p/ads')
+      .set(seller.auth)
+      .send({ side: 'sell', currency: 'USD', priceCurrency: 'EUR', rate: 0.9, minAmount: '10', maxAmount: '100', availableAmount: '150', paymentMethods: ['wallet', 'bank_transfer'] });
     expect(ad.status).toBe(201);
     const trade = await request(app).post('/api/p2p/trades').set(buyer.auth).send({ adId: ad.body.ad.id, amount: '50', paymentMethod: 'wallet' });
     expect(trade.status).toBe(201);
@@ -412,11 +454,17 @@ describe('admin', () => {
     const stats = await request(app).get('/api/admin/stats').set(admin.auth);
     expect(stats.status).toBe(200);
     expect(stats.body.users.user).toBeGreaterThan(0);
-    const fees = await request(app).put('/api/admin/settings/fees').set(admin.auth).send({ value: { ...stats.body.fees, transfer: { fixed: 0, bps: 100 } } });
+    const fees = await request(app)
+      .put('/api/admin/settings/fees')
+      .set(admin.auth)
+      .send({ value: { ...stats.body.fees, transfer: { fixed: 0, bps: 100 } } });
     expect(fees.status).toBe(200);
     const cur = await request(app).put('/api/admin/currencies/XAF').set(admin.auth).send({ name: 'CFA Franc', symbol: 'FCFA', decimals: 0, rateToBase: 600, enabled: true });
     expect(cur.body.currency.enabled).toBe(true);
-    const gw = await request(app).put('/api/admin/gateways/stripe').set(admin.auth).send({ name: 'Stripe', provider: 'stripe', enabled: true, methods: ['card'], currencies: [], credentials: { secretKey: 'sk_test_x', publishableKey: 'pk_test_x' } });
+    const gw = await request(app)
+      .put('/api/admin/gateways/stripe')
+      .set(admin.auth)
+      .send({ name: 'Stripe', provider: 'stripe', enabled: true, methods: ['card'], currencies: [], credentials: { secretKey: 'sk_test_x', publishableKey: 'pk_test_x' } });
     expect(gw.body.gateway.configuredKeys).toContain('secretKey');
     const u = await registerUser(app);
     const kyc = await request(app).post('/api/kyc').set(u.auth).send({ docType: 'passport', docNumber: 'P123', fullName: 'Test', selfie: 'data:image/png;base64,AAAA' });
@@ -431,7 +479,10 @@ describe('admin', () => {
     expect(logs.body.items.length).toBeGreaterThan(2);
     const forbidden = await request(app).get('/api/admin/stats').set(u.auth);
     expect(forbidden.status).toBe(403);
-    const staff = await request(app).post('/api/admin/users').set(admin.auth).send({ fullName: 'Staff', email: 'staff@test.local', password: 'Password123!', role: 'admin', permissions: ['support'] });
+    const staff = await request(app)
+      .post('/api/admin/users')
+      .set(admin.auth)
+      .send({ fullName: 'Staff', email: 'staff@test.local', password: 'Password123!', role: 'admin', permissions: ['support'] });
     const staffLogin = await request(app).post('/api/auth/login').send({ identifier: 'staff@test.local', password: 'Password123!' });
     const noPerm = await request(app).get('/api/admin/users').set('Authorization', `Bearer ${staffLogin.body.token}`);
     expect(noPerm.status).toBe(403);

@@ -78,7 +78,12 @@ export function toTrade(r: any, withDetails = false) {
       status: o.status,
       createdAt: o.created_at,
     }));
-    base.messages = (db.prepare('SELECT * FROM p2p_messages WHERE trade_id = ? ORDER BY created_at ASC').all(r.id) as any[]).map((m) => ({ id: m.id, senderId: m.sender_id, body: m.body, createdAt: m.created_at }));
+    base.messages = (db.prepare('SELECT * FROM p2p_messages WHERE trade_id = ? ORDER BY created_at ASC').all(r.id) as any[]).map((m) => ({
+      id: m.id,
+      senderId: m.sender_id,
+      body: m.body,
+      createdAt: m.created_at,
+    }));
     const ad = db.prepare('SELECT * FROM p2p_ads WHERE id = ?').get(r.ad_id);
     base.ad = ad ? toAd(ad) : null;
   }
@@ -98,7 +103,20 @@ function priceFor(amount: number, rate: number, currency: string, priceCurrency:
   return Math.round((amount / 10 ** c.decimals) * rate * 10 ** p.decimals);
 }
 
-export function createAd(user: UserRow, input: { side: 'buy' | 'sell'; currency: string; priceCurrency: string; rate: number; minAmount: number; maxAmount: number; availableAmount: number; paymentMethods: string[]; terms?: string | null }) {
+export function createAd(
+  user: UserRow,
+  input: {
+    side: 'buy' | 'sell';
+    currency: string;
+    priceCurrency: string;
+    rate: number;
+    minAmount: number;
+    maxAmount: number;
+    availableAmount: number;
+    paymentMethods: string[];
+    terms?: string | null;
+  },
+) {
   assertP2p();
   const cur = getCurrency(input.currency);
   const price = getCurrency(input.priceCurrency);
@@ -112,8 +130,25 @@ export function createAd(user: UserRow, input: { side: 'buy' | 'sell'; currency:
   }
   const id = uuid();
   getDb()
-    .prepare('INSERT INTO p2p_ads (id, user_id, side, currency, price_currency, rate, min_amount, max_amount, available_amount, payment_methods, terms, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, user.id, input.side, cur.code, price.code, input.rate, input.minAmount, input.maxAmount, input.availableAmount, JSON.stringify(input.paymentMethods.length ? input.paymentMethods : ['wallet']), input.terms ?? null, 'active', now(), now());
+    .prepare(
+      'INSERT INTO p2p_ads (id, user_id, side, currency, price_currency, rate, min_amount, max_amount, available_amount, payment_methods, terms, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    )
+    .run(
+      id,
+      user.id,
+      input.side,
+      cur.code,
+      price.code,
+      input.rate,
+      input.minAmount,
+      input.maxAmount,
+      input.availableAmount,
+      JSON.stringify(input.paymentMethods.length ? input.paymentMethods : ['wallet']),
+      input.terms ?? null,
+      'active',
+      now(),
+      now(),
+    );
   return toAd(getDb().prepare('SELECT * FROM p2p_ads WHERE id = ?').get(id));
 }
 
@@ -138,7 +173,10 @@ export function listAds(filter: { side?: string; currency?: string; priceCurrenc
     params.push(filter.userId);
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  return getDb().prepare(`SELECT * FROM p2p_ads ${whereSql} ORDER BY created_at DESC LIMIT 200`).all(...params).map(toAd);
+  return getDb()
+    .prepare(`SELECT * FROM p2p_ads ${whereSql} ORDER BY created_at DESC LIMIT 200`)
+    .all(...params)
+    .map(toAd);
 }
 
 export function setAdStatus(user: UserRow, id: string, status: 'active' | 'paused' | 'closed') {
@@ -171,9 +209,23 @@ export function openTrade(user: UserRow, input: { adId: string; amount: number; 
     `INSERT INTO p2p_trades (id, reference, ad_id, buyer_id, seller_id, initiator_id, amount, currency, price_amount, price_currency, rate, payment_method, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'negotiating', ?, ?)`,
   ).run(id, txReference('P2P'), ad.id, buyerId, sellerId, user.id, input.amount, ad.currency, priceAmount, ad.price_currency, rate, method === 'wallet' ? 'wallet' : 'external', ts, ts);
-  db.prepare("INSERT INTO p2p_offers (id, trade_id, from_user_id, amount, rate, price_amount, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)").run(uuid(), id, user.id, input.amount, rate, priceAmount, input.message ?? null, ts);
+  db.prepare("INSERT INTO p2p_offers (id, trade_id, from_user_id, amount, rate, price_amount, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)").run(
+    uuid(),
+    id,
+    user.id,
+    input.amount,
+    rate,
+    priceAmount,
+    input.message ?? null,
+    ts,
+  );
   const counterpart = ad.user_id;
-  notify(counterpart, 'New trade offer', `${user.full_name} wants to ${ad.side === 'sell' ? 'buy' : 'sell'} ${formatMoney(input.amount, getCurrency(ad.currency, false))} at ${rate} ${ad.price_currency}.`, { kind: 'p2p_offer', tradeId: id });
+  notify(
+    counterpart,
+    'New trade offer',
+    `${user.full_name} wants to ${ad.side === 'sell' ? 'buy' : 'sell'} ${formatMoney(input.amount, getCurrency(ad.currency, false))} at ${rate} ${ad.price_currency}.`,
+    { kind: 'p2p_offer', tradeId: id },
+  );
   return toTrade(db.prepare('SELECT * FROM p2p_trades WHERE id = ?').get(id), true);
 }
 
@@ -194,10 +246,22 @@ export function counterOffer(user: UserRow, tradeId: string, input: { amount: nu
   if (trade.status !== 'negotiating') throw conflict('This trade is no longer negotiable');
   db.prepare("UPDATE p2p_offers SET status = 'superseded' WHERE trade_id = ? AND status = 'pending'").run(trade.id);
   const priceAmount = priceFor(input.amount, input.rate, trade.currency, trade.price_currency);
-  db.prepare("INSERT INTO p2p_offers (id, trade_id, from_user_id, amount, rate, price_amount, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)").run(uuid(), trade.id, user.id, input.amount, input.rate, priceAmount, input.message ?? null, now());
+  db.prepare("INSERT INTO p2p_offers (id, trade_id, from_user_id, amount, rate, price_amount, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)").run(
+    uuid(),
+    trade.id,
+    user.id,
+    input.amount,
+    input.rate,
+    priceAmount,
+    input.message ?? null,
+    now(),
+  );
   db.prepare('UPDATE p2p_trades SET amount = ?, rate = ?, price_amount = ?, updated_at = ? WHERE id = ?').run(input.amount, input.rate, priceAmount, now(), trade.id);
   const other = trade.buyer_id === user.id ? trade.seller_id : trade.buyer_id;
-  notify(other, 'Counter-offer received', `${user.full_name} proposed ${input.rate} ${trade.price_currency} for ${formatMoney(input.amount, getCurrency(trade.currency, false))}.`, { kind: 'p2p_offer', tradeId: trade.id });
+  notify(other, 'Counter-offer received', `${user.full_name} proposed ${input.rate} ${trade.price_currency} for ${formatMoney(input.amount, getCurrency(trade.currency, false))}.`, {
+    kind: 'p2p_offer',
+    tradeId: trade.id,
+  });
   return toTrade(getTradeRow(trade.id), true);
 }
 
@@ -251,8 +315,16 @@ export function acceptOffer(user: UserRow, tradeId: string) {
       });
       releaseEscrow(trade.id, payTx.id);
     } else {
-      notify(buyer.id, 'Trade accepted – pay now', `Pay ${formatMoney(trade.price_amount, getCurrency(trade.price_currency, false))} to the seller using the agreed method, then mark the trade as paid.`, { kind: 'p2p_trade', tradeId: trade.id });
-      notify(seller.id, 'Trade accepted – funds in escrow', `${formatMoney(trade.amount, getCurrency(trade.currency, false))} is held in escrow until you confirm payment.`, { kind: 'p2p_trade', tradeId: trade.id });
+      notify(
+        buyer.id,
+        'Trade accepted – pay now',
+        `Pay ${formatMoney(trade.price_amount, getCurrency(trade.price_currency, false))} to the seller using the agreed method, then mark the trade as paid.`,
+        { kind: 'p2p_trade', tradeId: trade.id },
+      );
+      notify(seller.id, 'Trade accepted – funds in escrow', `${formatMoney(trade.amount, getCurrency(trade.currency, false))} is held in escrow until you confirm payment.`, {
+        kind: 'p2p_trade',
+        tradeId: trade.id,
+      });
     }
     return toTrade(getTradeRow(trade.id), true);
   })();
@@ -262,7 +334,12 @@ function releaseEscrow(tradeId: string, settlementTxId?: string | null) {
   const db = getDb();
   const trade = getTradeRow(tradeId);
   completeTransaction(trade.escrow_transaction_id);
-  db.prepare("UPDATE p2p_trades SET status = 'completed', settlement_transaction_id = COALESCE(?, settlement_transaction_id), updated_at = ?, completed_at = ? WHERE id = ?").run(settlementTxId ?? null, now(), now(), trade.id);
+  db.prepare("UPDATE p2p_trades SET status = 'completed', settlement_transaction_id = COALESCE(?, settlement_transaction_id), updated_at = ?, completed_at = ? WHERE id = ?").run(
+    settlementTxId ?? null,
+    now(),
+    now(),
+    trade.id,
+  );
   notify(trade.buyer_id, 'Trade completed', `${formatMoney(trade.amount, getCurrency(trade.currency, false))} has been released to your wallet.`, { kind: 'p2p_trade', tradeId: trade.id });
   notify(trade.seller_id, 'Trade completed', `Trade ${trade.reference} is complete.`, { kind: 'p2p_trade', tradeId: trade.id });
 }
@@ -272,7 +349,10 @@ export function markPaid(user: UserRow, tradeId: string) {
   if (trade.buyer_id !== user.id) throw forbidden('Only the buyer can mark a trade as paid');
   if (trade.status !== 'escrowed') throw conflict('Trade is not awaiting payment');
   getDb().prepare("UPDATE p2p_trades SET status = 'paid', updated_at = ? WHERE id = ?").run(now(), trade.id);
-  notify(trade.seller_id, 'Buyer marked as paid', `Confirm you received ${formatMoney(trade.price_amount, getCurrency(trade.price_currency, false))} to release the escrow.`, { kind: 'p2p_trade', tradeId: trade.id });
+  notify(trade.seller_id, 'Buyer marked as paid', `Confirm you received ${formatMoney(trade.price_amount, getCurrency(trade.price_currency, false))} to release the escrow.`, {
+    kind: 'p2p_trade',
+    tradeId: trade.id,
+  });
   return toTrade(getTradeRow(trade.id), true);
 }
 
@@ -341,7 +421,10 @@ export function listTrades(user: UserRow, filter: { status?: string; all?: boole
     params.push(filter.status);
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  return getDb().prepare(`SELECT * FROM p2p_trades ${whereSql} ORDER BY updated_at DESC LIMIT 200`).all(...params).map((r) => toTrade(r));
+  return getDb()
+    .prepare(`SELECT * FROM p2p_trades ${whereSql} ORDER BY updated_at DESC LIMIT 200`)
+    .all(...params)
+    .map((r) => toTrade(r));
 }
 
 export function getTrade(user: UserRow, id: string) {
@@ -372,7 +455,7 @@ export function tradeMessages(user: UserRow, tradeId: string, since?: string | n
 export function marketplaceStats() {
   const db = getDb();
   const ads = (db.prepare("SELECT COUNT(*) c FROM p2p_ads WHERE status = 'active'").get() as any).c;
-  const trades = db.prepare("SELECT status, COUNT(*) c FROM p2p_trades GROUP BY status").all() as any[];
+  const trades = db.prepare('SELECT status, COUNT(*) c FROM p2p_trades GROUP BY status').all() as any[];
   const volume = db.prepare("SELECT currency, COALESCE(SUM(amount),0) v FROM p2p_trades WHERE status = 'completed' GROUP BY currency").all();
   return { activeAds: ads, tradesByStatus: Object.fromEntries(trades.map((t) => [t.status, t.c])), volume, escrowAccount: toPublicUser(getSystemUser('escrow')) };
 }

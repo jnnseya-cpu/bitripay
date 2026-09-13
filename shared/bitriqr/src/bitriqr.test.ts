@@ -14,7 +14,15 @@ test('rails mask round-trips', () => {
   assert.deepEqual(maskToRails(m), ['wallet', 'mpesa', 'airtel', 'orange', 'card']);
 });
 
-const merchant = { merchantId: 'BMRC-7F3K9Q', rails: ['wallet', 'mpesa', 'airtel', 'orange', 'card'] as any, mcc: '5411', currency: 'CDF', country: 'CD', merchantName: 'PHARMACIE LIMETE', city: 'KINSHASA' };
+const merchant = {
+  merchantId: 'BMRC-7F3K9Q',
+  rails: ['wallet', 'mpesa', 'airtel', 'orange', 'card'] as any,
+  mcc: '5411',
+  currency: 'CDF',
+  country: 'CD',
+  merchantName: 'PHARMACIE LIMETE',
+  city: 'KINSHASA',
+};
 
 test('static unsigned QR encodes, decodes and carries basic trust', async () => {
   const payload = encodeUnsigned({ mode: 'static', ...merchant });
@@ -35,7 +43,10 @@ test('static unsigned QR encodes, decodes and carries basic trust', async () => 
 test('dynamic signed QR verifies with the merchant key and fails when tampered', async () => {
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
   const exp = Math.floor(Date.now() / 1000) + 300;
-  const payload = await encodeSigned({ mode: 'dynamic', ...merchant, amount: '25000', intentRef: 'pi_9f3k', billRef: 'INV-2026-0912', purposeCode: 'HEALTH', keyId: 'a1b2c3d4', expiresAt: exp }, (p) => new Uint8Array(sign(null, Buffer.from(p), privateKey)));
+  const payload = await encodeSigned(
+    { mode: 'dynamic', ...merchant, amount: '25000', intentRef: 'pi_9f3k', billRef: 'INV-2026-0912', purposeCode: 'HEALTH', keyId: 'a1b2c3d4', expiresAt: exp },
+    (p) => new Uint8Array(sign(null, Buffer.from(p), privateKey)),
+  );
   const d = decode(payload);
   assert.equal(d.mode, 'dynamic');
   assert.equal(d.amount, '25000');

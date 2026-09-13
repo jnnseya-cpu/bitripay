@@ -25,7 +25,8 @@ import { recordEvent, type Actor } from './events';
 import { getGatewayProductSettings } from './settings';
 import { assertMoneyMovementAllowed } from './guardian';
 import { notify } from './notifications';
-import { formatMoney } from '@bitripay/shared';
+import { formatMoney, nationalSignificant } from '@bitripay/shared';
+import { SANDBOX_MAGIC_MSISDNS } from '../payments/sandbox';
 import { publish } from './bus';
 
 const paymentRequired = (message: string, code = 'payment_required') => new AppError(402, code, message);
@@ -95,7 +96,8 @@ export interface CreateCheckoutSessionInput {
 export function createCheckoutSession(merchant: UserRow, input: CreateCheckoutSessionInput): CheckoutSessionView {
   const settings = getGatewayProductSettings().checkout;
   const items = (input.lineItems ?? []).map((li) => {
-    if (!li.name?.trim() || !Number.isInteger(li.quantity) || li.quantity <= 0 || !Number.isInteger(li.unitAmountMinor) || li.unitAmountMinor < 0) throw badRequest('Each line item needs a name, a positive quantity and a non-negative unit amount in minor units', 'invalid_line_item');
+    if (!li.name?.trim() || !Number.isInteger(li.quantity) || li.quantity <= 0 || !Number.isInteger(li.unitAmountMinor) || li.unitAmountMinor < 0)
+      throw badRequest('Each line item needs a name, a positive quantity and a non-negative unit amount in minor units', 'invalid_line_item');
     return { name: li.name.trim().slice(0, 120), quantity: li.quantity, unitAmountMinor: li.unitAmountMinor };
   });
   const itemsTotal = items.reduce((s, li) => s + li.quantity * li.unitAmountMinor, 0);
@@ -106,7 +108,9 @@ export function createCheckoutSession(merchant: UserRow, input: CreateCheckoutSe
   for (const u of [input.successUrl, input.cancelUrl]) if (u && !/^https?:\/\//.test(u)) throw badRequest('success_url and cancel_url must be absolute http(s) URLs', 'invalid_url');
   const db = getDb();
   if (input.idemKey) {
-    const existing = db.prepare('SELECT cs.* FROM checkout_sessions cs JOIN payment_intents pi ON pi.id = cs.intent_id WHERE cs.merchant_user_id = ? AND pi.idem_key = ?').get(merchant.id, `cs:${input.idemKey}`) as any;
+    const existing = db
+      .prepare('SELECT cs.* FROM checkout_sessions cs JOIN payment_intents pi ON pi.id = cs.intent_id WHERE cs.merchant_user_id = ? AND pi.idem_key = ?')
+      .get(merchant.id, `cs:${input.idemKey}`) as any;
     if (existing) return sessionView(syncSession(existing));
   }
   const id = `cs_${shortCode(20).toLowerCase()}`;
@@ -116,7 +120,14 @@ export function createCheckoutSession(merchant: UserRow, input: CreateCheckoutSe
       currency: input.currency,
       rails: input.rails,
       reference: input.reference ?? null,
-      description: input.description ?? (items.length ? items.map((i) => `${i.quantity}× ${i.name}`).join(', ').slice(0, 200) : null),
+      description:
+        input.description ??
+        (items.length
+          ? items
+              .map((i) => `${i.quantity}× ${i.name}`)
+              .join(', ')
+              .slice(0, 200)
+          : null),
       purposeCode: input.purposeCode ?? null,
       expiresInMinutes: minutes,
       metadata: { ...(input.metadata ?? {}), checkoutSessionId: id },
@@ -127,7 +138,20 @@ export function createCheckoutSession(merchant: UserRow, input: CreateCheckoutSe
       cancelUrl: input.cancelUrl ?? null,
       allowedMethods: input.allowedMethods,
     });
-    db.prepare('INSERT INTO checkout_sessions (id, intent_id, merchant_user_id, status, success_url, cancel_url, customer, line_items, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, row.id, merchant.id, 'open', input.successUrl ?? null, input.cancelUrl ?? null, input.customer ? JSON.stringify(input.customer) : null, JSON.stringify(items), row.expires_at ?? new Date(Date.now() + minutes * 60_000).toISOString(), now());
+    db.prepare(
+      'INSERT INTO checkout_sessions (id, intent_id, merchant_user_id, status, success_url, cancel_url, customer, line_items, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      id,
+      row.id,
+      merchant.id,
+      'open',
+      input.successUrl ?? null,
+      input.cancelUrl ?? null,
+      input.customer ? JSON.stringify(input.customer) : null,
+      JSON.stringify(items),
+      row.expires_at ?? new Date(Date.now() + minutes * 60_000).toISOString(),
+      now(),
+    );
     recordEvent('payment', row.id, 'checkout_session.created', { type: 'merchant', id: merchant.id }, { sessionId: id, amount, currency: row.currency, lineItems: items.length });
     return sessionView(db.prepare('SELECT * FROM checkout_sessions WHERE id = ?').get(id));
   })();
@@ -170,7 +194,9 @@ export function getCheckoutSession(merchantUserId: string | null, id: string): C
 }
 
 export function listCheckoutSessions(merchantUserId: string, filter: { status?: string | null; limit?: number } = {}): CheckoutSessionView[] {
-  const rows = getDb().prepare(`SELECT * FROM checkout_sessions WHERE merchant_user_id = ? ${filter.status ? 'AND status = ?' : ''} ORDER BY created_at DESC LIMIT ?`).all(...(filter.status ? [merchantUserId, filter.status] : [merchantUserId]), Math.min(200, filter.limit ?? 50)) as any[];
+  const rows = getDb()
+    .prepare(`SELECT * FROM checkout_sessions WHERE merchant_user_id = ? ${filter.status ? 'AND status = ?' : ''} ORDER BY created_at DESC LIMIT ?`)
+    .all(...(filter.status ? [merchantUserId, filter.status] : [merchantUserId]), Math.min(200, filter.limit ?? 50)) as any[];
   return rows.map((r) => sessionView(syncSession(r)));
 }
 
@@ -241,11 +267,46 @@ export interface CreatePaymentLinkInput {
 }
 
 function linkFromIntent(v: IntentView): PaymentLinkView {
-  return { id: v.id, object: 'payment_link', kind: 'single_use', url: v.checkoutUrl ?? `${config.webUrl}/pay/${v.paymentRequestCode}`, uri: v.uri, qrPayload: v.qrPayload, amount: v.amount, title: (v.metadata.title as string) ?? null, description: v.description, purposeCode: v.purposeCode, status: v.status, uses: PAID_STATES.has(v.status) ? 1 : 0, intentId: v.id, qrId: v.qrId, expiresAt: v.expiresAt, createdAt: v.createdAt };
+  return {
+    id: v.id,
+    object: 'payment_link',
+    kind: 'single_use',
+    url: v.checkoutUrl ?? `${config.webUrl}/pay/${v.paymentRequestCode}`,
+    uri: v.uri,
+    qrPayload: v.qrPayload,
+    amount: v.amount,
+    title: (v.metadata.title as string) ?? null,
+    description: v.description,
+    purposeCode: v.purposeCode,
+    status: v.status,
+    uses: PAID_STATES.has(v.status) ? 1 : 0,
+    intentId: v.id,
+    qrId: v.qrId,
+    expiresAt: v.expiresAt,
+    createdAt: v.createdAt,
+  };
 }
 function linkFromQr(q: QrView): PaymentLinkView {
-  const uses = (getDb().prepare("SELECT COUNT(*) c FROM payment_intents WHERE qr_id = ? AND status IN ('CAPTURED','SETTLEMENT_PENDING','SETTLED','PARTIALLY_REFUNDED','REFUNDED')").get(q.id) as any).c as number;
-  return { id: q.id, object: 'payment_link', kind: 'reusable', url: q.link, uri: q.uri, qrPayload: q.payload, amount: { valueMinor: q.amount, currency: q.currency }, title: q.reference, description: null, purposeCode: q.purposeCode, status: q.status, uses, intentId: null, qrId: q.id, expiresAt: q.expiresAt, createdAt: q.createdAt };
+  const uses = (getDb().prepare("SELECT COUNT(*) c FROM payment_intents WHERE qr_id = ? AND status IN ('CAPTURED','SETTLEMENT_PENDING','SETTLED','PARTIALLY_REFUNDED','REFUNDED')").get(q.id) as any)
+    .c as number;
+  return {
+    id: q.id,
+    object: 'payment_link',
+    kind: 'reusable',
+    url: q.link,
+    uri: q.uri,
+    qrPayload: q.payload,
+    amount: { valueMinor: q.amount, currency: q.currency },
+    title: q.reference,
+    description: null,
+    purposeCode: q.purposeCode,
+    status: q.status,
+    uses,
+    intentId: null,
+    qrId: q.id,
+    expiresAt: q.expiresAt,
+    createdAt: q.createdAt,
+  };
 }
 
 /**
@@ -256,7 +317,14 @@ function linkFromQr(q: QrView): PaymentLinkView {
 export function createPaymentLink(merchant: UserRow, input: CreatePaymentLinkInput): PaymentLinkView {
   const settings = getGatewayProductSettings().links;
   if (input.reusable) {
-    const qr = createStaticQr(merchant, { currency: input.currency, purposeCode: input.purposeCode ?? null, reference: input.title ?? input.description ?? null, kind: 'invoice', rails: input.rails, amount: input.amountMinor ?? null });
+    const qr = createStaticQr(merchant, {
+      currency: input.currency,
+      purposeCode: input.purposeCode ?? null,
+      reference: input.title ?? input.description ?? null,
+      kind: 'invoice',
+      rails: input.rails,
+      amount: input.amountMinor ?? null,
+    });
     return linkFromQr(qr);
   }
   if (!input.amountMinor) throw badRequest('Single-use links need an amount; set reusable=true for open-amount links', 'amount_required');
@@ -289,7 +357,9 @@ export function getPaymentLink(merchantUserId: string, id: string): PaymentLinkV
 }
 
 export function listPaymentLinks(merchantUserId: string, limit = 50): PaymentLinkView[] {
-  const intents = (getDb().prepare("SELECT * FROM payment_intents WHERE merchant_user_id = ? AND source = 'link' ORDER BY created_at DESC LIMIT ?").all(merchantUserId, limit) as IntentRow[]).map((r) => linkFromIntent(intentView(r)));
+  const intents = (getDb().prepare("SELECT * FROM payment_intents WHERE merchant_user_id = ? AND source = 'link' ORDER BY created_at DESC LIMIT ?").all(merchantUserId, limit) as IntentRow[]).map(
+    (r) => linkFromIntent(intentView(r)),
+  );
   const qrs = listQrs(merchantUserId, { mode: 'STATIC' })
     .filter((q) => q.kind === 'invoice')
     .map(linkFromQr);
@@ -327,13 +397,32 @@ export interface RefundView {
   createdAt: string;
   updatedAt: string;
 }
-const toRefund = (r: any): RefundView => ({ id: r.id, object: 'refund', intentId: r.intent_id, transactionId: r.transaction_id, amount: { valueMinor: r.amount, currency: r.currency }, reason: r.reason, status: r.status, method: r.method, refundTransactionId: r.refund_transaction_id, providerRef: r.provider_ref, error: r.error, metadata: parseJson(r.metadata, {}), createdAt: r.created_at, updatedAt: r.updated_at });
+const toRefund = (r: any): RefundView => ({
+  id: r.id,
+  object: 'refund',
+  intentId: r.intent_id,
+  transactionId: r.transaction_id,
+  amount: { valueMinor: r.amount, currency: r.currency },
+  reason: r.reason,
+  status: r.status,
+  method: r.method,
+  refundTransactionId: r.refund_transaction_id,
+  providerRef: r.provider_ref,
+  error: r.error,
+  metadata: parseJson(r.metadata, {}),
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
 
 /** Amount still refundable on a transaction: principal minus everything reserved, pending or already refunded. */
 export function refundableAmount(transactionId: string): { principal: number; reserved: number; refundable: number } {
   const tx = getTransaction(transactionId);
   if (!tx) throw notFound('Transaction not found', 'transaction_not_found');
-  const reserved = (getDb().prepare(`SELECT COALESCE(SUM(amount), 0) s FROM refunds WHERE transaction_id = ? AND status IN (${RESERVING_STATES.map(() => '?').join(',')})`).get(transactionId, ...RESERVING_STATES) as any).s as number;
+  const reserved = (
+    getDb()
+      .prepare(`SELECT COALESCE(SUM(amount), 0) s FROM refunds WHERE transaction_id = ? AND status IN (${RESERVING_STATES.map(() => '?').join(',')})`)
+      .get(transactionId, ...RESERVING_STATES) as any
+  ).s as number;
   return { principal: tx.amount, reserved, refundable: Math.max(0, tx.amount - reserved) };
 }
 
@@ -384,7 +473,24 @@ export async function createRefund(merchant: UserRow, input: CreateRefundInput, 
     const amount = input.amountMinor ?? refundable;
     if (!Number.isInteger(amount) || amount <= 0) throw badRequest('Refund amount must be a positive integer in minor units', 'invalid_amount');
     if (amount > refundable) throw conflict(`Only ${formatMoney(refundable, cur)} of this payment can still be refunded`, 'refund_exceeds_refundable');
-    db.prepare('INSERT INTO refunds (id, intent_id, transaction_id, merchant_user_id, amount, currency, reason, status, method, requested_by, idem_key, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, intent?.id ?? null, tx!.id, merchant.id, amount, cur.code, input.reason ?? null, 'REQUESTED', method, actor.id ?? null, input.idemKey ?? null, JSON.stringify({ ...(input.metadata ?? {}), gatewayPaymentId }), now(), now());
+    db.prepare(
+      'INSERT INTO refunds (id, intent_id, transaction_id, merchant_user_id, amount, currency, reason, status, method, requested_by, idem_key, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      id,
+      intent?.id ?? null,
+      tx!.id,
+      merchant.id,
+      amount,
+      cur.code,
+      input.reason ?? null,
+      'REQUESTED',
+      method,
+      actor.id ?? null,
+      input.idemKey ?? null,
+      JSON.stringify({ ...(input.metadata ?? {}), gatewayPaymentId }),
+      now(),
+      now(),
+    );
     return amount;
   })();
   emitEvent(merchant.id, 'refund.created', { refund: toRefund(db.prepare('SELECT * FROM refunds WHERE id = ?').get(id)) }, { resource: { type: 'refund', id } });
@@ -415,7 +521,13 @@ export async function createRefund(merchant: UserRow, input: CreateRefundInput, 
       db.prepare('UPDATE refunds SET status = ?, provider_ref = ?, error = ?, updated_at = ? WHERE id = ?').run(st, providerRef, result.message ?? null, now(), id);
       const view = toRefund(db.prepare('SELECT * FROM refunds WHERE id = ?').get(id));
       emitEvent(merchant.id, 'refund.updated', { refund: view }, { resource: { type: 'refund', id } });
-      if (st === 'MANUAL') notify(merchant.id, 'Refund needs manual execution', `${formatMoney(reserved, cur)} must be returned to the payer manually (${result.message ?? 'no refund API'}). Operations will confirm it.`, { kind: 'refund', refundId: id });
+      if (st === 'MANUAL')
+        notify(
+          merchant.id,
+          'Refund needs manual execution',
+          `${formatMoney(reserved, cur)} must be returned to the payer manually (${result.message ?? 'no refund API'}). Operations will confirm it.`,
+          { kind: 'refund', refundId: id },
+        );
       return view;
     }
   }
@@ -437,7 +549,8 @@ export async function createRefund(merchant: UserRow, input: CreateRefundInput, 
       });
       db.prepare("UPDATE refunds SET status = 'SUCCEEDED', refund_transaction_id = ?, provider_ref = ?, updated_at = ? WHERE id = ?").run(posted.id, providerRef, now(), id);
       const total = (db.prepare("SELECT COALESCE(SUM(amount), 0) s FROM refunds WHERE transaction_id = ? AND status = 'SUCCEEDED'").get(tx!.id) as any).s as number;
-      if (total >= tx!.amount) db.prepare("UPDATE transactions SET status = 'reversed', metadata = ? WHERE id = ?").run(JSON.stringify({ ...meta, refundTransactionId: posted.id, refundedMinor: total }), tx!.id);
+      if (total >= tx!.amount)
+        db.prepare("UPDATE transactions SET status = 'reversed', metadata = ? WHERE id = ?").run(JSON.stringify({ ...meta, refundTransactionId: posted.id, refundedMinor: total }), tx!.id);
       else db.prepare('UPDATE transactions SET metadata = ? WHERE id = ?').run(JSON.stringify({ ...meta, refundedMinor: total }), tx!.id);
       if (intent) {
         const target = total >= tx!.amount ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
@@ -448,11 +561,21 @@ export async function createRefund(merchant: UserRow, input: CreateRefundInput, 
             /* intents in review/dispute keep their state; the refund object is the record */
           }
         }
-        appendPaymentEvent({ intentId: intent.id, state: target, source: method === 'wallet' ? 'ledger' : 'processor', direction: 'out', amountMinor: reserved, currency: cur.code, transactionId: posted.id, payload: { refundId: id, providerRef } });
+        appendPaymentEvent({
+          intentId: intent.id,
+          state: target,
+          source: method === 'wallet' ? 'ledger' : 'processor',
+          direction: 'out',
+          amountMinor: reserved,
+          currency: cur.code,
+          transactionId: posted.id,
+          payload: { refundId: id, providerRef },
+        });
       }
       return posted;
     })();
-    if (tx.sender_user_id && method === 'wallet') notify(tx.sender_user_id, 'Refund received', `${formatMoney(reserved, cur)} was refunded by ${merchant.business_name ?? merchant.full_name}.`, { kind: 'refund', transactionId: refundTx.id });
+    if (tx.sender_user_id && method === 'wallet')
+      notify(tx.sender_user_id, 'Refund received', `${formatMoney(reserved, cur)} was refunded by ${merchant.business_name ?? merchant.full_name}.`, { kind: 'refund', transactionId: refundTx.id });
     const view = toRefund(db.prepare('SELECT * FROM refunds WHERE id = ?').get(id));
     emitEvent(merchant.id, 'refund.succeeded', { refund: view }, { resource: { type: 'refund', id } });
     emitEvent(merchant.id, 'refund.updated', { refund: view }, { resource: { type: 'refund', id } });
@@ -484,7 +607,18 @@ export async function resolveRefund(id: string, outcome: 'succeeded' | 'failed',
   const meta = parseJson<Record<string, any>>(tx.metadata, {});
   const merchantWallet = ensureWallet(merchant.id, cur.code);
   db.transaction(() => {
-    const posted = postTransaction({ type: 'refund', amount: r.amount, currency: cur.code, fromWalletId: merchantWallet.id, toWalletId: null, senderUserId: merchant.id, receiverUserId: null, note: `Refund of ${tx.reference} (confirmed by operations)`, metadata: { refundOf: tx.id, refundOfReference: tx.reference, refundId: id, method: 'processor', providerRef: r.provider_ref, note: note ?? null }, idempotencyKey: `refund:${id}` });
+    const posted = postTransaction({
+      type: 'refund',
+      amount: r.amount,
+      currency: cur.code,
+      fromWalletId: merchantWallet.id,
+      toWalletId: null,
+      senderUserId: merchant.id,
+      receiverUserId: null,
+      note: `Refund of ${tx.reference} (confirmed by operations)`,
+      metadata: { refundOf: tx.id, refundOfReference: tx.reference, refundId: id, method: 'processor', providerRef: r.provider_ref, note: note ?? null },
+      idempotencyKey: `refund:${id}`,
+    });
     db.prepare("UPDATE refunds SET status = 'SUCCEEDED', refund_transaction_id = ?, approved_by = ?, updated_at = ? WHERE id = ?").run(posted.id, admin.id, now(), id);
     const total = (db.prepare("SELECT COALESCE(SUM(amount), 0) s FROM refunds WHERE transaction_id = ? AND status = 'SUCCEEDED'").get(tx.id) as any).s as number;
     db.prepare('UPDATE transactions SET status = ?, metadata = ? WHERE id = ?').run(total >= tx.amount ? 'reversed' : tx.status, JSON.stringify({ ...meta, refundedMinor: total }), tx.id);
@@ -498,7 +632,16 @@ export async function resolveRefund(id: string, outcome: 'succeeded' | 'failed',
           /* keep review/dispute states */
         }
       }
-      appendPaymentEvent({ intentId: intent.id, state: target, source: 'manual', direction: 'out', amountMinor: r.amount, currency: cur.code, transactionId: posted.id, payload: { refundId: id, adminId: admin.id } });
+      appendPaymentEvent({
+        intentId: intent.id,
+        state: target,
+        source: 'manual',
+        direction: 'out',
+        amountMinor: r.amount,
+        currency: cur.code,
+        transactionId: posted.id,
+        payload: { refundId: id, adminId: admin.id },
+      });
     }
   })();
   const view = toRefund(db.prepare('SELECT * FROM refunds WHERE id = ?').get(id));
@@ -532,7 +675,11 @@ export function listRefunds(filter: { merchantUserId?: string | null; intentId?:
     where.push('status = ?');
     params.push(filter.status);
   }
-  return (getDb().prepare(`SELECT * FROM refunds ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT ?`).all(...params, Math.min(200, filter.limit ?? 50)) as any[]).map(toRefund);
+  return (
+    getDb()
+      .prepare(`SELECT * FROM refunds ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT ?`)
+      .all(...params, Math.min(200, filter.limit ?? 50)) as any[]
+  ).map(toRefund);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -550,16 +697,36 @@ export interface VerificationView {
   status: VerificationStatus;
   confidence: number;
   reasons: string[];
-  match: { paymentId: string | null; intentId: string | null; evidenceId: string | null; transactionId: string | null; settledAt: string | null; amount: number | null; currency: string | null; stage: string | null } | null;
+  match: {
+    paymentId: string | null;
+    intentId: string | null;
+    evidenceId: string | null;
+    transactionId: string | null;
+    settledAt: string | null;
+    amount: number | null;
+    currency: string | null;
+    stage: string | null;
+  } | null;
   charged: boolean;
   createdAt: string;
 }
-const toVerification = (r: any): VerificationView => ({ id: r.id, object: 'verification', rail: r.rail, reference: r.reference, msisdn: r.msisdn, amount: { valueMinor: r.amount, currency: r.currency }, window: { from: r.window_from, to: r.window_to }, status: r.status, confidence: r.confidence, reasons: parseJson<string[]>(r.reasons, []), match: r.payment_id || r.intent_id || r.evidence_id ? parseJson(r.match ?? 'null', null) : null, charged: !!r.charged, createdAt: r.created_at });
+const toVerification = (r: any): VerificationView => ({
+  id: r.id,
+  object: 'verification',
+  rail: r.rail,
+  reference: r.reference,
+  msisdn: r.msisdn,
+  amount: { valueMinor: r.amount, currency: r.currency },
+  window: { from: r.window_from, to: r.window_to },
+  status: r.status,
+  confidence: r.confidence,
+  reasons: parseJson<string[]>(r.reasons, []),
+  match: r.payment_id || r.intent_id || r.evidence_id ? parseJson(r.match ?? 'null', null) : null,
+  charged: !!r.charged,
+  createdAt: r.created_at,
+});
 
-function normaliseMsisdn(v: string | null | undefined): string | null {
-  const d = (v ?? '').replace(/\D/g, '');
-  return d.length >= 8 ? d.slice(-9) : null; // compare on the national significant part
-}
+const normaliseMsisdn = nationalSignificant; // compare on the national significant part
 
 export interface CreateVerificationInput {
   rail: string;
@@ -592,8 +759,21 @@ export function createVerification(merchant: UserRow, input: CreateVerificationI
   let chargeTx: TransactionRow | null = null;
   if (used >= settings.freePerMonth && settings.priceMinor > 0) {
     const wallet = ensureWallet(merchant.id, settings.priceCurrency);
-    if (wallet.balance < settings.priceMinor) throw paymentRequired(`Your ${settings.freePerMonth} free verifications this month are used. Each further lookup costs ${formatMoney(settings.priceMinor, getCurrency(settings.priceCurrency, false))}; top up your ${settings.priceCurrency} balance to continue.`, 'verification_quota_exhausted');
-    chargeTx = postTransaction({ type: 'verification', amount: settings.priceMinor, currency: settings.priceCurrency, fromWalletId: wallet.id, toWalletId: null, senderUserId: merchant.id, note: 'Scan-to-Verify lookup', metadata: { product: 'koda' } });
+    if (wallet.balance < settings.priceMinor)
+      throw paymentRequired(
+        `Your ${settings.freePerMonth} free verifications this month are used. Each further lookup costs ${formatMoney(settings.priceMinor, getCurrency(settings.priceCurrency, false))}; top up your ${settings.priceCurrency} balance to continue.`,
+        'verification_quota_exhausted',
+      );
+    chargeTx = postTransaction({
+      type: 'verification',
+      amount: settings.priceMinor,
+      currency: settings.priceCurrency,
+      fromWalletId: wallet.id,
+      toWalletId: null,
+      senderUserId: merchant.id,
+      note: 'Scan-to-Verify lookup',
+      metadata: { product: 'koda' },
+    });
   }
 
   // candidates: gateway payments on this merchant's requests
@@ -611,9 +791,26 @@ export function createVerification(merchant: UserRow, input: CreateVerificationI
        WHERE pr.requester_user_id = ? AND e.created_at >= ?`,
     )
     .all(merchant.id, from) as any[];
-  const ledger = reference ? (db.prepare("SELECT * FROM transactions WHERE receiver_user_id = ? AND (reference = ? OR json_extract(metadata, '$.providerRef') = ? OR json_extract(metadata, '$.reference') = ?) AND created_at >= ?").all(merchant.id, reference, reference, reference, from) as TransactionRow[]) : [];
+  const ledger = reference
+    ? (db
+        .prepare(
+          "SELECT * FROM transactions WHERE receiver_user_id = ? AND (reference = ? OR json_extract(metadata, '$.providerRef') = ? OR json_extract(metadata, '$.reference') = ?) AND created_at >= ?",
+        )
+        .all(merchant.id, reference, reference, reference, from) as TransactionRow[])
+    : [];
 
-  type Hit = { paymentId: string | null; intentId: string | null; evidenceId: string | null; transactionId: string | null; stage: string | null; amount: number; currency: string; at: string; score: number; why: string };
+  type Hit = {
+    paymentId: string | null;
+    intentId: string | null;
+    evidenceId: string | null;
+    transactionId: string | null;
+    stage: string | null;
+    amount: number;
+    currency: string;
+    at: string;
+    score: number;
+    why: string;
+  };
   const hits: Hit[] = [];
   const refEq = (a: string | null | undefined) => !!reference && !!a && a.replace(/\s+/g, '').toLowerCase() === reference.replace(/\s+/g, '').toLowerCase();
   for (const c of candidates) {
@@ -631,7 +828,19 @@ export function createVerification(merchant: UserRow, input: CreateVerificationI
       score += 25;
       why.push('amount');
     }
-    if (score >= 50) hits.push({ paymentId: c.payment_id, intentId: c.intent_id, evidenceId: null, transactionId: c.transaction_id, stage: c.stage, amount: c.amount, currency: c.currency, at: c.updated_at, score, why: why.join('+') });
+    if (score >= 50)
+      hits.push({
+        paymentId: c.payment_id,
+        intentId: c.intent_id,
+        evidenceId: null,
+        transactionId: c.transaction_id,
+        stage: c.stage,
+        amount: c.amount,
+        currency: c.currency,
+        at: c.updated_at,
+        score,
+        why: why.join('+'),
+      });
   }
   for (const e of evidence) {
     const parsed = parseJson<Partial<import('./evidence').ParsedEvidence>>(e.parsed, {});
@@ -649,9 +858,33 @@ export function createVerification(merchant: UserRow, input: CreateVerificationI
       score += 25;
       why.push('amount');
     }
-    if (score >= 50) hits.push({ paymentId: e.payment_id, intentId: e.intent_id, evidenceId: e.evidence_id, transactionId: e.transaction_id, stage: e.stage, amount: e.amount, currency: e.currency, at: e.updated_at, score, why: why.join('+') });
+    if (score >= 50)
+      hits.push({
+        paymentId: e.payment_id,
+        intentId: e.intent_id,
+        evidenceId: e.evidence_id,
+        transactionId: e.transaction_id,
+        stage: e.stage,
+        amount: e.amount,
+        currency: e.currency,
+        at: e.updated_at,
+        score,
+        why: why.join('+'),
+      });
   }
-  for (const t of ledger) hits.push({ paymentId: null, intentId: t.intent_id ?? null, evidenceId: null, transactionId: t.id, stage: t.status === 'completed' ? 'SETTLED' : t.status.toUpperCase(), amount: t.amount, currency: t.currency, at: t.completed_at ?? t.created_at, score: 80, why: 'ledger_reference' });
+  for (const t of ledger)
+    hits.push({
+      paymentId: null,
+      intentId: t.intent_id ?? null,
+      evidenceId: null,
+      transactionId: t.id,
+      stage: t.status === 'completed' ? 'SETTLED' : t.status.toUpperCase(),
+      amount: t.amount,
+      currency: t.currency,
+      at: t.completed_at ?? t.created_at,
+      score: 80,
+      why: 'ledger_reference',
+    });
 
   // one hit per underlying payment, best score first
   const byKey = new Map<string, Hit>();
@@ -693,13 +926,58 @@ export function createVerification(merchant: UserRow, input: CreateVerificationI
     }
   }
   const id = `vf_${shortCode(20).toLowerCase()}`;
-  const matchJson = match ? JSON.stringify({ paymentId: match.paymentId, intentId: match.intentId, evidenceId: match.evidenceId, transactionId: match.transactionId, settledAt: status === 'VERIFIED' ? match.at : null, amount: match.amount, currency: match.currency, stage: match.stage }) : null;
-  db.prepare('INSERT INTO verifications (id, merchant_user_id, rail, reference, msisdn, amount, currency, window_from, window_to, status, confidence, evidence_id, payment_id, intent_id, reasons, charged, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, merchant.id, input.rail, reference, msisdn, input.amountMinor ?? null, cur, from, to, status, confidence, match?.evidenceId ?? null, match?.paymentId ?? null, match?.intentId ?? null, JSON.stringify(reasons), chargeTx ? 1 : 0, now());
+  const matchJson = match
+    ? JSON.stringify({
+        paymentId: match.paymentId,
+        intentId: match.intentId,
+        evidenceId: match.evidenceId,
+        transactionId: match.transactionId,
+        settledAt: status === 'VERIFIED' ? match.at : null,
+        amount: match.amount,
+        currency: match.currency,
+        stage: match.stage,
+      })
+    : null;
+  db.prepare(
+    'INSERT INTO verifications (id, merchant_user_id, rail, reference, msisdn, amount, currency, window_from, window_to, status, confidence, evidence_id, payment_id, intent_id, reasons, charged, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(
+    id,
+    merchant.id,
+    input.rail,
+    reference,
+    msisdn,
+    input.amountMinor ?? null,
+    cur,
+    from,
+    to,
+    status,
+    confidence,
+    match?.evidenceId ?? null,
+    match?.paymentId ?? null,
+    match?.intentId ?? null,
+    JSON.stringify(reasons),
+    chargeTx ? 1 : 0,
+    now(),
+  );
   if (matchJson) db.prepare('UPDATE verifications SET match = ? WHERE id = ?').run(matchJson, id);
-  if (match?.intentId && status === 'VERIFIED') appendPaymentEvent({ intentId: match.intentId, state: 'EXTERNAL_VERIFIED', source: 'koda', direction: 'internal', amountMinor: match.amount, currency: match.currency, transactionId: match.transactionId, payload: { verificationId: id, confidence } });
+  if (match?.intentId && status === 'VERIFIED')
+    appendPaymentEvent({
+      intentId: match.intentId,
+      state: 'EXTERNAL_VERIFIED',
+      source: 'koda',
+      direction: 'internal',
+      amountMinor: match.amount,
+      currency: match.currency,
+      transactionId: match.transactionId,
+      payload: { verificationId: id, confidence },
+    });
   const view = toVerification(db.prepare('SELECT * FROM verifications WHERE id = ?').get(id));
   emitEvent(merchant.id, 'verification.completed', { verification: view }, { resource: { type: 'verification', id } });
-  publish('verification.requested', { verificationId: view.id, merchantId: merchant.id, reference: view.reference, msisdn: view.msisdn, status: view.status }, { aggregateId: view.id, tenantId: merchant.id });
+  publish(
+    'verification.requested',
+    { verificationId: view.id, merchantId: merchant.id, reference: view.reference, msisdn: view.msisdn, status: view.status },
+    { aggregateId: view.id, tenantId: merchant.id },
+  );
   return view;
 }
 
@@ -717,7 +995,13 @@ export function verificationQuota(merchantUserId: string) {
   const settings = getGatewayProductSettings().koda;
   const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
   const used = (getDb().prepare('SELECT COUNT(*) c FROM verifications WHERE merchant_user_id = ? AND created_at >= ?').get(merchantUserId, monthStart) as any).c as number;
-  return { used, freePerMonth: settings.freePerMonth, remainingFree: Math.max(0, settings.freePerMonth - used), price: { valueMinor: settings.priceMinor, currency: settings.priceCurrency }, windowHours: settings.windowHours };
+  return {
+    used,
+    freePerMonth: settings.freePerMonth,
+    remainingFree: Math.max(0, settings.freePerMonth - used),
+    price: { valueMinor: settings.priceMinor, currency: settings.priceCurrency },
+    windowHours: settings.windowHours,
+  };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -734,14 +1018,31 @@ export interface CreatePayoutInput {
 export function payoutView(tx: TransactionRow, viewerId: string) {
   const meta = parseJson<Record<string, any>>(tx.metadata, {});
   const payout = getPayoutByTransaction(tx.id);
-  return { id: tx.id, object: 'payout', reference: tx.reference, status: tx.status, stage: payout?.stage ?? null, amount: { valueMinor: tx.amount, currency: tx.currency }, fee: tx.fee, destination: meta.method === 'mobile_money' ? { method: 'mobile_money', operator: meta.operator ?? null, phone: meta.phone ?? null, name: meta.recipientName ?? null } : { method: 'bank', bankAccount: meta.bankAccount ?? null }, description: tx.note, transaction: toTransaction(tx, viewerId), createdAt: tx.created_at, completedAt: tx.completed_at };
+  return {
+    id: tx.id,
+    object: 'payout',
+    reference: tx.reference,
+    status: tx.status,
+    stage: payout?.stage ?? null,
+    amount: { valueMinor: tx.amount, currency: tx.currency },
+    fee: tx.fee,
+    destination:
+      meta.method === 'mobile_money'
+        ? { method: 'mobile_money', operator: meta.operator ?? null, phone: meta.phone ?? null, name: meta.recipientName ?? null }
+        : { method: 'bank', bankAccount: meta.bankAccount ?? null },
+    description: tx.note,
+    transaction: toTransaction(tx, viewerId),
+    createdAt: tx.created_at,
+    completedAt: tx.completed_at,
+  };
 }
 
 export function createPayout(merchant: UserRow, input: CreatePayoutInput) {
   assertMoneyMovementAllowed('payout');
   const db = getDb();
   if (input.idemKey) {
-    const existing = db.prepare("SELECT * FROM transactions WHERE sender_user_id = ? AND type = 'withdrawal' AND idempotency_key = ?").get(merchant.id, `payout:${input.idemKey}`) as TransactionRow | undefined;
+    const existing = db.prepare("SELECT * FROM transactions WHERE sender_user_id = ? AND type = 'withdrawal' AND idempotency_key = ?").get(merchant.id, `payout:${input.idemKey}`) as
+      TransactionRow | undefined;
     if (existing) return payoutView(existing, merchant.id);
   }
   const tx = requestWithdrawal(merchant, { amount: input.amountMinor, currency: input.currency, destination: input.destination, note: input.description ?? null });
@@ -756,7 +1057,12 @@ transactionStatusHooks.push((tx, outcome) => {
   if (tx.type !== 'withdrawal' || !tx.sender_user_id) return;
   const user = findUserById(tx.sender_user_id);
   if (!user || user.role !== 'merchant') return;
-  emitEvent(tx.sender_user_id, outcome === 'completed' ? 'payout.completed' : 'payout.failed', { payout: payoutView(tx, tx.sender_user_id) }, { resource: { type: 'payout', id: tx.id }, occurredAt: tx.completed_at ?? null });
+  emitEvent(
+    tx.sender_user_id,
+    outcome === 'completed' ? 'payout.completed' : 'payout.failed',
+    { payout: payoutView(tx, tx.sender_user_id) },
+    { resource: { type: 'payout', id: tx.id }, occurredAt: tx.completed_at ?? null },
+  );
 });
 
 export function getPayout(merchantUserId: string, id: string) {
@@ -766,7 +1072,9 @@ export function getPayout(merchantUserId: string, id: string) {
 }
 
 export function listPayouts(merchantUserId: string, limit = 50) {
-  return (getDb().prepare("SELECT * FROM transactions WHERE sender_user_id = ? AND type = 'withdrawal' ORDER BY created_at DESC LIMIT ?").all(merchantUserId, Math.min(200, limit)) as TransactionRow[]).map((t) => payoutView(t, merchantUserId));
+  return (
+    getDb().prepare("SELECT * FROM transactions WHERE sender_user_id = ? AND type = 'withdrawal' ORDER BY created_at DESC LIMIT ?").all(merchantUserId, Math.min(200, limit)) as TransactionRow[]
+  ).map((t) => payoutView(t, merchantUserId));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -774,7 +1082,10 @@ export function listPayouts(merchantUserId: string, limit = 50) {
 // ---------------------------------------------------------------------------------------------------------------------
 export const SIMULATION_OUTCOMES = ['succeed', 'fail', 'ambiguous', 'timeout_then_succeed', 'provider_unavailable'] as const;
 export type SimulationOutcome = (typeof SIMULATION_OUTCOMES)[number];
-const MAGIC: Record<SimulationOutcome, string> = { succeed: '+243000000501', fail: '+243000000404', ambiguous: '+243000000408', timeout_then_succeed: '+243000000500', provider_unavailable: '+243000000503' };
+const MAGIC = Object.fromEntries(SANDBOX_MAGIC_MSISDNS.filter((m) => (SIMULATION_OUTCOMES as readonly string[]).includes(m.outcome)).map((m) => [m.outcome, m.msisdn])) as Record<
+  SimulationOutcome,
+  string
+>;
 
 /**
  * Drive an intent through the real pipeline with the sandbox processor and a magic MSISDN: an attempt is started,
@@ -789,8 +1100,21 @@ export async function simulateOutcome(merchant: UserRow, intentId: string, outco
   if (!intent.payment_request_id) throw conflict('Intent has no checkout request', 'not_simulatable');
   const request = getDb().prepare('SELECT code FROM payment_requests WHERE id = ?').get(intent.payment_request_id) as { code: string };
   const phone = MAGIC[outcome];
-  const payment = await initiatePayment(null, { purpose: 'checkout', paymentRequestCode: request.code, method: 'mobile_money', gateway: 'sandbox', phone, amount: intent.amount_minor ?? undefined, currency: intent.currency, name: 'Sandbox payer', email: 'sandbox@bitripay.test' } as any);
-  if (outcome === 'succeed') getDb().prepare("UPDATE gateway_payments SET created_at = ? WHERE id = ?").run(new Date(Date.now() - 4000).toISOString(), payment.id); // the sandbox approves after ~3s
+  const payment = await initiatePayment(null, {
+    purpose: 'checkout',
+    paymentRequestCode: request.code,
+    method: 'mobile_money',
+    gateway: 'sandbox',
+    phone,
+    amount: intent.amount_minor ?? undefined,
+    currency: intent.currency,
+    name: 'Sandbox payer',
+    email: 'sandbox@bitripay.test',
+  } as any);
+  if (outcome === 'succeed')
+    getDb()
+      .prepare('UPDATE gateway_payments SET created_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 4000).toISOString(), payment.id); // the sandbox approves after ~3s
   const verified = await verifyPayment(payment.id);
   return { simulation: true, outcome, msisdn: phone, payment: verified, paymentIntent: intentView(getIntentRow(intentId)), attempts: listAttempts(intentId) };
 }
@@ -799,6 +1123,7 @@ export function sandboxCatalogue() {
   return {
     simulation: true,
     magicMsisdns: MAGIC,
+    magic: SANDBOX_MAGIC_MSISDNS.map((m) => ({ msisdn: m.msisdn, outcome: m.outcome, description: m.behaviour })),
     outcomes: SIMULATION_OUTCOMES,
     cards: { success: 'any Luhn-valid number', declined: 'last four 0002', insufficientFunds: 'last four 9995', expired: 'last four 0069', incorrectCvc: 'last four 0127' },
     note: 'Sandbox rails settle to your test balance through the same ledger, state machine and webhooks as live rails.',

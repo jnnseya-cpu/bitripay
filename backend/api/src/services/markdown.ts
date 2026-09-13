@@ -7,7 +7,13 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 export function slugify(s: string): string {
-  return s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+  return s
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
 }
 
 function inline(text: string): string {
@@ -82,11 +88,22 @@ export function renderMarkdown(md: string): { html: string; headings: Heading[];
       continue;
     }
     if (/^\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\|?\s*:?-{2,}/.test(lines[i + 1])) {
-      const header = line.split('|').slice(1, -1).map((c) => c.trim());
+      const header = line
+        .split('|')
+        .slice(1, -1)
+        .map((c) => c.trim());
       i += 2;
       const rows: string[][] = [];
-      while (i < lines.length && /^\|.*\|\s*$/.test(lines[i])) rows.push(lines[i++].split('|').slice(1, -1).map((c) => c.trim()));
-      out.push(`<div class="table-wrap"><table><thead><tr>${header.map((c) => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+      while (i < lines.length && /^\|.*\|\s*$/.test(lines[i]))
+        rows.push(
+          lines[i++]
+            .split('|')
+            .slice(1, -1)
+            .map((c) => c.trim()),
+        );
+      out.push(
+        `<div class="table-wrap"><table><thead><tr>${header.map((c) => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`,
+      );
       plain.push(header.join(' '), ...rows.map((r) => r.join(' ')));
       continue;
     }

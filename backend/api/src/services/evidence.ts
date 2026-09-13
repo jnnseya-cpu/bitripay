@@ -49,7 +49,26 @@ export interface EvidenceDevice {
 }
 
 function toDevice(r: any): EvidenceDevice {
-  return { id: r.id, ownerUserId: r.owner_user_id, name: r.name, publicKey: r.public_key, algorithm: r.algorithm, operatorIds: parseJson(r.operator_ids, []), kind: r.kind ?? 'collection', simMsisdn: r.sim_msisdn ?? null, simIccid: r.sim_iccid ?? null, agentUserId: r.agent_user_id ?? null, payoutAccountId: r.payout_account_id ?? null, status: r.status, riskScore: r.risk_score, registeredBy: r.registered_by, createdAt: r.created_at, lastSeenAt: r.last_seen_at, revokedAt: r.revoked_at, revokedReason: r.revoked_reason };
+  return {
+    id: r.id,
+    ownerUserId: r.owner_user_id,
+    name: r.name,
+    publicKey: r.public_key,
+    algorithm: r.algorithm,
+    operatorIds: parseJson(r.operator_ids, []),
+    kind: r.kind ?? 'collection',
+    simMsisdn: r.sim_msisdn ?? null,
+    simIccid: r.sim_iccid ?? null,
+    agentUserId: r.agent_user_id ?? null,
+    payoutAccountId: r.payout_account_id ?? null,
+    status: r.status,
+    riskScore: r.risk_score,
+    registeredBy: r.registered_by,
+    createdAt: r.created_at,
+    lastSeenAt: r.last_seen_at,
+    revokedAt: r.revoked_at,
+    revokedReason: r.revoked_reason,
+  };
 }
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
@@ -63,7 +82,20 @@ export function parsePublicKey(input: string): KeyObject {
   return createPublicKey({ key: raw, format: 'der', type: 'spki' });
 }
 
-export function registerDevice(owner: UserRow, input: { name: string; publicKey: string; operatorIds?: string[] | null; kind?: 'collection' | 'payout' | null; simMsisdn?: string | null; simIccid?: string | null; agentUserId?: string | null; payoutAccountId?: string | null }, registeredBy?: string | null): EvidenceDevice {
+export function registerDevice(
+  owner: UserRow,
+  input: {
+    name: string;
+    publicKey: string;
+    operatorIds?: string[] | null;
+    kind?: 'collection' | 'payout' | null;
+    simMsisdn?: string | null;
+    simIccid?: string | null;
+    agentUserId?: string | null;
+    payoutAccountId?: string | null;
+  },
+  registeredBy?: string | null,
+): EvidenceDevice {
   try {
     const key = parsePublicKey(input.publicKey);
     if (key.asymmetricKeyType !== 'ed25519') throw new Error('Only Ed25519 keys are supported');
@@ -74,9 +106,34 @@ export function registerDevice(owner: UserRow, input: { name: string; publicKey:
   const kind = input.kind ?? 'collection';
   if (kind === 'payout' && !input.simMsisdn && !input.simIccid) throw badRequest('A payout device must register its SIM identity (MSISDN and/or ICCID)', 'sim_identity_required');
   const id = uuid();
-  getDb().prepare('INSERT INTO evidence_devices (id, owner_user_id, name, public_key, algorithm, operator_ids, status, risk_score, registered_by, created_at, kind, sim_msisdn, sim_iccid, agent_user_id, payout_account_id) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)').run(id, owner.id, input.name, input.publicKey.trim(), 'ed25519', JSON.stringify(input.operatorIds ?? []), 'active', registeredBy ?? owner.id, now(), kind, input.simMsisdn ?? null, input.simIccid ?? null, input.agentUserId ?? null, input.payoutAccountId ?? null);
+  getDb()
+    .prepare(
+      'INSERT INTO evidence_devices (id, owner_user_id, name, public_key, algorithm, operator_ids, status, risk_score, registered_by, created_at, kind, sim_msisdn, sim_iccid, agent_user_id, payout_account_id) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)',
+    )
+    .run(
+      id,
+      owner.id,
+      input.name,
+      input.publicKey.trim(),
+      'ed25519',
+      JSON.stringify(input.operatorIds ?? []),
+      'active',
+      registeredBy ?? owner.id,
+      now(),
+      kind,
+      input.simMsisdn ?? null,
+      input.simIccid ?? null,
+      input.agentUserId ?? null,
+      input.payoutAccountId ?? null,
+    );
   if (input.payoutAccountId) getDb().prepare('UPDATE payout_accounts SET device_id = ? WHERE id = ?').run(id, input.payoutAccountId);
-  recordEvent('evidence', id, 'device.registered', { type: owner.role === 'admin' ? 'admin' : 'agent', id: registeredBy ?? owner.id }, { name: input.name, kind, operatorIds: input.operatorIds ?? [], sim: input.simMsisdn ? `…${input.simMsisdn.slice(-4)}` : null });
+  recordEvent(
+    'evidence',
+    id,
+    'device.registered',
+    { type: owner.role === 'admin' ? 'admin' : 'agent', id: registeredBy ?? owner.id },
+    { name: input.name, kind, operatorIds: input.operatorIds ?? [], sim: input.simMsisdn ? `…${input.simMsisdn.slice(-4)}` : null },
+  );
   return getDevice(id);
 }
 
@@ -87,13 +144,17 @@ export function getDevice(id: string): EvidenceDevice {
 }
 
 export function listDevices(ownerUserId?: string | null): EvidenceDevice[] {
-  const rows = ownerUserId ? getDb().prepare('SELECT * FROM evidence_devices WHERE owner_user_id = ? ORDER BY created_at DESC').all(ownerUserId) : getDb().prepare('SELECT * FROM evidence_devices ORDER BY created_at DESC').all();
+  const rows = ownerUserId
+    ? getDb().prepare('SELECT * FROM evidence_devices WHERE owner_user_id = ? ORDER BY created_at DESC').all(ownerUserId)
+    : getDb().prepare('SELECT * FROM evidence_devices ORDER BY created_at DESC').all();
   return (rows as any[]).map(toDevice);
 }
 
 export function revokeDevice(id: string, actor: Actor, reason?: string | null): EvidenceDevice {
   getDevice(id);
-  getDb().prepare("UPDATE evidence_devices SET status = 'revoked', revoked_at = ?, revoked_reason = ? WHERE id = ?").run(now(), reason ?? null, id);
+  getDb()
+    .prepare("UPDATE evidence_devices SET status = 'revoked', revoked_at = ?, revoked_reason = ? WHERE id = ?")
+    .run(now(), reason ?? null, id);
   recordEvent('evidence', id, 'device.revoked', actor, { reason: reason ?? null });
   return getDevice(id);
 }
@@ -136,7 +197,8 @@ function toTemplate(r: any): ParseTemplate {
   return { id: r.id, operatorId: r.operator_id, name: r.name, patterns: parseJson(r.patterns, {}), priority: r.priority, enabled: !!r.enabled, createdAt: r.created_at, updatedAt: r.updated_at };
 }
 
-const CURRENCY_WORDS = 'GHS|GH₵|KES|Ksh|KSh|NGN|₦|UGX|USh|TZS|TSh|RWF|ZMW|MWK|ETB|XOF|XAF|FCFA|CFA|ZAR|USD|EUR|GBP|INR|PKR|BDT|PHP|EGP|MAD|SLE|LRD|GMD|MZN|AOA|CDF|BIF|SSP|SDG|SOS|MGA|NAD|BWP|LSL|SZL|MUR|SCR|CVE|GNF|NPR|LKR|MMK|KHR|VND|IDR|MYR|THB|Rs\\.?|Tk|Le|D|₹';
+const CURRENCY_WORDS =
+  'GHS|GH₵|KES|Ksh|KSh|NGN|₦|UGX|USh|TZS|TSh|RWF|ZMW|MWK|ETB|XOF|XAF|FCFA|CFA|ZAR|USD|EUR|GBP|INR|PKR|BDT|PHP|EGP|MAD|SLE|LRD|GMD|MZN|AOA|CDF|BIF|SSP|SDG|SOS|MGA|NAD|BWP|LSL|SZL|MUR|SCR|CVE|GNF|NPR|LKR|MMK|KHR|VND|IDR|MYR|THB|Rs\\.?|Tk|Le|D|₹';
 export const DEFAULT_TEMPLATES: Omit<ParseTemplate, 'id' | 'createdAt' | 'updatedAt'>[] = [
   {
     operatorId: '*',
@@ -146,9 +208,10 @@ export const DEFAULT_TEMPLATES: Omit<ParseTemplate, 'id' | 'createdAt' | 'update
     patterns: {
       reference: '\\b(MM[A-Z2-9]{6}|BT[A-Z2-9]{6}|sbx_[A-Z2-9]{12})\\b',
       amount: `(?:${CURRENCY_WORDS})\\s?([\\d,]+(?:\\.\\d{1,2})?)`,
-      currency: '\\b(GHS|KES|NGN|UGX|TZS|RWF|ZMW|MWK|ETB|XOF|XAF|ZAR|USD|EUR|GBP|INR|PKR|BDT|PHP|EGP|MAD|SLE|LRD|GMD|MZN|AOA|CDF|BIF|SSP|SDG|SOS|MGA|NAD|BWP|LSL|SZL|MUR|SCR|CVE|GNF|NPR|LKR|MMK|KHR|VND|IDR|MYR|THB)\\b',
-      sender: '(?:from|by)\\s+(?:([A-Z][A-Za-z .\'-]{1,40}?)\\s*[-(]?\\s*)?(\\+?\\d[\\d ]{7,14}\\d)',
-      recipient: '(?:sent to|paid to|transferred to|to)\\s+(?:([A-Z][A-Za-z .\'-]{1,40}?)\\s*[-(]?\\s*)?(\\+?\\d[\\d ]{7,14}\\d)',
+      currency:
+        '\\b(GHS|KES|NGN|UGX|TZS|RWF|ZMW|MWK|ETB|XOF|XAF|ZAR|USD|EUR|GBP|INR|PKR|BDT|PHP|EGP|MAD|SLE|LRD|GMD|MZN|AOA|CDF|BIF|SSP|SDG|SOS|MGA|NAD|BWP|LSL|SZL|MUR|SCR|CVE|GNF|NPR|LKR|MMK|KHR|VND|IDR|MYR|THB)\\b',
+      sender: "(?:from|by)\\s+(?:([A-Z][A-Za-z .'-]{1,40}?)\\s*[-(]?\\s*)?(\\+?\\d[\\d ]{7,14}\\d)",
+      recipient: "(?:sent to|paid to|transferred to|to)\\s+(?:([A-Z][A-Za-z .'-]{1,40}?)\\s*[-(]?\\s*)?(\\+?\\d[\\d ]{7,14}\\d)",
       externalRef: '(?:Transaction ID|Trans(?:action)? ?ID|Txn ?ID|TID|Financial Transaction Id|Receipt(?: No)?|Trans\\.? ?No)\\.?[:\\s#]*([A-Z0-9]{6,20})',
       balance: '(?:balance|bal)(?: is)?[:\\s]*(?:' + CURRENCY_WORDS + ')?\\s?([\\d,]+(?:\\.\\d{1,2})?)',
     },
@@ -169,7 +232,7 @@ export const DEFAULT_TEMPLATES: Omit<ParseTemplate, 'id' | 'createdAt' | 'update
       keywords: ['sent to'],
       externalRef: '^([A-Z0-9]{10})\\s+Confirmed',
       amount: 'Ksh\\s?([\\d,]+(?:\\.\\d{1,2})?)',
-      recipient: 'sent to\\s+([A-Z][A-Z .\'-]+?)\\s+(\\d{9,13})',
+      recipient: "sent to\\s+([A-Z][A-Z .'-]+?)\\s+(\\d{9,13})",
       timestamp: 'on\\s+(\\d{1,2}/\\d{1,2}/\\d{2,4}\\s+at\\s+\\d{1,2}:\\d{2}\\s?[AP]M)',
       balance: 'balance is Ksh\\s?([\\d,]+(?:\\.\\d{1,2})?)',
     },
@@ -182,7 +245,7 @@ export const DEFAULT_TEMPLATES: Omit<ParseTemplate, 'id' | 'createdAt' | 'update
     patterns: {
       keywords: ['transfert', 'transfer', 'envoy', 'sent'],
       amount: '(\\d[\\d,]*(?:\\.\\d{1,2})?)\\s?(?:CDF|FC)\\b',
-      recipient: '(?:vers|to|au|a)\\s+(?:([A-Z][A-Za-z .\'-]{1,40}?)\\s*[-(]?\\s*)?(\\+?\\d[\\d ]{7,14}\\d)',
+      recipient: "(?:vers|to|au|a)\\s+(?:([A-Z][A-Za-z .'-]{1,40}?)\\s*[-(]?\\s*)?(\\+?\\d[\\d ]{7,14}\\d)",
       externalRef: '(?:ID|Ref|Trans(?:action)?(?: ID)?|TID)\\.?[:\\s]*([A-Z0-9.]{6,24})',
       balance: '(?:solde|balance)[:\\s]*(?:CDF|FC)?\\s?([\\d,.]+(?:\\.\\d{1,2})?)',
     },
@@ -196,7 +259,7 @@ export const DEFAULT_TEMPLATES: Omit<ParseTemplate, 'id' | 'createdAt' | 'update
       keywords: ['Confirmed', 'received'],
       externalRef: '^([A-Z0-9]{10})\\s+Confirmed',
       amount: 'Ksh\\s?([\\d,]+(?:\\.\\d{1,2})?)',
-      sender: 'from\\s+([A-Z][A-Z .\'-]+?)\\s+(\\d{9,13})',
+      sender: "from\\s+([A-Z][A-Z .'-]+?)\\s+(\\d{9,13})",
       timestamp: 'on\\s+(\\d{1,2}/\\d{1,2}/\\d{2,4}\\s+at\\s+\\d{1,2}:\\d{2}\\s?[AP]M)',
       balance: 'balance is Ksh\\s?([\\d,]+(?:\\.\\d{1,2})?)',
     },
@@ -209,7 +272,7 @@ export const DEFAULT_TEMPLATES: Omit<ParseTemplate, 'id' | 'createdAt' | 'update
     patterns: {
       keywords: ['received', 'Payment received'],
       amount: 'GHS\\s?([\\d,]+(?:\\.\\d{1,2})?)',
-      sender: 'from\\s+(?:([A-Z][A-Za-z .\'-]+?)\\s*\\(?)?(0\\d{9}|\\+233\\d{9})',
+      sender: "from\\s+(?:([A-Z][A-Za-z .'-]+?)\\s*\\(?)?(0\\d{9}|\\+233\\d{9})",
       externalRef: '(?:Transaction ID|Financial Transaction Id|TID)\\.?[:\\s]*(\\d{6,14})',
       reference: '(?:Reference|Ref)\\.?[:\\s]*(MM[A-Z2-9]{6})',
       balance: '(?:Current Balance|Bal(?:ance)?)[:\\s]*GHS\\s?([\\d,]+(?:\\.\\d{1,2})?)',
@@ -223,7 +286,7 @@ export const DEFAULT_TEMPLATES: Omit<ParseTemplate, 'id' | 'createdAt' | 'update
     patterns: {
       keywords: ['received', 'Airtel'],
       amount: 'UGX\\s?([\\d,]+(?:\\.\\d{1,2})?)',
-      sender: 'from\\s+(?:([A-Z][A-Za-z .\'-]+?)\\s*\\(?)?(\\+?\\d{9,13})',
+      sender: "from\\s+(?:([A-Z][A-Za-z .'-]+?)\\s*\\(?)?(\\+?\\d{9,13})",
       externalRef: '(?:TID|Trans(?:action)? ID|Txn ?ID)\\.?[:\\s]*([A-Z0-9]{6,20})',
       balance: 'Bal(?:ance)?[:\\s]*UGX\\s?([\\d,]+(?:\\.\\d{1,2})?)',
     },
@@ -238,7 +301,9 @@ export function ensureParseTemplates() {
 }
 
 export function listTemplates(operatorId?: string | null): ParseTemplate[] {
-  const rows = operatorId ? getDb().prepare("SELECT * FROM operator_parse_templates WHERE operator_id IN (?, '*') ORDER BY priority DESC, name").all(operatorId) : getDb().prepare('SELECT * FROM operator_parse_templates ORDER BY operator_id, priority DESC').all();
+  const rows = operatorId
+    ? getDb().prepare("SELECT * FROM operator_parse_templates WHERE operator_id IN (?, '*') ORDER BY priority DESC, name").all(operatorId)
+    : getDb().prepare('SELECT * FROM operator_parse_templates ORDER BY operator_id, priority DESC').all();
   return (rows as any[]).map(toTemplate);
 }
 
@@ -297,7 +362,20 @@ function first(re: string | undefined, text: string, group = 1): string | null {
 
 export function parseEvidenceText(text: string, operatorId?: string | null): ParsedEvidence {
   const templates = listTemplates(operatorId).filter((t) => t.enabled);
-  const out: ParsedEvidence = { reference: null, amount: null, currency: null, senderName: null, senderPhone: null, recipient: null, recipientName: null, externalRef: null, timestamp: null, balance: null, templates: [], confidence: 0 };
+  const out: ParsedEvidence = {
+    reference: null,
+    amount: null,
+    currency: null,
+    senderName: null,
+    senderPhone: null,
+    recipient: null,
+    recipientName: null,
+    externalRef: null,
+    timestamp: null,
+    balance: null,
+    templates: [],
+    confidence: 0,
+  };
   for (const t of templates) {
     const p = t.patterns;
     if (p.keywords?.length && !p.keywords.some((k) => text.toLowerCase().includes(k.toLowerCase()))) continue;
@@ -330,7 +408,10 @@ export function parseEvidenceText(text: string, operatorId?: string | null): Par
         /* ignore bad pattern */
       }
     }
-    const ext = first(p.externalRef, text)?.toUpperCase().replace(/[.,;:]+$/, '') ?? null;
+    const ext =
+      first(p.externalRef, text)
+        ?.toUpperCase()
+        .replace(/[.,;:]+$/, '') ?? null;
     if (ext && ext !== out.reference) out.externalRef ??= ext;
     out.timestamp ??= first(p.timestamp, text);
     out.balance ??= first(p.balance, text)?.replace(/,/g, '') ?? null;
@@ -379,16 +460,84 @@ export interface EvidenceView {
 }
 
 export function toEvidence(r: any): EvidenceView {
-  return { id: r.id, paymentId: r.payment_id, deviceId: r.device_id, source: r.source, operatorId: r.operator_id, sender: r.sender, rawText: r.raw_text, rawHash: r.raw_hash, receivedAt: r.received_at, parsed: parseJson(r.parsed, {} as ParsedEvidence), confidence: r.confidence, outcome: r.outcome, reasons: parseJson(r.reasons, []), externalRef: r.external_ref, verifier: { type: r.verifier_type, id: r.verifier_id }, direction: r.direction ?? 'in', payoutId: r.payout_id ?? null, simIdentity: r.sim_identity ?? null, operatorTimestamp: r.operator_timestamp ?? null, createdAt: r.created_at };
+  return {
+    id: r.id,
+    paymentId: r.payment_id,
+    deviceId: r.device_id,
+    source: r.source,
+    operatorId: r.operator_id,
+    sender: r.sender,
+    rawText: r.raw_text,
+    rawHash: r.raw_hash,
+    receivedAt: r.received_at,
+    parsed: parseJson(r.parsed, {} as ParsedEvidence),
+    confidence: r.confidence,
+    outcome: r.outcome,
+    reasons: parseJson(r.reasons, []),
+    externalRef: r.external_ref,
+    verifier: { type: r.verifier_type, id: r.verifier_id },
+    direction: r.direction ?? 'in',
+    payoutId: r.payout_id ?? null,
+    simIdentity: r.sim_identity ?? null,
+    operatorTimestamp: r.operator_timestamp ?? null,
+    createdAt: r.created_at,
+  };
 }
 
 /** Persist one evidence record (used by the inbound engine and by the payout engine). */
-export function storeEvidence(row: { paymentId?: string | null; payoutId?: string | null; direction: 'in' | 'out'; deviceId?: string | null; source: EvidenceSource; operatorId?: string | null; sender?: string | null; rawText: string; rawHash: string; receivedAt?: string | null; parsed: ParsedEvidence; outcome: string; reasons: string[]; nonce?: string | null; signature?: string | null; verifier: { type: string | null; id: string | null }; simIdentity?: string | null; operatorTimestamp?: string | null; clientHash?: string | null }): string {
+export function storeEvidence(row: {
+  paymentId?: string | null;
+  payoutId?: string | null;
+  direction: 'in' | 'out';
+  deviceId?: string | null;
+  source: EvidenceSource;
+  operatorId?: string | null;
+  sender?: string | null;
+  rawText: string;
+  rawHash: string;
+  receivedAt?: string | null;
+  parsed: ParsedEvidence;
+  outcome: string;
+  reasons: string[];
+  nonce?: string | null;
+  signature?: string | null;
+  verifier: { type: string | null; id: string | null };
+  simIdentity?: string | null;
+  operatorTimestamp?: string | null;
+  clientHash?: string | null;
+}): string {
   const id = uuid();
-  getDb().prepare(
-    `INSERT INTO payment_evidence (id, payment_id, device_id, source, operator_id, sender, raw_text, raw_hash, received_at, parsed, confidence, outcome, reasons, external_ref, nonce, signature, verifier_type, verifier_id, created_at, direction, payout_id, sim_identity, operator_timestamp, client_hash)
+  getDb()
+    .prepare(
+      `INSERT INTO payment_evidence (id, payment_id, device_id, source, operator_id, sender, raw_text, raw_hash, received_at, parsed, confidence, outcome, reasons, external_ref, nonce, signature, verifier_type, verifier_id, created_at, direction, payout_id, sim_identity, operator_timestamp, client_hash)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, row.paymentId ?? null, row.deviceId ?? null, row.source, row.operatorId ?? null, row.sender ?? null, row.rawText, row.rawHash, row.receivedAt ?? now(), JSON.stringify(row.parsed), row.parsed.confidence, row.outcome, JSON.stringify(row.reasons), row.parsed.externalRef, row.nonce ?? null, row.signature ?? null, row.verifier.type, row.verifier.id, now(), row.direction, row.payoutId ?? null, row.simIdentity ?? null, row.operatorTimestamp ?? null, row.clientHash ?? null);
+    )
+    .run(
+      id,
+      row.paymentId ?? null,
+      row.deviceId ?? null,
+      row.source,
+      row.operatorId ?? null,
+      row.sender ?? null,
+      row.rawText,
+      row.rawHash,
+      row.receivedAt ?? now(),
+      JSON.stringify(row.parsed),
+      row.parsed.confidence,
+      row.outcome,
+      JSON.stringify(row.reasons),
+      row.parsed.externalRef,
+      row.nonce ?? null,
+      row.signature ?? null,
+      row.verifier.type,
+      row.verifier.id,
+      now(),
+      row.direction,
+      row.payoutId ?? null,
+      row.simIdentity ?? null,
+      row.operatorTimestamp ?? null,
+      row.clientHash ?? null,
+    );
   return id;
 }
 
@@ -433,7 +582,8 @@ export function verifyDeviceRequest(headers: Record<string, unknown>, method: st
 
 /** Verify a device signature over the canonical evidence string; replays of a nonce are refused. */
 export function authenticateDevice(input: IngestInput): EvidenceDevice {
-  if (!input.deviceId || !input.nonce || !input.signature || !input.receivedAt || input.from == null) throw badRequest('deviceId, nonce, receivedAt, from, text and signature are required', 'validation_error');
+  if (!input.deviceId || !input.nonce || !input.signature || !input.receivedAt || input.from == null)
+    throw badRequest('deviceId, nonce, receivedAt, from, text and signature are required', 'validation_error');
   const device = getDevice(input.deviceId);
   if (device.status !== 'active') throw forbidden('This device has been revoked', 'device_revoked');
   const db = getDb();
@@ -445,7 +595,12 @@ export function authenticateDevice(input: IngestInput): EvidenceDevice {
   }
   const ok = (() => {
     try {
-      return cryptoVerify(null, Buffer.from(evidenceCanonical({ deviceId: device.id, nonce: input.nonce!, receivedAt: input.receivedAt!, from: input.from!, operatorId: input.operatorId, text: input.text })), parsePublicKey(device.publicKey), Buffer.from(input.signature!.replace(/-/g, '+').replace(/_/g, '/'), 'base64'));
+      return cryptoVerify(
+        null,
+        Buffer.from(evidenceCanonical({ deviceId: device.id, nonce: input.nonce!, receivedAt: input.receivedAt!, from: input.from!, operatorId: input.operatorId, text: input.text })),
+        parsePublicKey(device.publicKey),
+        Buffer.from(input.signature!.replace(/-/g, '+').replace(/_/g, '/'), 'base64'),
+      );
     } catch {
       return false;
     }
@@ -499,7 +654,9 @@ export function ingestEvidence(input: IngestInput): EvidenceView {
     } else {
       // 2. Operator transaction id reused for another payment = replay of a real receipt.
       if (parsed.externalRef) {
-        const reused = db.prepare("SELECT id, payment_id FROM payment_evidence WHERE external_ref = ? AND (operator_id = ? OR operator_id IS NULL) AND outcome IN ('matched','settled') AND payment_id != ?").get(parsed.externalRef, operatorId, payment.id) as any;
+        const reused = db
+          .prepare("SELECT id, payment_id FROM payment_evidence WHERE external_ref = ? AND (operator_id = ? OR operator_id IS NULL) AND outcome IN ('matched','settled') AND payment_id != ?")
+          .get(parsed.externalRef, operatorId, payment.id) as any;
         if (reused) {
           outcome = 'duplicate';
           reasons.push(`external_ref_reused:${reused.payment_id}`);
@@ -552,8 +709,37 @@ export function ingestEvidence(input: IngestInput): EvidenceView {
   db.prepare(
     `INSERT INTO payment_evidence (id, payment_id, device_id, source, operator_id, sender, raw_text, raw_hash, received_at, parsed, confidence, outcome, reasons, external_ref, nonce, signature, verifier_type, verifier_id, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, payment?.id ?? null, device?.id ?? null, input.source, operatorId, input.from ?? null, input.text, rawHash, input.receivedAt ?? now(), JSON.stringify(parsed), parsed.confidence, autoSettle ? 'matched' : outcome === 'matched' ? 'review' : outcome, JSON.stringify(reasons), parsed.externalRef, input.nonce ?? null, input.signature ?? null, verifier.type, verifier.id, now());
-  recordEvent('evidence', payment?.id ?? id, 'evidence.received', input.actor, { evidenceId: id, source: input.source, deviceId: device?.id ?? null, outcome: autoSettle ? 'matched' : outcome === 'matched' ? 'review' : outcome, confidence: parsed.confidence, reasons, rawHash, externalRef: parsed.externalRef });
+  ).run(
+    id,
+    payment?.id ?? null,
+    device?.id ?? null,
+    input.source,
+    operatorId,
+    input.from ?? null,
+    input.text,
+    rawHash,
+    input.receivedAt ?? now(),
+    JSON.stringify(parsed),
+    parsed.confidence,
+    autoSettle ? 'matched' : outcome === 'matched' ? 'review' : outcome,
+    JSON.stringify(reasons),
+    parsed.externalRef,
+    input.nonce ?? null,
+    input.signature ?? null,
+    verifier.type,
+    verifier.id,
+    now(),
+  );
+  recordEvent('evidence', payment?.id ?? id, 'evidence.received', input.actor, {
+    evidenceId: id,
+    source: input.source,
+    deviceId: device?.id ?? null,
+    outcome: autoSettle ? 'matched' : outcome === 'matched' ? 'review' : outcome,
+    confidence: parsed.confidence,
+    reasons,
+    rawHash,
+    externalRef: parsed.externalRef,
+  });
 
   if (payment) {
     const actor: Actor = device ? { type: 'device', id: device.id } : input.actor;
@@ -591,7 +777,10 @@ export function getEvidence(id: string): EvidenceView {
   return toEvidence(row);
 }
 
-export function listEvidence(filter: { paymentId?: string | null; payoutId?: string | null; outcome?: string | null; page?: number; pageSize?: number } = {}): { items: EvidenceView[]; total: number } {
+export function listEvidence(filter: { paymentId?: string | null; payoutId?: string | null; outcome?: string | null; page?: number; pageSize?: number } = {}): {
+  items: EvidenceView[];
+  total: number;
+} {
   const db = getDb();
   const where: string[] = [];
   const params: unknown[] = [];

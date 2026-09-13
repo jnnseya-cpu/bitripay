@@ -5,7 +5,21 @@ import { useT } from '../lib/i18n';
 import { Alert, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, StatusBadge, useAsync } from '../components/ui';
 import { fromMinor } from '@bitripay/shared';
 
-const CATEGORY_ICON: Record<string, string> = { electricity: '⚡', water: '💧', internet: '🌐', tv: '📺', gas: '🔥', insurance: '🛡️', education: '🎓', tax: '🏛️', shopping: '🛍️', entertainment: '🎬', gaming: '🎮', travel: '✈️', food: '🍔' };
+const CATEGORY_ICON: Record<string, string> = {
+  electricity: '⚡',
+  water: '💧',
+  internet: '🌐',
+  tv: '📺',
+  gas: '🔥',
+  insurance: '🛡️',
+  education: '🎓',
+  tax: '🏛️',
+  shopping: '🛍️',
+  entertainment: '🎬',
+  gaming: '🎮',
+  travel: '✈️',
+  food: '🍔',
+};
 
 export function Bills() {
   const t = useT();
@@ -45,28 +59,56 @@ export function Bills() {
         <div style={{ gridColumn: 'span 2' }}>
           {categories.map((cat) => (
             <div key={cat} className="mb">
-              <h4>{CATEGORY_ICON[cat] ?? '🧾'} {cat}</h4>
+              <h4>
+                {CATEGORY_ICON[cat] ?? '🧾'} {cat}
+              </h4>
               <div className="grid auto">
-                {billers.data?.items.filter((b) => b.category === cat).map((b) => (
-                  <div key={b.id} className={`brand-tile ${sel?.id === b.id ? 'selected' : ''}`} style={{ background: b.color }} onClick={() => { setSel(b); setAmount(''); }}>
-                    <div>{b.name}<div className="tiny" style={{ opacity: 0.85 }}>{b.country} · {b.currency}</div></div>
-                  </div>
-                ))}
+                {billers.data?.items
+                  .filter((b) => b.category === cat)
+                  .map((b) => (
+                    <div
+                      key={b.id}
+                      className={`brand-tile ${sel?.id === b.id ? 'selected' : ''}`}
+                      style={{ background: b.color }}
+                      onClick={() => {
+                        setSel(b);
+                        setAmount('');
+                      }}
+                    >
+                      <div>
+                        {b.name}
+                        <div className="tiny" style={{ opacity: 0.85 }}>
+                          {b.country} · {b.currency}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
               </div>
             </div>
           ))}
-          {billers.data?.items.length === 0 && <div className="card"><Empty icon="🧾" text="No billers available for this country" /></div>}
+          {billers.data?.items.length === 0 && (
+            <div className="card">
+              <Empty icon="🧾" text="No billers available for this country" />
+            </div>
+          )}
         </div>
         <div className="card">
           {error && <Alert kind="error">{error}</Alert>}
           {sel ? (
             <>
               <h3>{sel.name}</h3>
-              <Field label={sel.accountLabel}><Input value={account} onChange={(e) => setAccount(e.target.value)} /></Field>
-              <Field label={`${t('common.amount')} (${sel.currency})`} hint={sel.minAmount ? `Min ${money(sel.minAmount, sel.currency)}${sel.maxAmount ? ` · max ${money(sel.maxAmount, sel.currency)}` : ''}` : undefined}>
+              <Field label={sel.accountLabel}>
+                <Input value={account} onChange={(e) => setAccount(e.target.value)} />
+              </Field>
+              <Field
+                label={`${t('common.amount')} (${sel.currency})`}
+                hint={sel.minAmount ? `Min ${money(sel.minAmount, sel.currency)}${sel.maxAmount ? ` · max ${money(sel.maxAmount, sel.currency)}` : ''}` : undefined}
+              >
                 <Input className="amount-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} />
               </Field>
-              <Button block disabled={!account || !amount} onClick={() => setPinOpen(true)}>Pay bill</Button>
+              <Button block disabled={!account || !amount} onClick={() => setPinOpen(true)}>
+                Pay bill
+              </Button>
             </>
           ) : (
             <Empty icon="👆" text="Select a biller" />
@@ -75,7 +117,12 @@ export function Bills() {
           <div className="list">
             {history.data?.items.slice(0, 8).map((b) => (
               <div key={b.id} className="list-item">
-                <div className="flex1"><div className="main-text small">{b.billerName}</div><div className="sub-text">{b.accountNumber} · {b.receiptNo}</div></div>
+                <div className="flex1">
+                  <div className="main-text small">{b.billerName}</div>
+                  <div className="sub-text">
+                    {b.accountNumber} · {b.receiptNo}
+                  </div>
+                </div>
                 <div className="bold">{money(b.amount, b.currency)}</div>
               </div>
             ))}
@@ -93,7 +140,11 @@ function CountryPicker({ value, onChange }: { value: string; onChange: (v: strin
   return (
     <Select value={value} onChange={(e) => onChange(e.target.value)} style={{ width: 220 }}>
       <option value="">All countries</option>
-      {(config?.countries ?? []).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+      {(config?.countries ?? []).map((c) => (
+        <option key={c.code} value={c.code}>
+          {c.name}
+        </option>
+      ))}
     </Select>
   );
 }
@@ -134,26 +185,55 @@ export function Topup() {
         <div style={{ gridColumn: 'span 2' }}>
           <div className="grid auto">
             {ops.data?.items.map((o) => (
-              <div key={o.id} className={`brand-tile ${sel?.id === o.id ? 'selected' : ''}`} style={{ background: o.color }} onClick={() => { setSel(o); setAmount(''); }}>
-                <div>📶 {o.name}<div className="tiny" style={{ opacity: 0.85 }}>{o.country} · {o.currency}</div></div>
+              <div
+                key={o.id}
+                className={`brand-tile ${sel?.id === o.id ? 'selected' : ''}`}
+                style={{ background: o.color }}
+                onClick={() => {
+                  setSel(o);
+                  setAmount('');
+                }}
+              >
+                <div>
+                  📶 {o.name}
+                  <div className="tiny" style={{ opacity: 0.85 }}>
+                    {o.country} · {o.currency}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
-          {ops.data?.items.length === 0 && <div className="card"><Empty icon="📶" text="No operators for this country" /></div>}
+          {ops.data?.items.length === 0 && (
+            <div className="card">
+              <Empty icon="📶" text="No operators for this country" />
+            </div>
+          )}
         </div>
         <div className="card">
           {error && <Alert kind="error">{error}</Alert>}
           {sel ? (
             <>
               <h3>{sel.name}</h3>
-              <Field label="Phone number"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+234…" /></Field>
+              <Field label="Phone number">
+                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+234…" />
+              </Field>
               {sel.denominations.length > 0 && (
                 <Field label="Quick amounts">
-                  <div className="row wrap">{sel.denominations.map((d: number) => <span key={d} className={`chip clickable ${amount === fromMinor(d, 2) ? 'selected' : ''}`} onClick={() => setAmount(fromMinor(d, 2))}>{money(d, sel.currency)}</span>)}</div>
+                  <div className="row wrap">
+                    {sel.denominations.map((d: number) => (
+                      <span key={d} className={`chip clickable ${amount === fromMinor(d, 2) ? 'selected' : ''}`} onClick={() => setAmount(fromMinor(d, 2))}>
+                        {money(d, sel.currency)}
+                      </span>
+                    ))}
+                  </div>
                 </Field>
               )}
-              <Field label={`${t('common.amount')} (${sel.currency})`}><Input className="amount-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} /></Field>
-              <Button block disabled={!phone || !amount} onClick={() => setPinOpen(true)}>Top up</Button>
+              <Field label={`${t('common.amount')} (${sel.currency})`}>
+                <Input className="amount-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} />
+              </Field>
+              <Button block disabled={!phone || !amount} onClick={() => setPinOpen(true)}>
+                Top up
+              </Button>
             </>
           ) : (
             <Empty icon="👆" text="Select an operator" />
@@ -161,7 +241,13 @@ export function Topup() {
           <h4 className="mt">Recent top-ups</h4>
           <div className="list">
             {history.data?.items.slice(0, 8).map((x) => (
-              <div key={x.id} className="list-item"><div className="flex1"><div className="main-text small">{x.operatorName}</div><div className="sub-text">{x.phone}</div></div><div className="bold">{money(x.amount, x.currency)}</div></div>
+              <div key={x.id} className="list-item">
+                <div className="flex1">
+                  <div className="main-text small">{x.operatorName}</div>
+                  <div className="sub-text">{x.phone}</div>
+                </div>
+                <div className="bold">{money(x.amount, x.currency)}</div>
+              </div>
             ))}
           </div>
         </div>
@@ -208,8 +294,21 @@ export function GiftCards() {
         <div style={{ gridColumn: 'span 2' }}>
           <div className="grid auto">
             {products.data?.items.map((p) => (
-              <div key={p.id} className={`brand-tile ${sel?.id === p.id ? 'selected' : ''}`} style={{ background: p.color, minHeight: 120 }} onClick={() => { setSel(p); setAmount(p.denominations[0] ?? null); }}>
-                <div><div style={{ fontSize: '1.2rem' }}>{p.brand}</div><div className="tiny" style={{ opacity: 0.85 }}>{p.name} · {p.currency}</div></div>
+              <div
+                key={p.id}
+                className={`brand-tile ${sel?.id === p.id ? 'selected' : ''}`}
+                style={{ background: p.color, minHeight: 120 }}
+                onClick={() => {
+                  setSel(p);
+                  setAmount(p.denominations[0] ?? null);
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '1.2rem' }}>{p.brand}</div>
+                  <div className="tiny" style={{ opacity: 0.85 }}>
+                    {p.name} · {p.currency}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -220,10 +319,20 @@ export function GiftCards() {
               <h3>{sel.brand}</h3>
               <p className="small muted">{sel.description}</p>
               <Field label="Value">
-                <div className="row wrap">{sel.denominations.map((d: number) => <span key={d} className={`chip clickable ${amount === d ? 'selected' : ''}`} onClick={() => setAmount(d)}>{money(d, sel.currency)}</span>)}</div>
+                <div className="row wrap">
+                  {sel.denominations.map((d: number) => (
+                    <span key={d} className={`chip clickable ${amount === d ? 'selected' : ''}`} onClick={() => setAmount(d)}>
+                      {money(d, sel.currency)}
+                    </span>
+                  ))}
+                </div>
               </Field>
-              <Field label="Send to email (optional)"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-              <Button block disabled={!amount} onClick={() => setPinOpen(true)}>Buy {amount ? money(amount, sel.currency) : ''}</Button>
+              <Field label="Send to email (optional)">
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </Field>
+              <Button block disabled={!amount} onClick={() => setPinOpen(true)}>
+                Buy {amount ? money(amount, sel.currency) : ''}
+              </Button>
             </>
           ) : (
             <Empty icon="🎁" text="Pick a brand" />
@@ -233,7 +342,14 @@ export function GiftCards() {
           <div className="list">
             {mine.data?.items.map((g) => (
               <div key={g.id} className="list-item">
-                <div className="flex1"><div className="main-text small">{g.brand} · {money(g.amount, g.currency)}</div><div className="sub-text mono">{g.code} · PIN {g.pin}</div></div>
+                <div className="flex1">
+                  <div className="main-text small">
+                    {g.brand} · {money(g.amount, g.currency)}
+                  </div>
+                  <div className="sub-text mono">
+                    {g.code} · PIN {g.pin}
+                  </div>
+                </div>
                 <StatusBadge status={g.status} />
               </div>
             ))}
@@ -244,7 +360,9 @@ export function GiftCards() {
       <Modal open={!!bought} onClose={() => setBought(null)} title="Your gift card">
         {bought && (
           <div className="center">
-            <div className="brand-tile" style={{ background: bought.product.color, minHeight: 120, justifyContent: 'center', alignItems: 'center' }}>{bought.product.brand} · {money(bought.amount, bought.product.currency)}</div>
+            <div className="brand-tile" style={{ background: bought.product.color, minHeight: 120, justifyContent: 'center', alignItems: 'center' }}>
+              {bought.product.brand} · {money(bought.amount, bought.product.currency)}
+            </div>
             <KV k="Code" v={<span className="mono">{bought.code}</span>} />
             <KV k="PIN" v={<span className="mono">{bought.pin}</span>} />
             <p className="small muted mt">Saved under “My gift cards”.</p>

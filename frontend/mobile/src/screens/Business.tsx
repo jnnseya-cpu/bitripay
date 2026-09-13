@@ -26,30 +26,74 @@ export function Merchant() {
     <Screen>
       <Header title={user?.businessName || 'Merchant'} right={<Button title="Gateway" small variant="secondary" onPress={() => nav.navigate('MerchantGateway')} />} />
       <Row style={{ flexWrap: 'wrap' }}>
-        {(s?.byCurrency ?? []).map((c: any) => <Card key={c.currency} style={{ flexGrow: 1 }}><T muted size={12}>30-day volume · {c.currency}</T><T bold size={20}>{money(c.volume, c.currency)}</T><T muted size={11}>{c.c} payments · today {money(c.today, c.currency)}</T></Card>)}
-        <Card style={{ flexGrow: 1 }}><T muted size={12}>Open payment links</T><T bold size={20}>{s?.openPaymentRequests ?? 0}</T></Card>
+        {(s?.byCurrency ?? []).map((c: any) => (
+          <Card key={c.currency} style={{ flexGrow: 1 }}>
+            <T muted size={12}>
+              30-day volume · {c.currency}
+            </T>
+            <T bold size={20}>
+              {money(c.volume, c.currency)}
+            </T>
+            <T muted size={11}>
+              {c.c} payments · today {money(c.today, c.currency)}
+            </T>
+          </Card>
+        ))}
+        <Card style={{ flexGrow: 1 }}>
+          <T muted size={12}>
+            Open payment links
+          </T>
+          <T bold size={20}>
+            {s?.openPaymentRequests ?? 0}
+          </T>
+        </Card>
       </Row>
       <Card>
-        <T bold size={16}>Point of sale</T>
+        <T bold size={16}>
+          Point of sale
+        </T>
         {pr ? (
           <View style={{ alignItems: 'center', gap: 8 }}>
             {pr.status === 'paid' ? <T size={48}>✅</T> : <Qr value={pr.link!} size={220} />}
-            <T bold size={26}>{pr.amount != null ? money(pr.amount, pr.currency) : 'Any amount'}</T>
+            <T bold size={26}>
+              {pr.amount != null ? money(pr.amount, pr.currency) : 'Any amount'}
+            </T>
             <T muted>{pr.description}</T>
             <Status status={pr.status} />
-            {pr.status === 'open' && <T muted size={12}>Waiting for the customer to scan…</T>}
+            {pr.status === 'open' && (
+              <T muted size={12}>
+                Waiting for the customer to scan…
+              </T>
+            )}
             {pr.status === 'paid' && <T size={13}>Paid by {pr.payer?.fullName ?? 'customer'}</T>}
-            <Row><Button title="Copy link" small variant="secondary" onPress={() => Clipboard.setStringAsync(pr.link!)} /><Button title="New sale" small onPress={() => setPr(null)} /></Row>
+            <Row>
+              <Button title="Copy link" small variant="secondary" onPress={() => Clipboard.setStringAsync(pr.link!)} />
+              <Button title="New sale" small onPress={() => setPr(null)} />
+            </Row>
           </View>
         ) : (
           <>
             <AmountInput label={t('common.amount')} amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} currencies={(config?.currencies ?? []).map((c: any) => c.code)} />
             <Input label="Description" value={desc} onChangeText={setDesc} placeholder="Table 4 · Order #1042" />
-            <Button title="Generate QR" disabled={!amount} onPress={() => api.post<{ paymentRequest: PaymentRequest }>('/api/payment-requests', { kind: 'qr', amount, currency: cur, description: desc || null, expiresInMinutes: 30 }).then((r) => setPr(r.paymentRequest))} />
+            <Button
+              title="Generate QR"
+              disabled={!amount}
+              onPress={() =>
+                api
+                  .post<{ paymentRequest: PaymentRequest }>('/api/payment-requests', { kind: 'qr', amount, currency: cur, description: desc || null, expiresInMinutes: 30 })
+                  .then((r) => setPr(r.paymentRequest))
+              }
+            />
           </>
         )}
       </Card>
-      <Card><T bold>By method (30 days)</T>{(s?.byMethod ?? []).map((m: any) => <KV key={m.method} k={m.method.replace('_', ' ')} v={String(m.count)} />)}{s?.byMethod?.length === 0 && <Empty icon="📊" text="No sales yet" />}</Card>
+      <Card>
+        <T bold>By method (30 days)</T>
+        {(s?.byMethod ?? []).map((m: any) => (
+          <KV key={m.method} k={m.method.replace('_', ' ')} v={String(m.count)} />
+        ))}
+        {s?.byMethod?.length === 0 && <Empty icon="📊" text="No sales yet" />}
+      </Card>
     </Screen>
   );
 }
@@ -61,7 +105,12 @@ export function MerchantGateway() {
   const [settings, setSettings] = useState<any>(null);
   const [newKey, setNewKey] = useState<any>(null);
   const [webhook, setWebhook] = useState('');
-  useEffect(() => { if (gw.data) { setSettings(gw.data.settings); setWebhook(gw.data.webhookUrl ?? ''); } }, [gw.data]);
+  useEffect(() => {
+    if (gw.data) {
+      setSettings(gw.data.settings);
+      setWebhook(gw.data.webhookUrl ?? '');
+    }
+  }, [gw.data]);
   const methods = ['wallet', 'card', 'mobile_money', 'bank', 'virtual_card'];
   return (
     <Screen>
@@ -69,25 +118,95 @@ export function MerchantGateway() {
       {settings && (
         <Card>
           <T bold>Accepted methods on checkout</T>
-          <Row style={{ flexWrap: 'wrap' }}>{methods.map((m) => <Chip key={m} label={m.replace('_', ' ')} selected={settings.methods.includes(m)} onPress={() => setSettings({ ...settings, methods: settings.methods.includes(m) ? settings.methods.filter((x: string) => x !== m) : [...settings.methods, m] })} />)}</Row>
+          <Row style={{ flexWrap: 'wrap' }}>
+            {methods.map((m) => (
+              <Chip
+                key={m}
+                label={m.replace('_', ' ')}
+                selected={settings.methods.includes(m)}
+                onPress={() => setSettings({ ...settings, methods: settings.methods.includes(m) ? settings.methods.filter((x: string) => x !== m) : [...settings.methods, m] })}
+              />
+            ))}
+          </Row>
           <Input label="Success URL" value={settings.successUrl ?? ''} onChangeText={(v) => setSettings({ ...settings, successUrl: v || null })} autoCapitalize="none" />
-          <Button title="Save" onPress={() => api.put('/api/merchant/gateway', settings).then(() => toast('Saved', 'success')).catch((e) => toast(e.message, 'error'))} />
+          <Button
+            title="Save"
+            onPress={() =>
+              api
+                .put('/api/merchant/gateway', settings)
+                .then(() => toast('Saved', 'success'))
+                .catch((e) => toast(e.message, 'error'))
+            }
+          />
         </Card>
       )}
       <Card>
         <T bold>API keys</T>
-        <T muted size={12}>Used by your website, app or the WooCommerce plugin. Keys are shown once.</T>
-        {keys.data?.items.map((k) => <KV key={k.id} k={k.label} v={<Row><T mono size={12}>{k.prefix}</T><Button title="Revoke" small variant="ghost" onPress={() => api.del(`/api/merchant/api-keys/${k.id}`).then(keys.reload)} /></Row>} />)}
-        <Button title="Create API key" variant="secondary" onPress={() => api.post<{ apiKey: any }>('/api/merchant/api-keys', { label: 'Mobile' }).then((r) => { setNewKey(r.apiKey); keys.reload(); })} />
+        <T muted size={12}>
+          Used by your website, app or the WooCommerce plugin. Keys are shown once.
+        </T>
+        {keys.data?.items.map((k) => (
+          <KV
+            key={k.id}
+            k={k.label}
+            v={
+              <Row>
+                <T mono size={12}>
+                  {k.prefix}
+                </T>
+                <Button title="Revoke" small variant="ghost" onPress={() => api.del(`/api/merchant/api-keys/${k.id}`).then(keys.reload)} />
+              </Row>
+            }
+          />
+        ))}
+        <Button
+          title="Create API key"
+          variant="secondary"
+          onPress={() =>
+            api.post<{ apiKey: any }>('/api/merchant/api-keys', { label: 'Mobile' }).then((r) => {
+              setNewKey(r.apiKey);
+              keys.reload();
+            })
+          }
+        />
       </Card>
       <Card>
         <T bold>Webhook</T>
         <Input label="Webhook URL" value={webhook} onChangeText={setWebhook} autoCapitalize="none" placeholder="https://yourstore.com/wc-api/bitripay" />
-        <Button title="Save webhook" variant="secondary" onPress={() => api.put('/api/merchant/webhook', { url: webhook || null }).then(() => { toast('Saved', 'success'); gw.reload(); })} />
-        {gw.data?.webhookSecret && <KV k="Signing secret" v={<Row><T mono size={11}>{gw.data.webhookSecret.slice(0, 14)}…</T><Button title="Copy" small variant="secondary" onPress={() => Clipboard.setStringAsync(gw.data.webhookSecret)} /></Row>} />}
-        <T muted size={12}>Full integration docs: {config?.webUrl}/app/merchant/gateway</T>
+        <Button
+          title="Save webhook"
+          variant="secondary"
+          onPress={() =>
+            api.put('/api/merchant/webhook', { url: webhook || null }).then(() => {
+              toast('Saved', 'success');
+              gw.reload();
+            })
+          }
+        />
+        {gw.data?.webhookSecret && (
+          <KV
+            k="Signing secret"
+            v={
+              <Row>
+                <T mono size={11}>
+                  {gw.data.webhookSecret.slice(0, 14)}…
+                </T>
+                <Button title="Copy" small variant="secondary" onPress={() => Clipboard.setStringAsync(gw.data.webhookSecret)} />
+              </Row>
+            }
+          />
+        )}
+        <T muted size={12}>
+          Full integration docs: {config?.webUrl}/app/merchant/gateway
+        </T>
       </Card>
-      <Sheet open={!!newKey} onClose={() => setNewKey(null)} title="Your new API key"><Alert kind="warning" text="Copy this key now – it won't be shown again." /><T mono size={12}>{newKey?.secret}</T><Button title="Copy" onPress={() => Clipboard.setStringAsync(newKey.secret)} /></Sheet>
+      <Sheet open={!!newKey} onClose={() => setNewKey(null)} title="Your new API key">
+        <Alert kind="warning" text="Copy this key now – it won't be shown again." />
+        <T mono size={12}>
+          {newKey?.secret}
+        </T>
+        <Button title="Copy" onPress={() => Clipboard.setStringAsync(newKey.secret)} />
+      </Sheet>
     </Screen>
   );
 }
@@ -110,15 +229,34 @@ export function Agent() {
   const [loading, setLoading] = useState(false);
   useEffect(() => {
     if (customer.length < 3) return setFound(null);
-    const id = setTimeout(() => api.get<{ user: PublicUser }>(`/api/account/lookup?q=${encodeURIComponent(customer)}`).then((r) => setFound(r.user)).catch(() => setFound(null)), 350);
+    const id = setTimeout(
+      () =>
+        api
+          .get<{ user: PublicUser }>(`/api/account/lookup?q=${encodeURIComponent(customer)}`)
+          .then((r) => setFound(r.user))
+          .catch(() => setFound(null)),
+      350,
+    );
     return () => clearTimeout(id);
   }, [customer]);
   const run = async (p: string) => {
     setLoading(true);
     try {
-      if (pin === 'cashin') { await api.post('/api/agents/me/cash-in', { customer: found?.tag ?? customer, amount, currency: cur, pin: p }); toast('Customer wallet credited', 'success'); setAmount(''); }
-      if (pin === 'cashout') { await api.post('/api/agents/me/cash-out/confirm', { code, pin: p }); toast('Confirmed – hand over the cash', 'success'); setCode(''); }
-      if (pin === 'pickup') { await api.post(`/api/agents/me/pickups/${pickup.pickupCode}/payout`, { recipientIdNumber: idNumber, pin: p }); toast('Pickup paid out', 'success'); setPickup(null); }
+      if (pin === 'cashin') {
+        await api.post('/api/agents/me/cash-in', { customer: found?.tag ?? customer, amount, currency: cur, pin: p });
+        toast('Customer wallet credited', 'success');
+        setAmount('');
+      }
+      if (pin === 'cashout') {
+        await api.post('/api/agents/me/cash-out/confirm', { code, pin: p });
+        toast('Confirmed – hand over the cash', 'success');
+        setCode('');
+      }
+      if (pin === 'pickup') {
+        await api.post(`/api/agents/me/pickups/${pickup.pickupCode}/payout`, { recipientIdNumber: idNumber, pin: p });
+        toast('Pickup paid out', 'success');
+        setPickup(null);
+      }
       setPin(null);
       refreshWallets();
       stats.reload();
@@ -135,21 +273,209 @@ export function Agent() {
     <Screen>
       <Header title={user?.businessName || t('nav.agentTools')} />
       <Row style={{ flexWrap: 'wrap' }}>
-        <Card style={{ flexGrow: 1 }}><T muted size={12}>Float</T><T bold size={18}>{wallets[0] ? money(wallets[0].balance, wallets[0].currency) : '—'}</T></Card>
-        <Card style={{ flexGrow: 1 }}><T muted size={12}>Commission (30d)</T><T bold size={18}>{s ? money(s.commissionEarned, wallets[0]?.currency || 'USD') : '—'}</T><T muted size={11}>{s?.cashInCount ?? 0} in · {s?.cashOutCount ?? 0} out</T></Card>
+        <Card style={{ flexGrow: 1 }}>
+          <T muted size={12}>
+            Float
+          </T>
+          <T bold size={18}>
+            {wallets[0] ? money(wallets[0].balance, wallets[0].currency) : '—'}
+          </T>
+        </Card>
+        <Card style={{ flexGrow: 1 }}>
+          <T muted size={12}>
+            Commission (30d)
+          </T>
+          <T bold size={18}>
+            {s ? money(s.commissionEarned, wallets[0]?.currency || 'USD') : '—'}
+          </T>
+          <T muted size={11}>
+            {s?.cashInCount ?? 0} in · {s?.cashOutCount ?? 0} out
+          </T>
+        </Card>
       </Row>
-      <Tabs tabs={[{ id: 'cashin', label: 'Cash-in' }, { id: 'cashout', label: 'Cash-out' }, { id: 'pickup', label: 'Cash pickup' }, { id: 'requests', label: 'Requests' }, { id: 'payouts', label: 'Payouts' }]} value={tab} onChange={(v) => setTab(v as any)} />
-      {tab === 'payouts' && <>
-        <Alert text="Execute each payout from the merchant SIM (USSD / operator app). The forwarder app on that SIM submits the signed confirmation SMS; a transfer settles only on that evidence. Manual confirmations go to a second administrator." />
-        {payouts.data?.items.length === 0 && <Empty icon="📤" text="Nothing queued for you" />}
-        {(payouts.data?.items ?? []).map((p) => <Card key={p.id}><Row between><View style={{ flex: 1 }}><T bold>{money(p.amount, p.currency)} → {p.operatorName ?? p.rail} {p.recipientMsisdn ?? p.recipientMasked}</T><T muted size={12}>{p.recipientName ?? ''} · ref {p.reference}</T></View><Status status={p.stage.toLowerCase().replace(/_/g, ' ')} /></Row>{p.instructions && p.instructions.steps.map((st: string, i: number) => <T key={i} size={12}>{i + 1}. {st}</T>)}<Row>{p.stage === 'QUEUED' && <Button title="Start payout" small onPress={() => api.post(`/api/payouts/agent/${p.id}/claim`).then(() => { toast('Claimed – execute now', 'success'); payouts.reload(); }).catch((e) => toast(e.message, 'error'))} />}{p.stage === 'IN_PROGRESS' && <><Button title="Enter confirmation" small variant="secondary" onPress={() => setEv({ id: p.id, text: '', externalRef: '' })} /><Button title="Give back" small variant="ghost" onPress={() => api.post(`/api/payouts/agent/${p.id}/release`, { reason: 'Could not execute' }).then(payouts.reload)} /></>}</Row></Card>)}
-        {ev && <Card><T bold>Manual confirmation (needs a second administrator)</T><Input label="Operator SMS, exactly as received" value={ev.text} onChangeText={(v) => setEv({ ...ev, text: v })} /><Input label="Operator transaction ID" value={ev.externalRef} onChangeText={(v) => setEv({ ...ev, externalRef: v })} /><Row><Button title="Submit" small disabled={ev.text.length < 5 || ev.externalRef.length < 4} onPress={() => api.post(`/api/payouts/agent/${ev.id}/evidence`, { text: ev.text, externalRef: ev.externalRef }).then(() => { toast('Submitted for approval', 'success'); setEv(null); payouts.reload(); }).catch((e) => toast(e.message, 'error'))} /><Button title="Cancel" small variant="ghost" onPress={() => setEv(null)} /></Row></Card>}
-      </>}
-      {tab === 'cashin' && <Card><T bold>Credit a customer's wallet</T><Input label="Customer (@tag, email or phone)" value={customer} onChangeText={setCustomer} autoCapitalize="none" />{found && <Row><Avatar user={found} size={34} /><T bold>{found.fullName} (@{found.tag})</T></Row>}<AmountInput label={t('common.amount')} amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} /><Button title="Confirm cash-in" disabled={!found || !amount} onPress={() => setPin('cashin')} /></Card>}
-      {tab === 'cashout' && <Card><T bold>Pay out cash</T><T muted size={12}>Enter the code the customer shows you. Funds move to your float when you confirm.</T><Input label="Cash-out code" value={code} onChangeText={(v) => setCode(v.toUpperCase())} autoCapitalize="characters" /><Button title="Confirm & pay cash" disabled={code.length < 4} onPress={() => setPin('cashout')} /></Card>}
-      {tab === 'pickup' && <Card><T bold>Remittance cash pickup</T><Row><View style={{ flex: 1 }}><Input label="Pickup code" value={code} onChangeText={(v) => setCode(v.toUpperCase())} autoCapitalize="characters" /></View><Button title="Look up" small variant="secondary" onPress={() => api.get<{ remittance: any }>(`/api/agents/me/pickups/${code}`).then((r) => setPickup(r.remittance)).catch((e) => toast(e.message, 'error'))} /></Row>{pickup && <><KV k="Recipient" v={pickup.recipient?.name} /><KV k="Pay out" v={money(pickup.targetAmount, pickup.targetCurrency)} /><KV k="Status" v={<Status status={pickup.status} />} />{pickup.status === 'ready_for_pickup' && <><Input label="Recipient ID number" value={idNumber} onChangeText={setIdNumber} /><Button title={`Pay out ${money(pickup.targetAmount, pickup.targetCurrency)}`} onPress={() => setPin('pickup')} /></>}</>}</Card>}
-      {tab === 'requests' && <>{requests.data?.items.length === 0 && <Empty icon="💵" />}{requests.data?.items.map((r) => <Card key={r.id}><Row between><View><T bold>{money(r.amount, r.currency)} · <T mono>{r.code}</T></T><T muted size={12}>{r.customer?.fullName}</T></View><Status status={r.status} /></Row>{r.status === 'pending' && <Button title="Confirm" small onPress={() => { setCode(r.code); setPin('cashout'); }} />}</Card>)}</>}
-      <Card style={{ alignItems: 'center' }}><T bold>Your agent QR</T><Qr value={`${config?.webUrl}/q?v=1&t=ag&id=${user?.tag}`} size={170} /><T muted size={12}>@{user?.tag}</T></Card>
+      <Tabs
+        tabs={[
+          { id: 'cashin', label: 'Cash-in' },
+          { id: 'cashout', label: 'Cash-out' },
+          { id: 'pickup', label: 'Cash pickup' },
+          { id: 'requests', label: 'Requests' },
+          { id: 'payouts', label: 'Payouts' },
+        ]}
+        value={tab}
+        onChange={(v) => setTab(v as any)}
+      />
+      {tab === 'payouts' && (
+        <>
+          <Alert text="Execute each payout from the merchant SIM (USSD / operator app). The forwarder app on that SIM submits the signed confirmation SMS; a transfer settles only on that evidence. Manual confirmations go to a second administrator." />
+          {payouts.data?.items.length === 0 && <Empty icon="📤" text="Nothing queued for you" />}
+          {(payouts.data?.items ?? []).map((p) => (
+            <Card key={p.id}>
+              <Row between>
+                <View style={{ flex: 1 }}>
+                  <T bold>
+                    {money(p.amount, p.currency)} → {p.operatorName ?? p.rail} {p.recipientMsisdn ?? p.recipientMasked}
+                  </T>
+                  <T muted size={12}>
+                    {p.recipientName ?? ''} · ref {p.reference}
+                  </T>
+                </View>
+                <Status status={p.stage.toLowerCase().replace(/_/g, ' ')} />
+              </Row>
+              {p.instructions &&
+                p.instructions.steps.map((st: string, i: number) => (
+                  <T key={i} size={12}>
+                    {i + 1}. {st}
+                  </T>
+                ))}
+              <Row>
+                {p.stage === 'QUEUED' && (
+                  <Button
+                    title="Start payout"
+                    small
+                    onPress={() =>
+                      api
+                        .post(`/api/payouts/agent/${p.id}/claim`)
+                        .then(() => {
+                          toast('Claimed – execute now', 'success');
+                          payouts.reload();
+                        })
+                        .catch((e) => toast(e.message, 'error'))
+                    }
+                  />
+                )}
+                {p.stage === 'IN_PROGRESS' && (
+                  <>
+                    <Button title="Enter confirmation" small variant="secondary" onPress={() => setEv({ id: p.id, text: '', externalRef: '' })} />
+                    <Button title="Give back" small variant="ghost" onPress={() => api.post(`/api/payouts/agent/${p.id}/release`, { reason: 'Could not execute' }).then(payouts.reload)} />
+                  </>
+                )}
+              </Row>
+            </Card>
+          ))}
+          {ev && (
+            <Card>
+              <T bold>Manual confirmation (needs a second administrator)</T>
+              <Input label="Operator SMS, exactly as received" value={ev.text} onChangeText={(v) => setEv({ ...ev, text: v })} />
+              <Input label="Operator transaction ID" value={ev.externalRef} onChangeText={(v) => setEv({ ...ev, externalRef: v })} />
+              <Row>
+                <Button
+                  title="Submit"
+                  small
+                  disabled={ev.text.length < 5 || ev.externalRef.length < 4}
+                  onPress={() =>
+                    api
+                      .post(`/api/payouts/agent/${ev.id}/evidence`, { text: ev.text, externalRef: ev.externalRef })
+                      .then(() => {
+                        toast('Submitted for approval', 'success');
+                        setEv(null);
+                        payouts.reload();
+                      })
+                      .catch((e) => toast(e.message, 'error'))
+                  }
+                />
+                <Button title="Cancel" small variant="ghost" onPress={() => setEv(null)} />
+              </Row>
+            </Card>
+          )}
+        </>
+      )}
+      {tab === 'cashin' && (
+        <Card>
+          <T bold>Credit a customer's wallet</T>
+          <Input label="Customer (@tag, email or phone)" value={customer} onChangeText={setCustomer} autoCapitalize="none" />
+          {found && (
+            <Row>
+              <Avatar user={found} size={34} />
+              <T bold>
+                {found.fullName} (@{found.tag})
+              </T>
+            </Row>
+          )}
+          <AmountInput label={t('common.amount')} amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} />
+          <Button title="Confirm cash-in" disabled={!found || !amount} onPress={() => setPin('cashin')} />
+        </Card>
+      )}
+      {tab === 'cashout' && (
+        <Card>
+          <T bold>Pay out cash</T>
+          <T muted size={12}>
+            Enter the code the customer shows you. Funds move to your float when you confirm.
+          </T>
+          <Input label="Cash-out code" value={code} onChangeText={(v) => setCode(v.toUpperCase())} autoCapitalize="characters" />
+          <Button title="Confirm & pay cash" disabled={code.length < 4} onPress={() => setPin('cashout')} />
+        </Card>
+      )}
+      {tab === 'pickup' && (
+        <Card>
+          <T bold>Remittance cash pickup</T>
+          <Row>
+            <View style={{ flex: 1 }}>
+              <Input label="Pickup code" value={code} onChangeText={(v) => setCode(v.toUpperCase())} autoCapitalize="characters" />
+            </View>
+            <Button
+              title="Look up"
+              small
+              variant="secondary"
+              onPress={() =>
+                api
+                  .get<{ remittance: any }>(`/api/agents/me/pickups/${code}`)
+                  .then((r) => setPickup(r.remittance))
+                  .catch((e) => toast(e.message, 'error'))
+              }
+            />
+          </Row>
+          {pickup && (
+            <>
+              <KV k="Recipient" v={pickup.recipient?.name} />
+              <KV k="Pay out" v={money(pickup.targetAmount, pickup.targetCurrency)} />
+              <KV k="Status" v={<Status status={pickup.status} />} />
+              {pickup.status === 'ready_for_pickup' && (
+                <>
+                  <Input label="Recipient ID number" value={idNumber} onChangeText={setIdNumber} />
+                  <Button title={`Pay out ${money(pickup.targetAmount, pickup.targetCurrency)}`} onPress={() => setPin('pickup')} />
+                </>
+              )}
+            </>
+          )}
+        </Card>
+      )}
+      {tab === 'requests' && (
+        <>
+          {requests.data?.items.length === 0 && <Empty icon="💵" />}
+          {requests.data?.items.map((r) => (
+            <Card key={r.id}>
+              <Row between>
+                <View>
+                  <T bold>
+                    {money(r.amount, r.currency)} · <T mono>{r.code}</T>
+                  </T>
+                  <T muted size={12}>
+                    {r.customer?.fullName}
+                  </T>
+                </View>
+                <Status status={r.status} />
+              </Row>
+              {r.status === 'pending' && (
+                <Button
+                  title="Confirm"
+                  small
+                  onPress={() => {
+                    setCode(r.code);
+                    setPin('cashout');
+                  }}
+                />
+              )}
+            </Card>
+          ))}
+        </>
+      )}
+      <Card style={{ alignItems: 'center' }}>
+        <T bold>Your agent QR</T>
+        <Qr value={`${config?.webUrl}/q?v=1&t=ag&id=${user?.tag}`} size={170} />
+        <T muted size={12}>
+          @{user?.tag}
+        </T>
+      </Card>
       <PinSheet open={!!pin} onClose={() => setPin(null)} onSubmit={run} loading={loading} />
     </Screen>
   );

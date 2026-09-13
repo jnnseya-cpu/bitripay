@@ -30,11 +30,37 @@ export interface AgentDef {
   plan?: (input: string, context: Record<string, unknown> | null) => { tool: string; input: Record<string, unknown> }[] | null;
 }
 
-const READ_TOOLS = ['wallets.balances', 'transactions.list', 'transactions.get', 'routes.list', 'routes.get', 'rates.list', 'fees.quote', 'routes.quote', 'profile.summary', 'notifications.recent', 'knowledge.search'];
+const READ_TOOLS = [
+  'wallets.balances',
+  'transactions.list',
+  'transactions.get',
+  'routes.list',
+  'routes.get',
+  'rates.list',
+  'fees.quote',
+  'routes.quote',
+  'profile.summary',
+  'notifications.recent',
+  'knowledge.search',
+];
 const PERSONAL_TOOLS = [...READ_TOOLS, 'statements.build', 'actions.propose', 'memory.remember', 'support.tickets', 'support.create_ticket'];
 const MERCHANT_TOOLS = ['merchant.stats', 'merchant.settlements', 'merchant.payment_requests', 'merchant.webhooks'];
 const CASH_AGENT_TOOLS = ['agent.queue', 'agent.stats'];
-const ADMIN_READ = ['admin.emoney_overview', 'admin.liquidity', 'admin.corridors', 'admin.routes_stuck', 'admin.kyc_queue', 'admin.risk_events', 'admin.go_live', 'admin.event_chain_verify', 'admin.rate_status', 'admin.users_search', 'admin.user_summary', 'admin.support_open', 'admin.usage'];
+const ADMIN_READ = [
+  'admin.emoney_overview',
+  'admin.liquidity',
+  'admin.corridors',
+  'admin.routes_stuck',
+  'admin.kyc_queue',
+  'admin.risk_events',
+  'admin.go_live',
+  'admin.event_chain_verify',
+  'admin.rate_status',
+  'admin.users_search',
+  'admin.user_summary',
+  'admin.support_open',
+  'admin.usage',
+];
 const ADMIN_ACT = ['admin.freeze_wallet', 'admin.reconcile_reserves', 'admin.notify_admins'];
 
 const EVERYONE: Role[] = ['user', 'merchant', 'agent', 'admin'];
@@ -44,17 +70,211 @@ const payload = (c: Record<string, unknown> | null) => (c && typeof c.payload ==
 
 /** The operations agent mesh: bound to surface events, shadow-first, never a way to move money. */
 export const MESH_AGENTS: AgentDef[] = [
-  { key: 'fraud_scorer', registryId: 'PR-F01', aliases: ['FraudScorer'], name: 'Fraud Scorer', icon: '🛡️', roles: ['admin'], tagline: 'Explains every risk score and the rule that decided', charter: `You are the Fraud Scorer (PR-F01). The deterministic scorer already decided; you explain its factors, spot patterns across recent scores and recommend policy tuning. You never override a block, clear a hit or move money. Platform-funded: the account holder never pays for this.`, tools: ['fraud.explain', 'compliance.cases', 'admin.risk_events', 'admin.user_summary', 'admin.notify_admins'], suggestions: { admin: ['Why was the last movement blocked?', 'Which factors fire most this week?'] }, budget: { maxSteps: 6, maxTokens: 20_000 }, bindings: ['transaction.fraud_scored'], plan: (_i, c) => [{ tool: 'fraud.explain', input: { ...(ctxStr(payload(c), 'userId') ? { userId: ctxStr(payload(c), 'userId') } : {}), limit: 10 } }, { tool: 'compliance.cases', input: { limit: 10 } }] },
-  { key: 'retry_surgeon', registryId: 'PR-E02', aliases: ['RetryOwner'], name: 'Retry Surgeon', icon: '🩺', roles: ['admin'], tagline: 'Owns the AMBIGUOUS window: inquire, never re-push', charter: `You are the Retry Surgeon (PR-E02). When a push-rail attempt ends UNKNOWN you own the ambiguity window: read the timeline, run the recovery (inquiries only, idempotent per the operator playbook) and report what is still uncertain. You never re-emit, never mark a payment paid, never contact the payer.`, tools: ['switch.uncertain', 'switch.recover_uncertain', 'rails.health', 'admin.notify_admins'], suggestions: { admin: ['What is still uncertain?', 'Run the recovery'] }, budget: { maxSteps: 6, maxTokens: 20_000 }, bindings: ['attempt.unknown'], plan: () => [{ tool: 'switch.uncertain', input: { limit: 20 } }, { tool: 'switch.recover_uncertain', input: {} }] },
-  { key: 'recon', registryId: 'PR-B01', aliases: ['PR-B02', 'ReconNormaliser'], name: 'Recon', icon: '🧾', roles: ['admin'], tagline: 'Normalises statements and drives the three-way match', charter: `You are the Recon agent (PR-B01/B02). After a statement import you review the run, list what matched and what did not, and explain each exception class in plain words. Target: 95% automatic matching. You never correct a figure or close a case.`, tools: ['recon.cases', 'recon.evidence_pack', 'admin.notify_admins'], suggestions: { admin: ['How did the last import reconcile?', 'What is unmatched today?'] }, budget: { maxSteps: 6, maxTokens: 25_000 }, bindings: ['statement.imported'], plan: () => [{ tool: 'recon.cases', input: { status: 'OPEN', limit: 50 } }] },
-  { key: 'exception_hunter', registryId: 'PR-B03', name: 'Exception Hunter', icon: '🔎', roles: ['admin'], tagline: 'Evidence packs for cases older than a day, proposals for humans', charter: `You are the Exception Hunter (PR-B03). For every reconciliation case unmatched after 24 hours you assemble the evidence pack and propose a resolution for a human to approve. Closure always needs a different person; you never close, never adjust the ledger.`, tools: ['recon.cases', 'recon.evidence_pack', 'recon.propose_resolution', 'admin.notify_admins'], suggestions: { admin: ['Build the evidence pack for the oldest case', 'What can be resolved today?'] }, budget: { maxSteps: 8, maxTokens: 30_000 }, bindings: ['recon.exception_aged'], plan: (_i, c) => (ctxStr(c, 'aggregateId') ? [{ tool: 'recon.evidence_pack', input: { caseId: ctxStr(c, 'aggregateId') } }] : [{ tool: 'recon.cases', input: { status: 'OPEN', olderThanHours: 24, limit: 20 } }]) },
-  { key: 'koda_core', registryId: 'PR-A02', aliases: ['RecipientValidator', 'KODA'], name: 'KODA Core', icon: '✅', roles: ['merchant', 'admin'], tagline: 'Scan-to-Verify in seconds across the three doors', charter: `You are KODA Core (PR-A02). A merchant asks whether a payment really arrived; you run the verification (reference, or MSISDN plus amount) across the wallet ledger, the processors and the national switch — the three doors — and answer VERIFIED, PENDING, NOT_FOUND, AMBIGUOUS or MISMATCH with the evidence. You never mark anything paid.`, tools: ['verification.koda', 'merchant.growth', 'transactions.list'], suggestions: { merchant: ['Did the payment with reference X arrive?', 'Verify 25.00 USD from +243…'] }, budget: { maxSteps: 4, maxTokens: 12_000 }, bindings: ['verification.requested'], plan: (input, c) => { const ref = input.match(/reference\s+([A-Za-z0-9._-]{3,})/i)?.[1] ?? ctxStr(payload(c), 'reference'); const msisdn = input.match(/\+?\d{9,15}/)?.[0] ?? ctxStr(payload(c), 'msisdn'); const amt = input.match(/(\d+(?:\.\d{1,2})?)\s*([A-Z]{3})/); if (ref) return [{ tool: 'verification.koda', input: { rail: 'any', reference: ref } }]; if (msisdn && amt) return [{ tool: 'verification.koda', input: { rail: 'any', msisdn, amountMinor: Math.round(parseFloat(amt[1]) * 100), currency: amt[2] } }]; return null; } },
-  { key: 'dispute_arbiter', registryId: 'PR-F02', aliases: ['DisputeResolver'], name: 'Dispute Arbiter', icon: '⚖️', roles: ['admin'], tagline: 'Both sides’ evidence, a proposed ruling, a human confirms', charter: `You are the Dispute Arbiter (PR-F02). You read both sides' evidence and the chronology, weigh it against the product rules and propose WON or LOST with reasons. A human confirms; only then does money move. You never contact the parties with a decision.`, tools: ['disputes.summary', 'disputes.open', 'disputes.propose_ruling', 'admin.notify_admins'], suggestions: { admin: ['Summarise the oldest open dispute', 'Propose a ruling on dp_…'] }, budget: { maxSteps: 6, maxTokens: 25_000 }, bindings: ['dispute.opened'], plan: (input, c) => { const id = input.match(/dp_[a-z0-9]+/i)?.[0] ?? ctxStr(c, 'aggregateId'); return id ? [{ tool: 'disputes.summary', input: { disputeId: id } }] : [{ tool: 'disputes.open', input: { limit: 20 } }]; } },
-  { key: 'fx_oracle', registryId: 'PR-C02', aliases: ['FxOracle'], name: 'FX Oracle', icon: '📈', roles: ['admin'], tagline: 'Rate cards versus the market, policy proposals for a signature', charter: `You are the FX Oracle (PR-C02). You compare the published Diaspora-Direct rate cards with the live mid-market rate and the signed policy, flag drift, and propose policy changes a treasury administrator signs. Cards refresh every four hours under the policy; you never change a rate yourself.`, tools: ['fx.rate_card', 'fx.propose_policy', 'rates.list', 'admin.rate_status', 'admin.notify_admins'], suggestions: { admin: ['Are the rate cards in line with the market?', 'Propose a GBP/CDF policy at 150 bps'] }, budget: { maxSteps: 6, maxTokens: 20_000 }, bindings: ['diaspora.quote_created'], plan: (_i, c) => { const pair = ctxStr(payload(c), 'pair'); const [a, b] = (pair ?? '').split('/'); return [{ tool: 'fx.rate_card', input: a && b ? { sourceCurrency: a, destCurrency: b } : {} }]; } },
-  { key: 'rebalancer', registryId: 'PR-C03', aliases: ['LiquidityForecaster'], name: 'Rebalancer', icon: '💧', roles: ['admin'], tagline: 'Float forecasts and refill proposals inside the envelope', charter: `You are the Rebalancer (PR-C03). You watch every agent's float runway, forecast shortfalls and recommend refills within the signed envelope (never above the forecast target). Money moves only through the replenishment maker-checker; you send recommendations.`, tools: ['agents.float_overview', 'agents.recommend_refill', 'admin.liquidity', 'admin.notify_admins'], suggestions: { admin: ['Who runs out of float tomorrow?', 'Recommend refills'] }, budget: { maxSteps: 8, maxTokens: 25_000 }, bindings: ['agent.float_low'], plan: (_i, c) => { const p = payload(c); const agentId = ctxStr(p, 'agentId'); const cur = ctxStr(p, 'currency'); const refill = typeof p.refill === 'number' ? (p.refill as number) : 0; return agentId && cur && refill > 0 ? [{ tool: 'agents.recommend_refill', input: { agentId, currency: cur, amountMinor: refill, note: 'Forecast-driven recommendation' } }] : [{ tool: 'agents.float_overview', input: { onlyLow: true } }]; } },
-  { key: 'connector_medic', registryId: 'PR-E01', name: 'Connector Medic', icon: '🔌', roles: ['admin'], tagline: 'Reroute before failure, pause what is failing, describe the incident', charter: `You are the Connector Medic (PR-E01). When a connector degrades you read its health and statistics, propose a pause (a second administrator confirms) so Smart Route reroutes, and describe the incident for the runbook. You never change a national route or bypass the switch.`, tools: ['rails.health', 'rails.propose_pause', 'rails.propose_resume', 'admin.notify_admins'], suggestions: { admin: ['Which connectors are unhealthy?', 'Pause the failing connector'] }, budget: { maxSteps: 6, maxTokens: 20_000 }, bindings: ['connector.degraded'], plan: (_i, c) => { const conn = ctxStr(payload(c), 'connector'); return [{ tool: 'rails.health', input: {} }, ...(conn ? [{ tool: 'rails.propose_pause', input: { connector: conn, reason: 'Circuit opened after consecutive failures; reroute while it recovers' } }] : [])]; } },
-  { key: 'onboarding', registryId: 'PR-A01', aliases: ['OnboardingGuide', 'MerchantGrowth'], name: 'Onboarding', icon: '🚀', roles: ['merchant', 'admin'], tagline: 'Tiered KYC guidance and the merchant growth picture', charter: `You are the Onboarding agent (PR-A01). For a new merchant you explain the verification levels, what unlocks what, and the next step; for an active one you summarise growth (sales, settlement, disputes). Conversational, four languages, never approves KYC.`, tools: ['onboarding.status', 'merchant.growth', 'merchant.stats', 'knowledge.search'], suggestions: { merchant: ['What do I need to raise my limits?', 'How is my business doing this week?'] }, budget: { maxSteps: 5, maxTokens: 15_000 }, bindings: ['merchant.created'], plan: (input) => (/(sales|grow|week|settle)/i.test(input) ? [{ tool: 'merchant.growth', input: {} }] : [{ tool: 'onboarding.status', input: {} }]) },
-  { key: 'sanctions_sentinel', registryId: 'PR-D02', aliases: ['ComplianceMonitor'], name: 'Sanctions Sentinel', icon: '🚨', roles: ['admin'], tagline: 'Freeze outranks everything; the MLRO resolves', charter: `You are the Sanctions Sentinel (PR-D02). On a sanctions hit you gather the case, propose freezing the account's wallets (a second administrator confirms) and prepare the file for the money-laundering reporting officer. You never clear a hit.`, tools: ['compliance.cases', 'fraud.explain', 'admin.freeze_wallet', 'admin.user_summary', 'admin.notify_admins'], suggestions: { admin: ['Any sanctions hits today?'] }, budget: { maxSteps: 6, maxTokens: 20_000 }, bindings: ['sanctions.hit'], plan: (_i, c) => { const p = payload(c); const userId = ctxStr(p, 'userId'); return [{ tool: 'compliance.cases', input: { kind: 'SANCTIONS', limit: 10 } }, ...(userId ? [{ tool: 'admin.freeze_wallet', input: { userId, currency: ctxStr(p, 'currency') ?? 'USD', reason: 'Sanctions hit: freeze pending MLRO review' } }] : [])]; } },
+  {
+    key: 'fraud_scorer',
+    registryId: 'PR-F01',
+    aliases: ['FraudScorer'],
+    name: 'Fraud Scorer',
+    icon: '🛡️',
+    roles: ['admin'],
+    tagline: 'Explains every risk score and the rule that decided',
+    charter: `You are the Fraud Scorer (PR-F01). The deterministic scorer already decided; you explain its factors, spot patterns across recent scores and recommend policy tuning. You never override a block, clear a hit or move money. Platform-funded: the account holder never pays for this.`,
+    tools: ['fraud.explain', 'compliance.cases', 'admin.risk_events', 'admin.user_summary', 'admin.notify_admins'],
+    suggestions: { admin: ['Why was the last movement blocked?', 'Which factors fire most this week?'] },
+    budget: { maxSteps: 6, maxTokens: 20_000 },
+    bindings: ['transaction.fraud_scored'],
+    plan: (_i, c) => [
+      { tool: 'fraud.explain', input: { ...(ctxStr(payload(c), 'userId') ? { userId: ctxStr(payload(c), 'userId') } : {}), limit: 10 } },
+      { tool: 'compliance.cases', input: { limit: 10 } },
+    ],
+  },
+  {
+    key: 'retry_surgeon',
+    registryId: 'PR-E02',
+    aliases: ['RetryOwner'],
+    name: 'Retry Surgeon',
+    icon: '🩺',
+    roles: ['admin'],
+    tagline: 'Owns the AMBIGUOUS window: inquire, never re-push',
+    charter: `You are the Retry Surgeon (PR-E02). When a push-rail attempt ends UNKNOWN you own the ambiguity window: read the timeline, run the recovery (inquiries only, idempotent per the operator playbook) and report what is still uncertain. You never re-emit, never mark a payment paid, never contact the payer.`,
+    tools: ['switch.uncertain', 'switch.recover_uncertain', 'rails.health', 'admin.notify_admins'],
+    suggestions: { admin: ['What is still uncertain?', 'Run the recovery'] },
+    budget: { maxSteps: 6, maxTokens: 20_000 },
+    bindings: ['attempt.unknown'],
+    plan: () => [
+      { tool: 'switch.uncertain', input: { limit: 20 } },
+      { tool: 'switch.recover_uncertain', input: {} },
+    ],
+  },
+  {
+    key: 'recon',
+    registryId: 'PR-B01',
+    aliases: ['PR-B02', 'ReconNormaliser'],
+    name: 'Recon',
+    icon: '🧾',
+    roles: ['admin'],
+    tagline: 'Normalises statements and drives the three-way match',
+    charter: `You are the Recon agent (PR-B01/B02). After a statement import you review the run, list what matched and what did not, and explain each exception class in plain words. Target: 95% automatic matching. You never correct a figure or close a case.`,
+    tools: ['recon.cases', 'recon.evidence_pack', 'admin.notify_admins'],
+    suggestions: { admin: ['How did the last import reconcile?', 'What is unmatched today?'] },
+    budget: { maxSteps: 6, maxTokens: 25_000 },
+    bindings: ['statement.imported'],
+    plan: () => [{ tool: 'recon.cases', input: { status: 'OPEN', limit: 50 } }],
+  },
+  {
+    key: 'exception_hunter',
+    registryId: 'PR-B03',
+    name: 'Exception Hunter',
+    icon: '🔎',
+    roles: ['admin'],
+    tagline: 'Evidence packs for cases older than a day, proposals for humans',
+    charter: `You are the Exception Hunter (PR-B03). For every reconciliation case unmatched after 24 hours you assemble the evidence pack and propose a resolution for a human to approve. Closure always needs a different person; you never close, never adjust the ledger.`,
+    tools: ['recon.cases', 'recon.evidence_pack', 'recon.propose_resolution', 'admin.notify_admins'],
+    suggestions: { admin: ['Build the evidence pack for the oldest case', 'What can be resolved today?'] },
+    budget: { maxSteps: 8, maxTokens: 30_000 },
+    bindings: ['recon.exception_aged'],
+    plan: (_i, c) =>
+      ctxStr(c, 'aggregateId') ? [{ tool: 'recon.evidence_pack', input: { caseId: ctxStr(c, 'aggregateId') } }] : [{ tool: 'recon.cases', input: { status: 'OPEN', olderThanHours: 24, limit: 20 } }],
+  },
+  {
+    key: 'koda_core',
+    registryId: 'PR-A02',
+    aliases: ['RecipientValidator', 'KODA'],
+    name: 'KODA Core',
+    icon: '✅',
+    roles: ['merchant', 'admin'],
+    tagline: 'Scan-to-Verify in seconds across the three doors',
+    charter: `You are KODA Core (PR-A02). A merchant asks whether a payment really arrived; you run the verification (reference, or MSISDN plus amount) across the wallet ledger, the processors and the national switch — the three doors — and answer VERIFIED, PENDING, NOT_FOUND, AMBIGUOUS or MISMATCH with the evidence. You never mark anything paid.`,
+    tools: ['verification.koda', 'merchant.growth', 'transactions.list'],
+    suggestions: { merchant: ['Did the payment with reference X arrive?', 'Verify 25.00 USD from +243…'] },
+    budget: { maxSteps: 4, maxTokens: 12_000 },
+    bindings: ['verification.requested'],
+    plan: (input, c) => {
+      const ref = input.match(/reference\s+([A-Za-z0-9._-]{3,})/i)?.[1] ?? ctxStr(payload(c), 'reference');
+      const msisdn = input.match(/\+?\d{9,15}/)?.[0] ?? ctxStr(payload(c), 'msisdn');
+      const amt = input.match(/(\d+(?:\.\d{1,2})?)\s*([A-Z]{3})/);
+      if (ref) return [{ tool: 'verification.koda', input: { rail: 'any', reference: ref } }];
+      if (msisdn && amt) return [{ tool: 'verification.koda', input: { rail: 'any', msisdn, amountMinor: Math.round(parseFloat(amt[1]) * 100), currency: amt[2] } }];
+      return null;
+    },
+  },
+  {
+    key: 'dispute_arbiter',
+    registryId: 'PR-F02',
+    aliases: ['DisputeResolver'],
+    name: 'Dispute Arbiter',
+    icon: '⚖️',
+    roles: ['admin'],
+    tagline: 'Both sides’ evidence, a proposed ruling, a human confirms',
+    charter: `You are the Dispute Arbiter (PR-F02). You read both sides' evidence and the chronology, weigh it against the product rules and propose WON or LOST with reasons. A human confirms; only then does money move. You never contact the parties with a decision.`,
+    tools: ['disputes.summary', 'disputes.open', 'disputes.propose_ruling', 'admin.notify_admins'],
+    suggestions: { admin: ['Summarise the oldest open dispute', 'Propose a ruling on dp_…'] },
+    budget: { maxSteps: 6, maxTokens: 25_000 },
+    bindings: ['dispute.opened'],
+    plan: (input, c) => {
+      const id = input.match(/dp_[a-z0-9]+/i)?.[0] ?? ctxStr(c, 'aggregateId');
+      return id ? [{ tool: 'disputes.summary', input: { disputeId: id } }] : [{ tool: 'disputes.open', input: { limit: 20 } }];
+    },
+  },
+  {
+    key: 'fx_oracle',
+    registryId: 'PR-C02',
+    aliases: ['FxOracle'],
+    name: 'FX Oracle',
+    icon: '📈',
+    roles: ['admin'],
+    tagline: 'Rate cards versus the market, policy proposals for a signature',
+    charter: `You are the FX Oracle (PR-C02). You compare the published Diaspora-Direct rate cards with the live mid-market rate and the signed policy, flag drift, and propose policy changes a treasury administrator signs. Cards refresh every four hours under the policy; you never change a rate yourself.`,
+    tools: ['fx.rate_card', 'fx.propose_policy', 'rates.list', 'admin.rate_status', 'admin.notify_admins'],
+    suggestions: { admin: ['Are the rate cards in line with the market?', 'Propose a GBP/CDF policy at 150 bps'] },
+    budget: { maxSteps: 6, maxTokens: 20_000 },
+    bindings: ['diaspora.quote_created'],
+    plan: (_i, c) => {
+      const pair = ctxStr(payload(c), 'pair');
+      const [a, b] = (pair ?? '').split('/');
+      return [{ tool: 'fx.rate_card', input: a && b ? { sourceCurrency: a, destCurrency: b } : {} }];
+    },
+  },
+  {
+    key: 'rebalancer',
+    registryId: 'PR-C03',
+    aliases: ['LiquidityForecaster'],
+    name: 'Rebalancer',
+    icon: '💧',
+    roles: ['admin'],
+    tagline: 'Float forecasts and refill proposals inside the envelope',
+    charter: `You are the Rebalancer (PR-C03). You watch every agent's float runway, forecast shortfalls and recommend refills within the signed envelope (never above the forecast target). Money moves only through the replenishment maker-checker; you send recommendations.`,
+    tools: ['agents.float_overview', 'agents.recommend_refill', 'admin.liquidity', 'admin.notify_admins'],
+    suggestions: { admin: ['Who runs out of float tomorrow?', 'Recommend refills'] },
+    budget: { maxSteps: 8, maxTokens: 25_000 },
+    bindings: ['agent.float_low'],
+    plan: (_i, c) => {
+      const p = payload(c);
+      const agentId = ctxStr(p, 'agentId');
+      const cur = ctxStr(p, 'currency');
+      const refill = typeof p.refill === 'number' ? (p.refill as number) : 0;
+      return agentId && cur && refill > 0
+        ? [{ tool: 'agents.recommend_refill', input: { agentId, currency: cur, amountMinor: refill, note: 'Forecast-driven recommendation' } }]
+        : [{ tool: 'agents.float_overview', input: { onlyLow: true } }];
+    },
+  },
+  {
+    key: 'connector_medic',
+    registryId: 'PR-E01',
+    name: 'Connector Medic',
+    icon: '🔌',
+    roles: ['admin'],
+    tagline: 'Reroute before failure, pause what is failing, describe the incident',
+    charter: `You are the Connector Medic (PR-E01). When a connector degrades you read its health and statistics, propose a pause (a second administrator confirms) so Smart Route reroutes, and describe the incident for the runbook. You never change a national route or bypass the switch.`,
+    tools: ['rails.health', 'rails.propose_pause', 'rails.propose_resume', 'admin.notify_admins'],
+    suggestions: { admin: ['Which connectors are unhealthy?', 'Pause the failing connector'] },
+    budget: { maxSteps: 6, maxTokens: 20_000 },
+    bindings: ['connector.degraded'],
+    plan: (_i, c) => {
+      const conn = ctxStr(payload(c), 'connector');
+      return [
+        { tool: 'rails.health', input: {} },
+        ...(conn ? [{ tool: 'rails.propose_pause', input: { connector: conn, reason: 'Circuit opened after consecutive failures; reroute while it recovers' } }] : []),
+      ];
+    },
+  },
+  {
+    key: 'onboarding',
+    registryId: 'PR-A01',
+    aliases: ['OnboardingGuide', 'MerchantGrowth'],
+    name: 'Onboarding',
+    icon: '🚀',
+    roles: ['merchant', 'admin'],
+    tagline: 'Tiered KYC guidance and the merchant growth picture',
+    charter: `You are the Onboarding agent (PR-A01). For a new merchant you explain the verification levels, what unlocks what, and the next step; for an active one you summarise growth (sales, settlement, disputes). Conversational, four languages, never approves KYC.`,
+    tools: ['onboarding.status', 'merchant.growth', 'merchant.stats', 'knowledge.search'],
+    suggestions: { merchant: ['What do I need to raise my limits?', 'How is my business doing this week?'] },
+    budget: { maxSteps: 5, maxTokens: 15_000 },
+    bindings: ['merchant.created'],
+    plan: (input) => (/(sales|grow|week|settle)/i.test(input) ? [{ tool: 'merchant.growth', input: {} }] : [{ tool: 'onboarding.status', input: {} }]),
+  },
+  {
+    key: 'sanctions_sentinel',
+    registryId: 'PR-D02',
+    aliases: ['ComplianceMonitor'],
+    name: 'Sanctions Sentinel',
+    icon: '🚨',
+    roles: ['admin'],
+    tagline: 'Freeze outranks everything; the MLRO resolves',
+    charter: `You are the Sanctions Sentinel (PR-D02). On a sanctions hit you gather the case, propose freezing the account's wallets (a second administrator confirms) and prepare the file for the money-laundering reporting officer. You never clear a hit.`,
+    tools: ['compliance.cases', 'fraud.explain', 'admin.freeze_wallet', 'admin.user_summary', 'admin.notify_admins'],
+    suggestions: { admin: ['Any sanctions hits today?'] },
+    budget: { maxSteps: 6, maxTokens: 20_000 },
+    bindings: ['sanctions.hit'],
+    plan: (_i, c) => {
+      const p = payload(c);
+      const userId = ctxStr(p, 'userId');
+      return [
+        { tool: 'compliance.cases', input: { kind: 'SANCTIONS', limit: 10 } },
+        ...(userId ? [{ tool: 'admin.freeze_wallet', input: { userId, currency: ctxStr(p, 'currency') ?? 'USD', reason: 'Sanctions hit: freeze pending MLRO review' } }] : []),
+      ];
+    },
+  },
 ];
 
 export const AGENTS: AgentDef[] = [
@@ -66,7 +286,12 @@ export const AGENTS: AgentDef[] = [
     tagline: 'Your daily briefing, reminders and next steps',
     charter: `You are the Chief of Staff agent. You summarise what matters today for this account: balances, money in and out, routes still in progress, anything waiting for the account holder (consent requests, KYC, pending payouts) and one or two suggested next steps. You delegate detail to other agents by naming them. You remember stated preferences with memory.remember when the account holder asks you to.`,
     tools: [...PERSONAL_TOOLS, ...MERCHANT_TOOLS, ...CASH_AGENT_TOOLS, ...ADMIN_READ],
-    suggestions: { all: ['What should I know today?', 'What is still in progress?', 'Remind me what I asked you last time'], merchant: ['How did the shop do this week?'], agent: ['What is in my payout queue?'], admin: ['Anything waiting for treasury or approvals?'] },
+    suggestions: {
+      all: ['What should I know today?', 'What is still in progress?', 'Remind me what I asked you last time'],
+      merchant: ['How did the shop do this week?'],
+      agent: ['What is in my payout queue?'],
+      admin: ['Anything waiting for treasury or approvals?'],
+    },
     budget: { maxSteps: 8, maxTokens: 30_000 },
   },
   {
@@ -77,7 +302,10 @@ export const AGENTS: AgentDef[] = [
     tagline: 'Explains money in, money out, fees and statements',
     charter: `You are the Analyst agent. You answer questions about transactions, fees, exchange rates, statements and trends with exact figures from the tools. When asked "why", trace the ledger: find the transaction, read its fee and rate, and explain in one or two sentences. Offer a statement (statements.build) when a period summary is useful.`,
     tools: [...PERSONAL_TOOLS, ...MERCHANT_TOOLS, ...CASH_AGENT_TOOLS],
-    suggestions: { all: ['How much did I spend this month?', 'Why was I charged a fee on my last transfer?', 'Build my statement for last month'], merchant: ['Which payment method do my customers use most?'] },
+    suggestions: {
+      all: ['How much did I spend this month?', 'Why was I charged a fee on my last transfer?', 'Build my statement for last month'],
+      merchant: ['Which payment method do my customers use most?'],
+    },
     budget: { maxSteps: 8, maxTokens: 30_000 },
   },
   {
@@ -110,7 +338,11 @@ export const AGENTS: AgentDef[] = [
     tagline: 'Finds ways to sell more and get paid faster',
     charter: `You are the Growth agent for a merchant or cash agent. You read sales, methods, settlement timing and open payment links, then recommend two or three concrete, low-cost actions (a QR at the counter, a payment link for deliveries, a settlement threshold, opening hours by demand). Ground every recommendation in a figure from the tools.`,
     tools: [...READ_TOOLS, ...MERCHANT_TOOLS, ...CASH_AGENT_TOOLS, 'actions.propose', 'memory.remember'],
-    suggestions: { merchant: ['How can I get more customers to pay by QR?', 'When should I settle to my bank?'], agent: ['When is demand for cash highest?'], admin: ['Which merchants grew most this month?'] },
+    suggestions: {
+      merchant: ['How can I get more customers to pay by QR?', 'When should I settle to my bank?'],
+      agent: ['When is demand for cash highest?'],
+      admin: ['Which merchants grew most this month?'],
+    },
     budget: { maxSteps: 8, maxTokens: 30_000 },
   },
   {
@@ -154,7 +386,19 @@ export const AGENTS: AgentDef[] = [
     roles: ['admin'],
     tagline: 'KYC queue, sanctions hits, reserves and regulatory dates',
     charter: `You are the Compliance agent. You review the KYC queue, risk and sanctions events, reserve coverage per programme and corridor licence dates, and draft a short compliance note with counts, oldest items and what a reviewer must decide. You never approve KYC or clear a hit; you queue it for a human. Reconciliations require approval.`,
-    tools: ['admin.kyc_queue', 'admin.risk_events', 'admin.emoney_overview', 'admin.corridors', 'admin.reconcile_reserves', 'admin.users_search', 'admin.user_summary', 'admin.freeze_wallet', 'admin.notify_admins', 'knowledge.search', 'memory.remember'],
+    tools: [
+      'admin.kyc_queue',
+      'admin.risk_events',
+      'admin.emoney_overview',
+      'admin.corridors',
+      'admin.reconcile_reserves',
+      'admin.users_search',
+      'admin.user_summary',
+      'admin.freeze_wallet',
+      'admin.notify_admins',
+      'knowledge.search',
+      'memory.remember',
+    ],
     suggestions: { admin: ['Summarise the KYC queue', 'Are all programmes fully covered?', 'Any sanctions hits this week?'] },
     budget: { maxSteps: 10, maxTokens: 40_000 },
     schedule: 'daily',
@@ -176,7 +420,20 @@ export const AGENTS: AgentDef[] = [
 AGENTS.push(...MESH_AGENTS);
 export const AGENT_BY_KEY = new Map(AGENTS.map((a) => [a.key, a]));
 /** Resolve a canonical operating-system name (RouteOptimiser, FraudScorer, …) to the agent that implements it. */
-export const OS_AGENT_ALIASES: Record<string, string> = { RouteOptimiser: 'smart_route', FraudScorer: 'fraud_scorer', ComplianceMonitor: 'compliance', SavingsAdvisor: 'analyst', CreditReadiness: 'analyst', MerchantGrowth: 'onboarding', FinancialEducator: 'knowledge', SupportAgent: 'chief_of_staff', LiquidityForecaster: 'rebalancer', ContentEngine: 'seo_content', DisputeResolver: 'dispute_arbiter', RecipientValidator: 'koda_core' };
+export const OS_AGENT_ALIASES: Record<string, string> = {
+  RouteOptimiser: 'smart_route',
+  FraudScorer: 'fraud_scorer',
+  ComplianceMonitor: 'compliance',
+  SavingsAdvisor: 'analyst',
+  CreditReadiness: 'analyst',
+  MerchantGrowth: 'onboarding',
+  FinancialEducator: 'knowledge',
+  SupportAgent: 'chief_of_staff',
+  LiquidityForecaster: 'rebalancer',
+  ContentEngine: 'seo_content',
+  DisputeResolver: 'dispute_arbiter',
+  RecipientValidator: 'koda_core',
+};
 export function agentForAlias(name: string): AgentDef | undefined {
   const direct = AGENT_BY_KEY.get(name);
   if (direct) return direct;

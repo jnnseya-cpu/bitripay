@@ -45,7 +45,20 @@ export interface RiskPolicyView {
   notes: string | null;
   createdAt: string;
 }
-const toView = (r: any): RiskPolicyView => ({ id: r.id, version: r.version, name: r.name, rules: parseJson(r.rules, []), status: r.status, authorId: r.author_id, approvedBy: r.approved_by, approvedAt: r.approved_at, activatedAt: r.activated_at, retiredAt: r.retired_at, notes: r.notes, createdAt: r.created_at });
+const toView = (r: any): RiskPolicyView => ({
+  id: r.id,
+  version: r.version,
+  name: r.name,
+  rules: parseJson(r.rules, []),
+  status: r.status,
+  authorId: r.author_id,
+  approvedBy: r.approved_by,
+  approvedAt: r.approved_at,
+  activatedAt: r.activated_at,
+  retiredAt: r.retired_at,
+  notes: r.notes,
+  createdAt: r.created_at,
+});
 
 /** The default policy encodes the fraud bands: 0–30 approve, 31–60 step-up, 61–80 manual review, 81–100 block. */
 export const DEFAULT_RULES: RiskRule[] = [
@@ -67,7 +80,8 @@ function validateRules(rules: RiskRule[]) {
     if (!['allow', 'step_up', 'review', 'block'].includes(r.action)) throw badRequest(`Rule ${r.id}: unknown action ${r.action}`, 'validation_error');
     if (!r.when || typeof r.when !== 'object') throw badRequest(`Rule ${r.id}: missing conditions`, 'validation_error');
   }
-  if (!rules.some((r) => r.action === 'allow' && !r.when.minScore && !r.when.flags?.length && !r.when.kinds?.length)) throw badRequest('The last rule must be an unconditional or score-only allow so every movement gets a decision', 'validation_error');
+  if (!rules.some((r) => r.action === 'allow' && !r.when.minScore && !r.when.flags?.length && !r.when.kinds?.length))
+    throw badRequest('The last rule must be an unconditional or score-only allow so every movement gets a decision', 'validation_error');
 }
 
 export function ensureDefaultPolicy(): RiskPolicyView {
@@ -75,7 +89,9 @@ export function ensureDefaultPolicy(): RiskPolicyView {
   const active = db.prepare("SELECT * FROM risk_policies WHERE status = 'ACTIVE' LIMIT 1").get();
   if (active) return toView(active);
   const id = `rp_${shortCode(10).toLowerCase()}`;
-  db.prepare("INSERT INTO risk_policies (id, version, name, rules, status, author_id, approved_by, approved_at, activated_at, notes, created_at) VALUES (?, 1, 'Fraud bands (default)', ?, 'ACTIVE', NULL, NULL, ?, ?, 'Seeded default: 0–30 allow, 31–60 step-up, 61–80 review, 81–100 block; sanctions and cooling-off block.', ?)").run(id, JSON.stringify(DEFAULT_RULES), now(), now(), now());
+  db.prepare(
+    "INSERT INTO risk_policies (id, version, name, rules, status, author_id, approved_by, approved_at, activated_at, notes, created_at) VALUES (?, 1, 'Fraud bands (default)', ?, 'ACTIVE', NULL, NULL, ?, ?, 'Seeded default: 0–30 allow, 31–60 step-up, 61–80 review, 81–100 block; sanctions and cooling-off block.', ?)",
+  ).run(id, JSON.stringify(DEFAULT_RULES), now(), now(), now());
   return toView(db.prepare('SELECT * FROM risk_policies WHERE id = ?').get(id));
 }
 
@@ -95,7 +111,16 @@ export function createPolicyDraft(input: { name: string; rules: RiskRule[]; note
   const db = getDb();
   const version = ((db.prepare('SELECT MAX(version) v FROM risk_policies').get() as any).v ?? 0) + 1;
   const id = `rp_${shortCode(10).toLowerCase()}`;
-  db.prepare('INSERT INTO risk_policies (id, version, name, rules, status, author_id, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, version, input.name, JSON.stringify(input.rules), 'DRAFT', authorId, input.notes ?? null, now());
+  db.prepare('INSERT INTO risk_policies (id, version, name, rules, status, author_id, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id,
+    version,
+    input.name,
+    JSON.stringify(input.rules),
+    'DRAFT',
+    authorId,
+    input.notes ?? null,
+    now(),
+  );
   recordEvent('risk', id, 'risk_policy.drafted', { type: 'admin', id: authorId }, { version, rules: input.rules.length });
   return getPolicy(id);
 }

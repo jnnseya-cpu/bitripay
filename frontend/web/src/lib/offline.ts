@@ -39,7 +39,13 @@ async function kvSet(key: string, value: unknown): Promise<void> {
 const b64 = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const b64url = (buf: ArrayBuffer) => b64(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-interface DeviceRecord { deviceId: string; keyId: string; keyNotAfter: string; publicKey: string; userId: string }
+interface DeviceRecord {
+  deviceId: string;
+  keyId: string;
+  keyNotAfter: string;
+  publicKey: string;
+  userId: string;
+}
 export const offlineDevice = {
   supported(): boolean {
     return typeof crypto !== 'undefined' && !!crypto.subtle && typeof indexedDB !== 'undefined';
@@ -47,7 +53,13 @@ export const offlineDevice = {
   async status() {
     const rec = await kvGet<DeviceRecord>('device');
     const nonces = (await kvGet<{ nonce: string; expiresAt: string }[]>('nonces')) ?? [];
-    return { supported: this.supported(), deviceId: rec?.deviceId ?? null, keyId: rec?.keyId ?? null, keyNotAfter: rec?.keyNotAfter ?? null, nonces: nonces.filter((n) => n.expiresAt > new Date().toISOString()).length };
+    return {
+      supported: this.supported(),
+      deviceId: rec?.deviceId ?? null,
+      keyId: rec?.keyId ?? null,
+      keyNotAfter: rec?.keyNotAfter ?? null,
+      nonces: nonces.filter((n) => n.expiresAt > new Date().toISOString()).length,
+    };
   },
   /** Generate the subkey, register its public half (online), keep the private half in IndexedDB. */
   async provision(label: string): Promise<DeviceRecord> {
@@ -81,7 +93,15 @@ export const offlineDevice = {
     return current.length + r.data.length;
   },
   /** Merchant side, no network needed: a signed dynamic BitriQR with a stored nonce and this device's key. */
-  async localOfflineQr(input: { merchantCode: string; merchantName: string; country: string; currency: string; amount: string; reference?: string | null; ttlSeconds?: number }): Promise<{ payload: string; nonce: string; expiresAt: string; keyId: string }> {
+  async localOfflineQr(input: {
+    merchantCode: string;
+    merchantName: string;
+    country: string;
+    currency: string;
+    amount: string;
+    reference?: string | null;
+    ttlSeconds?: number;
+  }): Promise<{ payload: string; nonce: string; expiresAt: string; keyId: string }> {
     const rec = await kvGet<DeviceRecord>('device');
     if (!rec) throw new Error('Provision this device first');
     const nonces = ((await kvGet<{ nonce: string; expiresAt: string }[]>('nonces')) ?? []).filter((n) => n.expiresAt > new Date().toISOString());
@@ -89,7 +109,28 @@ export const offlineDevice = {
     if (!n) throw new Error('No offline codes left on this device; prefetch some while online');
     await kvSet('nonces', nonces);
     const expiresAt = Math.floor(Date.now() / 1000) + (input.ttlSeconds ?? 900);
-    const payload = await bitriqr.encodeSigned({ mode: 'dynamic', merchantId: input.merchantCode, merchantName: input.merchantName, country: input.country, currency: input.currency, amount: input.amount, rails: ['wallet'], intentRef: null, keyId: rec.keyId, expiresAt, offlineNonce: n.nonce, billRef: input.reference ?? null, referenceLabel: null, purposeCode: null, mcc: null, city: null, corridorFlag: null } as any, async (p: string) => new Uint8Array(Buffer_from(await this.sign(p))));
+    const payload = await bitriqr.encodeSigned(
+      {
+        mode: 'dynamic',
+        merchantId: input.merchantCode,
+        merchantName: input.merchantName,
+        country: input.country,
+        currency: input.currency,
+        amount: input.amount,
+        rails: ['wallet'],
+        intentRef: null,
+        keyId: rec.keyId,
+        expiresAt,
+        offlineNonce: n.nonce,
+        billRef: input.reference ?? null,
+        referenceLabel: null,
+        purposeCode: null,
+        mcc: null,
+        city: null,
+        corridorFlag: null,
+      } as any,
+      async (p: string) => new Uint8Array(Buffer_from(await this.sign(p))),
+    );
     return { payload, nonce: n.nonce, expiresAt: new Date(expiresAt * 1000).toISOString(), keyId: rec.keyId };
   },
 };
@@ -100,7 +141,14 @@ function Buffer_from(b64s: string): ArrayBuffer {
   return out.buffer;
 }
 
-export interface QueuedPromise { hash: string; body: Record<string, unknown>; amountMinor: number; currency: string; merchantName: string; queuedAt: string }
+export interface QueuedPromise {
+  hash: string;
+  body: Record<string, unknown>;
+  amountMinor: number;
+  currency: string;
+  merchantName: string;
+  queuedAt: string;
+}
 export const offlineQueue = {
   async count(): Promise<number> {
     const d = await idb();
@@ -133,7 +181,23 @@ export const offlineQueue = {
     const payerSig = await offlineDevice.sign(canonical);
     // the merchant's signature over the same fields travels inside the QR only for the base payload; the promise
     // itself is countersigned by the merchant device when both are online, or by the merchant when it syncs first
-    const body = { merchantId, payerId, payerDeviceId: rec.deviceId, merchantKeyId: d.keyId, payerKeyId: rec.keyId, amountMinor, currency: d.currency.toUpperCase(), nonce: d.offlineNonce, expiresAt, counter, reference: d.billRef ?? null, merchantSig: d.signature ?? '', payerSig, promisedAt: new Date().toISOString(), qrPayload };
+    const body = {
+      merchantId,
+      payerId,
+      payerDeviceId: rec.deviceId,
+      merchantKeyId: d.keyId,
+      payerKeyId: rec.keyId,
+      amountMinor,
+      currency: d.currency.toUpperCase(),
+      nonce: d.offlineNonce,
+      expiresAt,
+      counter,
+      reference: d.billRef ?? null,
+      merchantSig: d.signature ?? '',
+      payerSig,
+      promisedAt: new Date().toISOString(),
+      qrPayload,
+    };
     const item: QueuedPromise = { hash, body, amountMinor, currency: d.currency.toUpperCase(), merchantName: d.merchantName, queuedAt: new Date().toISOString() };
     const db = await idb();
     await new Promise<void>((resolve, reject) => {

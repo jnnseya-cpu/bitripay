@@ -22,7 +22,17 @@ export interface SigningKey {
   revokedAt: string | null;
   createdAt: string;
 }
-const toKey = (r: any): SigningKey => ({ keyId: r.key_id, partyType: r.party_type, partyId: r.party_id, scope: r.scope, publicKey: r.public_key, notBefore: r.not_before, notAfter: r.not_after, revokedAt: r.revoked_at, createdAt: r.created_at });
+const toKey = (r: any): SigningKey => ({
+  keyId: r.key_id,
+  partyType: r.party_type,
+  partyId: r.party_id,
+  scope: r.scope,
+  publicKey: r.public_key,
+  notBefore: r.not_before,
+  notAfter: r.not_after,
+  revokedAt: r.revoked_at,
+  createdAt: r.created_at,
+});
 
 export const MERCHANT_KEY_DAYS = 90;
 export const DEVICE_KEY_HOURS = 72;
@@ -36,12 +46,24 @@ function newKeyId(): string {
 /** The merchant's current signing key, generated or rotated as needed. */
 export function merchantSigningKey(merchantUserId: string): SigningKey {
   const db = getDb();
-  const current = db.prepare("SELECT * FROM signing_keys WHERE party_type = 'user' AND party_id = ? AND scope = 'MERCHANT' AND revoked_at IS NULL AND not_after > ? ORDER BY not_after DESC LIMIT 1").get(merchantUserId, now()) as any;
+  const current = db
+    .prepare("SELECT * FROM signing_keys WHERE party_type = 'user' AND party_id = ? AND scope = 'MERCHANT' AND revoked_at IS NULL AND not_after > ? ORDER BY not_after DESC LIMIT 1")
+    .get(merchantUserId, now()) as any;
   if (current && new Date(current.not_after).getTime() - Date.now() > ROTATE_BEFORE_DAYS * 86400_000) return toKey(current);
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
   const keyId = newKeyId();
   const notAfter = new Date(Date.now() + MERCHANT_KEY_DAYS * 86400_000).toISOString();
-  db.prepare('INSERT INTO signing_keys (key_id, party_type, party_id, scope, public_key, private_key_enc, not_before, not_after, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(keyId, 'user', merchantUserId, 'MERCHANT', publicKey.export({ type: 'spki', format: 'der' }).toString('base64'), encrypt(privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64')), now(), notAfter, now());
+  db.prepare('INSERT INTO signing_keys (key_id, party_type, party_id, scope, public_key, private_key_enc, not_before, not_after, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    keyId,
+    'user',
+    merchantUserId,
+    'MERCHANT',
+    publicKey.export({ type: 'spki', format: 'der' }).toString('base64'),
+    encrypt(privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64')),
+    now(),
+    notAfter,
+    now(),
+  );
   return toKey(db.prepare('SELECT * FROM signing_keys WHERE key_id = ?').get(keyId));
 }
 
@@ -49,12 +71,24 @@ export function merchantSigningKey(merchantUserId: string): SigningKey {
 export const PLATFORM_KEY_DAYS = 365;
 export function platformSigningKey(): SigningKey {
   const db = getDb();
-  const current = db.prepare("SELECT * FROM signing_keys WHERE party_type = 'platform' AND scope = 'PLATFORM' AND revoked_at IS NULL AND not_after > ? ORDER BY not_after DESC LIMIT 1").get(now()) as any;
+  const current = db
+    .prepare("SELECT * FROM signing_keys WHERE party_type = 'platform' AND scope = 'PLATFORM' AND revoked_at IS NULL AND not_after > ? ORDER BY not_after DESC LIMIT 1")
+    .get(now()) as any;
   if (current && new Date(current.not_after).getTime() - Date.now() > ROTATE_BEFORE_DAYS * 86400_000) return toKey(current);
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
   const keyId = newKeyId();
   const notAfter = new Date(Date.now() + PLATFORM_KEY_DAYS * 86400_000).toISOString();
-  db.prepare('INSERT INTO signing_keys (key_id, party_type, party_id, scope, public_key, private_key_enc, not_before, not_after, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(keyId, 'platform', 'platform', 'PLATFORM', publicKey.export({ type: 'spki', format: 'der' }).toString('base64'), encrypt(privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64')), now(), notAfter, now());
+  db.prepare('INSERT INTO signing_keys (key_id, party_type, party_id, scope, public_key, private_key_enc, not_before, not_after, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    keyId,
+    'platform',
+    'platform',
+    'PLATFORM',
+    publicKey.export({ type: 'spki', format: 'der' }).toString('base64'),
+    encrypt(privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64')),
+    now(),
+    notAfter,
+    now(),
+  );
   return toKey(db.prepare('SELECT * FROM signing_keys WHERE key_id = ?').get(keyId));
 }
 
@@ -66,7 +100,9 @@ export function registerDeviceKey(deviceId: string, publicKeySpkiB64: string, ho
     throw badRequest('Public key must be an ed25519 SPKI DER, base64', 'invalid_public_key');
   }
   const keyId = newKeyId();
-  getDb().prepare('INSERT INTO signing_keys (key_id, party_type, party_id, scope, public_key, private_key_enc, not_before, not_after, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)').run(keyId, 'device', deviceId, 'DEVICE_OFFLINE', publicKeySpkiB64, now(), new Date(Date.now() + hours * 3600_000).toISOString(), now());
+  getDb()
+    .prepare('INSERT INTO signing_keys (key_id, party_type, party_id, scope, public_key, private_key_enc, not_before, not_after, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)')
+    .run(keyId, 'device', deviceId, 'DEVICE_OFFLINE', publicKeySpkiB64, now(), new Date(Date.now() + hours * 3600_000).toISOString(), now());
   return getKey(keyId);
 }
 
@@ -107,6 +143,8 @@ export function verifyWithKey(keyId: string, payload: string, signature: Uint8Ar
 
 /** Public registry view (cacheable; the route sets an ETag from updated keys). */
 export function publicKeyRegistry(keyId?: string | null) {
-  const rows = keyId ? [getDb().prepare('SELECT * FROM signing_keys WHERE key_id = ?').get(keyId)].filter(Boolean) : getDb().prepare("SELECT * FROM signing_keys WHERE revoked_at IS NULL AND not_after > ? ORDER BY created_at DESC LIMIT 500").all(now());
+  const rows = keyId
+    ? [getDb().prepare('SELECT * FROM signing_keys WHERE key_id = ?').get(keyId)].filter(Boolean)
+    : getDb().prepare('SELECT * FROM signing_keys WHERE revoked_at IS NULL AND not_after > ? ORDER BY created_at DESC LIMIT 500').all(now());
   return (rows as any[]).map((r) => ({ keyId: r.key_id, scope: r.scope, publicKey: r.public_key, algorithm: 'ed25519', notBefore: r.not_before, notAfter: r.not_after, revoked: !!r.revoked_at }));
 }

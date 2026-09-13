@@ -27,7 +27,11 @@ export interface DisputeSettings {
   onDeadline: 'LOST' | 'UNDER_REVIEW';
   reasonCodes: string[];
 }
-const DEFAULT: DisputeSettings = { responseDays: { wallet: 7, card: 10, mobile_money: 7, bank: 10, national_switch: 15, default: 10 }, onDeadline: 'UNDER_REVIEW', reasonCodes: ['not_received', 'not_as_described', 'duplicate', 'unauthorised', 'amount_incorrect', 'cancelled_service', 'fraud', 'other'] };
+const DEFAULT: DisputeSettings = {
+  responseDays: { wallet: 7, card: 10, mobile_money: 7, bank: 10, national_switch: 15, default: 10 },
+  onDeadline: 'UNDER_REVIEW',
+  reasonCodes: ['not_received', 'not_as_described', 'duplicate', 'unauthorised', 'amount_incorrect', 'cancelled_service', 'fraud', 'other'],
+};
 export const getDisputeSettings = (): DisputeSettings => {
   const s = getSetting<Partial<DisputeSettings>>('disputes', {});
   return { ...DEFAULT, ...s, responseDays: { ...DEFAULT.responseDays, ...(s.responseDays ?? {}) } };
@@ -63,7 +67,35 @@ export interface DisputeView {
   createdAt: string;
   updatedAt: string;
 }
-const toView = (r: any): DisputeView => ({ id: r.id, merchantId: r.merchant_user_id, customerId: r.customer_user_id, intentId: r.intent_id, transactionId: r.transaction_id, gatewayPaymentId: r.gateway_payment_id, chargebackId: r.chargeback_id, switchPaymentId: r.switch_payment_id, openedBy: r.opened_by, reasonCode: r.reason_code, reason: r.reason, amount: { valueMinor: r.amount_minor, currency: r.currency }, rail: r.rail, status: r.status, deadlineAt: r.deadline_at, responsibleInstitution: r.responsible_institution, evidence: parseJson(r.evidence, []), merchantResponse: r.merchant_response, respondedAt: r.responded_at, decision: r.decision, decisionReason: r.decision_reason, decidedBy: r.decided_by, decidedAt: r.decided_at, holdId: r.hold_id, refundId: r.refund_id, createdAt: r.created_at, updatedAt: r.updated_at });
+const toView = (r: any): DisputeView => ({
+  id: r.id,
+  merchantId: r.merchant_user_id,
+  customerId: r.customer_user_id,
+  intentId: r.intent_id,
+  transactionId: r.transaction_id,
+  gatewayPaymentId: r.gateway_payment_id,
+  chargebackId: r.chargeback_id,
+  switchPaymentId: r.switch_payment_id,
+  openedBy: r.opened_by,
+  reasonCode: r.reason_code,
+  reason: r.reason,
+  amount: { valueMinor: r.amount_minor, currency: r.currency },
+  rail: r.rail,
+  status: r.status,
+  deadlineAt: r.deadline_at,
+  responsibleInstitution: r.responsible_institution,
+  evidence: parseJson(r.evidence, []),
+  merchantResponse: r.merchant_response,
+  respondedAt: r.responded_at,
+  decision: r.decision,
+  decisionReason: r.decision_reason,
+  decidedBy: r.decided_by,
+  decidedAt: r.decided_at,
+  holdId: r.hold_id,
+  refundId: r.refund_id,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
 
 export interface OpenDisputeInput {
   transactionId?: string | null;
@@ -106,7 +138,30 @@ export function openDispute(input: OpenDisputeInput, actor: Actor): DisputeView 
   const id = `dp_${shortCode(14).toLowerCase()}`;
   const deadline = new Date(Date.now() + days * 86_400_000).toISOString();
   db.transaction(() => {
-    db.prepare('INSERT INTO disputes (id, merchant_user_id, customer_user_id, intent_id, transaction_id, gateway_payment_id, chargeback_id, switch_payment_id, opened_by, reason_code, reason, amount_minor, currency, rail, status, deadline_at, responsible_institution, evidence, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, merchant.id, tx!.sender_user_id, intentId, tx!.id, input.gatewayPaymentId ?? null, input.chargebackId ?? null, input.switchPaymentId ?? null, input.openedBy, input.reasonCode, input.reason ?? null, amount, tx!.currency, rail, 'OPEN', deadline, input.responsibleInstitution ?? null, JSON.stringify(input.evidenceText ? [{ by: actor.id ?? input.openedBy, role: input.openedBy, at: now(), text: input.evidenceText, files: [] }] : []), now(), now());
+    db.prepare(
+      'INSERT INTO disputes (id, merchant_user_id, customer_user_id, intent_id, transaction_id, gateway_payment_id, chargeback_id, switch_payment_id, opened_by, reason_code, reason, amount_minor, currency, rail, status, deadline_at, responsible_institution, evidence, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      id,
+      merchant.id,
+      tx!.sender_user_id,
+      intentId,
+      tx!.id,
+      input.gatewayPaymentId ?? null,
+      input.chargebackId ?? null,
+      input.switchPaymentId ?? null,
+      input.openedBy,
+      input.reasonCode,
+      input.reason ?? null,
+      amount,
+      tx!.currency,
+      rail,
+      'OPEN',
+      deadline,
+      input.responsibleInstitution ?? null,
+      JSON.stringify(input.evidenceText ? [{ by: actor.id ?? input.openedBy, role: input.openedBy, at: now(), text: input.evidenceText, files: [] }] : []),
+      now(),
+      now(),
+    );
     // the disputed amount stays in the merchant wallet but is no longer available or settleable
     try {
       const wallet = getUserWallet(merchant.id, tx!.currency);
@@ -123,8 +178,15 @@ export function openDispute(input: OpenDisputeInput, actor: Actor): DisputeView 
   recordEvent('chargeback', id, 'dispute.opened', actor, { transactionId: tx.id, amount, reasonCode: input.reasonCode, openedBy: input.openedBy, deadline, rail });
   const view = getDispute(null, id);
   emitEvent(merchant.id, 'payment_intent.disputed', { dispute: view }, { resource: { type: 'dispute', id } });
-  publish('dispute.opened', { disputeId: id, merchantId: merchant.id, reasonCode: input.reasonCode, amountMinor: amount, currency: tx.currency, openedBy: input.openedBy }, { aggregateId: id, tenantId: merchant.id });
-  notify(merchant.id, 'Payment disputed', `${amount / 100} ${tx.currency}: ${input.reasonCode.replace(/_/g, ' ')}. Respond with evidence before ${deadline.slice(0, 10)}.`, { kind: 'chargeback', disputeId: id });
+  publish(
+    'dispute.opened',
+    { disputeId: id, merchantId: merchant.id, reasonCode: input.reasonCode, amountMinor: amount, currency: tx.currency, openedBy: input.openedBy },
+    { aggregateId: id, tenantId: merchant.id },
+  );
+  notify(merchant.id, 'Payment disputed', `${amount / 100} ${tx.currency}: ${input.reasonCode.replace(/_/g, ' ')}. Respond with evidence before ${deadline.slice(0, 10)}.`, {
+    kind: 'chargeback',
+    disputeId: id,
+  });
   return view;
 }
 
@@ -148,7 +210,11 @@ export function listDisputes(filter: { merchantId?: string | null; customerId?: 
     where.push('status = ?');
     params.push(filter.status);
   }
-  return (getDb().prepare(`SELECT * FROM disputes ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT ?`).all(...params, Math.min(200, filter.limit ?? 50)) as any[]).map(toView);
+  return (
+    getDb()
+      .prepare(`SELECT * FROM disputes ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT ?`)
+      .all(...params, Math.min(200, filter.limit ?? 50)) as any[]
+  ).map(toView);
 }
 
 const OPEN: DisputeStatus[] = ['OPEN', 'EVIDENCE_REQUESTED', 'UNDER_REVIEW'];
@@ -158,7 +224,9 @@ export function addEvidence(id: string, by: { id: string; role: string }, text: 
   const d = getDispute(null, id);
   if (!OPEN.includes(d.status)) throw conflict(`Dispute is ${d.status}`, 'dispute_closed');
   if (!text.trim() && !files.length) throw badRequest('Evidence needs text or files', 'evidence_required');
-  getDb().prepare('UPDATE disputes SET evidence = ?, updated_at = ? WHERE id = ?').run(JSON.stringify([...d.evidence, { by: by.id, role: by.role, at: now(), text, files }]), now(), id);
+  getDb()
+    .prepare('UPDATE disputes SET evidence = ?, updated_at = ? WHERE id = ?')
+    .run(JSON.stringify([...d.evidence, { by: by.id, role: by.role, at: now(), text, files }]), now(), id);
   recordEvent('chargeback', id, 'dispute.evidence', { type: by.role === 'admin' ? 'admin' : by.role === 'merchant' ? 'merchant' : 'user', id: by.id }, { chars: text.length, files: files.length });
   return getDispute(null, id);
 }
@@ -204,7 +272,16 @@ export async function decideDispute(id: string, decision: 'WON' | 'LOST', admin:
       }
     }
   } else releaseHoldsFor('dispute', id, actor, 'dispute won');
-  db.prepare('UPDATE disputes SET status = ?, decision = ?, decision_reason = ?, decided_by = ?, decided_at = ?, refund_id = ?, updated_at = ? WHERE id = ?').run(decision, decision, reason, admin.id, now(), refundId, now(), id);
+  db.prepare('UPDATE disputes SET status = ?, decision = ?, decision_reason = ?, decided_by = ?, decided_at = ?, refund_id = ?, updated_at = ? WHERE id = ?').run(
+    decision,
+    decision,
+    reason,
+    admin.id,
+    now(),
+    refundId,
+    now(),
+    id,
+  );
   if (d.intentId) {
     const st = (db.prepare('SELECT status FROM payment_intents WHERE id = ?').get(d.intentId) as any)?.status;
     if (st === 'DISPUTED' && decision === 'WON') db.prepare("UPDATE payment_intents SET status = 'SETTLED', updated_at = ? WHERE id = ?").run(now(), d.intentId);
@@ -212,7 +289,10 @@ export async function decideDispute(id: string, decision: 'WON' | 'LOST', admin:
   recordEvent('chargeback', id, `dispute.${decision.toLowerCase()}`, actor, { reason, refundId });
   const view = getDispute(null, id);
   emitEvent(d.merchantId, 'payment_intent.disputed', { dispute: view }, { resource: { type: 'dispute', id } });
-  notify(d.merchantId, decision === 'WON' ? 'Dispute won' : 'Dispute lost', decision === 'WON' ? 'The hold on the disputed amount was released.' : 'The disputed amount was refunded to the payer.', { kind: 'chargeback', disputeId: id });
+  notify(d.merchantId, decision === 'WON' ? 'Dispute won' : 'Dispute lost', decision === 'WON' ? 'The hold on the disputed amount was released.' : 'The disputed amount was refunded to the payer.', {
+    kind: 'chargeback',
+    disputeId: id,
+  });
   return view;
 }
 
@@ -230,7 +310,9 @@ export function sweepDisputeDeadlines(): number {
   const settings = getDisputeSettings();
   const rows = getDb().prepare("SELECT id FROM disputes WHERE status IN ('OPEN', 'EVIDENCE_REQUESTED') AND deadline_at < ?").all(now()) as { id: string }[];
   for (const r of rows) {
-    getDb().prepare('UPDATE disputes SET status = ?, updated_at = ? WHERE id = ?').run(settings.onDeadline === 'LOST' ? 'EXPIRED' : 'UNDER_REVIEW', now(), r.id);
+    getDb()
+      .prepare('UPDATE disputes SET status = ?, updated_at = ? WHERE id = ?')
+      .run(settings.onDeadline === 'LOST' ? 'EXPIRED' : 'UNDER_REVIEW', now(), r.id);
     recordEvent('chargeback', r.id, 'dispute.deadline_passed', { type: 'system' }, { outcome: settings.onDeadline });
   }
   return rows.length;
@@ -238,5 +320,14 @@ export function sweepDisputeDeadlines(): number {
 
 export function disputeChronology(id: string) {
   const d = getDispute(null, id);
-  return { dispute: d, events: listEvents({ stream: 'chargeback', subjectId: id, limit: 200 }).items.map((e) => ({ at: e.createdAt, event: e.event, actor: e.actor.type, actorId: e.actor.id ?? null, details: e.details })) };
+  return {
+    dispute: d,
+    events: listEvents({ stream: 'chargeback', subjectId: id, limit: 200 }).items.map((e) => ({
+      at: e.createdAt,
+      event: e.event,
+      actor: e.actor.type,
+      actorId: e.actor.id ?? null,
+      details: e.details,
+    })),
+  };
 }

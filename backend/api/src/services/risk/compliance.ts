@@ -49,7 +49,31 @@ export interface ComplianceCase {
 }
 const toView = (r: any): ComplianceCase => {
   const u = r.user_id ? findUserById(r.user_id) : null;
-  return { id: r.id, kind: r.kind, userId: r.user_id, user: u ? toPublicUser(u) : null, subjectType: r.subject_type, subjectId: r.subject_id, severity: r.severity, status: r.status, title: r.title, summary: r.summary, indicators: parseJson(r.indicators, []), sarDraft: r.sar_draft, sarReference: r.sar_reference, assignedTo: r.assigned_to, openedBy: r.opened_by, decision: r.decision, decisionReason: r.decision_reason, decidedBy: r.decided_by, decidedAt: r.decided_at, closedBy: r.closed_by, closedAt: r.closed_at, createdAt: r.created_at, updatedAt: r.updated_at };
+  return {
+    id: r.id,
+    kind: r.kind,
+    userId: r.user_id,
+    user: u ? toPublicUser(u) : null,
+    subjectType: r.subject_type,
+    subjectId: r.subject_id,
+    severity: r.severity,
+    status: r.status,
+    title: r.title,
+    summary: r.summary,
+    indicators: parseJson(r.indicators, []),
+    sarDraft: r.sar_draft,
+    sarReference: r.sar_reference,
+    assignedTo: r.assigned_to,
+    openedBy: r.opened_by,
+    decision: r.decision,
+    decisionReason: r.decision_reason,
+    decidedBy: r.decided_by,
+    decidedAt: r.decided_at,
+    closedBy: r.closed_by,
+    closedAt: r.closed_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
 };
 
 export interface AmlSettings {
@@ -61,14 +85,29 @@ export interface AmlSettings {
   /** Sanctions-like flag that only raises the score (never blocks by itself). */
   pepPoints: number;
 }
-const DEFAULT_AML: AmlSettings = { highRiskCountries: [], structuring: { window24hCount: 3, nearLimitPct: 80 }, passThrough: { distinctSenders24h: 5, forwardedPct: 80 }, dormantDays: 60, burstMultiplier: 5, pepPoints: 45 };
+const DEFAULT_AML: AmlSettings = {
+  highRiskCountries: [],
+  structuring: { window24hCount: 3, nearLimitPct: 80 },
+  passThrough: { distinctSenders24h: 5, forwardedPct: 80 },
+  dormantDays: 60,
+  burstMultiplier: 5,
+  pepPoints: 45,
+};
 export const getAmlSettings = (): AmlSettings => {
   const s = getSetting<Partial<AmlSettings>>('aml', {});
   return { ...DEFAULT_AML, ...s, structuring: { ...DEFAULT_AML.structuring, ...(s.structuring ?? {}) }, passThrough: { ...DEFAULT_AML.passThrough, ...(s.passThrough ?? {}) } };
 };
 
 /** A suspicious activity report draft from the facts on file. Officers edit it; the platform never files it by itself. */
-export function draftSar(input: { kind: CaseKind; userId?: string | null; subjectType?: string | null; subjectId?: string | null; summary: string; indicators: string[]; amounts?: { valueMinor: number; currency: string }[] }): string {
+export function draftSar(input: {
+  kind: CaseKind;
+  userId?: string | null;
+  subjectType?: string | null;
+  subjectId?: string | null;
+  summary: string;
+  indicators: string[];
+  amounts?: { valueMinor: number; currency: string }[];
+}): string {
   const u = input.userId ? findUserById(input.userId) : null;
   const base = getBaseCurrency();
   const lines = [
@@ -76,12 +115,16 @@ export function draftSar(input: { kind: CaseKind; userId?: string | null; subjec
     `Prepared: ${now()} · Status: draft, not filed · Category: ${input.kind}`,
     '',
     '1. Subject',
-    u ? `   ${u.full_name}${u.business_name ? ` (${u.business_name})` : ''} · @${u.tag} · account ${u.id} · country ${u.country ?? 'n/a'} · KYC tier ${(u as any).kyc_tier ?? 0} · account since ${u.created_at.slice(0, 10)}` : '   No account linked (external party)',
+    u
+      ? `   ${u.full_name}${u.business_name ? ` (${u.business_name})` : ''} · @${u.tag} · account ${u.id} · country ${u.country ?? 'n/a'} · KYC tier ${(u as any).kyc_tier ?? 0} · account since ${u.created_at.slice(0, 10)}`
+      : '   No account linked (external party)',
     '',
     '2. Activity',
     `   ${input.summary}`,
     input.subjectId ? `   Reference: ${input.subjectType ?? 'object'} ${input.subjectId}` : '',
-    input.amounts?.length ? `   Amounts: ${input.amounts.map((a) => formatMoney(a.valueMinor, { code: a.currency, decimals: 2, symbol: a.currency, name: a.currency, rateToBase: 1, enabled: true } as any)).join(', ')} (base currency ${base.code})` : '',
+    input.amounts?.length
+      ? `   Amounts: ${input.amounts.map((a) => formatMoney(a.valueMinor, { code: a.currency, decimals: 2, symbol: a.currency, name: a.currency, rateToBase: 1, enabled: true } as any)).join(', ')} (base currency ${base.code})`
+      : '',
     '',
     '3. Indicators',
     ...input.indicators.map((i) => `   • ${i}`),
@@ -95,7 +138,20 @@ export function draftSar(input: { kind: CaseKind; userId?: string | null; subjec
   return lines.join('\n');
 }
 
-export function openCase(input: { kind: CaseKind; userId?: string | null; subjectType?: string | null; subjectId?: string | null; severity?: CaseSeverity; title: string; summary: string; indicators?: string[]; dedupeKey?: string | null; openedBy?: string | null; amounts?: { valueMinor: number; currency: string }[]; sar?: boolean }): ComplianceCase {
+export function openCase(input: {
+  kind: CaseKind;
+  userId?: string | null;
+  subjectType?: string | null;
+  subjectId?: string | null;
+  severity?: CaseSeverity;
+  title: string;
+  summary: string;
+  indicators?: string[];
+  dedupeKey?: string | null;
+  openedBy?: string | null;
+  amounts?: { valueMinor: number; currency: string }[];
+  sar?: boolean;
+}): ComplianceCase {
   const db = getDb();
   if (input.dedupeKey) {
     const existing = db.prepare("SELECT * FROM compliance_cases WHERE dedupe_key = ? AND status != 'CLOSED'").get(input.dedupeKey) as any;
@@ -105,9 +161,34 @@ export function openCase(input: { kind: CaseKind; userId?: string | null; subjec
   const severity = input.severity ?? 'medium';
   const indicators = input.indicators ?? [];
   const sar = input.sar ?? (severity === 'critical' || input.kind === 'FRAUD');
-  db.prepare('INSERT INTO compliance_cases (id, kind, user_id, subject_type, subject_id, severity, status, title, summary, indicators, sar_draft, opened_by, dedupe_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, input.kind, input.userId ?? null, input.subjectType ?? null, input.subjectId ?? null, severity, 'OPEN', input.title, input.summary, JSON.stringify(indicators), sar ? draftSar({ kind: input.kind, userId: input.userId, subjectType: input.subjectType, subjectId: input.subjectId, summary: input.summary, indicators, amounts: input.amounts }) : null, input.openedBy ?? null, input.dedupeKey ?? null, now(), now());
-  recordEvent('risk', id, 'compliance_case.opened', input.openedBy ? { type: 'admin', id: input.openedBy } : { type: 'system' }, { kind: input.kind, userId: input.userId ?? null, severity, indicators });
-  if (severity === 'critical') for (const a of db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_system = 0 AND status = 'active'").all() as { id: string }[]) notify(a.id, `Compliance case (${input.kind})`, input.title, { kind: 'approval', caseId: id, loud: true });
+  db.prepare(
+    'INSERT INTO compliance_cases (id, kind, user_id, subject_type, subject_id, severity, status, title, summary, indicators, sar_draft, opened_by, dedupe_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(
+    id,
+    input.kind,
+    input.userId ?? null,
+    input.subjectType ?? null,
+    input.subjectId ?? null,
+    severity,
+    'OPEN',
+    input.title,
+    input.summary,
+    JSON.stringify(indicators),
+    sar ? draftSar({ kind: input.kind, userId: input.userId, subjectType: input.subjectType, subjectId: input.subjectId, summary: input.summary, indicators, amounts: input.amounts }) : null,
+    input.openedBy ?? null,
+    input.dedupeKey ?? null,
+    now(),
+    now(),
+  );
+  recordEvent('risk', id, 'compliance_case.opened', input.openedBy ? { type: 'admin', id: input.openedBy } : { type: 'system' }, {
+    kind: input.kind,
+    userId: input.userId ?? null,
+    severity,
+    indicators,
+  });
+  if (severity === 'critical')
+    for (const a of db.prepare("SELECT id FROM users WHERE role = 'admin' AND is_system = 0 AND status = 'active'").all() as { id: string }[])
+      notify(a.id, `Compliance case (${input.kind})`, input.title, { kind: 'approval', caseId: id, loud: true });
   return getCase(id);
 }
 export function getCase(id: string): ComplianceCase {
@@ -115,16 +196,30 @@ export function getCase(id: string): ComplianceCase {
   if (!r) throw notFound('Compliance case not found', 'case_not_found');
   return toView(r);
 }
-export function listCases(filter: { status?: string | null; kind?: string | null; userId?: string | null; assignedTo?: string | null; severity?: string | null; limit?: number } = {}): ComplianceCase[] {
+export function listCases(
+  filter: { status?: string | null; kind?: string | null; userId?: string | null; assignedTo?: string | null; severity?: string | null; limit?: number } = {},
+): ComplianceCase[] {
   const where: string[] = [];
   const params: unknown[] = [];
-  for (const [col, val] of [['status', filter.status], ['kind', filter.kind], ['user_id', filter.userId], ['assigned_to', filter.assignedTo], ['severity', filter.severity]] as const) {
+  for (const [col, val] of [
+    ['status', filter.status],
+    ['kind', filter.kind],
+    ['user_id', filter.userId],
+    ['assigned_to', filter.assignedTo],
+    ['severity', filter.severity],
+  ] as const) {
     if (val) {
       where.push(`${col} = ?`);
       params.push(val);
     }
   }
-  return (getDb().prepare(`SELECT * FROM compliance_cases ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at DESC LIMIT ?`).all(...params, Math.min(500, filter.limit ?? 100)) as any[]).map(toView);
+  return (
+    getDb()
+      .prepare(
+        `SELECT * FROM compliance_cases ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at DESC LIMIT ?`,
+      )
+      .all(...params, Math.min(500, filter.limit ?? 100)) as any[]
+  ).map(toView);
 }
 export function assignCase(id: string, officerId: string, actor: Actor): ComplianceCase {
   const c = getCase(id);
@@ -153,7 +248,11 @@ export function decideCase(id: string, decision: (typeof CASE_DECISIONS)[number]
   if (c.status === 'CLOSED') throw conflict('Case is closed', 'case_closed');
   if (!CASE_DECISIONS.includes(decision)) throw badRequest('Unknown decision', 'validation_error');
   if (decision === 'SAR_FILED' && !sarReference) throw badRequest('A filed report needs its reference', 'sar_reference_required');
-  getDb().prepare("UPDATE compliance_cases SET status = 'DECIDED', decision = ?, decision_reason = ?, decided_by = ?, decided_at = ?, sar_reference = COALESCE(?, sar_reference), updated_at = ? WHERE id = ?").run(decision, reason, adminId, now(), sarReference ?? null, now(), id);
+  getDb()
+    .prepare(
+      "UPDATE compliance_cases SET status = 'DECIDED', decision = ?, decision_reason = ?, decided_by = ?, decided_at = ?, sar_reference = COALESCE(?, sar_reference), updated_at = ? WHERE id = ?",
+    )
+    .run(decision, reason, adminId, now(), sarReference ?? null, now(), id);
   recordEvent('risk', id, 'compliance_case.decided', { type: 'admin', id: adminId }, { decision, reason, sarReference: sarReference ?? null });
   return getCase(id);
 }
@@ -170,7 +269,11 @@ export function complianceOverview() {
   const db = getDb();
   const open = db.prepare("SELECT kind, severity, COUNT(*) n, MIN(created_at) oldest FROM compliance_cases WHERE status != 'CLOSED' GROUP BY kind, severity").all() as any[];
   const sar = (db.prepare("SELECT COUNT(*) c FROM compliance_cases WHERE sar_draft IS NOT NULL AND status != 'CLOSED'").get() as any).c as number;
-  return { open: open.map((r) => ({ kind: r.kind, severity: r.severity, count: r.n, oldestAgeHours: Math.floor((Date.now() - Date.parse(r.oldest)) / 3600_000) })), sarDrafts: sar, sources: listSources() };
+  return {
+    open: open.map((r) => ({ kind: r.kind, severity: r.severity, count: r.n, oldestAgeHours: Math.floor((Date.now() - Date.parse(r.oldest)) / 3600_000) })),
+    sarDrafts: sar,
+    sources: listSources(),
+  };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -191,7 +294,11 @@ export function runAmlScan(at = new Date()): { scanned: number; opened: number; 
   const since7 = new Date(at.getTime() - 7 * 86_400_000).toISOString();
   const findings: { pattern: string; userId: string }[] = [];
   let opened = 0;
-  const active = db.prepare("SELECT DISTINCT user_id FROM (SELECT sender_user_id user_id FROM transactions WHERE created_at >= ? UNION SELECT receiver_user_id FROM transactions WHERE created_at >= ?) WHERE user_id IS NOT NULL").all(since24, since24) as { user_id: string }[];
+  const active = db
+    .prepare(
+      'SELECT DISTINCT user_id FROM (SELECT sender_user_id user_id FROM transactions WHERE created_at >= ? UNION SELECT receiver_user_id FROM transactions WHERE created_at >= ?) WHERE user_id IS NOT NULL',
+    )
+    .all(since24, since24) as { user_id: string }[];
   const open = (pattern: string, userId: string, severity: CaseSeverity, title: string, summary: string, indicators: string[], amounts?: { valueMinor: number; currency: string }[]) => {
     const before = (db.prepare('SELECT COUNT(*) c FROM compliance_cases').get() as any).c;
     openCase({ kind: 'AML', userId, severity, title, summary, indicators, dedupeKey: `aml:${pattern}:${userId}:${day}`, amounts, sar: severity !== 'low' });
@@ -205,40 +312,87 @@ export function runAmlScan(at = new Date()): { scanned: number; opened: number; 
     // Structuring: repeated movements just under the per-transaction limit
     const limits = tierLimitsFor(u);
     if (limits?.perTransaction) {
-      const out = db.prepare("SELECT amount, currency FROM transactions WHERE sender_user_id = ? AND status IN ('pending','completed') AND created_at >= ?").all(uid, since24) as { amount: number; currency: string }[];
+      const out = db.prepare("SELECT amount, currency FROM transactions WHERE sender_user_id = ? AND status IN ('pending','completed') AND created_at >= ?").all(uid, since24) as {
+        amount: number;
+        currency: string;
+      }[];
       const near = out.filter((r) => {
         const b = safeBase(r.amount, r.currency);
         return b >= (limits.perTransaction * s.structuring.nearLimitPct) / 100 && b <= limits.perTransaction;
       });
-      if (near.length >= s.structuring.window24hCount) open('structuring', uid, 'high', 'Possible structuring below the transaction limit', `${near.length} movements at ${s.structuring.nearLimitPct}–100% of the tier ${u.kyc_tier} per-transaction limit within 24 hours.`, [`${near.length} near-limit movements in 24h`, `limit ${limits.perTransaction} base minor`], near.map((n) => ({ valueMinor: n.amount, currency: n.currency })));
+      if (near.length >= s.structuring.window24hCount)
+        open(
+          'structuring',
+          uid,
+          'high',
+          'Possible structuring below the transaction limit',
+          `${near.length} movements at ${s.structuring.nearLimitPct}–100% of the tier ${u.kyc_tier} per-transaction limit within 24 hours.`,
+          [`${near.length} near-limit movements in 24h`, `limit ${limits.perTransaction} base minor`],
+          near.map((n) => ({ valueMinor: n.amount, currency: n.currency })),
+        );
     }
     // Pass-through / mule: many distinct senders then most of it forwarded out
-    const inRows = db.prepare("SELECT sender_user_id, amount, currency FROM transactions WHERE receiver_user_id = ? AND status = 'completed' AND created_at >= ? AND sender_user_id IS NOT NULL AND sender_user_id != ?").all(uid, since24, uid) as any[];
+    const inRows = db
+      .prepare(
+        "SELECT sender_user_id, amount, currency FROM transactions WHERE receiver_user_id = ? AND status = 'completed' AND created_at >= ? AND sender_user_id IS NOT NULL AND sender_user_id != ?",
+      )
+      .all(uid, since24, uid) as any[];
     const senders = new Set(inRows.map((r) => r.sender_user_id));
     if (senders.size >= s.passThrough.distinctSenders24h) {
       const inBase = inRows.reduce((a, r) => a + safeBase(r.amount, r.currency), 0);
       const outRows = db.prepare("SELECT amount, currency FROM transactions WHERE sender_user_id = ? AND status IN ('pending','completed') AND created_at >= ?").all(uid, since24) as any[];
       const outBase = outRows.reduce((a, r) => a + safeBase(r.amount, r.currency), 0);
-      if (inBase > 0 && outBase >= (inBase * s.passThrough.forwardedPct) / 100) open('pass_through', uid, 'high', 'Funds collected from many senders and forwarded', `Received from ${senders.size} distinct senders in 24h and moved ${Math.round((outBase / inBase) * 100)}% of it out.`, [`${senders.size} distinct senders in 24h`, `${Math.round((outBase / inBase) * 100)}% forwarded within 24h`]);
+      if (inBase > 0 && outBase >= (inBase * s.passThrough.forwardedPct) / 100)
+        open(
+          'pass_through',
+          uid,
+          'high',
+          'Funds collected from many senders and forwarded',
+          `Received from ${senders.size} distinct senders in 24h and moved ${Math.round((outBase / inBase) * 100)}% of it out.`,
+          [`${senders.size} distinct senders in 24h`, `${Math.round((outBase / inBase) * 100)}% forwarded within 24h`],
+        );
     }
     // Dormant then burst
-    const before7 = db.prepare("SELECT MAX(created_at) m FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND created_at < ?").get(uid, uid, since7) as any;
+    const before7 = db.prepare('SELECT MAX(created_at) m FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND created_at < ?').get(uid, uid, since7) as any;
     if (before7?.m && at.getTime() - Date.parse(before7.m) > s.dormantDays * 86_400_000) {
-      const recent = db.prepare("SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM transactions WHERE sender_user_id = ? AND created_at >= ?").get(uid, since7) as any;
-      const priorAvg = db.prepare("SELECT COUNT(*) c FROM transactions WHERE sender_user_id = ? AND created_at < ?").get(uid, since7) as any;
+      const recent = db.prepare('SELECT COUNT(*) c, COALESCE(SUM(amount),0) s FROM transactions WHERE sender_user_id = ? AND created_at >= ?').get(uid, since7) as any;
+      const priorAvg = db.prepare('SELECT COUNT(*) c FROM transactions WHERE sender_user_id = ? AND created_at < ?').get(uid, since7) as any;
       const ageDays = Math.max(7, (Date.parse(before7.m) - Date.parse(u.created_at)) / 86_400_000);
       const weeklyBefore = (priorAvg.c / ageDays) * 7;
-      if (recent.c >= 3 && recent.c >= weeklyBefore * s.burstMultiplier) open('dormant_burst', uid, 'medium', 'Dormant account suddenly active', `No activity for ${Math.floor((at.getTime() - Date.parse(before7.m)) / 86_400_000)} days, then ${recent.c} outgoing movements in a week.`, [`dormant ${s.dormantDays}+ days`, `${recent.c} movements this week vs ${weeklyBefore.toFixed(1)}/week before`]);
+      if (recent.c >= 3 && recent.c >= weeklyBefore * s.burstMultiplier)
+        open(
+          'dormant_burst',
+          uid,
+          'medium',
+          'Dormant account suddenly active',
+          `No activity for ${Math.floor((at.getTime() - Date.parse(before7.m)) / 86_400_000)} days, then ${recent.c} outgoing movements in a week.`,
+          [`dormant ${s.dormantDays}+ days`, `${recent.c} movements this week vs ${weeklyBefore.toFixed(1)}/week before`],
+        );
     }
     // High-risk counterparties
     if (s.highRiskCountries.length) {
-      const cps = db.prepare("SELECT DISTINCT u.country FROM transactions t JOIN users u ON u.id = CASE WHEN t.sender_user_id = ? THEN t.receiver_user_id ELSE t.sender_user_id END WHERE (t.sender_user_id = ? OR t.receiver_user_id = ?) AND t.created_at >= ? AND u.country IS NOT NULL").all(uid, uid, uid, since24) as { country: string }[];
+      const cps = db
+        .prepare(
+          'SELECT DISTINCT u.country FROM transactions t JOIN users u ON u.id = CASE WHEN t.sender_user_id = ? THEN t.receiver_user_id ELSE t.sender_user_id END WHERE (t.sender_user_id = ? OR t.receiver_user_id = ?) AND t.created_at >= ? AND u.country IS NOT NULL',
+        )
+        .all(uid, uid, uid, since24) as { country: string }[];
       const hits = cps.map((c) => c.country.toUpperCase()).filter((c) => s.highRiskCountries.map((x) => x.toUpperCase()).includes(c));
-      if (hits.length) open('high_risk_country', uid, 'medium', 'Counterparty in a high-risk jurisdiction', `Movements with counterparties registered in ${[...new Set(hits)].join(', ')} in the last 24 hours.`, hits.map((h) => `counterparty country ${h}`));
+      if (hits.length)
+        open(
+          'high_risk_country',
+          uid,
+          'medium',
+          'Counterparty in a high-risk jurisdiction',
+          `Movements with counterparties registered in ${[...new Set(hits)].join(', ')} in the last 24 hours.`,
+          hits.map((h) => `counterparty country ${h}`),
+        );
     }
     // Politically exposed person on the list
     const pep = db.prepare("SELECT value FROM sanctions_entries WHERE kind = 'pep' AND normalized = ?").get(normalizeName(u.full_name)) as any;
-    if (pep) open('pep', uid, 'medium', 'Politically exposed person is transacting', `${u.full_name} matches the PEP list entry "${pep.value}"; enhanced due diligence applies.`, [`pep list match: ${pep.value}`]);
+    if (pep)
+      open('pep', uid, 'medium', 'Politically exposed person is transacting', `${u.full_name} matches the PEP list entry "${pep.value}"; enhanced due diligence applies.`, [
+        `pep list match: ${pep.value}`,
+      ]);
   }
   recordEvent('risk', `aml:${day}`, 'aml.scan', { type: 'system' }, { scanned: active.length, opened, findings: findings.length });
   return { scanned: active.length, opened, findings };
@@ -260,7 +414,19 @@ export interface SanctionsSource {
   lastError: string | null;
   createdAt: string;
 }
-const toSource = (r: any): SanctionsSource => ({ id: r.id, name: r.name, url: r.url, format: r.format, kind: r.kind, enabled: !!r.enabled, lastVersion: r.last_version, lastCount: r.last_count, lastRefreshedAt: r.last_refreshed_at, lastError: r.last_error, createdAt: r.created_at });
+const toSource = (r: any): SanctionsSource => ({
+  id: r.id,
+  name: r.name,
+  url: r.url,
+  format: r.format,
+  kind: r.kind,
+  enabled: !!r.enabled,
+  lastVersion: r.last_version,
+  lastCount: r.last_count,
+  lastRefreshedAt: r.last_refreshed_at,
+  lastError: r.last_error,
+  createdAt: r.created_at,
+});
 export function listSources(): SanctionsSource[] {
   return (getDb().prepare('SELECT * FROM sanctions_sources ORDER BY name').all() as any[]).map(toSource);
 }
@@ -268,8 +434,25 @@ export function upsertSource(input: { id?: string | null; name: string; url?: st
   const db = getDb();
   const id = input.id ?? `src_${shortCode(8).toLowerCase()}`;
   const existing = db.prepare('SELECT * FROM sanctions_sources WHERE id = ?').get(id) as any;
-  if (existing) db.prepare('UPDATE sanctions_sources SET name = ?, url = ?, format = ?, kind = ?, enabled = ? WHERE id = ?').run(input.name, input.url ?? existing.url, input.format ?? existing.format, input.kind ?? existing.kind, (input.enabled ?? !!existing.enabled) ? 1 : 0, id);
-  else db.prepare('INSERT INTO sanctions_sources (id, name, url, format, kind, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, input.name, input.url ?? null, input.format ?? 'csv', input.kind ?? 'sanctions', (input.enabled ?? true) ? 1 : 0, now());
+  if (existing)
+    db.prepare('UPDATE sanctions_sources SET name = ?, url = ?, format = ?, kind = ?, enabled = ? WHERE id = ?').run(
+      input.name,
+      input.url ?? existing.url,
+      input.format ?? existing.format,
+      input.kind ?? existing.kind,
+      (input.enabled ?? !!existing.enabled) ? 1 : 0,
+      id,
+    );
+  else
+    db.prepare('INSERT INTO sanctions_sources (id, name, url, format, kind, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      id,
+      input.name,
+      input.url ?? null,
+      input.format ?? 'csv',
+      input.kind ?? 'sanctions',
+      (input.enabled ?? true) ? 1 : 0,
+      now(),
+    );
   return toSource(db.prepare('SELECT * FROM sanctions_sources WHERE id = ?').get(id));
 }
 export interface SanctionRow {
@@ -303,7 +486,11 @@ export function importSanctionsRows(sourceId: string, rows: SanctionRow[], versi
 export function parseSanctionsCsv(text: string): SanctionRow[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   if (!lines.length) return [];
-  const split = (l: string) => l.match(/("([^"]|"")*"|[^,]*)(,|$)/g)?.map((c) => c.replace(/,$/, '').replace(/^"|"$/g, '').replace(/""/g, '"').trim()).filter((_, i, a) => i < a.length - 1 || _ !== '') ?? [];
+  const split = (l: string) =>
+    l
+      .match(/("([^"]|"")*"|[^,]*)(,|$)/g)
+      ?.map((c) => c.replace(/,$/, '').replace(/^"|"$/g, '').replace(/""/g, '"').trim())
+      .filter((_, i, a) => i < a.length - 1 || _ !== '') ?? [];
   const header = split(lines[0]).map((h) => h.toLowerCase());
   const out: SanctionRow[] = [];
   if (header.includes('kind') && header.includes('value')) {

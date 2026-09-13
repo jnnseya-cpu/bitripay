@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Button } from './ui';
 
 declare global {
-  interface Window { Stripe?: (key: string) => any }
+  interface Window {
+    Stripe?: (key: string) => any;
+  }
 }
 
 function loadStripeJs(): Promise<void> {
@@ -54,7 +56,9 @@ export function StripePayment({ clientSecret, publishableKey, onComplete }: { cl
     <div>
       {error && <Alert kind="error">{error}</Alert>}
       <div ref={mount} className="mb" />
-      <Button block loading={loading} disabled={!ready} onClick={confirm}>Pay securely</Button>
+      <Button block loading={loading} disabled={!ready} onClick={confirm}>
+        Pay securely
+      </Button>
     </div>
   );
 }

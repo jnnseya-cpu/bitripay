@@ -16,6 +16,7 @@ import { scoreFraud } from './risk/fraud';
 import { openCase } from './risk/compliance';
 import { getRiskSettings } from './settings';
 import { toBase } from './currencies';
+import { nationalSignificant } from '@bitripay/shared';
 import { recordEvent } from './events';
 import { publish } from './bus';
 
@@ -54,16 +55,23 @@ export interface RiskAssessment {
 }
 
 export function normalizeName(v: string) {
-  return v.toLowerCase().normalize('NFKD').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  return v
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9 ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 export function normalizePhoneDigits(v: string) {
-  return v.replace(/\D/g, '').slice(-9);
+  return nationalSignificant(v) ?? v.replace(/\D/g, '');
 }
 
 export function addSanction(kind: 'name' | 'phone' | 'email' | 'country' | 'pep', value: string, note?: string | null, createdBy?: string | null) {
   const normalized = kind === 'name' || kind === 'pep' ? normalizeName(value) : kind === 'phone' ? normalizePhoneDigits(value) : value.trim().toLowerCase();
   const id = uuid();
-  getDb().prepare('INSERT INTO sanctions_entries (id, kind, value, normalized, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, kind, value, normalized, note ?? null, createdBy ?? null, now());
+  getDb()
+    .prepare('INSERT INTO sanctions_entries (id, kind, value, normalized, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, kind, value, normalized, note ?? null, createdBy ?? null, now());
   return { id, kind, value, normalized, note: note ?? null, createdAt: now() };
 }
 export function listSanctions(filter: { source?: string | null; kind?: string | null; limit?: number } = {}) {
@@ -77,7 +85,21 @@ export function listSanctions(filter: { source?: string | null; kind?: string | 
     where.push('kind = ?');
     params.push(filter.kind);
   }
-  return (getDb().prepare(`SELECT * FROM sanctions_entries ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT ?`).all(...params, Math.min(5000, filter.limit ?? 500)) as any[]).map((r) => ({ id: r.id, kind: r.kind, value: r.value, note: r.note, source: r.source ?? 'manual', externalId: r.external_id ?? null, listVersion: r.list_version ?? null, createdBy: r.created_by, createdAt: r.created_at }));
+  return (
+    getDb()
+      .prepare(`SELECT * FROM sanctions_entries ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT ?`)
+      .all(...params, Math.min(5000, filter.limit ?? 500)) as any[]
+  ).map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    value: r.value,
+    note: r.note,
+    source: r.source ?? 'manual',
+    externalId: r.external_id ?? null,
+    listVersion: r.list_version ?? null,
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+  }));
 }
 export function deleteSanction(id: string) {
   getDb().prepare('DELETE FROM sanctions_entries WHERE id = ?').run(id);
@@ -131,8 +153,10 @@ export function assessRisk(input: RiskInput): RiskAssessment {
   if (input.userId) {
     const hourAgo = new Date(Date.now() - 3600_000).toISOString();
     const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
-    const perHour = (db.prepare('SELECT COUNT(*) c FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND created_at >= ?').get(input.userId, input.userId, hourAgo) as any).c as number;
-    const perDay = (db.prepare('SELECT COUNT(*) c FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND created_at >= ?').get(input.userId, input.userId, dayAgo) as any).c as number;
+    const perHour = (db.prepare('SELECT COUNT(*) c FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND created_at >= ?').get(input.userId, input.userId, hourAgo) as any)
+      .c as number;
+    const perDay = (db.prepare('SELECT COUNT(*) c FROM transactions WHERE (sender_user_id = ? OR receiver_user_id = ?) AND created_at >= ?').get(input.userId, input.userId, dayAgo) as any)
+      .c as number;
     if (s.maxTxPerHour && perHour >= s.maxTxPerHour) flags.push(`velocity:hour:${perHour}`);
     if (s.maxTxPerDay && perDay >= s.maxTxPerDay) flags.push(`velocity:day:${perDay}`);
   }
@@ -148,14 +172,44 @@ export function assessRisk(input: RiskInput): RiskAssessment {
       if (base > s.coolingOffAmount) flags.push(`cooling_off:new_beneficiary:${Math.round(ageMs / 60_000)}m`);
     }
   }
-  const fraud = scoreFraud({ userId: input.userId, kind: input.kind, amount: input.amount, currency: input.currency, subjectType: input.subjectType, subjectId: input.subjectId, method: input.method, recipientUserId: input.recipientUserId, newBeneficiary: input.newBeneficiary, deviceHash: input.deviceHash, ipCountry: input.ipCountry, flags });
+  const fraud = scoreFraud({
+    userId: input.userId,
+    kind: input.kind,
+    amount: input.amount,
+    currency: input.currency,
+    subjectType: input.subjectType,
+    subjectId: input.subjectId,
+    method: input.method,
+    recipientUserId: input.recipientUserId,
+    newBeneficiary: input.newBeneficiary,
+    deviceHash: input.deviceHash,
+    ipCountry: input.ipCountry,
+    flags,
+  });
   let action: RiskAssessment['action'] = fraud.decision.action;
   // Inbound money has nobody to step up: a step-up decision simply lets it in (review and block still hold it).
   if (action === 'step_up' && (input.kind === 'payment_in' || input.kind === 'route')) action = 'allow';
   const allFlags = [...flags, ...fraud.factors.filter((f) => !['sanctions', 'cooling_off', 'velocity_legacy_hour', 'velocity_legacy_day'].includes(f.code)).map((f) => `fraud:${f.code}`)];
   const id = uuid();
-  db.prepare('INSERT INTO risk_events (id, user_id, subject_type, subject_id, kind, score, flags, action, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, input.userId ?? null, input.subjectType, input.subjectId ?? null, input.kind, fraud.score, JSON.stringify(allFlags), action, now());
-  if (action !== 'allow') recordEvent('risk', input.subjectId ?? id, `risk.${action}`, { type: 'system' }, { kind: input.kind, score: fraud.score, flags: allFlags, userId: input.userId ?? null, rule: fraud.decision.rule?.id ?? null, policy: `${fraud.decision.policyId}@v${fraud.decision.version}` });
+  db.prepare('INSERT INTO risk_events (id, user_id, subject_type, subject_id, kind, score, flags, action, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id,
+    input.userId ?? null,
+    input.subjectType,
+    input.subjectId ?? null,
+    input.kind,
+    fraud.score,
+    JSON.stringify(allFlags),
+    action,
+    now(),
+  );
+  if (action !== 'allow')
+    recordEvent(
+      'risk',
+      input.subjectId ?? id,
+      `risk.${action}`,
+      { type: 'system' },
+      { kind: input.kind, score: fraud.score, flags: allFlags, userId: input.userId ?? null, rule: fraud.decision.rule?.id ?? null, policy: `${fraud.decision.policyId}@v${fraud.decision.version}` },
+    );
   if (action === 'block' && input.userId) {
     openCase({
       kind: sanctions.length ? 'SANCTIONS' : 'FRAUD',
@@ -171,7 +225,13 @@ export function assessRisk(input: RiskInput): RiskAssessment {
       sar: true,
     });
   }
-  return { score: fraud.score, flags: allFlags, action, fraud: { id: fraud.id, score: fraud.score, band: fraud.band, factors: fraud.factors }, policy: { id: fraud.decision.policyId, version: fraud.decision.version, rule: fraud.decision.rule?.id ?? null, reason: fraud.decision.reason } };
+  return {
+    score: fraud.score,
+    flags: allFlags,
+    action,
+    fraud: { id: fraud.id, score: fraud.score, band: fraud.band, factors: fraud.factors },
+    policy: { id: fraud.decision.policyId, version: fraud.decision.version, rule: fraud.decision.rule?.id ?? null, reason: fraud.decision.reason },
+  };
 }
 
 /** Outbound guard: refuse blocked movements with a clear reason; ask for step-up when the policy says so. */
@@ -179,16 +239,26 @@ export function enforceOutboundRisk(input: RiskInput): RiskAssessment {
   const r = assessRisk(input);
   if (r.action === 'block') {
     const cooling = r.flags.find((f) => f.startsWith('cooling_off'));
-    if (cooling) throw forbidden(`This beneficiary was added recently. Larger amounts can be sent once the ${getRiskSettings().coolingOffMinutes}-minute cooling-off period has passed.`, 'cooling_off');
+    if (cooling)
+      throw forbidden(`This beneficiary was added recently. Larger amounts can be sent once the ${getRiskSettings().coolingOffMinutes}-minute cooling-off period has passed.`, 'cooling_off');
     if (r.flags.some((f) => f.startsWith('sanctions'))) {
-      publish('sanctions.hit', { userId: input.userId ?? null, kind: input.kind, hits: r.flags.filter((f) => f.startsWith('sanctions')), amountMinor: input.amount, currency: input.currency }, { aggregateId: input.userId ?? input.subjectId ?? null });
+      publish(
+        'sanctions.hit',
+        { userId: input.userId ?? null, kind: input.kind, hits: r.flags.filter((f) => f.startsWith('sanctions')), amountMinor: input.amount, currency: input.currency },
+        { aggregateId: input.userId ?? input.subjectId ?? null },
+      );
       throw forbidden('This transaction cannot be processed. Please contact support.', 'risk_blocked');
     }
     if (r.flags.some((f) => f.startsWith('velocity:'))) throw forbidden('Too many transactions in a short period. Please try again later.', 'velocity_limit');
     throw forbidden('This transaction cannot be processed right now. Our team has been notified and will contact you if anything is needed.', 'risk_blocked');
   }
   if (r.action === 'step_up' && !input.stepUpVerified) {
-    throw new AppError(403, 'step_up_required', 'Please confirm this transaction with your passkey or authenticator code.', { challenge: 'step_up', score: r.score, rule: r.policy.rule, factors: r.fraud.factors.map((f) => f.code) });
+    throw new AppError(403, 'step_up_required', 'Please confirm this transaction with your passkey or authenticator code.', {
+      challenge: 'step_up',
+      score: r.score,
+      rule: r.policy.rule,
+      factors: r.fraud.factors.map((f) => f.code),
+    });
   }
   return r;
 }
@@ -198,7 +268,10 @@ const LEDGER_HOOK = Symbol.for('bitripay.risk.ledgerHook');
 if (!(globalThis as any)[LEDGER_HOOK]) {
   (globalThis as any)[LEDGER_HOOK] = true;
   preCommitHooks.push(({ input, fromUser, toUser }) => {
-    for (const [role, u] of [['sender', fromUser], ['receiver', toUser]] as const) {
+    for (const [role, u] of [
+      ['sender', fromUser],
+      ['receiver', toUser],
+    ] as const) {
       if (!u || u.is_system) continue;
       const hits = screenSanctions({ name: u.full_name, phone: u.phone, email: u.email, country: u.country }).filter((h) => h.startsWith('sanctions:'));
       if (!hits.length) continue;
@@ -206,7 +279,18 @@ if (!(globalThis as any)[LEDGER_HOOK]) {
       queueMicrotask(() => {
         publish('sanctions.hit', { userId: u.id, kind: input.type, hits, amountMinor: input.amount, currency: input.currency, role }, { aggregateId: u.id });
         recordEvent('risk', u.id, 'ledger.sanctions_refused', { type: 'system' }, { role, type: input.type, amount: input.amount, currency: input.currency, hits });
-        openCase({ kind: 'SANCTIONS', userId: u.id, subjectType: 'ledger', subjectId: null, severity: 'critical', title: 'Ledger posting refused: sanctioned party', summary: `${input.type} of ${input.amount} ${input.currency} with ${role} ${u.full_name} refused at commit (${hits.join(', ')}).`, indicators: hits, dedupeKey: `ledger-sanctions:${u.id}:${now().slice(0, 10)}`, sar: true });
+        openCase({
+          kind: 'SANCTIONS',
+          userId: u.id,
+          subjectType: 'ledger',
+          subjectId: null,
+          severity: 'critical',
+          title: 'Ledger posting refused: sanctioned party',
+          summary: `${input.type} of ${input.amount} ${input.currency} with ${role} ${u.full_name} refused at commit (${hits.join(', ')}).`,
+          indicators: hits,
+          dedupeKey: `ledger-sanctions:${u.id}:${now().slice(0, 10)}`,
+          sar: true,
+        });
       });
       throw forbidden('This transaction cannot be processed. Please contact support.', 'sanctions_hit');
     }
@@ -217,5 +301,18 @@ export function listRiskEvents(page = 1, pageSize = 50) {
   const db = getDb();
   const total = (db.prepare('SELECT COUNT(*) c FROM risk_events').get() as any).c as number;
   const rows = db.prepare('SELECT * FROM risk_events ORDER BY created_at DESC LIMIT ? OFFSET ?').all(pageSize, (page - 1) * pageSize) as any[];
-  return { items: rows.map((r) => ({ id: r.id, userId: r.user_id, subjectType: r.subject_type, subjectId: r.subject_id, kind: r.kind, score: r.score, flags: JSON.parse(r.flags || '[]'), action: r.action, createdAt: r.created_at })), total };
+  return {
+    items: rows.map((r) => ({
+      id: r.id,
+      userId: r.user_id,
+      subjectType: r.subject_type,
+      subjectId: r.subject_id,
+      kind: r.kind,
+      score: r.score,
+      flags: JSON.parse(r.flags || '[]'),
+      action: r.action,
+      createdAt: r.created_at,
+    })),
+    total,
+  };
 }

@@ -90,7 +90,18 @@ export interface WebhookEndpointView {
   createdAt: string;
   updatedAt: string;
 }
-const toEndpoint = (r: any): WebhookEndpointView => ({ id: r.id, url: r.url, events: parseJson<string[]>(r.events, ['*']), description: r.description, apiVersion: r.api_version, active: !!r.active, failures: r.failures, disabledReason: r.disabled_reason, createdAt: r.created_at, updatedAt: r.updated_at });
+const toEndpoint = (r: any): WebhookEndpointView => ({
+  id: r.id,
+  url: r.url,
+  events: parseJson<string[]>(r.events, ['*']),
+  description: r.description,
+  apiVersion: r.api_version,
+  active: !!r.active,
+  failures: r.failures,
+  disabledReason: r.disabled_reason,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
 
 export interface WebhookDeliveryView {
   id: string;
@@ -109,7 +120,23 @@ export interface WebhookDeliveryView {
   createdAt: string;
   updatedAt: string;
 }
-const toDelivery = (r: any): WebhookDeliveryView => ({ id: r.id, endpointId: r.endpoint_id ?? null, eventId: r.event_id ?? null, event: r.event, url: r.url, statusCode: r.status_code, success: !!r.success, dead: !!r.dead, attempts: r.attempts, nextAttemptAt: r.next_attempt_at ?? null, lastError: r.last_error, responseBody: r.response_body ?? null, replayOf: r.replay_of ?? null, createdAt: r.created_at, updatedAt: r.updated_at });
+const toDelivery = (r: any): WebhookDeliveryView => ({
+  id: r.id,
+  endpointId: r.endpoint_id ?? null,
+  eventId: r.event_id ?? null,
+  event: r.event,
+  url: r.url,
+  statusCode: r.status_code,
+  success: !!r.success,
+  dead: !!r.dead,
+  attempts: r.attempts,
+  nextAttemptAt: r.next_attempt_at ?? null,
+  lastError: r.last_error,
+  responseBody: r.response_body ?? null,
+  replayOf: r.replay_of ?? null,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Signatures
@@ -170,7 +197,11 @@ export async function assertSafeDestination(url: string): Promise<void> {
     if (!insecureOk) throw badRequest('Webhook URL must point to a public host', 'invalid_webhook_url');
     return;
   }
-  const addresses = isIP(host) ? [host] : await lookup(host, { all: true }).then((r) => r.map((a) => a.address)).catch(() => [] as string[]);
+  const addresses = isIP(host)
+    ? [host]
+    : await lookup(host, { all: true })
+        .then((r) => r.map((a) => a.address))
+        .catch(() => [] as string[]);
   if (!addresses.length) throw badRequest('Webhook host does not resolve', 'invalid_webhook_url');
   if (!insecureOk && addresses.some(isPrivateIp)) throw badRequest('Webhook URL must not point to a private or reserved address', 'invalid_webhook_url');
 }
@@ -180,17 +211,23 @@ export async function assertSafeDestination(url: string): Promise<void> {
 // ---------------------------------------------------------------------------------------------------------------------
 function validateEvents(events: string[] | undefined): string[] {
   const list = (events?.length ? events : ['*']).map((e) => e.trim()).filter(Boolean);
-  for (const e of list) if (e !== '*' && !KNOWN_TYPES.has(e) && !(e.endsWith('.*') && [...KNOWN_TYPES].some((t) => t.startsWith(e.slice(0, -1))))) throw badRequest(`Unknown event type "${e}"`, 'unknown_event_type');
+  for (const e of list)
+    if (e !== '*' && !KNOWN_TYPES.has(e) && !(e.endsWith('.*') && [...KNOWN_TYPES].some((t) => t.startsWith(e.slice(0, -1))))) throw badRequest(`Unknown event type "${e}"`, 'unknown_event_type');
   return [...new Set(list)];
 }
 
-export async function createEndpoint(userId: string, input: { url: string; events?: string[]; description?: string | null; apiVersion?: string | null }): Promise<WebhookEndpointView & { secret: string }> {
+export async function createEndpoint(
+  userId: string,
+  input: { url: string; events?: string[]; description?: string | null; apiVersion?: string | null },
+): Promise<WebhookEndpointView & { secret: string }> {
   await assertSafeDestination(input.url);
   const count = (getDb().prepare('SELECT COUNT(*) c FROM webhook_endpoints WHERE user_id = ?').get(userId) as any).c;
   if (count >= 16) throw conflict('You can register at most 16 webhook endpoints', 'endpoint_limit');
   const id = `we_${shortCode(16).toLowerCase()}`;
   const secret = `whsec_${secretToken(24)}`;
-  getDb().prepare('INSERT INTO webhook_endpoints (id, user_id, url, secret_enc, events, description, api_version, active, failures, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)').run(id, userId, input.url, encrypt(secret), JSON.stringify(validateEvents(input.events)), input.description ?? null, input.apiVersion ?? WEBHOOK_API_VERSION, now(), now());
+  getDb()
+    .prepare('INSERT INTO webhook_endpoints (id, user_id, url, secret_enc, events, description, api_version, active, failures, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)')
+    .run(id, userId, input.url, encrypt(secret), JSON.stringify(validateEvents(input.events)), input.description ?? null, input.apiVersion ?? WEBHOOK_API_VERSION, now(), now());
   return { ...getEndpoint(userId, id), secret };
 }
 
@@ -209,7 +246,20 @@ export async function updateEndpoint(userId: string, id: string, patch: { url?: 
   if (patch.url && patch.url !== cur.url) await assertSafeDestination(patch.url);
   const events = patch.events ? validateEvents(patch.events) : cur.events;
   const active = patch.active ?? cur.active;
-  getDb().prepare('UPDATE webhook_endpoints SET url = ?, events = ?, description = ?, active = ?, failures = CASE WHEN ? = 1 THEN 0 ELSE failures END, disabled_reason = CASE WHEN ? = 1 THEN NULL ELSE disabled_reason END, updated_at = ? WHERE id = ?').run(patch.url ?? cur.url, JSON.stringify(events), patch.description === undefined ? cur.description : patch.description, active ? 1 : 0, active && !cur.active ? 1 : 0, active && !cur.active ? 1 : 0, now(), id);
+  getDb()
+    .prepare(
+      'UPDATE webhook_endpoints SET url = ?, events = ?, description = ?, active = ?, failures = CASE WHEN ? = 1 THEN 0 ELSE failures END, disabled_reason = CASE WHEN ? = 1 THEN NULL ELSE disabled_reason END, updated_at = ? WHERE id = ?',
+    )
+    .run(
+      patch.url ?? cur.url,
+      JSON.stringify(events),
+      patch.description === undefined ? cur.description : patch.description,
+      active ? 1 : 0,
+      active && !cur.active ? 1 : 0,
+      active && !cur.active ? 1 : 0,
+      now(),
+      id,
+    );
   return getEndpoint(userId, id);
 }
 
@@ -255,7 +305,9 @@ export function emitEvent(userId: string, type: string, data: Record<string, unk
   const db = getDb();
   const user = findUserById(userId);
   if (!user) return null;
-  const endpoints = (db.prepare('SELECT * FROM webhook_endpoints WHERE user_id = ? AND active = 1').all(userId) as any[]).filter((e) => (opts.endpointId ? e.id === opts.endpointId : subscribed(parseJson<string[]>(e.events, ['*']), type)));
+  const endpoints = (db.prepare('SELECT * FROM webhook_endpoints WHERE user_id = ? AND active = 1').all(userId) as any[]).filter((e) =>
+    opts.endpointId ? e.id === opts.endpointId : subscribed(parseJson<string[]>(e.events, ['*']), type),
+  );
   const legacy = !opts.endpointId && user.webhook_url && user.webhook_secret ? { id: null as string | null, url: user.webhook_url } : null;
   // the event is always recorded after the durable commit (it is the merchant's event log); deliveries only exist for destinations
   const id = `evt_${shortCode(20).toLowerCase()}`;
@@ -277,12 +329,23 @@ export function emitEvent(userId: string, type: string, data: Record<string, unk
     data,
   };
   const payload = JSON.stringify(envelope);
-  db.prepare('INSERT INTO webhook_events (id, user_id, type, api_version, resource_type, resource_id, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, type, WEBHOOK_API_VERSION, opts.resource?.type ?? null, opts.resource?.id ?? null, payload, ts);
+  db.prepare('INSERT INTO webhook_events (id, user_id, type, api_version, resource_type, resource_id, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id,
+    userId,
+    type,
+    WEBHOOK_API_VERSION,
+    opts.resource?.type ?? null,
+    opts.resource?.id ?? null,
+    payload,
+    ts,
+  );
   const targets = [...endpoints.map((e) => ({ id: e.id as string, url: e.url as string })), ...(legacy ? [legacy] : [])];
   const ids: string[] = [];
   for (const t of targets) {
     const did = uuid();
-    db.prepare('INSERT INTO webhook_deliveries (id, user_id, event, payload, url, status_code, success, attempts, created_at, updated_at, endpoint_id, event_id, next_attempt_at, dead) VALUES (?, ?, ?, ?, ?, NULL, 0, 0, ?, ?, ?, ?, ?, 0)').run(did, userId, type, payload, t.url, ts, ts, t.id, id, ts);
+    db.prepare(
+      'INSERT INTO webhook_deliveries (id, user_id, event, payload, url, status_code, success, attempts, created_at, updated_at, endpoint_id, event_id, next_attempt_at, dead) VALUES (?, ?, ?, ?, ?, NULL, 0, 0, ?, ?, ?, ?, ?, 0)',
+    ).run(did, userId, type, payload, t.url, ts, ts, t.id, id, ts);
     ids.push(did);
   }
   if (!config.isTest) for (const did of ids) void attemptDelivery(did);
@@ -308,7 +371,7 @@ export async function attemptDelivery(deliveryId: string): Promise<WebhookDelive
   const row = db.prepare('SELECT * FROM webhook_deliveries WHERE id = ?').get(deliveryId) as any;
   if (!row || row.success || row.dead) return row ? toDelivery(row) : null;
   const settings = getWebhookSettings();
-  const secret = row.endpoint_id ? endpointSecret(row.endpoint_id) : findUserById(row.user_id)?.webhook_secret ?? null;
+  const secret = row.endpoint_id ? endpointSecret(row.endpoint_id) : (findUserById(row.user_id)?.webhook_secret ?? null);
   if (!secret) {
     db.prepare("UPDATE webhook_deliveries SET dead = 1, last_error = 'destination removed', next_attempt_at = NULL, updated_at = ? WHERE id = ?").run(now(), deliveryId);
     return toDelivery(db.prepare('SELECT * FROM webhook_deliveries WHERE id = ?').get(deliveryId));
@@ -359,25 +422,52 @@ export async function attemptDelivery(deliveryId: string): Promise<WebhookDelive
   const nextDelay = success ? null : delayFor(attempts);
   const dead = !success && nextDelay == null ? 1 : 0;
   const nextAt = nextDelay != null ? new Date(Date.now() + nextDelay).toISOString() : null;
-  db.prepare('UPDATE webhook_deliveries SET status_code = ?, success = ?, attempts = ?, last_error = ?, response_body = ?, next_attempt_at = ?, dead = ?, updated_at = ? WHERE id = ?').run(statusCode, success, attempts, lastError, responseBody, nextAt, dead, now(), deliveryId);
+  db.prepare('UPDATE webhook_deliveries SET status_code = ?, success = ?, attempts = ?, last_error = ?, response_body = ?, next_attempt_at = ?, dead = ?, updated_at = ? WHERE id = ?').run(
+    statusCode,
+    success,
+    attempts,
+    lastError,
+    responseBody,
+    nextAt,
+    dead,
+    now(),
+    deliveryId,
+  );
   if (row.endpoint_id) {
     if (success) db.prepare('UPDATE webhook_endpoints SET failures = 0, updated_at = ? WHERE id = ?').run(now(), row.endpoint_id);
     else {
       const ep = db.prepare('UPDATE webhook_endpoints SET failures = failures + 1, updated_at = ? WHERE id = ? RETURNING failures, active').get(now(), row.endpoint_id) as any;
       if (ep && ep.active && ep.failures >= settings.disableAfterConsecutiveFailures) {
-        db.prepare("UPDATE webhook_endpoints SET active = 0, disabled_reason = ?, updated_at = ? WHERE id = ?").run(`disabled after ${ep.failures} consecutive failed deliveries`, now(), row.endpoint_id);
-        notify(row.user_id, 'Webhook endpoint disabled', `${row.url} failed ${ep.failures} deliveries in a row and was disabled. Fix the endpoint, re-enable it and replay missed events from the developer console.`, { kind: 'webhook', endpointId: row.endpoint_id });
+        db.prepare('UPDATE webhook_endpoints SET active = 0, disabled_reason = ?, updated_at = ? WHERE id = ?').run(
+          `disabled after ${ep.failures} consecutive failed deliveries`,
+          now(),
+          row.endpoint_id,
+        );
+        notify(
+          row.user_id,
+          'Webhook endpoint disabled',
+          `${row.url} failed ${ep.failures} deliveries in a row and was disabled. Fix the endpoint, re-enable it and replay missed events from the developer console.`,
+          { kind: 'webhook', endpointId: row.endpoint_id },
+        );
       }
     }
   }
-  if (dead) notify(row.user_id, 'Webhook delivery failed', `Event ${row.event} could not be delivered to ${row.url} after ${attempts} attempts. Replay it from the developer console once the endpoint is fixed.`, { kind: 'webhook', deliveryId });
+  if (dead)
+    notify(
+      row.user_id,
+      'Webhook delivery failed',
+      `Event ${row.event} could not be delivered to ${row.url} after ${attempts} attempts. Replay it from the developer console once the endpoint is fixed.`,
+      { kind: 'webhook', deliveryId },
+    );
   if (!success && !dead && !config.isTest) setTimeout(() => void attemptDelivery(deliveryId), nextDelay!).unref();
   return toDelivery(db.prepare('SELECT * FROM webhook_deliveries WHERE id = ?').get(deliveryId));
 }
 
 /** Scheduler entry point: deliveries whose retry time has passed (covers restarts, where in-memory timers are lost). */
 export async function processDueDeliveries(limit = 50): Promise<number> {
-  const rows = getDb().prepare('SELECT id FROM webhook_deliveries WHERE success = 0 AND dead = 0 AND next_attempt_at IS NOT NULL AND next_attempt_at <= ? ORDER BY next_attempt_at LIMIT ?').all(now(), limit) as { id: string }[];
+  const rows = getDb()
+    .prepare('SELECT id FROM webhook_deliveries WHERE success = 0 AND dead = 0 AND next_attempt_at IS NOT NULL AND next_attempt_at <= ? ORDER BY next_attempt_at LIMIT ?')
+    .all(now(), limit) as { id: string }[];
   let n = 0;
   for (const chunk of [...Array(Math.ceil(rows.length / 5)).keys()].map((i) => rows.slice(i * 5, i * 5 + 5))) {
     await Promise.all(chunk.map((r) => attemptDelivery(r.id).then(() => (n += 1))));
@@ -391,7 +481,9 @@ export function replayDelivery(userId: string, deliveryId: string): WebhookDeliv
   const row = db.prepare('SELECT * FROM webhook_deliveries WHERE id = ? AND user_id = ?').get(deliveryId, userId) as any;
   if (!row) throw notFound('Delivery not found', 'delivery_not_found');
   const id = uuid();
-  db.prepare('INSERT INTO webhook_deliveries (id, user_id, event, payload, url, status_code, success, attempts, created_at, updated_at, endpoint_id, event_id, next_attempt_at, dead, replay_of) VALUES (?, ?, ?, ?, ?, NULL, 0, 0, ?, ?, ?, ?, ?, 0, ?)').run(id, userId, row.event, row.payload, row.url, now(), now(), row.endpoint_id, row.event_id, now(), row.id);
+  db.prepare(
+    'INSERT INTO webhook_deliveries (id, user_id, event, payload, url, status_code, success, attempts, created_at, updated_at, endpoint_id, event_id, next_attempt_at, dead, replay_of) VALUES (?, ?, ?, ?, ?, NULL, 0, 0, ?, ?, ?, ?, ?, 0, ?)',
+  ).run(id, userId, row.event, row.payload, row.url, now(), now(), row.endpoint_id, row.event_id, now(), row.id);
   if (!config.isTest) void attemptDelivery(id);
   return toDelivery(db.prepare('SELECT * FROM webhook_deliveries WHERE id = ?').get(id));
 }
@@ -401,11 +493,15 @@ export function replayEvent(userId: string, eventId: string, endpointId?: string
   const db = getDb();
   const ev = db.prepare('SELECT * FROM webhook_events WHERE id = ? AND user_id = ?').get(eventId, userId) as any;
   if (!ev) throw notFound('Event not found', 'event_not_found');
-  const endpoints = (db.prepare('SELECT * FROM webhook_endpoints WHERE user_id = ? AND active = 1').all(userId) as any[]).filter((e) => (endpointId ? e.id === endpointId : subscribed(parseJson<string[]>(e.events, ['*']), ev.type)));
+  const endpoints = (db.prepare('SELECT * FROM webhook_endpoints WHERE user_id = ? AND active = 1').all(userId) as any[]).filter((e) =>
+    endpointId ? e.id === endpointId : subscribed(parseJson<string[]>(e.events, ['*']), ev.type),
+  );
   const out: WebhookDeliveryView[] = [];
   for (const e of endpoints) {
     const id = uuid();
-    db.prepare('INSERT INTO webhook_deliveries (id, user_id, event, payload, url, status_code, success, attempts, created_at, updated_at, endpoint_id, event_id, next_attempt_at, dead) VALUES (?, ?, ?, ?, ?, NULL, 0, 0, ?, ?, ?, ?, ?, 0)').run(id, userId, ev.type, ev.data, e.url, now(), now(), e.id, ev.id, now());
+    db.prepare(
+      'INSERT INTO webhook_deliveries (id, user_id, event, payload, url, status_code, success, attempts, created_at, updated_at, endpoint_id, event_id, next_attempt_at, dead) VALUES (?, ?, ?, ?, ?, NULL, 0, 0, ?, ?, ?, ?, ?, 0)',
+    ).run(id, userId, ev.type, ev.data, e.url, now(), now(), e.id, ev.id, now());
     if (!config.isTest) void attemptDelivery(id);
     out.push(toDelivery(db.prepare('SELECT * FROM webhook_deliveries WHERE id = ?').get(id)));
   }
@@ -438,17 +534,37 @@ export function listEvents(userId: string, filter: { type?: string | null; resou
     where.push('created_at < ?');
     params.push(filter.before);
   }
-  const rows = getDb().prepare(`SELECT * FROM webhook_events WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT ?`).all(...params, Math.min(200, filter.limit ?? 50)) as any[];
-  return rows.map((r) => ({ id: r.id, type: r.type, apiVersion: r.api_version, resource: r.resource_type ? { type: r.resource_type, id: r.resource_id } : null, data: envelopeData(r.data), createdAt: r.created_at }));
+  const rows = getDb()
+    .prepare(`SELECT * FROM webhook_events WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT ?`)
+    .all(...params, Math.min(200, filter.limit ?? 50)) as any[];
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.type,
+    apiVersion: r.api_version,
+    resource: r.resource_type ? { type: r.resource_type, id: r.resource_id } : null,
+    data: envelopeData(r.data),
+    createdAt: r.created_at,
+  }));
 }
 
 export function getEvent(userId: string, id: string) {
   const r = getDb().prepare('SELECT * FROM webhook_events WHERE id = ? AND user_id = ?').get(id, userId) as any;
   if (!r) throw notFound('Event not found', 'event_not_found');
-  return { id: r.id, type: r.type, apiVersion: r.api_version, resource: r.resource_type ? { type: r.resource_type, id: r.resource_id } : null, data: envelopeData(r.data), createdAt: r.created_at, deliveries: listDeliveries(userId, { eventId: r.id }) };
+  return {
+    id: r.id,
+    type: r.type,
+    apiVersion: r.api_version,
+    resource: r.resource_type ? { type: r.resource_type, id: r.resource_id } : null,
+    data: envelopeData(r.data),
+    createdAt: r.created_at,
+    deliveries: listDeliveries(userId, { eventId: r.id }),
+  };
 }
 
-export function listDeliveries(userId: string, filter: { endpointId?: string | null; eventId?: string | null; status?: 'pending' | 'succeeded' | 'failed' | 'dead' | null; limit?: number } = {}): WebhookDeliveryView[] {
+export function listDeliveries(
+  userId: string,
+  filter: { endpointId?: string | null; eventId?: string | null; status?: 'pending' | 'succeeded' | 'failed' | 'dead' | null; limit?: number } = {},
+): WebhookDeliveryView[] {
   const where = ['user_id = ?'];
   const params: unknown[] = [userId];
   if (filter.endpointId) {
@@ -463,11 +579,19 @@ export function listDeliveries(userId: string, filter: { endpointId?: string | n
   else if (filter.status === 'dead') where.push('dead = 1');
   else if (filter.status === 'failed') where.push('success = 0 AND attempts > 0');
   else if (filter.status === 'pending') where.push('success = 0 AND dead = 0');
-  return (getDb().prepare(`SELECT * FROM webhook_deliveries WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT ?`).all(...params, Math.min(200, filter.limit ?? 50)) as any[]).map(toDelivery);
+  return (
+    getDb()
+      .prepare(`SELECT * FROM webhook_deliveries WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT ?`)
+      .all(...params, Math.min(200, filter.limit ?? 50)) as any[]
+  ).map(toDelivery);
 }
 
 export function deliveryStats(userId: string, hours = 24) {
   const since = new Date(Date.now() - hours * 3600_000).toISOString();
-  const r = getDb().prepare('SELECT COUNT(*) total, SUM(success) succeeded, SUM(dead) dead, SUM(CASE WHEN success = 0 AND dead = 0 THEN 1 ELSE 0 END) pending FROM webhook_deliveries WHERE user_id = ? AND created_at >= ?').get(userId, since) as any;
+  const r = getDb()
+    .prepare(
+      'SELECT COUNT(*) total, SUM(success) succeeded, SUM(dead) dead, SUM(CASE WHEN success = 0 AND dead = 0 THEN 1 ELSE 0 END) pending FROM webhook_deliveries WHERE user_id = ? AND created_at >= ?',
+    )
+    .get(userId, since) as any;
   return { hours, total: r.total ?? 0, succeeded: r.succeeded ?? 0, dead: r.dead ?? 0, pending: r.pending ?? 0 };
 }

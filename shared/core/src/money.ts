@@ -10,7 +10,38 @@ export interface CurrencyInfo {
 }
 
 /** Currencies enabled by default on a fresh install (the full ISO 4217 list is in ALL_CURRENCIES; admins can enable more). */
-export const DEFAULT_CURRENCY_CODES = ['USD', 'EUR', 'GBP', 'NGN', 'KES', 'GHS', 'ZAR', 'INR', 'BDT', 'PHP', 'PKR', 'AED', 'CAD', 'AUD', 'JPY', 'CNY', 'BRL', 'MXN', 'TRY', 'XOF', 'XAF', 'UGX', 'TZS', 'RWF', 'EGP', 'MAD', 'SAR', 'IDR', 'VND', 'CHF'];
+export const DEFAULT_CURRENCY_CODES = [
+  'USD',
+  'EUR',
+  'GBP',
+  'NGN',
+  'KES',
+  'GHS',
+  'ZAR',
+  'INR',
+  'BDT',
+  'PHP',
+  'PKR',
+  'AED',
+  'CAD',
+  'AUD',
+  'JPY',
+  'CNY',
+  'BRL',
+  'MXN',
+  'TRY',
+  'XOF',
+  'XAF',
+  'UGX',
+  'TZS',
+  'RWF',
+  'EGP',
+  'MAD',
+  'SAR',
+  'IDR',
+  'VND',
+  'CHF',
+];
 
 /**
  * Parse a user-entered decimal amount ("12.50") into integer minor units (1250).
@@ -66,7 +97,6 @@ export function convertMinor(amountMinor: number, from: CurrencyInfo, to: Curren
 export function exchangeRate(from: CurrencyInfo, to: CurrencyInfo): number {
   return to.rateToBase / from.rateToBase;
 }
-
 
 /**
  * Canonical money helpers: integers in minor units, never floats. `allocate` splits an amount into parts by weight

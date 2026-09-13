@@ -68,7 +68,10 @@ recipientsRouter.get('/', (req, res) => res.json({ items: listSavedRecipients(re
 recipientsRouter.post(
   '/',
   wrap(async (req, res) => {
-    const body = validate(recipientSchema.extend({ payoutMethod: z.enum(['wallet', 'bank', 'cash_pickup']).default('wallet'), currency: z.string().length(3).optional().nullable(), pin: z.string().optional() }), req.body);
+    const body = validate(
+      recipientSchema.extend({ payoutMethod: z.enum(['wallet', 'bank', 'cash_pickup']).default('wallet'), currency: z.string().length(3).optional().nullable(), pin: z.string().optional() }),
+      req.body,
+    );
     assertPin(req.user!, body.pin, req); // beneficiary changes need biometrics or PIN
     const { pin: _pin, ...recipient } = body;
     res.status(201).json({ recipient: saveRecipient(req.user!.id, recipient) });

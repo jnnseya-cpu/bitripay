@@ -14,17 +14,24 @@ export function Scanner({ onScan, active = true }: { onScan: (text: string) => v
     const scanner = new Html5Qrcode(id.current, { verbose: false });
     instance.current = scanner;
     scanner
-      .start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 240 } }, (text) => {
-        if (handled.current) return;
-        handled.current = true;
-        onScan(text);
-      }, () => {})
+      .start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        (text) => {
+          if (handled.current) return;
+          handled.current = true;
+          onScan(text);
+        },
+        () => {},
+      )
       .catch((err) => setError(typeof err === 'string' ? err : err?.message || 'Camera unavailable'));
     return () => {
       const s = instance.current;
       instance.current = null;
       if (s) {
-        s.stop().then(() => s.clear()).catch(() => {});
+        s.stop()
+          .then(() => s.clear())
+          .catch(() => {});
       }
     };
   }, [active, onScan]);

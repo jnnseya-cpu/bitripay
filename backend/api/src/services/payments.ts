@@ -136,7 +136,9 @@ export function getPayment(id: string): GatewayPaymentRow {
 
 function updatePayment(id: string, fields: Partial<Record<keyof GatewayPaymentRow, unknown>>) {
   const keys = Object.keys(fields);
-  getDb().prepare(`UPDATE gateway_payments SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(...keys.map((k) => (fields as any)[k]), now(), id);
+  getDb()
+    .prepare(`UPDATE gateway_payments SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`)
+    .run(...keys.map((k) => (fields as any)[k]), now(), id);
 }
 
 function mergeMeta(id: string, patch: Record<string, unknown>) {
@@ -150,10 +152,27 @@ export function paymentOptions(currency: string, country?: string | null, purpos
   return methods
     .map((method) => ({
       method,
-      gateways: availableGateways(method, currency, country).map((g) => ({ id: g.id, name: g.name, provider: g.provider, publishableKey: g.provider === 'stripe' ? getGatewayCredentials(g.id).publishableKey || null : null })),
+      gateways: availableGateways(method, currency, country).map((g) => ({
+        id: g.id,
+        name: g.name,
+        provider: g.provider,
+        publishableKey: g.provider === 'stripe' ? getGatewayCredentials(g.id).publishableKey || null : null,
+      })),
       fee: calculateFee(method === 'card' ? 'card_deposit' : method === 'mobile_money' ? 'mobile_money_deposit' : 'bank_deposit', 10000, currency),
       /** Mobile money operators the payer can choose (world directory filtered by country when known). */
-      operators: method === 'mobile_money' ? listOperators({ country: country || undefined }).map((o) => ({ id: o.id, name: o.name, brand: o.brand, country: o.country, currency: o.currency, ussd: o.ussd, color: o.color, directRail: o.directRail })) : undefined,
+      operators:
+        method === 'mobile_money'
+          ? listOperators({ country: country || undefined }).map((o) => ({
+              id: o.id,
+              name: o.name,
+              brand: o.brand,
+              country: o.country,
+              currency: o.currency,
+              ussd: o.ussd,
+              color: o.color,
+              directRail: o.directRail,
+            }))
+          : undefined,
     }))
     .filter((m) => m.gateways.length > 0 && (purpose === 'checkout' || m.method !== 'wallet'));
 }
@@ -166,7 +185,10 @@ function pickMobileMoneyGateway(candidates: ReturnType<typeof availableGateways>
   if (preferred && !operatorId) return candidates.find((g) => g.id === preferred);
   if (!operatorId) return candidates.find((g) => g.provider !== 'manual_momo') ?? candidates[0];
   const op = getOperator(operatorId);
-  const api = candidates.find((g) => g.provider !== 'manual_momo' && g.provider !== 'sandbox' && (g.countries.length === 0 || g.countries.includes(op.country)) && (g.currencies.length === 0 || g.currencies.includes(op.currency)));
+  const api = candidates.find(
+    (g) =>
+      g.provider !== 'manual_momo' && g.provider !== 'sandbox' && (g.countries.length === 0 || g.countries.includes(op.country)) && (g.currencies.length === 0 || g.currencies.includes(op.currency)),
+  );
   if (api) return api;
   const direct = candidates.find((g) => g.provider === 'manual_momo');
   if (direct && op.collectionNumber) return direct;
@@ -176,7 +198,10 @@ function pickMobileMoneyGateway(candidates: ReturnType<typeof availableGateways>
 /** Smart Route: best usable connector for a method among the candidates the capability filters already allowed. */
 function smartPick(candidates: ReturnType<typeof availableGateways>, method: PaymentMethod, policy: string) {
   if (!candidates.length) return undefined;
-  const { id } = pickConnector(candidates.map((g, i) => ({ id: g.id, method, costBps: typeof g.config.costBps === 'number' ? (g.config.costBps as number) : null, preferenceRank: i })), (['smart', 'cheapest', 'fastest', 'most_reliable'].includes(policy) ? policy : 'smart') as any);
+  const { id } = pickConnector(
+    candidates.map((g, i) => ({ id: g.id, method, costBps: typeof g.config.costBps === 'number' ? (g.config.costBps as number) : null, preferenceRank: i })),
+    (['smart', 'cheapest', 'fastest', 'most_reliable'].includes(policy) ? policy : 'smart') as any,
+  );
   return id ? candidates.find((g) => g.id === id) : undefined;
 }
 
@@ -229,15 +254,36 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
   if (!Number.isInteger(amount) || amount <= 0) throw badRequest('Amount must be greater than zero', 'invalid_amount');
 
   const candidates = availableGateways(input.method, cur.code, user?.country);
-  const policy = (request ? (getDb().prepare('SELECT method_policy FROM payment_intents WHERE id = ?').get(request.intent_id ?? '') as any)?.method_policy : null) ?? 'smart';
-  let gateway = input.method === 'mobile_money' ? pickMobileMoneyGateway(candidates, input.operatorId, input.gateway) : input.gateway ? candidates.find((g) => g.id === input.gateway) : smartPick(candidates.filter((g) => g.provider !== 'manual_momo'), input.method, policy);
+  const policy =
+    (request
+      ? (
+          getDb()
+            .prepare('SELECT method_policy FROM payment_intents WHERE id = ?')
+            .get(request.intent_id ?? '') as any
+        )?.method_policy
+      : null) ?? 'smart';
+  let gateway =
+    input.method === 'mobile_money'
+      ? pickMobileMoneyGateway(candidates, input.operatorId, input.gateway)
+      : input.gateway
+        ? candidates.find((g) => g.id === input.gateway)
+        : smartPick(
+            candidates.filter((g) => g.provider !== 'manual_momo'),
+            input.method,
+            policy,
+          );
   if (gateway && !input.gateway && !connectorHealth(gateway.id).usable) {
     // the preferred connector is paused or its circuit is open: fail over to the best usable one for the same method
-    const alternative = smartPick(candidates.filter((g) => g.id !== gateway!.id && g.provider !== 'manual_momo'), input.method, policy);
+    const alternative = smartPick(
+      candidates.filter((g) => g.id !== gateway!.id && g.provider !== 'manual_momo'),
+      input.method,
+      policy,
+    );
     if (alternative) gateway = alternative;
   }
   if (!gateway) throw unprocessable(`No ${input.method.replace('_', ' ')} gateway is available for ${cur.code}`, 'no_gateway');
-  if (input.gateway && !connectorHealth(gateway.id).usable) throw unprocessable(`${gateway.name} is temporarily unavailable (${connectorHealth(gateway.id).reason}); choose another method or try again shortly`, 'connector_unavailable');
+  if (input.gateway && !connectorHealth(gateway.id).usable)
+    throw unprocessable(`${gateway.name} is temporarily unavailable (${connectorHealth(gateway.id).reason}); choose another method or try again shortly`, 'connector_unavailable');
   if (gateway.provider === 'manual_momo' && input.operatorId) {
     const op = getOperator(input.operatorId);
     if (op.currency !== cur.code) throw badRequest(`${op.name} collects ${op.currency}. Choose ${op.currency} as the currency to pay with this operator.`, 'operator_currency_mismatch');
@@ -257,13 +303,39 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
   const controls = getGatewayControls();
   const expiresAt = new Date(Date.now() + controls.intentExpiryHours * 3600_000).toISOString();
   // Non-sensitive inputs are kept so the intent can be dispatched after authentication. Card data is never stored.
-  const intentInput = { operatorId: input.operatorId ?? null, route: input.route ?? null, routeId: input.routeId ?? null, returnUrl: input.returnUrl ?? null, saveCard: !!input.saveCard, savedCardId: input.savedCardId ?? null, openBanking: input.openBanking ?? null };
+  const intentInput = {
+    operatorId: input.operatorId ?? null,
+    route: input.route ?? null,
+    routeId: input.routeId ?? null,
+    returnUrl: input.returnUrl ?? null,
+    saveCard: !!input.saveCard,
+    savedCardId: input.savedCardId ?? null,
+    openBanking: input.openBanking ?? null,
+  };
   getDb()
     .prepare(
       `INSERT INTO gateway_payments (id, gateway, provider_ref, method, purpose, user_id, payment_request_id, amount, currency, fee, status, stage, expires_at, payer_email, payer_phone, payer_name, saved_card_id, metadata, transaction_id, created_at, updated_at)
        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 'initiated', 'CREATED', ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
     )
-    .run(id, gateway.id, input.method, input.purpose, user?.id ?? null, request?.id ?? null, amount, cur.code, fee, expiresAt, input.email ?? user?.email ?? null, input.phone ?? user?.phone ?? null, input.name ?? user?.full_name ?? null, input.savedCardId ?? null, JSON.stringify({ operatorId: input.operatorId ?? null, route: input.route ?? null, routeId: input.routeId ?? null, intentInput }), ts, ts);
+    .run(
+      id,
+      gateway.id,
+      input.method,
+      input.purpose,
+      user?.id ?? null,
+      request?.id ?? null,
+      amount,
+      cur.code,
+      fee,
+      expiresAt,
+      input.email ?? user?.email ?? null,
+      input.phone ?? user?.phone ?? null,
+      input.name ?? user?.full_name ?? null,
+      input.savedCardId ?? null,
+      JSON.stringify({ operatorId: input.operatorId ?? null, route: input.route ?? null, routeId: input.routeId ?? null, intentInput }),
+      ts,
+      ts,
+    );
   const actor = actorFor(user);
   recordEvent('payment', id, 'payment.created', actor, { purpose: input.purpose, method: input.method, gateway: gateway.id, amount, currency: cur.code, fee, operatorId: input.operatorId ?? null });
   // Gateway intents: every external execution is a Payment Attempt on the intent (one in flight at a time).
@@ -288,7 +360,12 @@ function markAuthenticated(id: string, method: string, actor: Actor) {
 }
 
 /** Second step for intents created without authentication: supply biometrics/PIN (and card details again for card payments). */
-export async function authenticatePayment(user: UserRow, id: string, body: { pin?: string | null; card?: CardInput; savedCardId?: string | null; saveCard?: boolean; returnUrl?: string | null }, req: Pick<Request, 'headers' | 'body'>): Promise<PaymentView> {
+export async function authenticatePayment(
+  user: UserRow,
+  id: string,
+  body: { pin?: string | null; card?: CardInput; savedCardId?: string | null; saveCard?: boolean; returnUrl?: string | null },
+  req: Pick<Request, 'headers' | 'body'>,
+): Promise<PaymentView> {
   const payment = getPayment(id);
   if (payment.user_id !== user.id) throw notFound('Payment not found');
   if (payment.stage !== 'AUTHENTICATION_REQUIRED') throw conflict(`Payment is already ${STAGE_LABELS[payment.stage as PaymentStage].label.toLowerCase()}`, 'invalid_stage_transition');
@@ -303,13 +380,22 @@ export async function authenticatePayment(user: UserRow, id: string, body: { pin
   const stored = parseJson<any>(payment.metadata, {}).intentInput ?? {};
   const routeId = parseJson<any>(payment.metadata, {}).routeId as string | null;
   if (routeId) tryTransitionRoute(routeId, 'BIOMETRICALLY_APPROVED', actorFor(user), { paymentId: id, method: authn.method });
-  const view = await dispatchToProvider(user, getPayment(id), { card: body.card, savedCardId: body.savedCardId ?? stored.savedCardId, saveCard: body.saveCard ?? stored.saveCard, returnUrl: body.returnUrl ?? stored.returnUrl });
+  const view = await dispatchToProvider(user, getPayment(id), {
+    card: body.card,
+    savedCardId: body.savedCardId ?? stored.savedCardId,
+    saveCard: body.saveCard ?? stored.saveCard,
+    returnUrl: body.returnUrl ?? stored.returnUrl,
+  });
   if (routeId && view.status !== 'failed' && view.stage !== 'SETTLED') tryTransitionRoute(routeId, 'FUNDING_PENDING', actorFor(user), { paymentId: id, gateway: view.gateway });
   return view;
 }
 
 /** Hand the authenticated intent to the rail: issue instructions / redirect / prompt, or settle immediately when the processor already confirmed. */
-async function dispatchToProvider(user: UserRow | null, payment: GatewayPaymentRow, secrets: { card?: CardInput; savedCardId?: string | null; saveCard?: boolean; returnUrl?: string | null }): Promise<PaymentView> {
+async function dispatchToProvider(
+  user: UserRow | null,
+  payment: GatewayPaymentRow,
+  secrets: { card?: CardInput; savedCardId?: string | null; saveCard?: boolean; returnUrl?: string | null },
+): Promise<PaymentView> {
   const gateway = getGateway(payment.gateway)!;
   const provider = PROVIDERS[gateway.provider];
   const cur = getCurrency(payment.currency, false);
@@ -397,7 +483,9 @@ function expireIfDue(payment: GatewayPaymentRow): boolean {
 }
 
 export function expireStalePayments(): number {
-  const rows = getDb().prepare("SELECT * FROM gateway_payments WHERE expires_at < ? AND stage IN ('CREATED','AUTHENTICATION_REQUIRED','INSTRUCTION_ISSUED','PAYMENT_SENT')").all(now()) as GatewayPaymentRow[];
+  const rows = getDb()
+    .prepare("SELECT * FROM gateway_payments WHERE expires_at < ? AND stage IN ('CREATED','AUTHENTICATION_REQUIRED','INSTRUCTION_ISSUED','PAYMENT_SENT')")
+    .all(now()) as GatewayPaymentRow[];
   let n = 0;
   for (const r of rows) if (expireIfDue(r)) n += 1;
   return n;
@@ -424,7 +512,6 @@ function applyProcessorResult(payment: GatewayPaymentRow, result: VerifyResult, 
     transitionStage(payment.id, 'MANUAL_REVIEW', actor, { reason: 'provider_outcome_unknown', detail: result.failureReason ?? null });
   }
 }
-
 
 function summarizeRaw(raw: unknown) {
   if (!raw) return null;
@@ -460,7 +547,15 @@ export function confirmAndSettle(payment: GatewayPaymentRow, input: Confirmation
     const details = { source: input.source, evidenceId: input.evidenceId ?? null, verificationId: input.verificationId ?? null, ...(input.details ?? {}) };
     advanceThrough(fresh.id, ['EVIDENCE_RECEIVED', 'VERIFYING'], input.actor, details);
     // Fraud, sanctions and velocity controls run on every confirmation, whatever its source.
-    const risk = assessRisk({ userId: fresh.user_id, kind: 'payment_in', amount: fresh.amount, currency: fresh.currency, subjectType: 'payment', subjectId: fresh.id, counterparty: { name: fresh.payer_name, phone: fresh.payer_phone, email: fresh.payer_email } });
+    const risk = assessRisk({
+      userId: fresh.user_id,
+      kind: 'payment_in',
+      amount: fresh.amount,
+      currency: fresh.currency,
+      subjectType: 'payment',
+      subjectId: fresh.id,
+      counterparty: { name: fresh.payer_name, phone: fresh.payer_phone, email: fresh.payer_email },
+    });
     if (risk.action !== 'allow' && input.source !== 'manual') {
       mergeMeta(fresh.id, { riskFlags: risk.flags, riskScore: risk.score });
       transitionStage(fresh.id, 'MANUAL_REVIEW', { type: 'system' }, { reason: 'risk', score: risk.score, flags: risk.flags });
@@ -518,7 +613,18 @@ export function settlePayment(payment: GatewayPaymentRow, actor: Actor = { type:
         senderUserId: fresh.user_id ?? null,
         receiverUserId: merchant.id,
         note: request.description ?? `Payment via ${fresh.method.replace('_', ' ')}`,
-        metadata: { gateway: fresh.gateway, method: fresh.method, providerRef: fresh.provider_ref, paymentId: fresh.id, paymentRequestId: request.id, paymentRequestCode: request.code, payerEmail: fresh.payer_email, payerPhone: fresh.payer_phone, payerName: fresh.payer_name, ...parseJson(request.metadata, {}) },
+        metadata: {
+          gateway: fresh.gateway,
+          method: fresh.method,
+          providerRef: fresh.provider_ref,
+          paymentId: fresh.id,
+          paymentRequestId: request.id,
+          paymentRequestCode: request.code,
+          payerEmail: fresh.payer_email,
+          payerPhone: fresh.payer_phone,
+          payerName: fresh.payer_name,
+          ...parseJson(request.metadata, {}),
+        },
         issuance: { authority: 'external_funding', paymentId: fresh.id, reference: fresh.provider_ref },
       });
       updatePayment(fresh.id, { transaction_id: tx.id });
@@ -557,8 +663,6 @@ export function markPaymentSent(user: UserRow, id: string, proof: { reference?: 
   else recordEvent('payment', id, 'payment.sent_report_updated', actorFor(user), { reference: proof.reference ?? null, hasImage: !!proof.image });
   return toPaymentView(getPayment(id));
 }
-/** @deprecated use markPaymentSent */
-export const attachBankProof = markPaymentSent;
 
 export async function handleGatewayWebhook(gatewayId: string, req: Request): Promise<{ handled: number }> {
   const gateway = getGateway(gatewayId) ?? listGateways().find((g) => g.provider === gatewayId);
@@ -605,10 +709,28 @@ export interface ChargebackView {
   note: string | null;
 }
 function toChargeback(r: any): ChargebackView {
-  return { id: r.id, paymentId: r.payment_id, routeId: r.route_id, providerRef: r.provider_ref, amount: r.amount, currency: r.currency, reason: r.reason, status: r.status, payoutStateAtOpen: r.payout_state_at_open, reversalTransactionId: r.reversal_transaction_id, openedBy: r.opened_by, openedAt: r.opened_at, resolvedBy: r.resolved_by, resolvedAt: r.resolved_at, note: r.note };
+  return {
+    id: r.id,
+    paymentId: r.payment_id,
+    routeId: r.route_id,
+    providerRef: r.provider_ref,
+    amount: r.amount,
+    currency: r.currency,
+    reason: r.reason,
+    status: r.status,
+    payoutStateAtOpen: r.payout_state_at_open,
+    reversalTransactionId: r.reversal_transaction_id,
+    openedBy: r.opened_by,
+    openedAt: r.opened_at,
+    resolvedBy: r.resolved_by,
+    resolvedAt: r.resolved_at,
+    note: r.note,
+  };
 }
 export function listChargebacks(status?: string | null): ChargebackView[] {
-  const rows = status ? getDb().prepare('SELECT * FROM chargebacks WHERE status = ? ORDER BY opened_at DESC').all(status) : getDb().prepare('SELECT * FROM chargebacks ORDER BY opened_at DESC LIMIT 200').all();
+  const rows = status
+    ? getDb().prepare('SELECT * FROM chargebacks WHERE status = ? ORDER BY opened_at DESC').all(status)
+    : getDb().prepare('SELECT * FROM chargebacks ORDER BY opened_at DESC LIMIT 200').all();
   return (rows as any[]).map(toChargeback);
 }
 
@@ -655,24 +777,57 @@ export function openChargeback(paymentId: string, input: { reason?: string | nul
     if (route) tryTransitionRoute(route.id, 'DISPUTED', input.actor, { paymentId, reason: input.reason ?? null });
     if (notPaidOut) {
       if (route) recallRouteFunds(route.id, input.actor, 'Funding disputed (chargeback)');
-      else if (payout && ['QUEUED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED', 'MISMATCHED', 'DUPLICATE'].includes(payout.stage)) cancelPayout(payout.id, input.actor, 'Funding disputed (chargeback)');
+      else if (payout && ['QUEUED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED', 'MISMATCHED', 'DUPLICATE'].includes(payout.stage))
+        cancelPayout(payout.id, input.actor, 'Funding disputed (chargeback)');
       const tx = reverseFunding(payment, input.actor, input.reason ?? 'chargeback', 'chargeback');
       reversalTx = tx.id;
       status = 'reversed_before_payout';
       if (route) tryTransitionRoute(route.id, 'REVERSED', input.actor, { paymentId, chargebackId: id });
     }
-    db.prepare('INSERT INTO chargebacks (id, payment_id, route_id, provider_ref, amount, currency, reason, status, payout_state_at_open, reversal_transaction_id, opened_by, opened_at, resolved_by, resolved_at, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)').run(id, payment.id, route?.id ?? null, input.providerRef ?? payment.provider_ref, payment.amount, payment.currency, input.reason ?? null, status, payoutState, reversalTx, input.actor.id ?? null, now());
+    db.prepare(
+      'INSERT INTO chargebacks (id, payment_id, route_id, provider_ref, amount, currency, reason, status, payout_state_at_open, reversal_transaction_id, opened_by, opened_at, resolved_by, resolved_at, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)',
+    ).run(
+      id,
+      payment.id,
+      route?.id ?? null,
+      input.providerRef ?? payment.provider_ref,
+      payment.amount,
+      payment.currency,
+      input.reason ?? null,
+      status,
+      payoutState,
+      reversalTx,
+      input.actor.id ?? null,
+      now(),
+    );
     recordEvent('chargeback', id, 'chargeback.opened', input.actor, { paymentId, routeId: route?.id ?? null, status, payoutState, reason: input.reason ?? null });
     // A chargeback on money that reached a merchant becomes a dispute object (deadline, evidence, hold, decision).
     if (status === 'open' && payment.transaction_id) {
       try {
-        const d = openDispute({ transactionId: payment.transaction_id, gatewayPaymentId: payment.id, chargebackId: id, openedBy: 'processor', reasonCode: 'unauthorised', reason: input.reason ?? 'Chargeback received from the processor', responsibleInstitution: payment.gateway ?? null }, input.actor);
+        const d = openDispute(
+          {
+            transactionId: payment.transaction_id,
+            gatewayPaymentId: payment.id,
+            chargebackId: id,
+            openedBy: 'processor',
+            reasonCode: 'unauthorised',
+            reason: input.reason ?? 'Chargeback received from the processor',
+            responsibleInstitution: payment.gateway ?? null,
+          },
+          input.actor,
+        );
         db.prepare('UPDATE chargebacks SET note = ? WHERE id = ?').run(`dispute:${d.id}`, id);
       } catch (err) {
         if (!(err instanceof AppError && (err.code === 'not_disputable' || err.code === 'dispute_exists'))) throw err;
       }
     }
-    if (payment.user_id) notify(payment.user_id, 'Payment disputed', status === 'reversed_before_payout' ? 'Your card payment was disputed; the transfer was cancelled and reversed.' : 'Your card payment was disputed. The transfer is under review.', { kind: 'chargeback', paymentId });
+    if (payment.user_id)
+      notify(
+        payment.user_id,
+        'Payment disputed',
+        status === 'reversed_before_payout' ? 'Your card payment was disputed; the transfer was cancelled and reversed.' : 'Your card payment was disputed. The transfer is under review.',
+        { kind: 'chargeback', paymentId },
+      );
     return toChargeback(db.prepare('SELECT * FROM chargebacks WHERE id = ?').get(id));
   })();
 }
@@ -694,7 +849,14 @@ export function resolveChargeback(id: string, outcome: 'won' | 'lost', admin: Us
       reversalTx = reverseFunding(payment, actor, note ?? 'chargeback lost', 'chargeback').id;
       if (cb.route_id) tryTransitionRoute(cb.route_id, 'REVERSED', actor, { chargebackId: id, outcome });
     }
-    db.prepare('UPDATE chargebacks SET status = ?, resolved_by = ?, resolved_at = ?, note = ?, reversal_transaction_id = COALESCE(?, reversal_transaction_id) WHERE id = ?').run(outcome, admin.id, now(), note ?? null, reversalTx, id);
+    db.prepare('UPDATE chargebacks SET status = ?, resolved_by = ?, resolved_at = ?, note = ?, reversal_transaction_id = COALESCE(?, reversal_transaction_id) WHERE id = ?').run(
+      outcome,
+      admin.id,
+      now(),
+      note ?? null,
+      reversalTx,
+      id,
+    );
     recordEvent('chargeback', id, `chargeback.${outcome}`, actor, { paymentId: payment.id, note: note ?? null, reversalTransactionId: reversalTx });
     return toChargeback(db.prepare('SELECT * FROM chargebacks WHERE id = ?').get(id));
   })();
@@ -710,13 +872,20 @@ export async function providerRefund(payment: GatewayPaymentRow, amount: number,
   if (!Number.isInteger(amount) || amount <= 0 || amount > payment.amount) throw badRequest('Invalid refund amount');
   const gateway = getGateway(payment.gateway)!;
   const provider = PROVIDER_MAP[gateway.provider];
-  const result = provider.refund ? await provider.refund(payment, amount, reason, getGatewayCredentials(gateway.id)) : { status: 'manual' as const, message: `${gateway.name} has no refund API – refund manually and record it` };
+  const result = provider.refund
+    ? await provider.refund(payment, amount, reason, getGatewayCredentials(gateway.id))
+    : { status: 'manual' as const, message: `${gateway.name} has no refund API – refund manually and record it` };
   recordEvent('payment', payment.id, 'payment.refund_requested', actor, { amount, reason, result: result.status, providerRef: result.providerRef ?? null });
   return result;
 }
 
 /** Refund a deposit: the processor returns the money and the payer's wallet funding is reversed. */
-export async function refundPayment(paymentId: string, amount: number, reason: string, actor: Actor): Promise<{ payment: PaymentView; result: import('../payments/types').RefundResult; transactionId: string | null }> {
+export async function refundPayment(
+  paymentId: string,
+  amount: number,
+  reason: string,
+  actor: Actor,
+): Promise<{ payment: PaymentView; result: import('../payments/types').RefundResult; transactionId: string | null }> {
   const payment = getPayment(paymentId);
   const result = await providerRefund(payment, amount, reason, actor);
   if (result.status === 'manual') return { payment: toPaymentView(payment), result, transactionId: null };
@@ -759,6 +928,8 @@ export function listPayments(filter: { userId?: string; purpose?: string; status
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const total = (db.prepare(`SELECT COUNT(*) c FROM gateway_payments ${whereSql}`).get(...params) as any).c;
-  const rows = db.prepare(`SELECT * FROM gateway_payments ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, filter.pageSize, (filter.page - 1) * filter.pageSize) as GatewayPaymentRow[];
+  const rows = db
+    .prepare(`SELECT * FROM gateway_payments ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+    .all(...params, filter.pageSize, (filter.page - 1) * filter.pageSize) as GatewayPaymentRow[];
   return { items: rows.map(toPaymentView), total };
 }

@@ -36,7 +36,7 @@ export interface PaymentRequestRow {
 
 export function toPaymentRequest(row: PaymentRequestRow, users?: Map<string, ReturnType<typeof toPublicUser>>): PaymentRequest {
   const requester = users?.get(row.requester_user_id) ?? (findUserById(row.requester_user_id) ? toPublicUser(findUserById(row.requester_user_id)!) : undefined);
-  const payer = row.payer_user_id ? users?.get(row.payer_user_id) ?? (findUserById(row.payer_user_id) ? toPublicUser(findUserById(row.payer_user_id)!) : null) : null;
+  const payer = row.payer_user_id ? (users?.get(row.payer_user_id) ?? (findUserById(row.payer_user_id) ? toPublicUser(findUserById(row.payer_user_id)!) : null)) : null;
   const qr = qrContent({ type: 'pr', id: row.code });
   return {
     id: row.id,
@@ -148,7 +148,9 @@ export function listPaymentRequests(userId: string, filter: { role: 'requester' 
     params.push(filter.kind);
   }
   const total = (db.prepare(`SELECT COUNT(*) c FROM payment_requests WHERE ${where.join(' AND ')}`).get(...params) as any).c;
-  const rows = db.prepare(`SELECT * FROM payment_requests WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, filter.pageSize, (filter.page - 1) * filter.pageSize) as PaymentRequestRow[];
+  const rows = db
+    .prepare(`SELECT * FROM payment_requests WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+    .all(...params, filter.pageSize, (filter.page - 1) * filter.pageSize) as PaymentRequestRow[];
   const users = usersById(rows.flatMap((r) => [r.requester_user_id, r.payer_user_id!]));
   return { items: rows.map((r) => toPaymentRequest(r, users)), total };
 }
@@ -166,7 +168,8 @@ export function payWithWallet(payer: UserRow, code: string, amount?: number | nu
     const currency = getCurrency(row.currency);
     const requester = findUserById(row.requester_user_id)!;
     const type = requester.role === 'merchant' ? 'merchant_payment' : row.kind === 'request' ? 'money_request' : 'qr_payment';
-    const fee = type === 'money_request' ? calculateFee('transfer', finalAmount, currency.code, null, { userId: payer.id }) : calculateFee(type, finalAmount, currency.code, null, { userId: requester.id });
+    const fee =
+      type === 'money_request' ? calculateFee('transfer', finalAmount, currency.code, null, { userId: payer.id }) : calculateFee(type, finalAmount, currency.code, null, { userId: requester.id });
     enforceLimits(payer, finalAmount, currency.code);
     const fromWallet = getUserWallet(payer.id, currency.code);
     const toWallet = ensureWallet(requester.id, currency.code);
@@ -191,7 +194,10 @@ export function payWithWallet(payer: UserRow, code: string, amount?: number | nu
       transactionId: tx.id,
       code: row.code,
     });
-    void dispatchWebhook(requester.id, 'payment.completed', { paymentRequest: toPaymentRequest(updated), transaction: { id: tx.id, reference: tx.reference, amount: tx.amount, fee: tx.fee, currency: tx.currency, method: 'wallet' } });
+    void dispatchWebhook(requester.id, 'payment.completed', {
+      paymentRequest: toPaymentRequest(updated),
+      transaction: { id: tx.id, reference: tx.reference, amount: tx.amount, fee: tx.fee, currency: tx.currency, method: 'wallet' },
+    });
     return { tx, request: updated };
   })();
 }

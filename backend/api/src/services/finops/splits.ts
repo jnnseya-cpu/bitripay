@@ -34,7 +34,19 @@ export interface SplitPayoutView {
   error: string | null;
   createdAt: string;
 }
-const toView = (r: any): SplitPayoutView => ({ id: r.id, intentId: r.intent_id, sourceTransactionId: r.source_transaction_id, recipientUserId: r.recipient_user_id, amountMinor: r.amount_minor, currency: r.currency, label: r.label, transactionId: r.transaction_id, status: r.status, error: r.error, createdAt: r.created_at });
+const toView = (r: any): SplitPayoutView => ({
+  id: r.id,
+  intentId: r.intent_id,
+  sourceTransactionId: r.source_transaction_id,
+  recipientUserId: r.recipient_user_id,
+  amountMinor: r.amount_minor,
+  currency: r.currency,
+  label: r.label,
+  transactionId: r.transaction_id,
+  status: r.status,
+  error: r.error,
+  createdAt: r.created_at,
+});
 
 /** Resolve recipients and check the rules can be honoured on any amount (bps total ≤ 10000; fixed parts are checked at capture). */
 export function validateSplits(rules: SplitRule[], merchantId: string): { recipient: string; recipientUserId: string; bps: number; fixedMinor: number; label: string | null }[] {
@@ -76,7 +88,9 @@ export function applySplits(intentId: string): SplitPayoutView[] {
   rules.forEach((rule, i) => {
     const amount = rule.fixedMinor + shares[i];
     const id = `sp_${shortCode(12).toLowerCase()}`;
-    db.prepare('INSERT INTO split_payouts (id, intent_id, source_transaction_id, recipient_user_id, amount_minor, currency, label, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, intentId, source.id, rule.recipientUserId, amount, source.currency, rule.label, 'PENDING', now(), now());
+    db.prepare(
+      'INSERT INTO split_payouts (id, intent_id, source_transaction_id, recipient_user_id, amount_minor, currency, label, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(id, intentId, source.id, rule.recipientUserId, amount, source.currency, rule.label, 'PENDING', now(), now());
     if (amount <= 0) {
       db.prepare("UPDATE split_payouts SET status = 'PAID', updated_at = ? WHERE id = ?").run(now(), id);
       out.push(toView(db.prepare('SELECT * FROM split_payouts WHERE id = ?').get(id)));
@@ -84,7 +98,18 @@ export function applySplits(intentId: string): SplitPayoutView[] {
     }
     try {
       const to = ensureWallet(rule.recipientUserId, source.currency);
-      const tx = postTransaction({ type: 'distribution', amount, currency: source.currency, fromWalletId: merchantWallet.id, toWalletId: to.id, senderUserId: merchant.id, receiverUserId: rule.recipientUserId, note: rule.label ?? `Split of ${source.reference}`, metadata: { intentId, split: true, sourceTransactionId: source.id, label: rule.label }, idempotencyKey: `split:${id}` });
+      const tx = postTransaction({
+        type: 'distribution',
+        amount,
+        currency: source.currency,
+        fromWalletId: merchantWallet.id,
+        toWalletId: to.id,
+        senderUserId: merchant.id,
+        receiverUserId: rule.recipientUserId,
+        note: rule.label ?? `Split of ${source.reference}`,
+        metadata: { intentId, split: true, sourceTransactionId: source.id, label: rule.label },
+        idempotencyKey: `split:${id}`,
+      });
       db.prepare("UPDATE split_payouts SET status = 'PAID', transaction_id = ?, updated_at = ? WHERE id = ?").run(tx.id, now(), id);
       notify(rule.recipientUserId, 'Split payment received', `${merchant.business_name ?? merchant.full_name} shared a payment with you.`, { kind: 'transfer_in', transactionId: tx.id });
     } catch (err) {
@@ -92,7 +117,13 @@ export function applySplits(intentId: string): SplitPayoutView[] {
     }
     out.push(toView(db.prepare('SELECT * FROM split_payouts WHERE id = ?').get(id)));
   });
-  recordEvent('payment', intentId, 'splits.applied', { type: 'system' }, { count: out.length, paid: out.filter((s) => s.status === 'PAID').length, failed: out.filter((s) => s.status === 'FAILED').length });
+  recordEvent(
+    'payment',
+    intentId,
+    'splits.applied',
+    { type: 'system' },
+    { count: out.length, paid: out.filter((s) => s.status === 'PAID').length, failed: out.filter((s) => s.status === 'FAILED').length },
+  );
   return out;
 }
 
@@ -109,7 +140,18 @@ export function retrySplits(intentId: string): SplitPayoutView[] {
     try {
       const merchantWallet = getUserWallet(intent.merchant_user_id, f.currency);
       const to = ensureWallet(f.recipient_user_id, f.currency);
-      const tx = postTransaction({ type: 'distribution', amount: f.amount_minor, currency: f.currency, fromWalletId: merchantWallet.id, toWalletId: to.id, senderUserId: intent.merchant_user_id, receiverUserId: f.recipient_user_id, note: f.label ?? 'Split payment', metadata: { intentId, split: true, sourceTransactionId: f.source_transaction_id }, idempotencyKey: `split:${f.id}:retry:${Date.now()}` });
+      const tx = postTransaction({
+        type: 'distribution',
+        amount: f.amount_minor,
+        currency: f.currency,
+        fromWalletId: merchantWallet.id,
+        toWalletId: to.id,
+        senderUserId: intent.merchant_user_id,
+        receiverUserId: f.recipient_user_id,
+        note: f.label ?? 'Split payment',
+        metadata: { intentId, split: true, sourceTransactionId: f.source_transaction_id },
+        idempotencyKey: `split:${f.id}:retry:${Date.now()}`,
+      });
       db.prepare("UPDATE split_payouts SET status = 'PAID', transaction_id = ?, error = NULL, updated_at = ? WHERE id = ?").run(tx.id, now(), f.id);
     } catch (err) {
       db.prepare('UPDATE split_payouts SET error = ?, updated_at = ? WHERE id = ?').run((err as Error).message, now(), f.id);

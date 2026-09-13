@@ -26,10 +26,14 @@ beforeAll(() => {
   app = setupApp();
   getDb().prepare("UPDATE currencies SET enabled = 1 WHERE code IN ('CDF', 'USD', 'GBP')").run();
 });
-const balanceOf = async (auth: Record<string, string>, currency = 'USD') => ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
+const balanceOf = async (auth: Record<string, string>, currency = 'USD') =>
+  ((await request(app).get('/api/wallets').set(auth)).body.items.find((w: any) => w.currency === currency)?.balance ?? 0) as number;
 const deviceKey = () => {
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-  return { publicKey: publicKey.export({ type: 'spki', format: 'der' }).toString('base64'), sign: (payload: string) => Buffer.from(nodeSign(null, Buffer.from(payload), privateKey)).toString('base64') };
+  return {
+    publicKey: publicKey.export({ type: 'spki', format: 'der' }).toString('base64'),
+    sign: (payload: string) => Buffer.from(nodeSign(null, Buffer.from(payload), privateKey)).toString('base64'),
+  };
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function waitRun(id: string) {
@@ -62,12 +66,33 @@ describe('offline-signed QR protocol', () => {
     expect(decoded.signed).toBe(true);
     expect(decoded.amount).toBe('12.5');
     const promise = (over: Partial<Record<string, unknown>> = {}) => {
-      const base = { merchantId: m.user.id, payerId: payer.user.id, amountMinor: 1250, currency: 'USD', nonce: qr.body.nonce, expiresAt: qr.body.expiresAt, counter: 1, reference: 'TABLE-4', ...over } as any;
+      const base = {
+        merchantId: m.user.id,
+        payerId: payer.user.id,
+        amountMinor: 1250,
+        currency: 'USD',
+        nonce: qr.body.nonce,
+        expiresAt: qr.body.expiresAt,
+        counter: 1,
+        reference: 'TABLE-4',
+        ...over,
+      } as any;
       const canonical = promiseCanonical(base);
-      return { ...base, payerDeviceId: 'payer-phone-01', merchantKeyId: mDev.body.keyId, payerKeyId: pDev.body.keyId, merchantSig: mk.sign(canonical), payerSig: pk.sign(canonical), promisedAt: new Date().toISOString() };
+      return {
+        ...base,
+        payerDeviceId: 'payer-phone-01',
+        merchantKeyId: mDev.body.keyId,
+        payerKeyId: pDev.body.keyId,
+        merchantSig: mk.sign(canonical),
+        payerSig: pk.sign(canonical),
+        promisedAt: new Date().toISOString(),
+      };
     };
     const p1 = promise();
-    const sync = await request(app).post('/api/v1/offline/sync').set(m.auth).send({ promises: [p1] });
+    const sync = await request(app)
+      .post('/api/v1/offline/sync')
+      .set(m.auth)
+      .send({ promises: [p1] });
     expect(sync.status, JSON.stringify(sync.body)).toBe(200);
     expect(sync.body.settled).toBe(1);
     const out = sync.body.results[0];
@@ -81,28 +106,61 @@ describe('offline-signed QR protocol', () => {
     expect(await balanceOf(payer.auth)).toBe(5000 - 1250);
     expect(await balanceOf(m.auth)).toBe(1250 - calculateFee('qr_payment', 1250, 'USD')); // platform fee, receiver pays
     // replay of the same promise: duplicate, no second movement
-    const again = await request(app).post('/api/v1/offline/sync').set(payer.auth).send({ promises: [p1] });
+    const again = await request(app)
+      .post('/api/v1/offline/sync')
+      .set(payer.auth)
+      .send({ promises: [p1] });
     expect(again.body.results[0].state).toBe('DUPLICATE');
     expect(await balanceOf(payer.auth)).toBe(3750);
     // same nonce with a new counter: nonce replayed; stale counter: not monotonic
-    const nonceReplay = await request(app).post('/api/v1/offline/sync').set(m.auth).send({ promises: [promise({ counter: 2, reference: 'TABLE-5' })] });
+    const nonceReplay = await request(app)
+      .post('/api/v1/offline/sync')
+      .set(m.auth)
+      .send({ promises: [promise({ counter: 2, reference: 'TABLE-5' })] });
     expect(nonceReplay.body.results[0].state).toBe('REJECTED');
     expect(nonceReplay.body.results[0].reason).toBe('nonce_replayed');
     expect(nonceReplay.body.results[0].restoreMinor).toBe(1250);
     const nonces = await request(app).post('/api/v1/offline/nonces').set(m.auth).send({ count: 3 });
     const [n1, n2, n3] = nonces.body.data;
-    const stale = await request(app).post('/api/v1/offline/sync').set(m.auth).send({ promises: [promise({ counter: 1, nonce: n1.nonce, expiresAt: n1.expiresAt })] });
+    const stale = await request(app)
+      .post('/api/v1/offline/sync')
+      .set(m.auth)
+      .send({ promises: [promise({ counter: 1, nonce: n1.nonce, expiresAt: n1.expiresAt })] });
     expect(stale.body.results[0].reason).toBe('counter_not_monotonic');
     // a tampered signature is refused
     const tampered = { ...promise({ counter: 2, nonce: n1.nonce, expiresAt: n1.expiresAt }), amountMinor: 1 };
-    expect((await request(app).post('/api/v1/offline/sync').set(m.auth).send({ promises: [tampered] })).body.results[0].reason).toBe('merchant_signature_invalid');
+    expect(
+      (
+        await request(app)
+          .post('/api/v1/offline/sync')
+          .set(m.auth)
+          .send({ promises: [tampered] })
+      ).body.results[0].reason,
+    ).toBe('merchant_signature_invalid');
     // an unrelated account cannot submit a promise between two other parties
     const stranger = await registerUser(app);
-    expect((await request(app).post('/api/v1/offline/sync').set(stranger.auth).send({ promises: [promise({ counter: 2, nonce: n1.nonce, expiresAt: n1.expiresAt })] })).body.results[0].reason).toBe('submitter_not_party');
+    expect(
+      (
+        await request(app)
+          .post('/api/v1/offline/sync')
+          .set(stranger.auth)
+          .send({ promises: [promise({ counter: 2, nonce: n1.nonce, expiresAt: n1.expiresAt })] })
+      ).body.results[0].reason,
+    ).toBe('submitter_not_party');
     // over the ceiling, then a batch in order where the last one empties the wallet
     await request(app).put('/api/admin/intelligence/offline/settings').set(admin.auth).send({ maxPerPromiseBase: 3000 });
-    expect((await request(app).post('/api/v1/offline/sync').set(m.auth).send({ promises: [promise({ counter: 2, nonce: n1.nonce, expiresAt: n1.expiresAt, amountMinor: 3500 })] })).body.results[0].reason).toBe('offline_ceiling');
-    const batch = await request(app).post('/api/v1/offline/sync').set(payer.auth).send({ promises: [promise({ counter: 3, nonce: n2.nonce, expiresAt: n2.expiresAt, amountMinor: 2000 }), promise({ counter: 4, nonce: n3.nonce, expiresAt: n3.expiresAt, amountMinor: 2000 })] });
+    expect(
+      (
+        await request(app)
+          .post('/api/v1/offline/sync')
+          .set(m.auth)
+          .send({ promises: [promise({ counter: 2, nonce: n1.nonce, expiresAt: n1.expiresAt, amountMinor: 3500 })] })
+      ).body.results[0].reason,
+    ).toBe('offline_ceiling');
+    const batch = await request(app)
+      .post('/api/v1/offline/sync')
+      .set(payer.auth)
+      .send({ promises: [promise({ counter: 3, nonce: n2.nonce, expiresAt: n2.expiresAt, amountMinor: 2000 }), promise({ counter: 4, nonce: n3.nonce, expiresAt: n3.expiresAt, amountMinor: 2000 })] });
     expect(batch.body.results.map((r: any) => r.state)).toEqual(['SETTLED', 'REJECTED']);
     expect(batch.body.results[1].reason).toBe('insufficient_funds');
     expect(batch.body.results[1].restoreMinor).toBe(2000);
@@ -113,10 +171,20 @@ describe('offline-signed QR protocol', () => {
     await fund(app, payer.user.id, '20.00');
     const qr2 = await request(app).post('/api/v1/offline/qr').set(m.auth).send({ amount: '7.00', currency: 'USD', reference: 'TABLE-9' });
     const alone = promise({ counter: 5, nonce: qr2.body.nonce, expiresAt: qr2.body.expiresAt, amountMinor: 700, reference: 'TABLE-9' });
-    const viaQr = await request(app).post('/api/v1/offline/sync').set(payer.auth).send({ promises: [{ ...alone, merchantKeyId: qr2.body.keyId, merchantSig: '', qrPayload: qr2.body.payload }] });
+    const viaQr = await request(app)
+      .post('/api/v1/offline/sync')
+      .set(payer.auth)
+      .send({ promises: [{ ...alone, merchantKeyId: qr2.body.keyId, merchantSig: '', qrPayload: qr2.body.payload }] });
     expect(viaQr.body.results[0].state, JSON.stringify(viaQr.body)).toBe('SETTLED');
     const forged = promise({ counter: 6, nonce: qr2.body.nonce, expiresAt: qr2.body.expiresAt, amountMinor: 100 });
-    expect((await request(app).post('/api/v1/offline/sync').set(payer.auth).send({ promises: [{ ...forged, merchantKeyId: qr2.body.keyId, merchantSig: '', qrPayload: qr2.body.payload }] })).body.results[0].reason).toBe('merchant_signature_invalid');
+    expect(
+      (
+        await request(app)
+          .post('/api/v1/offline/sync')
+          .set(payer.auth)
+          .send({ promises: [{ ...forged, merchantKeyId: qr2.body.keyId, merchantSig: '', qrPayload: qr2.body.payload }] })
+      ).body.results[0].reason,
+    ).toBe('merchant_signature_invalid');
     const mine = await request(app).get('/api/v1/offline/promises').set(m.auth);
     expect(mine.body.data.filter((p: any) => p.state === 'SETTLED')).toHaveLength(3);
     const console = await request(app).get('/api/admin/intelligence/offline').set(admin.auth);
@@ -127,7 +195,10 @@ describe('offline-signed QR protocol', () => {
 describe('Diaspora-Direct', () => {
   it('publishes signed rate cards under a human-signed policy, locks quotes to verified institutions per purpose, and pays at the card rate', async () => {
     const admin = await adminToken(app);
-    const policy = await request(app).post('/api/admin/intelligence/diaspora/policies').set(admin.auth).send({ sourceCurrency: 'GBP', destCurrency: 'CDF', markupBps: 150, feeBps: 100, feeFixedSourceMinor: 99, maxValidityHours: 4 });
+    const policy = await request(app)
+      .post('/api/admin/intelligence/diaspora/policies')
+      .set(admin.auth)
+      .send({ sourceCurrency: 'GBP', destCurrency: 'CDF', markupBps: 150, feeBps: 100, feeFixedSourceMinor: 99, maxValidityHours: 4 });
     expect(policy.status, JSON.stringify(policy.body)).toBe(201);
     expect(policy.body.policy.signature).toMatch(/^[0-9a-f]{8}:/);
     expect(verifyPolicySignature(listRatePolicies().find((p) => p.id === policy.body.policy.id)!)).toBe(true);
@@ -138,12 +209,18 @@ describe('Diaspora-Direct', () => {
     expect(cards.body.restricted).toContain('SCHOOL');
     // a school registers as an institution; until verified, SCHOOL quotes are refused
     const school = await registerUser(app, { role: 'merchant', businessName: 'Lycée Kabambare', country: 'CD' });
-    const reg = await request(app).post('/api/v1/institutions').set(school.auth).send({ kind: 'school', name: 'Lycée Kabambare', registryRef: 'MINEDUC-KIN-0042', purposeCodes: ['SCHOOL'] });
+    const reg = await request(app)
+      .post('/api/v1/institutions')
+      .set(school.auth)
+      .send({ kind: 'school', name: 'Lycée Kabambare', registryRef: 'MINEDUC-KIN-0042', purposeCodes: ['SCHOOL'] });
     expect(reg.status, JSON.stringify(reg.body)).toBe(201);
     expect(reg.body.status).toBe('pending');
     const sender = await registerUser(app, { country: 'GB' });
     await fund(app, sender.user.id, '300.00', 'GBP');
-    const refused = await request(app).post('/api/v1/diaspora/quotes').set(sender.auth).send({ beneficiary: school.user.tag, sourceCurrency: 'GBP', sourceMinor: 10_000, purposeCode: 'SCHOOL', reference: 'Term 1 · Grace' });
+    const refused = await request(app)
+      .post('/api/v1/diaspora/quotes')
+      .set(sender.auth)
+      .send({ beneficiary: school.user.tag, sourceCurrency: 'GBP', sourceMinor: 10_000, purposeCode: 'SCHOOL', reference: 'Term 1 · Grace' });
     expect(refused.status).toBe(422);
     expect(refused.body.error.code).toBe('purpose_not_allowed');
     await request(app).post(`/api/admin/intelligence/diaspora/institutions/${school.user.id}/review`).set(admin.auth).send({ decision: 'verified' });
@@ -153,7 +230,10 @@ describe('Diaspora-Direct', () => {
     expect(ddQr.status, JSON.stringify(ddQr.body)).toBe(201);
     expect(bitriqr.decode(ddQr.body.payload).corridorFlag).toBe('DD');
     expect((await request(app).post('/api/v1/institutions/me/qr').set(school.auth).send({ purposeCode: 'HEALTH', currency: 'CDF' })).status).toBe(403);
-    const quote = await request(app).post('/api/v1/diaspora/quotes').set(sender.auth).send({ beneficiary: school.user.tag, sourceCurrency: 'GBP', sourceMinor: 10_000, purposeCode: 'SCHOOL', reference: 'Term 1 · Grace' });
+    const quote = await request(app)
+      .post('/api/v1/diaspora/quotes')
+      .set(sender.auth)
+      .send({ beneficiary: school.user.tag, sourceCurrency: 'GBP', sourceMinor: 10_000, purposeCode: 'SCHOOL', reference: 'Term 1 · Grace' });
     expect(quote.status, JSON.stringify(quote.body)).toBe(201);
     expect(quote.body.destCurrency).toBe('CDF');
     expect(quote.body.feeMinor).toBe(100 + 99);
@@ -174,7 +254,9 @@ describe('Diaspora-Direct', () => {
     expect(gift.status, JSON.stringify(gift.body)).toBe(201);
     expect(gift.body.destMinor).toBeGreaterThanOrEqual(50_000);
     // cards refresh under the policy before they lapse
-    getDb().prepare("UPDATE fx_rate_cards SET valid_until = ? WHERE source_currency = 'GBP'").run(new Date(Date.now() + 10 * 60_000).toISOString());
+    getDb()
+      .prepare("UPDATE fx_rate_cards SET valid_until = ? WHERE source_currency = 'GBP'")
+      .run(new Date(Date.now() + 10 * 60_000).toISOString());
     const refreshed = await request(app).post('/api/admin/intelligence/diaspora/cards/refresh').set(admin.auth);
     expect(refreshed.body.issued).toBe(1);
   });
@@ -203,13 +285,19 @@ describe('AI gateway and ACU policy', () => {
     await expect(executeNeuralKernelTask({ ...ctx, uid: null }, spec, { text: 'x' })).rejects.toMatchObject({ code: 'unauthenticated' });
     await expect(executeNeuralKernelTask({ ...ctx, tenantId: 'other' }, { ...spec, tenantId: 'platform' }, { text: 'x' })).rejects.toMatchObject({ code: 'tenant_mismatch' });
     // margin floor: with a provider key present but ACU priced at nothing, no model can meet the floor
-    await request(app).put('/api/admin/intelligence/gateway/routing').set(admin.auth).send({ providers: { openai: { enabled: true, apiKey: 'sk-test' } }, taskTypes: { classify: ['gpt-4o-mini'] } });
+    await request(app)
+      .put('/api/admin/intelligence/gateway/routing')
+      .set(admin.auth)
+      .send({ providers: { openai: { enabled: true, apiKey: 'sk-test' } }, taskTypes: { classify: ['gpt-4o-mini'] } });
     await request(app).put('/api/admin/intelligence/gateway/acu-policy').set(admin.auth).send({ acuPriceMicros: 1 });
     await expect(executeNeuralKernelTask(ctx, spec, { text: 'hello' })).rejects.toBeInstanceOf(GatewayError);
     await expect(executeNeuralKernelTask(ctx, spec, { text: 'hello' })).rejects.toMatchObject({ code: 'margin_protection_violation' });
     expect((await request(app).put('/api/admin/intelligence/gateway/acu-policy').set(admin.auth).send({ minGrossMargin: 0.5 })).status).toBe(422);
     await request(app).put('/api/admin/intelligence/gateway/acu-policy').set(admin.auth).send({ acuPriceMicros: 10_000 });
-    await request(app).put('/api/admin/intelligence/gateway/routing').set(admin.auth).send({ taskTypes: { classify: ['claude-haiku-4-5-20251001', 'claude-sonnet-5'] } });
+    await request(app)
+      .put('/api/admin/intelligence/gateway/routing')
+      .set(admin.auth)
+      .send({ taskTypes: { classify: ['claude-haiku-4-5-20251001', 'claude-sonnet-5'] } });
     expect(projectEconomics('claude-haiku-4-5-20251001', 6000).ok).toBe(true);
     // a real provider call fails (no network / fake key) → failover → rules; the ledger records the failover
     const r2 = await executeNeuralKernelTask(ctx, spec, { text: 'I need help with a ticket' });
@@ -218,15 +306,27 @@ describe('AI gateway and ACU policy', () => {
     const ledger = await request(app).get('/api/admin/intelligence/gateway/ledger').set(admin.auth);
     expect(ledger.body.items.some((x: any) => x.outcome === 'failover')).toBe(true);
     expect(ledger.body.items.some((x: any) => x.outcome === 'refused' && x.errorCode === 'MARGIN_PROTECTION_VIOLATION')).toBe(true);
-    await request(app).put('/api/admin/intelligence/gateway/routing').set(admin.auth).send({ providers: { openai: { enabled: false, apiKey: null } } });
+    await request(app)
+      .put('/api/admin/intelligence/gateway/routing')
+      .set(admin.auth)
+      .send({ providers: { openai: { enabled: false, apiKey: null } } });
     // rate limiter
-    await request(app).put('/api/admin/intelligence/gateway/routing').set(admin.auth).send({ rateLimits: { perUserPerMinute: 2 } });
+    await request(app)
+      .put('/api/admin/intelligence/gateway/routing')
+      .set(admin.auth)
+      .send({ rateLimits: { perUserPerMinute: 2 } });
     await executeNeuralKernelTask({ ...ctx, uid: 'rl' }, spec, { text: 'a' });
     await executeNeuralKernelTask({ ...ctx, uid: 'rl' }, spec, { text: 'b' });
     await expect(executeNeuralKernelTask({ ...ctx, uid: 'rl' }, spec, { text: 'c' })).rejects.toMatchObject({ code: 'rate_limited' });
-    await request(app).put('/api/admin/intelligence/gateway/routing').set(admin.auth).send({ rateLimits: { perUserPerMinute: 30 } });
+    await request(app)
+      .put('/api/admin/intelligence/gateway/routing')
+      .set(admin.auth)
+      .send({ rateLimits: { perUserPerMinute: 30 } });
     // administrator pricing below the floor is refused; a sane price passes
-    const bad = await request(app).put('/api/admin/agents/settings').set(admin.auth).send({ billing: { prices: { standard: 0, deep: 1 } } });
+    const bad = await request(app)
+      .put('/api/admin/agents/settings')
+      .set(admin.auth)
+      .send({ billing: { prices: { standard: 0, deep: 1 } } });
     expect(bad.status).toBe(422);
     expect(bad.body.error.code).toBe('margin_protection_violation');
     expect((await request(app).post('/api/admin/intelligence/gateway/validate-pricing').set(admin.auth).send({ standard: 500, deep: 3500 })).status).toBe(200);
@@ -283,7 +383,10 @@ describe('agent mesh', () => {
     const ev3 = publish('connector.degraded', { connector: 'orange_cd', failures: 5 }, { aggregateId: 'orange_cd' });
     expect((await dispatchEvent(ev3)).started).toHaveLength(0);
     // a drill event through the console, and the dispute arbiter's plan on a real dispute id
-    const drill = await request(app).post('/api/admin/intelligence/events').set(admin.auth).send({ type: 'agent.float_low', aggregateId: 'nobody', payload: { agentId: 'nobody', currency: 'USD', refill: 0 } });
+    const drill = await request(app)
+      .post('/api/admin/intelligence/events')
+      .set(admin.auth)
+      .send({ type: 'agent.float_low', aggregateId: 'nobody', payload: { agentId: 'nobody', currency: 'USD', refill: 0 } });
     expect(drill.status).toBe(201);
     const runs = await request(app).get('/api/admin/agents/runs').set(admin.auth).query({ agent: 'rebalancer' });
     expect(runs.body.items.length).toBeGreaterThanOrEqual(1);

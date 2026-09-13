@@ -1,7 +1,7 @@
 import { getDb } from '../db';
 import { config } from '../config';
 import { badRequest } from '../lib/errors';
-import { ALL_CURRENCIES, DEFAULT_CURRENCY_CODES, convertMinor, exchangeRate, type CurrencyInfo } from '@bitripay/shared';
+import { ALL_CURRENCIES, DEFAULT_CURRENCY_CODES, convertMinor, exchangeRate, formatMoney, type CurrencyInfo } from '@bitripay/shared';
 import { getAppSettings, getSetting, setSetting, getFxSettings } from './settings';
 import { decrypt } from '../lib/crypto';
 import { now } from '../lib/ids';
@@ -34,9 +34,7 @@ export const TEST_RATES_VERSION = 'test_rates_v1';
 export function ensureDefaultCurrencies() {
   const db = getDb();
   const existing = new Set((db.prepare('SELECT code FROM currencies').all() as any[]).map((r) => r.code));
-  const insert = db.prepare(
-    'INSERT INTO currencies (code, name, symbol, decimals, rate_to_base, enabled, is_base, rate_source, rate_updated_at, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-  );
+  const insert = db.prepare('INSERT INTO currencies (code, name, symbol, decimals, rate_to_base, enabled, is_base, rate_source, rate_updated_at, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
   const base = config.baseCurrency.toUpperCase();
   const hasBase = existing.size > 0 && !!db.prepare('SELECT 1 FROM currencies WHERE is_base = 1').get();
   db.transaction(() => {
@@ -63,6 +61,15 @@ export function getCurrency(code: string, requireEnabled = true): CurrencyRow {
   const cur = mapRow(row);
   if (requireEnabled && !cur.enabled) throw badRequest(`Currency ${code} is currently disabled`, 'currency_disabled');
   return cur;
+}
+
+/** Human-readable amount for messages and receipts; never throws on an unknown code. */
+export function formatMinor(minor: number, code: string): string {
+  try {
+    return formatMoney(minor, getCurrency(code, false));
+  } catch {
+    return `${minor} ${code}`;
+  }
 }
 
 export function getBaseCurrency(): CurrencyRow {
@@ -128,9 +135,27 @@ export interface RateProviderInfo {
 export const RATE_PROVIDERS: RateProviderInfo[] = [
   { id: 'frankfurter', name: 'Frankfurter (ECB reference rates, keyless)', keyed: false, url: (base) => `https://api.frankfurter.app/latest?from=${base}`, parse: (j) => j.rates ?? {} },
   { id: 'open_er_api', name: 'open.er-api.com (keyless, 160+ currencies)', keyed: false, url: (base) => `https://open.er-api.com/v6/latest/${base}`, parse: (j) => j.rates ?? {} },
-  { id: 'exchangerate_host', name: 'exchangerate.host (API key)', keyed: true, url: (base, key) => `https://api.exchangerate.host/live?access_key=${encodeURIComponent(key)}&source=${base}`, parse: (j, base) => Object.fromEntries(Object.entries(j.quotes ?? {}).map(([k, v]) => [String(k).slice(base.length), Number(v)])) },
-  { id: 'openexchangerates', name: 'Open Exchange Rates (app id)', keyed: true, url: (base, key) => `https://openexchangerates.org/api/latest.json?app_id=${encodeURIComponent(key)}&base=${base}`, parse: (j) => j.rates ?? {} },
-  { id: 'fixer', name: 'Fixer / apilayer (access key)', keyed: true, url: (base, key) => `https://data.fixer.io/api/latest?access_key=${encodeURIComponent(key)}&base=${base}`, parse: (j) => j.rates ?? {} },
+  {
+    id: 'exchangerate_host',
+    name: 'exchangerate.host (API key)',
+    keyed: true,
+    url: (base, key) => `https://api.exchangerate.host/live?access_key=${encodeURIComponent(key)}&source=${base}`,
+    parse: (j, base) => Object.fromEntries(Object.entries(j.quotes ?? {}).map(([k, v]) => [String(k).slice(base.length), Number(v)])),
+  },
+  {
+    id: 'openexchangerates',
+    name: 'Open Exchange Rates (app id)',
+    keyed: true,
+    url: (base, key) => `https://openexchangerates.org/api/latest.json?app_id=${encodeURIComponent(key)}&base=${base}`,
+    parse: (j) => j.rates ?? {},
+  },
+  {
+    id: 'fixer',
+    name: 'Fixer / apilayer (access key)',
+    keyed: true,
+    url: (base, key) => `https://data.fixer.io/api/latest?access_key=${encodeURIComponent(key)}&base=${base}`,
+    parse: (j) => j.rates ?? {},
+  },
 ];
 
 export interface RateStatus {
@@ -141,17 +166,20 @@ export interface RateStatus {
   lastSnapshotId: number | null;
   consecutiveFailures: number;
 }
-export const getRateStatus = () => getSetting<RateStatus>('rateStatus', { provider: 'manual', lastAttemptAt: null, lastSuccessAt: null, lastError: null, lastSnapshotId: null, consecutiveFailures: 0 });
+export const getRateStatus = () =>
+  getSetting<RateStatus>('rateStatus', { provider: 'manual', lastAttemptAt: null, lastSuccessAt: null, lastError: null, lastSnapshotId: null, consecutiveFailures: 0 });
 
 function recordSnapshot(provider: string, source: 'live' | 'manual_import', base: string, rates: Record<string, number>, createdBy: string | null, note: string | null): number {
-  const r = getDb().prepare('INSERT INTO rate_snapshots (provider, source, base, rates, fetched_at, created_by, note) VALUES (?, ?, ?, ?, ?, ?, ?)').run(provider, source, base, JSON.stringify(rates), now(), createdBy, note);
+  const r = getDb()
+    .prepare('INSERT INTO rate_snapshots (provider, source, base, rates, fetched_at, created_by, note) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(provider, source, base, JSON.stringify(rates), now(), createdBy, note);
   return Number(r.lastInsertRowid);
 }
 
 function applyRates(rates: Record<string, number>, source: string): { updated: string[]; skipped: string[] } {
   const updated: string[] = [];
   const skipped: string[] = [];
-  const stmt = getDb().prepare("UPDATE currencies SET rate_to_base = ?, rate_source = ?, rate_updated_at = ? WHERE code = ? AND is_base = 0");
+  const stmt = getDb().prepare('UPDATE currencies SET rate_to_base = ?, rate_source = ?, rate_updated_at = ? WHERE code = ? AND is_base = 0');
   for (const c of listCurrencies()) {
     if (c.isBase) continue;
     const r = rates[c.code];
@@ -171,7 +199,8 @@ async function fetchWithRetry(url: string, attempts = 3): Promise<any> {
       const timer = setTimeout(() => controller.abort(), 15_000);
       const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'BitriPay/1.0 rates' } });
       clearTimeout(timer);
-      if (res.status === 403 || res.status === 407) throw new Error(`HTTP ${res.status} – outbound access to the rate provider is blocked (proxy / firewall). Allow the host or import a versioned rate batch manually.`);
+      if (res.status === 403 || res.status === 407)
+        throw new Error(`HTTP ${res.status} – outbound access to the rate provider is blocked (proxy / firewall). Allow the host or import a versioned rate batch manually.`);
       if (res.status === 401) throw new Error('HTTP 401 – the provider rejected the API key');
       if (res.status === 429) throw new Error('HTTP 429 – rate provider quota exceeded');
       if (!res.ok) throw new Error(`HTTP ${res.status} from the rate provider`);
@@ -234,7 +263,15 @@ export function importRates(admin: { id: string }, rates: Record<string, number>
 }
 
 export function listRateSnapshots(limit = 20) {
-  return (getDb().prepare('SELECT id, provider, source, base, fetched_at, created_by, note, LENGTH(rates) size FROM rate_snapshots ORDER BY id DESC LIMIT ?').all(limit) as any[]).map((r) => ({ id: r.id, provider: r.provider, source: r.source, base: r.base, fetchedAt: r.fetched_at, createdBy: r.created_by, note: r.note }));
+  return (getDb().prepare('SELECT id, provider, source, base, fetched_at, created_by, note, LENGTH(rates) size FROM rate_snapshots ORDER BY id DESC LIMIT ?').all(limit) as any[]).map((r) => ({
+    id: r.id,
+    provider: r.provider,
+    source: r.source,
+    base: r.base,
+    fetchedAt: r.fetched_at,
+    createdBy: r.created_by,
+    note: r.note,
+  }));
 }
 
 /** Are the rates in use live and fresh enough for guaranteed quotes? */

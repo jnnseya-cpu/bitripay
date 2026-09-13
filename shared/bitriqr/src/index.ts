@@ -31,7 +31,21 @@ export function maskToRails(mask: number): Rail[] {
 }
 
 /** ISO 4217 numeric codes for the currencies BitriPay handles today; others pass through as given. */
-export const CURRENCY_NUMERIC: Record<string, string> = { CDF: '976', USD: '840', EUR: '978', GBP: '826', KES: '404', NGN: '566', UGX: '800', XOF: '952', XAF: '950', ZAR: '710', TZS: '834', RWF: '646', GHS: '936' };
+export const CURRENCY_NUMERIC: Record<string, string> = {
+  CDF: '976',
+  USD: '840',
+  EUR: '978',
+  GBP: '826',
+  KES: '404',
+  NGN: '566',
+  UGX: '800',
+  XOF: '952',
+  XAF: '950',
+  ZAR: '710',
+  TZS: '834',
+  RWF: '646',
+  GHS: '936',
+};
 export const NUMERIC_CURRENCY: Record<string, string> = Object.fromEntries(Object.entries(CURRENCY_NUMERIC).map(([a, n]) => [n, a]));
 
 export interface BitriQrFields {
@@ -73,7 +87,14 @@ const tlv = (tag: string, value: string) => {
   if (value.length > 99) throw new Error(`Value for tag ${tag} exceeds 99 characters`);
   return `${tag}${String(value.length).padStart(2, '0')}${value}`;
 };
-const template = (tag: string, fields: [string, string | null | undefined][]) => tlv(tag, fields.filter(([, v]) => v != null && v !== '').map(([t, v]) => tlv(t, String(v))).join(''));
+const template = (tag: string, fields: [string, string | null | undefined][]) =>
+  tlv(
+    tag,
+    fields
+      .filter(([, v]) => v != null && v !== '')
+      .map(([t, v]) => tlv(t, String(v)))
+      .join(''),
+  );
 
 /** CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF) as used by EMVCo, over the UTF-8 bytes. */
 export function crc16(input: string): string {
@@ -100,15 +121,32 @@ export function serialiseUnsigned(f: BitriQrFields): { base: string; ext: string
   const base =
     tlv('00', '01') +
     tlv('01', f.mode === 'static' ? '11' : '12') +
-    template('26', [['00', GUI], ['01', f.merchantId], ['02', railsToMask(f.rails).toString(16).toUpperCase().padStart(2, '0')], ['03', f.intentRef]]) +
+    template('26', [
+      ['00', GUI],
+      ['01', f.merchantId],
+      ['02', railsToMask(f.rails).toString(16).toUpperCase().padStart(2, '0')],
+      ['03', f.intentRef],
+    ]) +
     (f.mcc ? tlv('52', f.mcc) : '') +
     tlv('53', currencyNum) +
     (f.mode === 'dynamic' && f.amount ? tlv('54', normaliseAmount(f.amount)) : '') +
     tlv('58', f.country.toUpperCase()) +
     tlv('59', f.merchantName.slice(0, 25)) +
     (f.city ? tlv('60', f.city.slice(0, 15)) : '') +
-    (f.billRef || f.referenceLabel || f.purposeCode ? template('62', [['01', f.billRef], ['05', f.referenceLabel], ['08', f.purposeCode]]) : '');
-  const ext = [tlv('00', VERSION), f.keyId ? tlv('01', f.keyId) : '', f.expiresAt ? tlv('02', Math.floor(f.expiresAt).toString(36)) : '', f.offlineNonce ? tlv('03', f.offlineNonce) : '', f.corridorFlag ? tlv('04', f.corridorFlag) : ''].join('');
+    (f.billRef || f.referenceLabel || f.purposeCode
+      ? template('62', [
+          ['01', f.billRef],
+          ['05', f.referenceLabel],
+          ['08', f.purposeCode],
+        ])
+      : '');
+  const ext = [
+    tlv('00', VERSION),
+    f.keyId ? tlv('01', f.keyId) : '',
+    f.expiresAt ? tlv('02', Math.floor(f.expiresAt).toString(36)) : '',
+    f.offlineNonce ? tlv('03', f.offlineNonce) : '',
+    f.corridorFlag ? tlv('04', f.corridorFlag) : '',
+  ].join('');
   return { base, ext };
 }
 

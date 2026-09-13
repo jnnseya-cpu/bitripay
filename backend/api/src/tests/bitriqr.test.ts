@@ -22,7 +22,11 @@ describe('BitriQR payment intents', () => {
     const m = await registerUser(app, { role: 'merchant', businessName: 'Pharmacie Limete', country: 'CD' });
     const payer = await registerUser(app);
     await fund(app, payer.user.id, '100.00', 'USD');
-    const created = await request(app).post('/api/v1/payment_intents').set(m.auth).set('Idempotency-Key', 'order-1042').send({ amount_minor: 2500, currency: 'USD', reference: 'INV-2026-0912', purpose_code: 'HEALTH', description: 'Prescription' });
+    const created = await request(app)
+      .post('/api/v1/payment_intents')
+      .set(m.auth)
+      .set('Idempotency-Key', 'order-1042')
+      .send({ amount_minor: 2500, currency: 'USD', reference: 'INV-2026-0912', purpose_code: 'HEALTH', description: 'Prescription' });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const pi = created.body;
     expect(pi.id).toMatch(/^pi_/);
@@ -42,7 +46,11 @@ describe('BitriQR payment intents', () => {
     expect(d.signed).toBe(true);
     expect(d.crcValid).toBe(true);
     // the same Idempotency-Key returns the same intent
-    const again = await request(app).post('/api/v1/payment_intents').set(m.auth).set('Idempotency-Key', 'order-1042').send({ amount_minor: 2500, currency: 'USD', reference: 'INV-2026-0912', purpose_code: 'HEALTH', description: 'Prescription' });
+    const again = await request(app)
+      .post('/api/v1/payment_intents')
+      .set(m.auth)
+      .set('Idempotency-Key', 'order-1042')
+      .send({ amount_minor: 2500, currency: 'USD', reference: 'INV-2026-0912', purpose_code: 'HEALTH', description: 'Prescription' });
     expect(again.body.id).toBe(pi.id);
     // the key registry publishes the merchant key with an ETag
     const keys = await request(app).get('/api/v1/keys');
@@ -65,11 +73,16 @@ describe('BitriQR payment intents', () => {
     expect(resolved.body.methods.find((x: any) => x.methodClass === 'wallet').available).toBe(true);
     expect(resolved.body.disclosures).toContain('fx_rate');
     // a tampered payload fails the CRC and is refused
-    const tampered = await request(app).post('/api/v1/resolve').set(payer.auth).send({ content: pi.qr_payload.replace('540225', '540299') });
+    const tampered = await request(app)
+      .post('/api/v1/resolve')
+      .set(payer.auth)
+      .send({ content: pi.qr_payload.replace('540225', '540299') });
     expect(tampered.body.kind).toBe('invalid');
     expect(tampered.body.reasons).toContain('crc_mismatch');
     // the URI form resolves too
-    const viaUri = await request(app).get(`/api/v1/resolve/${encodeURIComponent(pi.uri)}`).set(payer.auth);
+    const viaUri = await request(app)
+      .get(`/api/v1/resolve/${encodeURIComponent(pi.uri)}`)
+      .set(payer.auth);
     expect(viaUri.body.intent.id).toBe(pi.id);
     // pay from the wallet: attempt → ledger posting → captured → settlement pending
     const paid = await request(app).post(`/api/v1/payment_intents/${pi.id}/pay/wallet`).set(payer.auth).send({ pin: '1234' });
@@ -107,7 +120,10 @@ describe('BitriQR payment intents', () => {
     expect(loc.status).toBe(201);
     const term = await request(app).post(`/api/v1/locations/${loc.body.id}/terminals`).set(m.auth).send({ label: 'Counter 1' });
     expect(term.status).toBe(201);
-    const qr = await request(app).post('/api/v1/qr_codes').set(m.auth).send({ location_id: loc.body.id, terminal_id: term.body.id, currency: 'USD', rails: ['wallet', 'mpesa', 'airtel', 'orange', 'card'], asset_ref: 'STICKER-0001' });
+    const qr = await request(app)
+      .post('/api/v1/qr_codes')
+      .set(m.auth)
+      .send({ location_id: loc.body.id, terminal_id: term.body.id, currency: 'USD', rails: ['wallet', 'mpesa', 'airtel', 'orange', 'card'], asset_ref: 'STICKER-0001' });
     expect(qr.status, JSON.stringify(qr.body)).toBe(201);
     expect(qr.body.mode).toBe('STATIC');
     expect(qr.body.signed).toBe(true);

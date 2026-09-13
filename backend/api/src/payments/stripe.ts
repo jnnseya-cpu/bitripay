@@ -69,7 +69,14 @@ export const stripeProvider: GatewayProvider = {
       const stripe = client(credentials);
       const bal = await stripe.balance.retrieve();
       const pubOk = !credentials.publishableKey || credentials.publishableKey.startsWith(mode === 'live' ? 'pk_live_' : 'pk_test_');
-      return { ok: pubOk, mode, message: pubOk ? `Connected (${mode}) · ${bal.available.map((b) => `${b.currency.toUpperCase()} ${b.amount}`).join(', ') || 'no balance yet'}` : 'Secret and publishable keys are from different modes', details: { livemode: bal.livemode, webhookSecret: !!credentials.webhookSecret } };
+      return {
+        ok: pubOk,
+        mode,
+        message: pubOk
+          ? `Connected (${mode}) · ${bal.available.map((b) => `${b.currency.toUpperCase()} ${b.amount}`).join(', ') || 'no balance yet'}`
+          : 'Secret and publishable keys are from different modes',
+        details: { livemode: bal.livemode, webhookSecret: !!credentials.webhookSecret },
+      };
     } catch (err) {
       return { ok: false, mode, message: (err as Error).message };
     }
@@ -85,10 +92,7 @@ export const stripeProvider: GatewayProvider = {
     const intent = await stripe.paymentIntents.retrieve(payment.provider_ref, { expand: ['payment_method'] });
     if (intent.status === 'succeeded') {
       const pm = intent.payment_method as Stripe.PaymentMethod | null;
-      const savedCard =
-        intent.setup_future_usage && pm?.card
-          ? { token: pm.id, brand: pm.card.brand, last4: pm.card.last4, expMonth: pm.card.exp_month, expYear: pm.card.exp_year }
-          : undefined;
+      const savedCard = intent.setup_future_usage && pm?.card ? { token: pm.id, brand: pm.card.brand, last4: pm.card.last4, expMonth: pm.card.exp_month, expYear: pm.card.exp_year } : undefined;
       return { status: 'succeeded', raw: intent, savedCard };
     }
     if (intent.status === 'canceled') return { status: 'failed', failureReason: 'Payment cancelled', raw: intent };
@@ -110,7 +114,8 @@ export const stripeProvider: GatewayProvider = {
     if (event.type === 'payment_intent.succeeded') return [{ providerRef: intent.id, status: 'succeeded', raw: event }];
     if (event.type === 'payment_intent.payment_failed' || event.type === 'payment_intent.canceled') return [{ providerRef: intent.id, status: 'failed', raw: event }];
     // Chargebacks: a dispute on the charge freezes / reverses the transfer it funded.
-    if (event.type === 'charge.dispute.created') return [{ providerRef: String((event.data.object as any).payment_intent ?? ''), status: 'disputed', reason: (event.data.object as any).reason ?? 'dispute', raw: event }];
+    if (event.type === 'charge.dispute.created')
+      return [{ providerRef: String((event.data.object as any).payment_intent ?? ''), status: 'disputed', reason: (event.data.object as any).reason ?? 'dispute', raw: event }];
     if (event.type === 'charge.refunded') return [{ providerRef: String((event.data.object as any).payment_intent ?? ''), status: 'refunded', raw: event }];
     return [];
   },

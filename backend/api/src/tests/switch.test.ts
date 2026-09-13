@@ -30,7 +30,10 @@ const NODE = 'node:test';
 let orderSeq = 0;
 
 async function consent(amount: number, token = 'tok_ok', participant = 'DEMO_BANK_A') {
-  const r = await request(app).post('/api/v1/consents').set(auth).send({ participant_id: participant, beneficiary_binding_id: bindingId, amount: { currency: 'CDF', value_minor: String(amount) }, account_token: token, proof: `sim-consent-${Date.now()}` });
+  const r = await request(app)
+    .post('/api/v1/consents')
+    .set(auth)
+    .send({ participant_id: participant, beneficiary_binding_id: bindingId, amount: { currency: 'CDF', value_minor: String(amount) }, account_token: token, proof: `sim-consent-${Date.now()}` });
   expect(r.status, JSON.stringify(r.body)).toBe(201);
   return r.body.reference as string;
 }
@@ -42,14 +45,25 @@ async function createPayment(opts: { amount?: number; token?: string; participan
   const order = opts.order ?? `INV-2026-${String(++orderSeq).padStart(6, '0')}`;
   const req = request(app).post('/api/v1/payments').set(auth);
   if (opts.idem) req.set('Idempotency-Key', opts.idem);
-  const r = await req.send({ merchant_order_id: order, product: 'MERCHANT_PAYMENT', amount: { currency: 'CDF', value_minor: String(amount) }, payer: { participant_id: participant, account_token: token }, beneficiary_binding_id: bindingId, consent_reference: c, description: `Order ${order}`, ...(opts.extra ?? {}) });
+  const r = await req.send({
+    merchant_order_id: order,
+    product: 'MERCHANT_PAYMENT',
+    amount: { currency: 'CDF', value_minor: String(amount) },
+    payer: { participant_id: participant, account_token: token },
+    beneficiary_binding_id: bindingId,
+    consent_reference: c,
+    description: `Order ${order}`,
+    ...(opts.extra ?? {}),
+  });
   return r;
 }
 async function dispatch(owner = NODE) {
   return dispatchOutbox(owner, { limit: 100 });
 }
 function makeDue(paymentId: string) {
-  getDb().prepare('UPDATE outbox_messages SET available_at = ? WHERE payment_id = ? AND delivered_at IS NULL').run(new Date(Date.now() - 1000).toISOString(), paymentId);
+  getDb()
+    .prepare('UPDATE outbox_messages SET available_at = ? WHERE payment_id = ? AND delivered_at IS NULL')
+    .run(new Date(Date.now() - 1000).toISOString(), paymentId);
 }
 async function inject(stableMessageId: string, variant: string, externalMessageId?: string) {
   const r = await request(app).post(`/api/admin/switch/connections/${CONN}/simulate-inbound`).set(admin.auth).send({ stableMessageId, variant, externalMessageId });
@@ -83,9 +97,20 @@ beforeAll(async () => {
 describe('L1 internal core: identity, idempotency, state machine', () => {
   it('T01/T02/T03 — same key and order → one resource and one command; changed content → 409; new key same order → duplicate refused', async () => {
     const c = await consent(250_000_00);
-    const body = { merchant_order_id: 'INV-2026-000187', product: 'MERCHANT_PAYMENT', amount: { currency: 'CDF', value_minor: '25000000' }, payer: { participant_id: 'DEMO_BANK_A', account_token: 'tok_ok' }, beneficiary_binding_id: bindingId, consent_reference: c, description: 'Order INV-2026-000187' };
+    const body = {
+      merchant_order_id: 'INV-2026-000187',
+      product: 'MERCHANT_PAYMENT',
+      amount: { currency: 'CDF', value_minor: '25000000' },
+      payer: { participant_id: 'DEMO_BANK_A', account_token: 'tok_ok' },
+      beneficiary_binding_id: bindingId,
+      consent_reference: c,
+      description: 'Order INV-2026-000187',
+    };
     // two simultaneous creations: exactly one 201; the other is either the identical resource (200) or told the key is in progress (409) — never a second payment
-    const [ra, rb] = await Promise.all([request(app).post('/api/v1/payments').set(auth).set('Idempotency-Key', 'k-187').send(body), request(app).post('/api/v1/payments').set(auth).set('Idempotency-Key', 'k-187').send(body)]);
+    const [ra, rb] = await Promise.all([
+      request(app).post('/api/v1/payments').set(auth).set('Idempotency-Key', 'k-187').send(body),
+      request(app).post('/api/v1/payments').set(auth).set('Idempotency-Key', 'k-187').send(body),
+    ]);
     const created = [ra, rb].filter((x) => x.status === 201);
     expect(created, JSON.stringify([ra.body, rb.body])).toHaveLength(1);
     const otherStatus = [ra, rb].find((x) => x.status !== 201)!.status;
@@ -98,11 +123,22 @@ describe('L1 internal core: identity, idempotency, state machine', () => {
     const pid = r1.body.payment_id as string;
     expect(r1.body.status).toBe('READY');
     expect(r1.body.route).toMatchObject({ class: 'DOMESTIC_INTEROPERABLE', rail: 'NATIONAL_SWITCH', access_mode: 'DIRECT', scheme_id: 'SMN-CD' });
-    expect(r1.body).toMatchObject({ authorization_status: 'NOT_OBSERVED', beneficiary_credit_status: 'NOT_OBSERVED', settlement_status: 'NOT_OBSERVED', reconciliation_status: 'NOT_DUE', resolution_status: 'NONE', state_version: 1 });
+    expect(r1.body).toMatchObject({
+      authorization_status: 'NOT_OBSERVED',
+      beneficiary_credit_status: 'NOT_OBSERVED',
+      settlement_status: 'NOT_OBSERVED',
+      reconciliation_status: 'NOT_DUE',
+      resolution_status: 'NONE',
+      state_version: 1,
+    });
     expect(r1.body.amount.value_minor).toBe('25000000');
     expect((getDb().prepare("SELECT COUNT(*) c FROM outbox_messages WHERE payment_id = ? AND kind = 'switch.submit'").get(pid) as any).c).toBe(1);
     // T02: same key, changed amount
-    const t02 = await request(app).post('/api/v1/payments').set(auth).set('Idempotency-Key', 'k-187').send({ ...body, amount: { currency: 'CDF', value_minor: '26000000' } });
+    const t02 = await request(app)
+      .post('/api/v1/payments')
+      .set(auth)
+      .set('Idempotency-Key', 'k-187')
+      .send({ ...body, amount: { currency: 'CDF', value_minor: '26000000' } });
     expect(t02.status).toBe(409);
     expect(t02.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
     // T03: new key, same order
@@ -135,7 +171,14 @@ describe('L1 internal core: identity, idempotency, state machine', () => {
     expect(c.status).toBe(200);
     expect(c.body.status).toBe('CANCELLED');
     const d = await dispatch();
-    expect(d.results.filter((x) => x.id && getDb().prepare('SELECT payment_id FROM outbox_messages WHERE id = ?').get(x.id) && (getDb().prepare('SELECT payment_id FROM outbox_messages WHERE id = ?').get(x.id) as any).payment_id === r.body.payment_id)).toHaveLength(0);
+    expect(
+      d.results.filter(
+        (x) =>
+          x.id &&
+          getDb().prepare('SELECT payment_id FROM outbox_messages WHERE id = ?').get(x.id) &&
+          (getDb().prepare('SELECT payment_id FROM outbox_messages WHERE id = ?').get(x.id) as any).payment_id === r.body.payment_id,
+      ),
+    ).toHaveLength(0);
     expect((getDb().prepare('SELECT COUNT(*) c FROM switch_attempts WHERE payment_id = ?').get(r.body.payment_id) as any).c).toBe(0);
     const r2 = await createPayment();
     await dispatch();
@@ -159,21 +202,39 @@ describe('L1 internal core: identity, idempotency, state machine', () => {
 
   it('T20/T31 — substituted beneficiary or injected route fields are rejected before any transmission', async () => {
     const other = await registerUser(app, { role: 'merchant', businessName: 'Imposter', country: 'CD' });
-    const stolen = await request(app).post('/api/v1/payments').set(other.auth).send({ merchant_order_id: 'IMP-1', product: 'MERCHANT_PAYMENT', amount: { currency: 'CDF', value_minor: '1000' }, payer: { participant_id: 'DEMO_BANK_A' }, beneficiary_binding_id: bindingId });
+    const stolen = await request(app)
+      .post('/api/v1/payments')
+      .set(other.auth)
+      .send({ merchant_order_id: 'IMP-1', product: 'MERCHANT_PAYMENT', amount: { currency: 'CDF', value_minor: '1000' }, payer: { participant_id: 'DEMO_BANK_A' }, beneficiary_binding_id: bindingId });
     expect(stolen.status).toBe(404);
     const pending = await request(app).post('/api/v1/beneficiary_bindings').set(auth).send({ participant_id: 'DEMO_BANK_B', account_token: 'acct-new-000011', account_name: 'Kin Bakery SARL' });
-    const unverified = await request(app).post('/api/v1/payments').set(auth).send({ merchant_order_id: 'UNV-1', product: 'MERCHANT_PAYMENT', amount: { currency: 'CDF', value_minor: '1000' }, payer: { participant_id: 'DEMO_BANK_A' }, beneficiary_binding_id: pending.body.id });
+    const unverified = await request(app)
+      .post('/api/v1/payments')
+      .set(auth)
+      .send({
+        merchant_order_id: 'UNV-1',
+        product: 'MERCHANT_PAYMENT',
+        amount: { currency: 'CDF', value_minor: '1000' },
+        payer: { participant_id: 'DEMO_BANK_A' },
+        beneficiary_binding_id: pending.body.id,
+      });
     expect(unverified.status).toBe(422);
     const injected = await createPayment({ extra: { rail: 'MMO_DIRECT', sponsor_id: 'DEMO_SPONSOR' } });
     expect(injected.status).toBe(400);
     expect(injected.body.error.code).toBe('INVALID_REQUEST');
     expect(injected.body.error.details.rejected_fields).toEqual(['rail', 'sponsor_id']);
-    const float = await request(app).post('/api/v1/payments').set(auth).send({ merchant_order_id: 'FLT-1', product: 'MERCHANT_PAYMENT', amount: { currency: 'CDF', value_minor: 250.5 }, payer: { participant_id: 'DEMO_BANK_A' }, beneficiary_binding_id: bindingId });
+    const float = await request(app)
+      .post('/api/v1/payments')
+      .set(auth)
+      .send({ merchant_order_id: 'FLT-1', product: 'MERCHANT_PAYMENT', amount: { currency: 'CDF', value_minor: 250.5 }, payer: { participant_id: 'DEMO_BANK_A' }, beneficiary_binding_id: bindingId });
     expect(float.status).toBe(400);
   });
 
   it('T30 — a wallet or mint product in the aggregator phase is refused server-side and audited', async () => {
-    const r = await request(app).post('/api/v1/payments').set(auth).send({ merchant_order_id: 'WAL-1', product: 'WALLET_MINT', amount: { currency: 'CDF', value_minor: '1000' }, payer: { participant_id: 'DEMO_BANK_A' }, beneficiary_binding_id: bindingId });
+    const r = await request(app)
+      .post('/api/v1/payments')
+      .set(auth)
+      .send({ merchant_order_id: 'WAL-1', product: 'WALLET_MINT', amount: { currency: 'CDF', value_minor: '1000' }, payer: { participant_id: 'DEMO_BANK_A' }, beneficiary_binding_id: bindingId });
     expect(r.status).toBe(422);
     expect(r.body.error.code).toBe('UNSUPPORTED_PRODUCT');
     const audited = getDb().prepare("SELECT COUNT(*) c FROM event_log WHERE event = 'perimeter.denied'").get() as any;
@@ -225,15 +286,15 @@ describe('L2 routing and simulation', () => {
 
   it('T06 — an expired certificate stops emission and raises a P1 incident; nothing disables TLS', async () => {
     try {
-    upsertConnection({ id: CONN, name: 'SMN (test)', country: 'CD', schemeId: 'SMN-CD', environment: 'sandbox', participantId: 'BITRIPAY_CD' }, admin.user?.id ?? 'admin');
-    setCertificate(CONN, { fingerprint: 'AA:BB', notAfter: new Date(Date.now() - 86_400_000).toISOString(), status: 'EXPIRED' }, admin.user?.id ?? 'admin');
-    const gate = emissionGate(getConnection(CONN));
-    expect(gate.allowed).toBe(false);
-    expect(gate.reasons.join(' ')).toMatch(/certificate/i);
-    const alerts = certificateAlerts();
-    expect(alerts.expired).toContain(CONN);
-    const incidents = await request(app).get('/api/admin/switch/incidents?status=OPEN').set(admin.auth);
-    expect(incidents.body.items.some((i: any) => i.level === 'P1' && /Certificate expired/.test(i.title))).toBe(true);
+      upsertConnection({ id: CONN, name: 'SMN (test)', country: 'CD', schemeId: 'SMN-CD', environment: 'sandbox', participantId: 'BITRIPAY_CD' }, admin.user?.id ?? 'admin');
+      setCertificate(CONN, { fingerprint: 'AA:BB', notAfter: new Date(Date.now() - 86_400_000).toISOString(), status: 'EXPIRED' }, admin.user?.id ?? 'admin');
+      const gate = emissionGate(getConnection(CONN));
+      expect(gate.allowed).toBe(false);
+      expect(gate.reasons.join(' ')).toMatch(/certificate/i);
+      const alerts = certificateAlerts();
+      expect(alerts.expired).toContain(CONN);
+      const incidents = await request(app).get('/api/admin/switch/incidents?status=OPEN').set(admin.auth);
+      expect(incidents.body.items.some((i: any) => i.level === 'P1' && /Certificate expired/.test(i.title))).toBe(true);
     } finally {
       // restore the simulation connection whatever happened above
       upsertConnection({ id: CONN, name: 'SMN (test)', country: 'CD', schemeId: 'SMN-CD', environment: 'simulation', participantId: 'BITRIPAY_CD' }, admin.user?.id ?? 'admin');
@@ -278,9 +339,32 @@ describe('L3 evidence and operations', () => {
     // the process persisted the attempt, sent the command (effect happened), then died before persisting the answer
     const stable = `${pid}-1`;
     const sim = simulatorFor(getConnection(CONN));
-    await sim.submit({ paymentId: pid, product: 'MERCHANT_PAYMENT', amountMinor: String(row.amount_minor), currency: row.currency, debtor: { participantId: 'DEMO_BANK_A', accountToken: 'tok_ok', routingId: null }, creditor: { participantId: binding.participant_id, accountToken: binding.account_token, routingId: null, merchantId: row.merchant_user_id }, accessMode: 'DIRECT', participantId: 'BITRIPAY_CD', sponsorId: null, schemeId: 'SMN-CD', consentReference: row.consent_reference, occurredAt: new Date().toISOString(), description: null }, stable);
-    getDb().prepare("INSERT INTO switch_attempts (id, payment_id, seq, kind, stable_message_id, access_mode, participant_id, fencing_token, emission_possible, sent_at, status, created_at) VALUES (?, ?, 1, 'SUBMIT', ?, 'DIRECT', 'BITRIPAY_CD', 1, 1, ?, 'SENT', ?)").run('sa_crash1', pid, stable, new Date(Date.now() - 120_000).toISOString(), new Date().toISOString());
-    getDb().prepare("UPDATE switch_payments SET status = 'DISPATCHING', external_message_id = ?, dispatched_at = ?, state_version = state_version + 1 WHERE id = ?").run(stable, new Date().toISOString(), pid);
+    await sim.submit(
+      {
+        paymentId: pid,
+        product: 'MERCHANT_PAYMENT',
+        amountMinor: String(row.amount_minor),
+        currency: row.currency,
+        debtor: { participantId: 'DEMO_BANK_A', accountToken: 'tok_ok', routingId: null },
+        creditor: { participantId: binding.participant_id, accountToken: binding.account_token, routingId: null, merchantId: row.merchant_user_id },
+        accessMode: 'DIRECT',
+        participantId: 'BITRIPAY_CD',
+        sponsorId: null,
+        schemeId: 'SMN-CD',
+        consentReference: row.consent_reference,
+        occurredAt: new Date().toISOString(),
+        description: null,
+      },
+      stable,
+    );
+    getDb()
+      .prepare(
+        "INSERT INTO switch_attempts (id, payment_id, seq, kind, stable_message_id, access_mode, participant_id, fencing_token, emission_possible, sent_at, status, created_at) VALUES (?, ?, 1, 'SUBMIT', ?, 'DIRECT', 'BITRIPAY_CD', 1, 1, ?, 'SENT', ?)",
+      )
+      .run('sa_crash1', pid, stable, new Date(Date.now() - 120_000).toISOString(), new Date().toISOString());
+    getDb()
+      .prepare("UPDATE switch_payments SET status = 'DISPATCHING', external_message_id = ?, dispatched_at = ?, state_version = state_version + 1 WHERE id = ?")
+      .run(stable, new Date().toISOString(), pid);
     getDb().prepare("UPDATE outbox_messages SET delivered_at = ? WHERE payment_id = ? AND kind = 'switch.submit'").run(new Date().toISOString(), pid);
     const recovered = recoverUncertainEmissions();
     expect(recovered).toBeGreaterThanOrEqual(1);
@@ -314,7 +398,9 @@ describe('L3 evidence and operations', () => {
     const ack = await createPayment({ token: 'tok_ack_only' });
     await dispatch();
     expect(getPaymentRow(ack.body.payment_id).status).toBe('PENDING');
-    getDb().prepare('UPDATE switch_payments SET dispatched_at = ? WHERE id = ?').run(new Date(Date.now() - 60_000).toISOString(), ack.body.payment_id);
+    getDb()
+      .prepare('UPDATE switch_payments SET dispatched_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 60_000).toISOString(), ack.body.payment_id);
     for (let i = 0; i < 4; i++) {
       recoverUncertainEmissions(); // the recovery worker starts the inquiry chain once the product timeout passed
       makeDue(ack.body.payment_id);
@@ -367,10 +453,25 @@ describe('L3 evidence and operations', () => {
   });
 
   it('T15 — consent that expires while queued: no transmission, the payment expires', async () => {
-    const c = await request(app).post('/api/v1/consents').set(auth).send({ participant_id: 'DEMO_BANK_A', beneficiary_binding_id: bindingId, amount: { currency: 'CDF', value_minor: '5000' }, account_token: 'tok_ok', ttl_seconds: 30, proof: 'short-lived' });
-    const r = await request(app).post('/api/v1/payments').set(auth).send({ merchant_order_id: `EXP-${Date.now()}`, product: 'MERCHANT_PAYMENT', amount: { currency: 'CDF', value_minor: '5000' }, payer: { participant_id: 'DEMO_BANK_A', account_token: 'tok_ok' }, beneficiary_binding_id: bindingId, consent_reference: c.body.reference });
+    const c = await request(app)
+      .post('/api/v1/consents')
+      .set(auth)
+      .send({ participant_id: 'DEMO_BANK_A', beneficiary_binding_id: bindingId, amount: { currency: 'CDF', value_minor: '5000' }, account_token: 'tok_ok', ttl_seconds: 30, proof: 'short-lived' });
+    const r = await request(app)
+      .post('/api/v1/payments')
+      .set(auth)
+      .send({
+        merchant_order_id: `EXP-${Date.now()}`,
+        product: 'MERCHANT_PAYMENT',
+        amount: { currency: 'CDF', value_minor: '5000' },
+        payer: { participant_id: 'DEMO_BANK_A', account_token: 'tok_ok' },
+        beneficiary_binding_id: bindingId,
+        consent_reference: c.body.reference,
+      });
     expect(r.status).toBe(201);
-    getDb().prepare('UPDATE consent_evidence SET expires_at = ? WHERE reference = ?').run(new Date(Date.now() - 1000).toISOString(), c.body.reference);
+    getDb()
+      .prepare('UPDATE consent_evidence SET expires_at = ? WHERE reference = ?')
+      .run(new Date(Date.now() - 1000).toISOString(), c.body.reference);
     await dispatch();
     const row = getPaymentRow(r.body.payment_id);
     expect(row.status).toBe('EXPIRED');
@@ -389,7 +490,10 @@ describe('L3 evidence and operations', () => {
   it('T16/T17 — refund reservations are atomic and an unknown refund keeps its reservation', async () => {
     const r = await createPayment({ amount: 1000_00 });
     await dispatch();
-    const [a, b] = await Promise.all([request(app).post(`/api/v1/payments/${r.body.payment_id}/refunds`).set(auth).send({ amount_minor: '60000', reason: 'partial' }), request(app).post(`/api/v1/payments/${r.body.payment_id}/refunds`).set(auth).send({ amount_minor: '60000', reason: 'partial again' })]);
+    const [a, b] = await Promise.all([
+      request(app).post(`/api/v1/payments/${r.body.payment_id}/refunds`).set(auth).send({ amount_minor: '60000', reason: 'partial' }),
+      request(app).post(`/api/v1/payments/${r.body.payment_id}/refunds`).set(auth).send({ amount_minor: '60000', reason: 'partial again' }),
+    ]);
     expect([a.status, b.status].sort()).toEqual([201, 409]);
     expect((a.status === 409 ? a : b).body.error.code).toBe('REFUND_EXCEEDS_REFUNDABLE');
     expect(refundable(r.body.payment_id)).toMatchObject({ principal: 100000, reserved: 60000, refundable: 40000 });
@@ -412,7 +516,10 @@ describe('L3 evidence and operations', () => {
   });
 
   it('T18 — an unreachable webhook endpoint never changes the payment; deliveries queue and the status stays readable', async () => {
-    await request(app).post('/api/v1/webhook-endpoints').set(auth).send({ url: 'http://127.0.0.1:9/hooks', events: ['payment.*'] });
+    await request(app)
+      .post('/api/v1/webhook-endpoints')
+      .set(auth)
+      .send({ url: 'http://127.0.0.1:9/hooks', events: ['payment.*'] });
     const r = await createPayment();
     await dispatch();
     const deliveries = (await request(app).get('/api/v1/webhook_deliveries?status=pending').set(auth)).body.data;
@@ -425,9 +532,29 @@ describe('L3 evidence and operations', () => {
     await dispatch();
     const row = getPaymentRow(r.body.payment_id);
     const cycle = businessDate();
-    const lines = [{ externalReference: row.external_reference, correlationId: row.switch_correlation_id, debtorId: 'DEMO_BANK_A', creditorId: 'DEMO_MMO_B', amountMinor: String(row.amount_minor), currency: 'CDF', status: 'COMPLETED', feeMinor: String(Math.round(row.amount_minor * 0.005)), settlementRef: `SET-${cycle}` }];
-    const i1 = await importReport(CONN, { source: 'SWITCH', cycleRef: cycle, periodFrom: `${cycle}T00:00:00.000Z`, periodTo: `${cycle}T23:59:59.999Z`, currency: 'CDF', lines }, admin.user?.id ?? 'admin');
-    const i2 = await importReport(CONN, { source: 'SWITCH', cycleRef: cycle, periodFrom: `${cycle}T00:00:00.000Z`, periodTo: `${cycle}T23:59:59.999Z`, currency: 'CDF', lines }, admin.user?.id ?? 'admin');
+    const lines = [
+      {
+        externalReference: row.external_reference,
+        correlationId: row.switch_correlation_id,
+        debtorId: 'DEMO_BANK_A',
+        creditorId: 'DEMO_MMO_B',
+        amountMinor: String(row.amount_minor),
+        currency: 'CDF',
+        status: 'COMPLETED',
+        feeMinor: String(Math.round(row.amount_minor * 0.005)),
+        settlementRef: `SET-${cycle}`,
+      },
+    ];
+    const i1 = await importReport(
+      CONN,
+      { source: 'SWITCH', cycleRef: cycle, periodFrom: `${cycle}T00:00:00.000Z`, periodTo: `${cycle}T23:59:59.999Z`, currency: 'CDF', lines },
+      admin.user?.id ?? 'admin',
+    );
+    const i2 = await importReport(
+      CONN,
+      { source: 'SWITCH', cycleRef: cycle, periodFrom: `${cycle}T00:00:00.000Z`, periodTo: `${cycle}T23:59:59.999Z`, currency: 'CDF', lines },
+      admin.user?.id ?? 'admin',
+    );
     expect(i2.id).toBe(i1.id);
     expect(i2.duplicate).toBe(true);
     expect((getDb().prepare('SELECT COUNT(*) c FROM reconciliation_lines WHERE external_reference = ?').get(row.external_reference) as any).c).toBe(1);
@@ -439,7 +566,18 @@ describe('L3 evidence and operations', () => {
     expect(run.totals.CDF.external.count).toBeGreaterThanOrEqual(1);
     expect(Object.keys(run.totals)).not.toContain('TOTAL'); // per currency only
     // T23 the institution reports a different amount
-    const inst = await importReport(CONN, { source: 'INSTITUTION', cycleRef: cycle, periodFrom: `${cycle}T00:00:00.000Z`, periodTo: `${cycle}T23:59:59.999Z`, currency: 'CDF', lines: [{ ...lines[0], amountMinor: String(row.amount_minor + 100) }] }, admin.user?.id ?? 'admin');
+    const inst = await importReport(
+      CONN,
+      {
+        source: 'INSTITUTION',
+        cycleRef: cycle,
+        periodFrom: `${cycle}T00:00:00.000Z`,
+        periodTo: `${cycle}T23:59:59.999Z`,
+        currency: 'CDF',
+        lines: [{ ...lines[0], amountMinor: String(row.amount_minor + 100) }],
+      },
+      admin.user?.id ?? 'admin',
+    );
     expect(inst.duplicate).toBeFalsy();
     const run2 = runReconciliation(CONN, cycle, admin.user?.id ?? 'admin');
     expect(run2.complete).toBe(true);
@@ -452,7 +590,10 @@ describe('L3 evidence and operations', () => {
     expect(mine.status).toBe(200);
     expect(mine.body.data.length).toBe(1);
     // closure needs the analyst and a different approver
-    const proposed = await request(app).post(`/api/admin/switch/cases/${mismatch[0].id}/resolve`).set(admin.auth).send({ resolution: 'Institution confirmed a fee-inclusive figure; corrected file requested.', documents: ['INST-LETTER-1'] });
+    const proposed = await request(app)
+      .post(`/api/admin/switch/cases/${mismatch[0].id}/resolve`)
+      .set(admin.auth)
+      .send({ resolution: 'Institution confirmed a fee-inclusive figure; corrected file requested.', documents: ['INST-LETTER-1'] });
     expect(proposed.body.case.status).toBe('RESOLUTION_PROPOSED');
     const selfClose = await request(app).post(`/api/admin/switch/cases/${mismatch[0].id}/approve-closure`).set(admin.auth);
     expect(selfClose.status).toBe(400);
@@ -493,14 +634,23 @@ describe('L5 resilience: fencing', () => {
     expect(dir.body.data.some((p: any) => p.participant_id === 'DEMO_BANK_A' && p.open_pairs.some((x: any) => x.creditor_id === 'DEMO_MMO_B'))).toBe(true);
     expect(dir.body.data.some((p: any) => p.participant_id === 'DEMO_BANK_C')).toBe(false);
     // production can never be enabled on the simulator, and a certified adapter needs certification with evidence and a distinct approver
-    const prod = await request(app).put(`/api/admin/switch/connections/${CONN}`).set(admin.auth).send({ name: 'SMN', country: 'CD', schemeId: 'SMN-CD', environment: 'production', participantId: 'BITRIPAY_CD' });
+    const prod = await request(app)
+      .put(`/api/admin/switch/connections/${CONN}`)
+      .set(admin.auth)
+      .send({ name: 'SMN', country: 'CD', schemeId: 'SMN-CD', environment: 'production', participantId: 'BITRIPAY_CD' });
     expect(prod.body.blockers.join(' ')).toMatch(/simulator never reaches production/);
     const enable = await request(app).post(`/api/admin/switch/connections/${CONN}/enable`).set(admin.auth).send({ enabled: true });
     expect(enable.status).toBe(409);
     expect(enable.body.error.code).toBe('connector_not_certified');
-    const cert = await request(app).post(`/api/admin/switch/connections/${CONN}/certification`).set(admin.auth).send({ status: 'CERTIFIED', evidenceRef: 'x', approverId: admin.user?.id ?? 'admin' });
+    const cert = await request(app)
+      .post(`/api/admin/switch/connections/${CONN}/certification`)
+      .set(admin.auth)
+      .send({ status: 'CERTIFIED', evidenceRef: 'x', approverId: admin.user?.id ?? 'admin' });
     expect(cert.status).toBe(409); // must go through INTERNAL_TESTS and SANDBOX first
-    await request(app).put(`/api/admin/switch/connections/${CONN}`).set(admin.auth).send({ name: 'Switch Monétique National (RDC) — SIMULATION', country: 'CD', schemeId: 'SMN-CD', environment: 'simulation', participantId: 'BITRIPAY_CD' });
+    await request(app)
+      .put(`/api/admin/switch/connections/${CONN}`)
+      .set(admin.auth)
+      .send({ name: 'Switch Monétique National (RDC) — SIMULATION', country: 'CD', schemeId: 'SMN-CD', environment: 'simulation', participantId: 'BITRIPAY_CD' });
     await request(app).post(`/api/admin/switch/connections/${CONN}/enable`).set(admin.auth).send({ enabled: true });
     expect(getConnection(CONN).enabled).toBe(true);
   });
@@ -511,21 +661,42 @@ describe('rail registry and Smart Route', () => {
     for (let i = 0; i < 20; i++) recordRoutingOutcome('conn_fast', 'card', 'success', 800);
     for (let i = 0; i < 20; i++) recordRoutingOutcome('conn_slow', 'card', 'success', 9000);
     for (let i = 0; i < 10; i++) recordRoutingOutcome('conn_flaky', 'card', i % 2 ? 'failure' : 'success', 1500);
-    const scores = scoreConnectors([{ id: 'conn_fast', method: 'card', costBps: 150 }, { id: 'conn_slow', method: 'card', costBps: 150 }, { id: 'conn_flaky', method: 'card', costBps: 150 }], 'smart');
+    const scores = scoreConnectors(
+      [
+        { id: 'conn_fast', method: 'card', costBps: 150 },
+        { id: 'conn_slow', method: 'card', costBps: 150 },
+        { id: 'conn_flaky', method: 'card', costBps: 150 },
+      ],
+      'smart',
+    );
     expect(scores[0].id).toBe('conn_fast');
     expect(scores.every((s) => s.usable)).toBe(true);
-    const cheapest = scoreConnectors([{ id: 'conn_fast', method: 'card', costBps: 290 }, { id: 'conn_slow', method: 'card', costBps: 150 }], 'cheapest');
+    const cheapest = scoreConnectors(
+      [
+        { id: 'conn_fast', method: 'card', costBps: 290 },
+        { id: 'conn_slow', method: 'card', costBps: 150 },
+      ],
+      'cheapest',
+    );
     expect(cheapest[0].components.cost).toBeGreaterThanOrEqual(cheapest[1].components.cost);
     // declines never trip the breaker; connector faults do
     for (let i = 0; i < 10; i++) recordRoutingOutcome('conn_declines', 'card', 'decline', 500);
     expect(connectorHealth('conn_declines').circuit).toBe('closed');
     for (let i = 0; i < 5; i++) recordRoutingOutcome('conn_down', 'card', 'failure', 15000);
     expect(connectorHealth('conn_down').circuit).toBe('open');
-    const pick = pickConnector([{ id: 'conn_down', method: 'card' }, { id: 'conn_fast', method: 'card' }], 'smart');
+    const pick = pickConnector(
+      [
+        { id: 'conn_down', method: 'card' },
+        { id: 'conn_fast', method: 'card' },
+      ],
+      'smart',
+    );
     expect(pick.id).toBe('conn_fast');
     expect(pick.scores.find((s) => s.id === 'conn_down')?.usable).toBe(false);
     // half-open after the cooldown, closed again on success
-    getDb().prepare("UPDATE connector_state SET opened_at = ? WHERE connector = 'conn_down'").run(new Date(Date.now() - 10 * 60_000).toISOString());
+    getDb()
+      .prepare("UPDATE connector_state SET opened_at = ? WHERE connector = 'conn_down'")
+      .run(new Date(Date.now() - 10 * 60_000).toISOString());
     expect(connectorHealth('conn_down').circuit).toBe('half_open');
     recordRoutingOutcome('conn_down', 'card', 'success', 700);
     expect(connectorHealth('conn_down').circuit).toBe('closed');

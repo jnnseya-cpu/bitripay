@@ -5,7 +5,8 @@
   const { decodeEntities } = window.wp.htmlEntities;
   const settings = getSetting('bitripay_data', {});
   const label = decodeEntities(settings.title || 'BitriPay');
-  const Content = () => createElement('div', null, decodeEntities(settings.description || ''), settings.testmode ? createElement('em', { style: { display: 'block', fontSize: '12px' } }, 'Test mode') : null);
+  const Content = () =>
+    createElement('div', null, decodeEntities(settings.description || ''), settings.testmode ? createElement('em', { style: { display: 'block', fontSize: '12px' } }, 'Test mode') : null);
   const Label = () => createElement('span', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, createElement('img', { src: settings.icon, alt: '', style: { height: 24 } }), label);
   registerPaymentMethod({
     name: 'bitripay',

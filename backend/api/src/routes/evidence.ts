@@ -36,14 +36,32 @@ evidenceRouter.post(
   }),
 );
 
-evidenceRouter.get('/canonical-format', (_req, res) => res.json({ algorithm: 'ed25519', canonical: 'deviceId\\nnonce\\nreceivedAt\\nfrom\\noperatorId\\ntext', example: evidenceCanonical({ deviceId: 'DEVICE_ID', nonce: 'NONCE', receivedAt: '2026-01-01T00:00:00.000Z', from: 'MPESA', operatorId: 'mpesa_ke', text: 'SMS TEXT' }) }));
+evidenceRouter.get('/canonical-format', (_req, res) =>
+  res.json({
+    algorithm: 'ed25519',
+    canonical: 'deviceId\\nnonce\\nreceivedAt\\nfrom\\noperatorId\\ntext',
+    example: evidenceCanonical({ deviceId: 'DEVICE_ID', nonce: 'NONCE', receivedAt: '2026-01-01T00:00:00.000Z', from: 'MPESA', operatorId: 'mpesa_ke', text: 'SMS TEXT' }),
+  }),
+);
 
 evidenceRouter.use(requireAuth, requireRole('admin', 'agent'));
 evidenceRouter.get('/devices', (req, res) => res.json({ items: listDevices(req.user!.role === 'admin' ? null : req.user!.id) }));
 evidenceRouter.post(
   '/devices',
   wrap(async (req, res) => {
-    const body = validate(z.object({ name: z.string().min(2).max(80), publicKey: z.string().min(32).max(2000), operatorIds: z.array(z.string()).max(50).optional().nullable(), kind: z.enum(['collection', 'payout']).optional().nullable(), simMsisdn: z.string().max(30).optional().nullable(), simIccid: z.string().max(30).optional().nullable(), agentUserId: z.string().optional().nullable(), payoutAccountId: z.string().optional().nullable() }), req.body);
+    const body = validate(
+      z.object({
+        name: z.string().min(2).max(80),
+        publicKey: z.string().min(32).max(2000),
+        operatorIds: z.array(z.string()).max(50).optional().nullable(),
+        kind: z.enum(['collection', 'payout']).optional().nullable(),
+        simMsisdn: z.string().max(30).optional().nullable(),
+        simIccid: z.string().max(30).optional().nullable(),
+        agentUserId: z.string().optional().nullable(),
+        payoutAccountId: z.string().optional().nullable(),
+      }),
+      req.body,
+    );
     // Agents may enrol payout devices only on payout accounts they operate; collection devices are theirs to register.
     if (req.user!.role === 'agent' && body.kind === 'payout') {
       if (!body.payoutAccountId) throw forbidden('Choose the payout account this device operates', 'payout_account_required');

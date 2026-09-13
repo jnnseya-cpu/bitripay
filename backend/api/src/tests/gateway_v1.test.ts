@@ -41,7 +41,10 @@ describe('checkout sessions, links and refunds', () => {
     const payer = await registerUser(app);
     await fund(app, payer.user.id, '200.00', 'USD');
     await fund(app, m.user.id, '1.00', 'USD'); // refunds return the principal; the platform fee stays with the platform, so the merchant covers it from its balance
-    const ep = await request(app).post('/api/v1/webhook_endpoints').set(m.auth).send({ url: 'http://127.0.0.1:9/hooks', events: ['checkout.session.*', 'refund.*', 'payment_intent.succeeded'] });
+    const ep = await request(app)
+      .post('/api/v1/webhook_endpoints')
+      .set(m.auth)
+      .send({ url: 'http://127.0.0.1:9/hooks', events: ['checkout.session.*', 'refund.*', 'payment_intent.succeeded'] });
     expect(ep.status, JSON.stringify(ep.body)).toBe(201);
     expect(ep.body.secret).toMatch(/^whsec_/);
 
@@ -49,7 +52,17 @@ describe('checkout sessions, links and refunds', () => {
       .post('/api/v1/checkout_sessions')
       .set(m.auth)
       .set('Idempotency-Key', 'order-77')
-      .send({ currency: 'USD', line_items: [{ name: 'Croissant', quantity: 4, unit_amount_minor: 150 }, { name: 'Coffee', quantity: 2, unit_amount_minor: 300 }], success_url: 'https://kinbakery.example/thanks', cancel_url: 'https://kinbakery.example/cart', customer: { email: 'ana@example.com' }, reference: 'ORD-77' });
+      .send({
+        currency: 'USD',
+        line_items: [
+          { name: 'Croissant', quantity: 4, unit_amount_minor: 150 },
+          { name: 'Coffee', quantity: 2, unit_amount_minor: 300 },
+        ],
+        success_url: 'https://kinbakery.example/thanks',
+        cancel_url: 'https://kinbakery.example/cart',
+        customer: { email: 'ana@example.com' },
+        reference: 'ORD-77',
+      });
     expect(cs.status, JSON.stringify(cs.body)).toBe(201);
     expect(cs.body.id).toMatch(/^cs_/);
     expect(cs.body.status).toBe('open');
@@ -61,13 +74,26 @@ describe('checkout sessions, links and refunds', () => {
       .post('/api/v1/checkout_sessions')
       .set(m.auth)
       .set('Idempotency-Key', 'order-77')
-      .send({ currency: 'USD', line_items: [{ name: 'Croissant', quantity: 4, unit_amount_minor: 150 }, { name: 'Coffee', quantity: 2, unit_amount_minor: 300 }], success_url: 'https://kinbakery.example/thanks', cancel_url: 'https://kinbakery.example/cart', customer: { email: 'ana@example.com' }, reference: 'ORD-77' });
+      .send({
+        currency: 'USD',
+        line_items: [
+          { name: 'Croissant', quantity: 4, unit_amount_minor: 150 },
+          { name: 'Coffee', quantity: 2, unit_amount_minor: 300 },
+        ],
+        success_url: 'https://kinbakery.example/thanks',
+        cancel_url: 'https://kinbakery.example/cart',
+        customer: { email: 'ana@example.com' },
+        reference: 'ORD-77',
+      });
     expect(again.body.id).toBe(cs.body.id);
     const reused = await request(app).post('/api/v1/checkout_sessions').set(m.auth).set('Idempotency-Key', 'order-77').send({ currency: 'USD', amount_minor: 1200 });
     expect(reused.status).toBe(422);
     expect(reused.body.error.code).toBe('idempotency_key_reused');
     // a mismatching total is refused
-    const bad = await request(app).post('/api/v1/checkout_sessions').set(m.auth).send({ currency: 'USD', amount_minor: 999, line_items: [{ name: 'X', quantity: 1, unit_amount_minor: 100 }] });
+    const bad = await request(app)
+      .post('/api/v1/checkout_sessions')
+      .set(m.auth)
+      .send({ currency: 'USD', amount_minor: 999, line_items: [{ name: 'X', quantity: 1, unit_amount_minor: 100 }] });
     expect(bad.status).toBe(400);
     expect(bad.body.error.code).toBe('amount_mismatch');
 
@@ -164,7 +190,10 @@ describe('webhook engine', () => {
     let status = 200;
     const r = await receiver(() => status);
     server = r.server;
-    const ep = await request(app).post('/api/v1/webhook_endpoints').set(m.auth).send({ url: r.url, events: ['ping', 'payment_intent.*'], description: 'test' });
+    const ep = await request(app)
+      .post('/api/v1/webhook_endpoints')
+      .set(m.auth)
+      .send({ url: r.url, events: ['ping', 'payment_intent.*'], description: 'test' });
     expect(ep.status, JSON.stringify(ep.body)).toBe(201);
     const secret = ep.body.secret as string;
     const ping = await request(app).post(`/api/v1/webhook_endpoints/${ep.body.id}/ping`).set(m.auth);
@@ -212,11 +241,15 @@ describe('webhook engine', () => {
     // the scheduler only picks it up once the retry time has passed
     await processDueDeliveries();
     expect((getDb().prepare('SELECT attempts FROM webhook_deliveries WHERE id = ?').get(d2.id) as any).attempts).toBe(1);
-    getDb().prepare('UPDATE webhook_deliveries SET next_attempt_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), d2.id);
+    getDb()
+      .prepare('UPDATE webhook_deliveries SET next_attempt_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 1000).toISOString(), d2.id);
     await processDueDeliveries();
     expect((getDb().prepare('SELECT attempts FROM webhook_deliveries WHERE id = ?').get(d2.id) as any).attempts).toBe(2);
     // exhaust the schedule
-    getDb().prepare('UPDATE webhook_deliveries SET attempts = 17, next_attempt_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), d2.id);
+    getDb()
+      .prepare('UPDATE webhook_deliveries SET attempts = 8, next_attempt_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 1000).toISOString(), d2.id);
     const dead = await attemptDelivery(d2.id);
     expect(dead?.dead).toBe(true);
     expect(dead?.nextAttemptAt).toBeNull();
@@ -236,7 +269,10 @@ describe('webhook engine', () => {
     expect(rotated.body.secret).not.toBe(secret);
     const disabled = await request(app).patch(`/api/v1/webhook_endpoints/${ep.body.id}`).set(m.auth).send({ active: false });
     expect(disabled.body.active).toBe(false);
-    const unknownType = await request(app).post('/api/v1/webhook_endpoints').set(m.auth).send({ url: r.url, events: ['payment.made_up'] });
+    const unknownType = await request(app)
+      .post('/api/v1/webhook_endpoints')
+      .set(m.auth)
+      .send({ url: r.url, events: ['payment.made_up'] });
     expect(unknownType.status).toBe(400);
     const types = await request(app).get('/api/v1/webhook_events/types');
     expect(types.body.data.some((t: any) => t.type === 'payment_intent.ambiguous_hold')).toBe(true);
@@ -246,29 +282,46 @@ describe('webhook engine', () => {
 describe('scoped API keys', () => {
   it('restricts keys to their scopes, keeps publishable keys read-only and never lets a key mint keys', async () => {
     const m = await registerUser(app, { role: 'merchant', businessName: 'Keys Ltd' });
-    const ro = await request(app).post('/api/v1/api_keys').set(m.auth).send({ label: 'reporting', kind: 'restricted', scopes: ['payment_intents:read'] });
+    const ro = await request(app)
+      .post('/api/v1/api_keys')
+      .set(m.auth)
+      .send({ label: 'reporting', kind: 'restricted', scopes: ['payment_intents:read'] });
     expect(ro.status, JSON.stringify(ro.body)).toBe(201);
     expect(ro.body.secret).toMatch(/^rk_live_/);
     const pk = await request(app).post('/api/v1/api_keys').set(m.auth).send({ label: 'browser', kind: 'publishable', mode: 'test' });
     expect(pk.body.secret).toMatch(/^pk_test_/);
     const sk = await request(app).post('/api/v1/api_keys').set(m.auth).send({ label: 'server', mode: 'test' });
     expect(sk.body.secret).toMatch(/^sk_test_/);
-    const bad = await request(app).post('/api/v1/api_keys').set(m.auth).send({ label: 'x', kind: 'restricted', scopes: ['everything'] });
+    const bad = await request(app)
+      .post('/api/v1/api_keys')
+      .set(m.auth)
+      .send({ label: 'x', kind: 'restricted', scopes: ['everything'] });
     expect(bad.status).toBe(400);
     const roAuth = { Authorization: `Bearer ${ro.body.secret}` };
     const denied = await request(app).post('/api/v1/payment_intents').set(roAuth).send({ currency: 'USD', amount_minor: 100 });
     expect(denied.status).toBe(403);
     expect(denied.body.error.code).toBe('scope_denied');
-    const created = await request(app).post('/api/v1/payment_intents').set({ Authorization: `Bearer ${sk.body.secret}` }).send({ currency: 'USD', amount_minor: 100 });
+    const created = await request(app)
+      .post('/api/v1/payment_intents')
+      .set({ Authorization: `Bearer ${sk.body.secret}` })
+      .send({ currency: 'USD', amount_minor: 100 });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const listed = await request(app).get('/api/v1/payment_intents').set(roAuth);
     expect(listed.status).toBe(200);
     expect(listed.body.data.some((i: any) => i.id === created.body.id)).toBe(true);
-    const pkList = await request(app).get('/api/v1/payment_intents').set({ Authorization: `Bearer ${pk.body.secret}` });
+    const pkList = await request(app)
+      .get('/api/v1/payment_intents')
+      .set({ Authorization: `Bearer ${pk.body.secret}` });
     expect(pkList.status).toBe(200);
-    const pkWrite = await request(app).post('/api/v1/refunds').set({ Authorization: `Bearer ${pk.body.secret}` }).send({ payment_intent: created.body.id });
+    const pkWrite = await request(app)
+      .post('/api/v1/refunds')
+      .set({ Authorization: `Bearer ${pk.body.secret}` })
+      .send({ payment_intent: created.body.id });
     expect(pkWrite.status).toBe(403);
-    const mint = await request(app).post('/api/v1/api_keys').set({ Authorization: `Bearer ${sk.body.secret}` }).send({ label: 'evil' });
+    const mint = await request(app)
+      .post('/api/v1/api_keys')
+      .set({ Authorization: `Bearer ${sk.body.secret}` })
+      .send({ label: 'evil' });
     expect(mint.status).toBe(403);
     expect(mint.body.error.code).toBe('session_required');
     const revoked = await request(app).delete(`/api/v1/api_keys/${ro.body.id}`).set(m.auth);
@@ -354,13 +407,34 @@ describe('sandbox simulator, Scan-to-Verify and payouts', () => {
   it('creates a payout through the withdrawal workflow and emits payout events when operations complete it', async () => {
     const m = await registerUser(app, { role: 'merchant', businessName: 'Payout Co' });
     await fund(app, m.user.id, '300.00', 'USD');
-    await request(app).post('/api/v1/webhook_endpoints').set(m.auth).send({ url: 'http://127.0.0.1:9/hooks', events: ['payout.*'] });
-    const po = await request(app).post('/api/v1/payouts').set(m.auth).set('Idempotency-Key', 'po-1').send({ amount_minor: 10000, currency: 'USD', destination: { method: 'bank', bank_name: 'Rawbank', account_name: 'Payout Co', account_number: '00012345678', country: 'CD' }, description: 'weekly settlement' });
+    await request(app)
+      .post('/api/v1/webhook_endpoints')
+      .set(m.auth)
+      .send({ url: 'http://127.0.0.1:9/hooks', events: ['payout.*'] });
+    const po = await request(app)
+      .post('/api/v1/payouts')
+      .set(m.auth)
+      .set('Idempotency-Key', 'po-1')
+      .send({
+        amount_minor: 10000,
+        currency: 'USD',
+        destination: { method: 'bank', bank_name: 'Rawbank', account_name: 'Payout Co', account_number: '00012345678', country: 'CD' },
+        description: 'weekly settlement',
+      });
     expect(po.status, JSON.stringify(po.body)).toBe(201);
     expect(po.body.object).toBe('payout');
     expect(po.body.status).toBe('pending');
     expect(po.body.destination.method).toBe('bank');
-    const dup = await request(app).post('/api/v1/payouts').set(m.auth).set('Idempotency-Key', 'po-1').send({ amount_minor: 10000, currency: 'USD', destination: { method: 'bank', bank_name: 'Rawbank', account_name: 'Payout Co', account_number: '00012345678', country: 'CD' }, description: 'weekly settlement' });
+    const dup = await request(app)
+      .post('/api/v1/payouts')
+      .set(m.auth)
+      .set('Idempotency-Key', 'po-1')
+      .send({
+        amount_minor: 10000,
+        currency: 'USD',
+        destination: { method: 'bank', bank_name: 'Rawbank', account_name: 'Payout Co', account_number: '00012345678', country: 'CD' },
+        description: 'weekly settlement',
+      });
     expect(dup.body.id).toBe(po.body.id);
     expect((await request(app).get('/api/v1/payouts').set(m.auth)).body.data).toHaveLength(1);
     await decideWithdrawal(app, po.body.id, 'approve');

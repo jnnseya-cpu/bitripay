@@ -80,7 +80,17 @@ function mapGateway(row: any): GatewayConfig {
   const provider = PROVIDERS[row.provider as GatewayProviderId];
   const creds = getGatewayCredentials(row.id);
   const cfg = parseJson<Record<string, any>>(row.config, {});
-  const mode: GatewayMode = ['sandbox', 'manual_bank', 'manual_momo'].includes(row.provider) ? 'test' : provider?.keyMode ? provider.keyMode(creds) : ['mtn_momo', 'mpesa'].includes(row.provider) ? (creds.env === 'production' ? 'live' : creds.env ? 'test' : 'unknown') : 'unknown';
+  const mode: GatewayMode = ['sandbox', 'manual_bank', 'manual_momo'].includes(row.provider)
+    ? 'test'
+    : provider?.keyMode
+      ? provider.keyMode(creds)
+      : ['mtn_momo', 'mpesa'].includes(row.provider)
+        ? creds.env === 'production'
+          ? 'live'
+          : creds.env
+            ? 'test'
+            : 'unknown'
+        : 'unknown';
   return {
     id: row.id,
     name: row.name,
@@ -91,7 +101,9 @@ function mapGateway(row: any): GatewayConfig {
     countries: parseJson(row.countries, []),
     config: parseJson(row.config, {}),
     sortOrder: row.sort_order,
-    configuredKeys: Object.entries(creds).filter(([, v]) => !!v).map(([k]) => k),
+    configuredKeys: Object.entries(creds)
+      .filter(([, v]) => !!v)
+      .map(([k]) => k),
     credentialFields: provider?.credentialFields ?? [],
     mode,
     lastHealth: cfg.lastHealth ?? null,
@@ -188,7 +200,9 @@ export async function testGateway(id: string): Promise<HealthResult & { at: stri
   if (provider.healthCheck) result = await provider.healthCheck({ ...creds, ...(g.config.threeDSecure ? { threeDSecure: String(g.config.threeDSecure) } : {}) });
   else result = { ok: isGatewayReady(g), mode: g.mode, message: isGatewayReady(g) ? 'Credentials present (provider has no connectivity test)' : 'Missing credentials' };
   const at = now();
-  getDb().prepare('UPDATE gateways SET config = ?, updated_at = ? WHERE id = ?').run(JSON.stringify({ ...g.config, lastHealth: { ...result, at } }), at, id);
+  getDb()
+    .prepare('UPDATE gateways SET config = ?, updated_at = ? WHERE id = ?')
+    .run(JSON.stringify({ ...g.config, lastHealth: { ...result, at } }), at, id);
   return { ...result, at, webhookUrl: `${config.apiUrl}/api/webhooks/${id}` };
 }
 
@@ -200,15 +214,33 @@ export function deleteGateway(id: string) {
 export function ensureDefaultGateways() {
   const count = (getDb().prepare('SELECT COUNT(*) c FROM gateways').get() as any).c;
   if (count > 0) {
-    if (!getGateway('manual_momo')) upsertGateway({ id: 'manual_momo', name: 'Mobile money (direct, all operators)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], sortOrder: 7 });
-    if (!getGateway('open_banking')) upsertGateway({ id: 'open_banking', name: 'Pay by bank (open banking)', provider: 'open_banking', enabled: true, methods: ['bank'], currencies: [], sortOrder: 8 });
+    if (!getGateway('manual_momo'))
+      upsertGateway({ id: 'manual_momo', name: 'Mobile money (direct, all operators)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], sortOrder: 7 });
+    if (!getGateway('open_banking'))
+      upsertGateway({ id: 'open_banking', name: 'Pay by bank (open banking)', provider: 'open_banking', enabled: true, methods: ['bank'], currencies: [], sortOrder: 8 });
     return;
   }
   upsertGateway({ id: 'sandbox', name: 'Sandbox (test)', provider: 'sandbox', enabled: !config.isProduction, methods: ['card', 'mobile_money', 'bank'], currencies: [], sortOrder: 0 });
   upsertGateway({ id: 'stripe', name: 'Stripe', provider: 'stripe', enabled: !!config.stripe.secretKey, methods: ['card'], currencies: [], sortOrder: 1 });
-  upsertGateway({ id: 'paystack', name: 'Paystack', provider: 'paystack', enabled: !!config.paystack.secretKey, methods: ['card', 'mobile_money', 'bank'], currencies: ['NGN', 'GHS', 'KES', 'ZAR', 'USD'], sortOrder: 2 });
+  upsertGateway({
+    id: 'paystack',
+    name: 'Paystack',
+    provider: 'paystack',
+    enabled: !!config.paystack.secretKey,
+    methods: ['card', 'mobile_money', 'bank'],
+    currencies: ['NGN', 'GHS', 'KES', 'ZAR', 'USD'],
+    sortOrder: 2,
+  });
   upsertGateway({ id: 'flutterwave', name: 'Flutterwave', provider: 'flutterwave', enabled: !!config.flutterwave.secretKey, methods: ['card', 'mobile_money', 'bank'], currencies: [], sortOrder: 3 });
-  upsertGateway({ id: 'mtn_momo', name: 'MTN Mobile Money', provider: 'mtn_momo', enabled: !!config.mtnMomo.apiKey, methods: ['mobile_money'], currencies: ['GHS', 'UGX', 'XAF', 'XOF', 'RWF', 'ZMW', 'EUR'], sortOrder: 4 });
+  upsertGateway({
+    id: 'mtn_momo',
+    name: 'MTN Mobile Money',
+    provider: 'mtn_momo',
+    enabled: !!config.mtnMomo.apiKey,
+    methods: ['mobile_money'],
+    currencies: ['GHS', 'UGX', 'XAF', 'XOF', 'RWF', 'ZMW', 'EUR'],
+    sortOrder: 4,
+  });
   upsertGateway({ id: 'mpesa', name: 'M-Pesa', provider: 'mpesa', enabled: !!config.mpesa.consumerKey, methods: ['mobile_money'], currencies: ['KES'], sortOrder: 5 });
   upsertGateway({ id: 'manual_bank', name: 'Bank transfer', provider: 'manual_bank', enabled: true, methods: ['bank'], currencies: [], sortOrder: 6 });
   upsertGateway({ id: 'manual_momo', name: 'Mobile money (direct, all operators)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], sortOrder: 7 });

@@ -19,9 +19,7 @@ export interface IssueOtpResult {
 
 export async function issueOtp(channel: 'email' | 'sms', target: string, purpose: OtpPurpose, userId?: string | null): Promise<IssueOtpResult> {
   const db = getDb();
-  const recent = db
-    .prepare("SELECT COUNT(*) c FROM otp_codes WHERE target = ? AND purpose = ? AND created_at > ?")
-    .get(target, purpose, new Date(Date.now() - 60 * 1000).toISOString()) as any;
+  const recent = db.prepare('SELECT COUNT(*) c FROM otp_codes WHERE target = ? AND purpose = ? AND created_at > ?').get(target, purpose, new Date(Date.now() - 60 * 1000).toISOString()) as any;
   if (recent.c >= 3) throw badRequest('Too many codes requested. Please wait a minute.', 'otp_rate_limited');
   db.prepare('UPDATE otp_codes SET consumed = 1 WHERE target = ? AND purpose = ? AND consumed = 0').run(target, purpose);
   const code = numericCode(6);
@@ -48,9 +46,7 @@ export async function issueOtp(channel: 'email' | 'sms', target: string, purpose
 
 export function verifyOtp(target: string, purpose: OtpPurpose, code: string): boolean {
   const db = getDb();
-  const row = db
-    .prepare('SELECT * FROM otp_codes WHERE target = ? AND purpose = ? AND consumed = 0 ORDER BY created_at DESC LIMIT 1')
-    .get(target, purpose) as any;
+  const row = db.prepare('SELECT * FROM otp_codes WHERE target = ? AND purpose = ? AND consumed = 0 ORDER BY created_at DESC LIMIT 1').get(target, purpose) as any;
   if (!row) return false;
   if (row.expires_at < now()) return false;
   if (row.attempts >= 5) return false;

@@ -57,24 +57,70 @@ import { billingReport } from '../../services/assist/billing';
 import { recentUssdSessions, ussdRequest, ussdSessionId } from '../../services/channels/ussd';
 import { recentSms, smsHandle } from '../../services/channels/sms';
 import { getChannelSettings } from '../../services/settings';
+import { getKey, listKeys, revokeKey } from '../../services/keys';
 import { draftArticle, keywordIdeas, auditPost, socialPack, listRuns, agentStatus, outreachCandidates } from '../../services/seoAgent';
 import { getSeoSettings, getAssistSettings } from '../../services/settings';
 import { buildStatement, statementCsv, statementPdf, listStatements } from '../../services/statements';
-import { emoneyOverview, listProgrammes, getProgramme, upsertProgramme, setProgrammeStatus, listReserveMovements, recordReserveMovement, reverseReserveMovement, listPools, getPool, createPool, allocate, reconcileReserves, listReconciliations, freezeWallet, listPromoCredits } from '../../services/emoney';
+import {
+  emoneyOverview,
+  listProgrammes,
+  getProgramme,
+  upsertProgramme,
+  setProgrammeStatus,
+  listReserveMovements,
+  recordReserveMovement,
+  reverseReserveMovement,
+  listPools,
+  getPool,
+  createPool,
+  allocate,
+  reconcileReserves,
+  listReconciliations,
+  freezeWallet,
+  listPromoCredits,
+} from '../../services/emoney';
 import { testGateway } from '../../payments';
 import { encrypt } from '../../lib/crypto';
-import { getSetting, setSetting, getFees, getLimits, getReferralSettings, getAppSettings, getGatewayControls, getFxSettings, getRiskSettings } from '../../services/settings';
+import {
+  getSetting,
+  setSetting,
+  getFees,
+  getLimits,
+  getReferralSettings,
+  getAppSettings,
+  getGatewayControls,
+  getFxSettings,
+  getRiskSettings,
+  getEmoneySettings,
+  getGatewayProductSettings,
+  getWebhookSettings,
+} from '../../services/settings';
 import { getModules, DEFAULT_MODULES } from '../../services/modules';
 import { listGateways, upsertGateway, deleteGateway, PROVIDERS } from '../../payments';
 import { listBillers, upsertBiller, deleteBiller, listOperators, upsertOperator, deleteOperator, listGiftProducts, upsertGiftProduct, deleteGiftProduct } from '../../services/services';
-import { getSiteSettings, updateSiteSettings, listPages, upsertPage, deletePage, listContactMessages, replyContactMessage, listSubscribers, sendNewsletter, listLanguages, upsertLanguage, deleteLanguage, getTranslationOverrides, setTranslationOverrides } from '../../services/cms';
+import {
+  getSiteSettings,
+  updateSiteSettings,
+  listPages,
+  upsertPage,
+  deletePage,
+  listContactMessages,
+  replyContactMessage,
+  listSubscribers,
+  sendNewsletter,
+  listLanguages,
+  upsertLanguage,
+  deleteLanguage,
+  getTranslationOverrides,
+  setTranslationOverrides,
+} from '../../services/cms';
 import { listTickets, getTicket, replyTicket, setTicketStatus, chatConversations, chatHistory, sendChat } from '../../services/support';
 import * as p2p from '../../services/p2p';
 import { broadcast, notify } from '../../services/notifications';
 import { runAutoSettlements, listSettlements } from '../../services/merchant';
 import { getSmtpSettings, sendEmail, outbox } from '../../services/messaging';
 import { toMinor } from '@bitripay/shared';
-import { badRequest, notFound } from '../../lib/errors';
+import { badRequest, conflict, notFound } from '../../lib/errors';
 import { toPaymentRequest, type PaymentRequestRow } from '../../services/paymentRequests';
 import { usersById } from '../../services/users';
 import { ADMIN_PERMISSIONS } from '../../middleware/permissions';
@@ -93,7 +139,7 @@ function verificationSubject(v: { subjectType: string; paymentId: string }) {
         return { route: adminRouteView(v.paymentId) };
       case 'issuance': {
         const u = getUserById(v.paymentId);
-        return { user: toUser(u), wallets: listWallets(v.paymentId).map((w) => toWallet(w, u)), pool: u.tag?.startsWith('pool_') ? listPools().find((p) => p.walletUserId === u.id) ?? null : null };
+        return { user: toUser(u), wallets: listWallets(v.paymentId).map((w) => toWallet(w, u)), pool: u.tag?.startsWith('pool_') ? (listPools().find((p) => p.walletUserId === u.id) ?? null) : null };
       }
       case 'reserve_funding':
         return { movement: listReserveMovements(null, 500).find((m) => m.id === v.paymentId) ?? null };
@@ -105,7 +151,17 @@ function verificationSubject(v: { subjectType: string; paymentId: string }) {
   }
 }
 
-const complianceSchema = z.object({ regulator: z.string().max(200).optional().nullable(), licenceType: z.string().max(200).optional().nullable(), licenceNumber: z.string().max(200).optional().nullable(), safeguardingAccount: z.string().max(200).optional().nullable(), amlProgrammeRef: z.string().max(200).optional().nullable(), dataProtectionRef: z.string().max(200).optional().nullable(), fxApprovalRef: z.string().max(200).optional().nullable(), consumerDisclosureUrl: z.string().max(300).optional().nullable(), agentSupervisionRef: z.string().max(200).optional().nullable() });
+const complianceSchema = z.object({
+  regulator: z.string().max(200).optional().nullable(),
+  licenceType: z.string().max(200).optional().nullable(),
+  licenceNumber: z.string().max(200).optional().nullable(),
+  safeguardingAccount: z.string().max(200).optional().nullable(),
+  amlProgrammeRef: z.string().max(200).optional().nullable(),
+  dataProtectionRef: z.string().max(200).optional().nullable(),
+  fxApprovalRef: z.string().max(200).optional().nullable(),
+  consumerDisclosureUrl: z.string().max(300).optional().nullable(),
+  agentSupervisionRef: z.string().max(200).optional().nullable(),
+});
 
 export const adminRouter = Router();
 adminRouter.use(...requireAdmin);
@@ -120,11 +176,19 @@ adminRouter.get('/stats', requirePermission('reports'), (_req, res) => {
   const db = getDb();
   const dayAgo = new Date(Date.now() - 86400_000).toISOString();
   const monthAgo = new Date(Date.now() - 30 * 86400_000).toISOString();
-  const users = db.prepare("SELECT role, COUNT(*) c FROM users WHERE is_system = 0 GROUP BY role").all() as any[];
+  const users = db.prepare('SELECT role, COUNT(*) c FROM users WHERE is_system = 0 GROUP BY role').all() as any[];
   const newUsers = (db.prepare('SELECT COUNT(*) c FROM users WHERE is_system = 0 AND created_at >= ?').get(monthAgo) as any).c;
-  const txByType = db.prepare("SELECT type, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE status = 'completed' AND created_at >= ? GROUP BY type, currency").all(monthAgo);
-  const today = db.prepare("SELECT currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE status = 'completed' AND created_at >= ? GROUP BY currency").all(dayAgo);
-  const daily = db.prepare("SELECT substr(created_at,1,10) day, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE status = 'completed' AND created_at >= ? GROUP BY day, currency ORDER BY day").all(monthAgo);
+  const txByType = db
+    .prepare("SELECT type, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE status = 'completed' AND created_at >= ? GROUP BY type, currency")
+    .all(monthAgo);
+  const today = db
+    .prepare("SELECT currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE status = 'completed' AND created_at >= ? GROUP BY currency")
+    .all(dayAgo);
+  const daily = db
+    .prepare(
+      "SELECT substr(created_at,1,10) day, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE status = 'completed' AND created_at >= ? GROUP BY day, currency ORDER BY day",
+    )
+    .all(monthAgo);
   const pending = {
     withdrawals: (db.prepare("SELECT COUNT(*) c FROM transactions WHERE type = 'withdrawal' AND status = 'pending'").get() as any).c,
     bankDeposits: (db.prepare("SELECT COUNT(*) c FROM gateway_payments WHERE method = 'bank' AND status IN ('pending','initiated')").get() as any).c,
@@ -132,7 +196,7 @@ adminRouter.get('/stats', requirePermission('reports'), (_req, res) => {
     remittances: (db.prepare("SELECT COUNT(*) c FROM remittances WHERE status IN ('pending','processing')").get() as any).c,
     tickets: (db.prepare("SELECT COUNT(*) c FROM support_tickets WHERE status = 'open'").get() as any).c,
     disputes: (db.prepare("SELECT COUNT(*) c FROM p2p_trades WHERE status = 'disputed'").get() as any).c,
-    chats: (db.prepare("SELECT COUNT(DISTINCT user_id) c FROM chat_messages WHERE is_admin = 0 AND read = 0").get() as any).c,
+    chats: (db.prepare('SELECT COUNT(DISTINCT user_id) c FROM chat_messages WHERE is_admin = 0 AND read = 0').get() as any).c,
   };
   const balances = db.prepare('SELECT w.currency, COALESCE(SUM(w.balance),0) total FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.is_system = 0 GROUP BY w.currency').all();
   const revenue = db.prepare("SELECT w.currency, w.balance FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.tag = 'bitripay_fees'").all();
@@ -166,14 +230,31 @@ adminRouter.get('/users', requirePermission('users'), (req, res) => {
   const whereSql = `WHERE ${where.join(' AND ')}`;
   const total = (db.prepare(`SELECT COUNT(*) c FROM users ${whereSql}`).get(...params) as any).c;
   const rows = db.prepare(`SELECT * FROM users ${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize) as UserRow[];
-  res.json({ items: rows.map((r) => ({ ...toUser(r), permissions: JSON.parse((r as any).permissions || '[]'), wallets: listWallets(r.id).map((w) => toWallet(w)), lastLoginAt: r.last_login_at })), total, page, pageSize });
+  res.json({
+    items: rows.map((r) => ({ ...toUser(r), permissions: JSON.parse((r as any).permissions || '[]'), wallets: listWallets(r.id).map((w) => toWallet(w)), lastLoginAt: r.last_login_at })),
+    total,
+    page,
+    pageSize,
+  });
 });
 
 adminRouter.post(
   '/users',
   requirePermission('admins'),
   wrap(async (req, res) => {
-    const body = validate(z.object({ fullName: z.string().min(2), email: z.string().email().optional().nullable(), phone: z.string().optional().nullable(), password: z.string().min(8), role: z.enum(['user', 'merchant', 'agent', 'admin']).default('user'), permissions: z.array(z.string()).optional(), businessName: z.string().optional().nullable(), country: z.string().length(2).optional().nullable() }), req.body);
+    const body = validate(
+      z.object({
+        fullName: z.string().min(2),
+        email: z.string().email().optional().nullable(),
+        phone: z.string().optional().nullable(),
+        password: z.string().min(8),
+        role: z.enum(['user', 'merchant', 'agent', 'admin']).default('user'),
+        permissions: z.array(z.string()).optional(),
+        businessName: z.string().optional().nullable(),
+        country: z.string().length(2).optional().nullable(),
+      }),
+      req.body,
+    );
     const user = createUser({ ...body, emailVerified: true });
     if (body.role === 'admin') updateUser(user.id, { permissions: JSON.stringify(body.permissions ?? []) } as any);
     audit(req.user!.id, 'user.create', 'user', user.id, { role: body.role });
@@ -261,7 +342,12 @@ adminRouter.post(
     if (target.is_system) throw badRequest('System accounts cannot be adjusted');
     const cur = getCurrency(body.currency);
     const amount = toMinor(body.amount, cur.decimals);
-    const verification = proposeVerification(req.user!, target.id, { subjectType: 'issuance', action: 'confirm', note: body.reason, payload: { direction: body.direction, amount, currency: cur.code, reason: body.reason } });
+    const verification = proposeVerification(req.user!, target.id, {
+      subjectType: 'issuance',
+      action: 'confirm',
+      note: body.reason,
+      payload: { direction: body.direction, amount, currency: cur.code, reason: body.reason },
+    });
     audit(req.user!.id, `issuance.${body.direction}.proposed`, 'user', target.id, { amount, currency: cur.code, reason: body.reason, verificationId: verification.id });
     res.status(201).json({ verification, wallet: toWallet(ensureWallet(target.id, cur.code)) });
   }),
@@ -269,13 +355,31 @@ adminRouter.post(
 /** Outstanding e-money per currency, how it was issued, the reserve position of every programme and the immutable issuance register. */
 adminRouter.get('/emoney', requirePermission('reports'), (req, res) => {
   const { page, pageSize } = parsePagination(req.query, 50);
-  res.json({ supply: emoneySupply(), ...emoneyOverview(), register: listEvents({ stream: 'issuance', limit: pageSize, page }), pending: listVerifications({ status: 'proposed' }).filter((v) => v.subjectType === 'issuance' || v.subjectType === 'reserve_funding') });
+  res.json({
+    supply: emoneySupply(),
+    ...emoneyOverview(),
+    register: listEvents({ stream: 'issuance', limit: pageSize, page }),
+    pending: listVerifications({ status: 'proposed' }).filter((v) => v.subjectType === 'issuance' || v.subjectType === 'reserve_funding'),
+  });
 });
 
 // ---------------------------------------------------------------------------------------------
 // E-money issuance engine (TREASURY_SUPER_ADMIN = 'treasury' permission)
 // ---------------------------------------------------------------------------------------------
-const programmeSchema = z.object({ currency: z.string().length(3), jurisdiction: z.string().min(2).max(10), issuerModel: z.enum(['own_authorisation', 'partner_issuer', 'sandbox']).optional(), issuerName: z.string().max(200).optional().nullable(), licenceRef: z.string().max(200).optional().nullable(), regulator: z.string().max(200).optional().nullable(), safeguardingBank: z.string().max(200).optional().nullable(), safeguardingAccountRef: z.string().max(200).optional().nullable(), reservedExposure: z.number().int().min(0).optional(), limits: z.object({ maxIssuancePerRequest: z.number().int().min(0).optional(), dailyIssuanceLimit: z.number().int().min(0).optional(), maxHolderBalance: z.number().int().min(0).optional() }).optional() });
+const programmeSchema = z.object({
+  currency: z.string().length(3),
+  jurisdiction: z.string().min(2).max(10),
+  issuerModel: z.enum(['own_authorisation', 'partner_issuer', 'sandbox']).optional(),
+  issuerName: z.string().max(200).optional().nullable(),
+  licenceRef: z.string().max(200).optional().nullable(),
+  regulator: z.string().max(200).optional().nullable(),
+  safeguardingBank: z.string().max(200).optional().nullable(),
+  safeguardingAccountRef: z.string().max(200).optional().nullable(),
+  reservedExposure: z.number().int().min(0).optional(),
+  limits: z
+    .object({ maxIssuancePerRequest: z.number().int().min(0).optional(), dailyIssuanceLimit: z.number().int().min(0).optional(), maxHolderBalance: z.number().int().min(0).optional() })
+    .optional(),
+});
 adminRouter.get('/emoney/programmes', requirePermission('reports'), (_req, res) => res.json({ items: listProgrammes() }));
 adminRouter.put('/emoney/programmes/:id', requirePermission('treasury'), (req, res) => {
   const body = validate(programmeSchema, req.body);
@@ -300,12 +404,41 @@ adminRouter.get('/emoney/programmes/:id', requirePermission('reports'), (req, re
  * evidence); a different treasury administrator must confirm before the funds count towards issuance.
  */
 adminRouter.post('/emoney/programmes/:id/reserves', requirePermission('treasury'), (req, res) => {
-  const body = validate(z.object({ kind: z.enum(['funding', 'adjustment', 'redemption']).default('funding'), direction: z.enum(['in', 'out']).default('in'), amount: z.string(), reference: z.string().min(2).max(200), evidence: z.record(z.string(), z.unknown()).optional().nullable(), note: z.string().min(8).max(500) }), req.body);
+  const body = validate(
+    z.object({
+      kind: z.enum(['funding', 'adjustment', 'redemption']).default('funding'),
+      direction: z.enum(['in', 'out']).default('in'),
+      amount: z.string(),
+      reference: z.string().min(2).max(200),
+      evidence: z.record(z.string(), z.unknown()).optional().nullable(),
+      note: z.string().min(8).max(500),
+    }),
+    req.body,
+  );
   const programme = getProgramme(String(req.params.id));
   const cur = getCurrency(programme.currency);
   const amount = toMinor(body.amount, cur.decimals);
-  const movement = recordReserveMovement({ programmeId: programme.id, kind: body.kind, direction: body.direction, amount, status: 'pending', reference: body.reference, evidence: body.evidence ?? null, proposedBy: req.user!.id, note: body.note }, { type: 'admin', id: req.user!.id });
-  const verification = proposeVerification(req.user!, movement.id, { subjectType: 'reserve_funding', action: 'confirm', note: body.note, externalRef: body.reference, payload: { programmeId: programme.id, kind: body.kind, direction: body.direction, amount, currency: programme.currency } });
+  const movement = recordReserveMovement(
+    {
+      programmeId: programme.id,
+      kind: body.kind,
+      direction: body.direction,
+      amount,
+      status: 'pending',
+      reference: body.reference,
+      evidence: body.evidence ?? null,
+      proposedBy: req.user!.id,
+      note: body.note,
+    },
+    { type: 'admin', id: req.user!.id },
+  );
+  const verification = proposeVerification(req.user!, movement.id, {
+    subjectType: 'reserve_funding',
+    action: 'confirm',
+    note: body.note,
+    externalRef: body.reference,
+    payload: { programmeId: programme.id, kind: body.kind, direction: body.direction, amount, currency: programme.currency },
+  });
   audit(req.user!.id, 'emoney.reserve.proposed', 'programme', programme.id, { movementId: movement.id, amount, direction: body.direction, reference: body.reference, verificationId: verification.id });
   res.status(201).json({ movement, verification, programme: getProgramme(programme.id) });
 });
@@ -318,25 +451,47 @@ adminRouter.post('/emoney/reserves/:id/reverse', requirePermission('treasury'), 
 });
 /** Issuance request against a distribution pool (maker → independent checker → mint). */
 adminRouter.post('/emoney/issue', requirePermission('issuance'), (req, res) => {
-  const body = validate(z.object({ programmeId: z.string(), poolId: z.string(), direction: z.enum(['credit', 'debit']).default('credit'), amount: z.string(), reason: z.string().min(3).max(300) }), req.body);
+  const body = validate(
+    z.object({ programmeId: z.string(), poolId: z.string(), direction: z.enum(['credit', 'debit']).default('credit'), amount: z.string(), reason: z.string().min(3).max(300) }),
+    req.body,
+  );
   const programme = getProgramme(body.programmeId);
   const pool = getPool(body.poolId);
   const cur = getCurrency(programme.currency);
   const amount = toMinor(body.amount, cur.decimals);
-  const verification = proposeVerification(req.user!, pool.walletUserId, { subjectType: 'issuance', action: 'confirm', note: body.reason, payload: { direction: body.direction, amount, currency: cur.code, reason: body.reason, poolId: pool.id, programmeId: programme.id } });
+  const verification = proposeVerification(req.user!, pool.walletUserId, {
+    subjectType: 'issuance',
+    action: 'confirm',
+    note: body.reason,
+    payload: { direction: body.direction, amount, currency: cur.code, reason: body.reason, poolId: pool.id, programmeId: programme.id },
+  });
   audit(req.user!.id, `issuance.${body.direction}.proposed`, 'pool', pool.id, { amount, currency: cur.code, reason: body.reason, verificationId: verification.id });
   res.status(201).json({ verification, pool: getPool(pool.id), position: programme.position });
 });
 adminRouter.get('/emoney/pools', requirePermission('reports'), (req, res) => res.json({ items: listPools({ programmeId: req.query.programmeId ? String(req.query.programmeId) : null }) }));
 adminRouter.post('/emoney/pools', requirePermission('treasury'), (req, res) => {
-  const body = validate(z.object({ programmeId: z.string(), name: z.string().min(2).max(120), level: z.enum(['country', 'institution', 'master_agent', 'agent', 'merchant']), parentId: z.string().optional().nullable(), ownerUserId: z.string().optional().nullable(), country: z.string().length(2).optional().nullable(), limits: z.record(z.string(), z.number()).optional() }), req.body);
+  const body = validate(
+    z.object({
+      programmeId: z.string(),
+      name: z.string().min(2).max(120),
+      level: z.enum(['country', 'institution', 'master_agent', 'agent', 'merchant']),
+      parentId: z.string().optional().nullable(),
+      ownerUserId: z.string().optional().nullable(),
+      country: z.string().length(2).optional().nullable(),
+      limits: z.record(z.string(), z.number()).optional(),
+    }),
+    req.body,
+  );
   const pool = createPool(body, req.user!);
   audit(req.user!.id, 'emoney.pool.created', 'pool', pool.id, { name: pool.name, level: pool.level });
   res.status(201).json({ pool });
 });
 /** Distribution moves existing e-money down the hierarchy under step-up; it never creates money. */
 adminRouter.post('/emoney/pools/:id/allocate', requirePermission('treasury'), (req, res) => {
-  const body = validate(z.object({ toPoolId: z.string().optional().nullable(), toUserId: z.string().optional().nullable(), amount: z.string(), reason: z.string().min(3).max(300), pin: z.string().optional() }), req.body);
+  const body = validate(
+    z.object({ toPoolId: z.string().optional().nullable(), toUserId: z.string().optional().nullable(), amount: z.string(), reason: z.string().min(3).max(300), pin: z.string().optional() }),
+    req.body,
+  );
   assertAdminStepUp(req.user!, body.pin, req);
   const from = getPool(String(req.params.id));
   const amount = toMinor(body.amount, getCurrency(from.currency).decimals);
@@ -378,7 +533,33 @@ adminRouter.get('/permissions', (_req, res) => res.json({ items: ADMIN_PERMISSIO
 // ---------------------------------------------------------------------------------------------
 // Blog & SEO (cms permission)
 // ---------------------------------------------------------------------------------------------
-const postSchema = z.object({ title: z.string().min(3).max(200), slug: z.string().max(120).optional().nullable(), excerpt: z.string().max(400).optional().nullable(), bodyMd: z.string().min(20), coverUrl: z.string().max(500).optional().nullable(), coverAlt: z.string().max(200).optional().nullable(), category: z.string().max(60).optional().nullable(), tags: z.array(z.string().max(40)).max(12).optional(), keywords: z.array(z.string().max(80)).max(12).optional(), language: z.string().max(5).optional().nullable(), authorName: z.string().max(80).optional().nullable(), status: z.enum(['draft', 'review', 'scheduled', 'published', 'archived']).optional(), metaTitle: z.string().max(120).optional().nullable(), metaDescription: z.string().max(300).optional().nullable(), canonicalUrl: z.string().max(300).optional().nullable(), faq: z.array(z.object({ question: z.string().max(300), answer: z.string().max(2000) })).max(12).optional(), sources: z.array(z.object({ title: z.string().max(200), url: z.string().max(500) })).max(20).optional(), social: z.record(z.string(), z.string()).optional(), scheduledFor: z.string().datetime({ offset: true }).optional().nullable() });
+const postSchema = z.object({
+  title: z.string().min(3).max(200),
+  slug: z.string().max(120).optional().nullable(),
+  excerpt: z.string().max(400).optional().nullable(),
+  bodyMd: z.string().min(20),
+  coverUrl: z.string().max(500).optional().nullable(),
+  coverAlt: z.string().max(200).optional().nullable(),
+  category: z.string().max(60).optional().nullable(),
+  tags: z.array(z.string().max(40)).max(12).optional(),
+  keywords: z.array(z.string().max(80)).max(12).optional(),
+  language: z.string().max(5).optional().nullable(),
+  authorName: z.string().max(80).optional().nullable(),
+  status: z.enum(['draft', 'review', 'scheduled', 'published', 'archived']).optional(),
+  metaTitle: z.string().max(120).optional().nullable(),
+  metaDescription: z.string().max(300).optional().nullable(),
+  canonicalUrl: z.string().max(300).optional().nullable(),
+  faq: z
+    .array(z.object({ question: z.string().max(300), answer: z.string().max(2000) }))
+    .max(12)
+    .optional(),
+  sources: z
+    .array(z.object({ title: z.string().max(200), url: z.string().max(500) }))
+    .max(20)
+    .optional(),
+  social: z.record(z.string(), z.string()).optional(),
+  scheduledFor: z.string().datetime({ offset: true }).optional().nullable(),
+});
 adminRouter.get('/blog/posts', requirePermission('cms'), (req, res) => {
   const { page, pageSize } = parsePagination(req.query, 30);
   res.json(listPosts({ status: (req.query.status ? String(req.query.status) : 'all') as any, q: req.query.q ? String(req.query.q) : null, page, pageSize }));
@@ -406,7 +587,16 @@ adminRouter.delete('/blog/posts/:id', requirePermission('cms'), (req, res) => {
 /** AI content agent. */
 adminRouter.get('/seo', requirePermission('cms'), (_req, res) => {
   const s = getSeoSettings();
-  res.json({ settings: { ...s, agent: { ...s.agent, apiKey: s.agent.apiKey ? '••••••••' : '' } }, agent: agentStatus(), views: pageviewSummary(30), rules: listLinkRules(), backlinks: listBacklinks(), runs: listRuns(30), outreach: outreachCandidates(), posts: listPosts({ status: 'all', pageSize: 100 }).items });
+  res.json({
+    settings: { ...s, agent: { ...s.agent, apiKey: s.agent.apiKey ? '••••••••' : '' } },
+    agent: agentStatus(),
+    views: pageviewSummary(30),
+    rules: listLinkRules(),
+    backlinks: listBacklinks(),
+    runs: listRuns(30),
+    outreach: outreachCandidates(),
+    posts: listPosts({ status: 'all', pageSize: 100 }).items,
+  });
 });
 adminRouter.put('/seo/settings', requirePermission('settings'), (req, res) => {
   const current = getSeoSettings();
@@ -420,39 +610,109 @@ adminRouter.put('/seo/settings', requirePermission('settings'), (req, res) => {
   audit(req.user!.id, 'seo.settings.update', 'settings', 'seo', { keys: Object.keys(body) });
   res.json({ settings: { ...next, agent: { ...next.agent, apiKey: next.agent.apiKey ? '••••••••' : '' } }, agent: agentStatus() });
 });
-adminRouter.post('/seo/agent/draft', requirePermission('cms'), wrap(async (req, res) => {
-  const body = validate(z.object({ topic: z.string().min(4).max(300), keywords: z.array(z.string().max(80)).max(10).optional(), language: z.string().max(5).optional(), extraInstructions: z.string().max(1000).optional().nullable() }), req.body);
-  const r = await draftArticle(body, { type: 'admin', id: req.user!.id }, req.user!.id);
-  audit(req.user!.id, 'seo.agent.draft', 'post', r.post.id, { runId: r.run.id, status: r.run.status });
-  res.status(201).json(r);
-}));
-adminRouter.post('/seo/agent/keywords', requirePermission('cms'), wrap(async (req, res) => {
-  const body = validate(z.object({ seed: z.string().min(2).max(200) }), req.body);
-  res.json(await keywordIdeas(body.seed, { type: 'admin', id: req.user!.id }));
-}));
-adminRouter.post('/seo/agent/audit/:postId', requirePermission('cms'), wrap(async (req, res) => res.json(await auditPost(String(req.params.postId), { type: 'admin', id: req.user!.id }))));
-adminRouter.post('/seo/agent/social/:postId', requirePermission('cms'), wrap(async (req, res) => res.json(await socialPack(String(req.params.postId), { type: 'admin', id: req.user!.id }))));
-adminRouter.post('/seo/ping', requirePermission('cms'), wrap(async (req, res) => {
-  const body = validate(z.object({ paths: z.array(z.string().max(300)).min(1).max(100) }), req.body);
-  res.json(await pingIndexNow(body.paths));
-}));
+adminRouter.post(
+  '/seo/agent/draft',
+  requirePermission('cms'),
+  wrap(async (req, res) => {
+    const body = validate(
+      z.object({
+        topic: z.string().min(4).max(300),
+        keywords: z.array(z.string().max(80)).max(10).optional(),
+        language: z.string().max(5).optional(),
+        extraInstructions: z.string().max(1000).optional().nullable(),
+      }),
+      req.body,
+    );
+    const r = await draftArticle(body, { type: 'admin', id: req.user!.id }, req.user!.id);
+    audit(req.user!.id, 'seo.agent.draft', 'post', r.post.id, { runId: r.run.id, status: r.run.status });
+    res.status(201).json(r);
+  }),
+);
+adminRouter.post(
+  '/seo/agent/keywords',
+  requirePermission('cms'),
+  wrap(async (req, res) => {
+    const body = validate(z.object({ seed: z.string().min(2).max(200) }), req.body);
+    res.json(await keywordIdeas(body.seed, { type: 'admin', id: req.user!.id }));
+  }),
+);
+adminRouter.post(
+  '/seo/agent/audit/:postId',
+  requirePermission('cms'),
+  wrap(async (req, res) => res.json(await auditPost(String(req.params.postId), { type: 'admin', id: req.user!.id }))),
+);
+adminRouter.post(
+  '/seo/agent/social/:postId',
+  requirePermission('cms'),
+  wrap(async (req, res) => res.json(await socialPack(String(req.params.postId), { type: 'admin', id: req.user!.id }))),
+);
+adminRouter.post(
+  '/seo/ping',
+  requirePermission('cms'),
+  wrap(async (req, res) => {
+    const body = validate(z.object({ paths: z.array(z.string().max(300)).min(1).max(100) }), req.body);
+    res.json(await pingIndexNow(body.paths));
+  }),
+);
 adminRouter.put('/seo/rules/:id', requirePermission('cms'), (req, res) => {
-  const body = validate(z.object({ keyword: z.string().min(2).max(80), url: z.string().min(1).max(300), title: z.string().max(200).optional().nullable(), kind: z.enum(['internal', 'outbound']).optional(), maxPerPage: z.number().int().min(1).max(10).optional(), priority: z.number().int().min(0).max(100).optional(), enabled: z.boolean().optional() }), req.body);
+  const body = validate(
+    z.object({
+      keyword: z.string().min(2).max(80),
+      url: z.string().min(1).max(300),
+      title: z.string().max(200).optional().nullable(),
+      kind: z.enum(['internal', 'outbound']).optional(),
+      maxPerPage: z.number().int().min(1).max(10).optional(),
+      priority: z.number().int().min(0).max(100).optional(),
+      enabled: z.boolean().optional(),
+    }),
+    req.body,
+  );
   res.json({ rule: upsertLinkRule({ id: String(req.params.id) === 'new' ? undefined : String(req.params.id), ...body }) });
 });
-adminRouter.delete('/seo/rules/:id', requirePermission('cms'), (req, res) => { deleteLinkRule(String(req.params.id)); res.json({ ok: true }); });
+adminRouter.delete('/seo/rules/:id', requirePermission('cms'), (req, res) => {
+  deleteLinkRule(String(req.params.id));
+  res.json({ ok: true });
+});
 adminRouter.put('/seo/backlinks/:id', requirePermission('cms'), (req, res) => {
-  const body = validate(z.object({ direction: z.enum(['inbound', 'outbound', 'partner']), sourceUrl: z.string().url().max(500), targetUrl: z.string().max(500), anchor: z.string().max(200).optional().nullable(), status: z.enum(['live', 'pending', 'lost', 'rejected']).optional(), nofollow: z.boolean().optional(), notes: z.string().max(500).optional().nullable() }), req.body);
+  const body = validate(
+    z.object({
+      direction: z.enum(['inbound', 'outbound', 'partner']),
+      sourceUrl: z.string().url().max(500),
+      targetUrl: z.string().max(500),
+      anchor: z.string().max(200).optional().nullable(),
+      status: z.enum(['live', 'pending', 'lost', 'rejected']).optional(),
+      nofollow: z.boolean().optional(),
+      notes: z.string().max(500).optional().nullable(),
+    }),
+    req.body,
+  );
   res.json({ backlink: upsertBacklink({ id: String(req.params.id) === 'new' ? undefined : String(req.params.id), ...body }) });
 });
-adminRouter.delete('/seo/backlinks/:id', requirePermission('cms'), (req, res) => { deleteBacklink(String(req.params.id)); res.json({ ok: true }); });
-adminRouter.post('/seo/backlinks/verify', requirePermission('cms'), wrap(async (_req, res) => res.json(await verifyBacklinks())));
+adminRouter.delete('/seo/backlinks/:id', requirePermission('cms'), (req, res) => {
+  deleteBacklink(String(req.params.id));
+  res.json({ ok: true });
+});
+adminRouter.post(
+  '/seo/backlinks/verify',
+  requirePermission('cms'),
+  wrap(async (_req, res) => res.json(await verifyBacklinks())),
+);
 
 // ---------------- Transactions ----------------
 adminRouter.get('/transactions', requirePermission('transactions'), (req, res) => {
   const { page, pageSize } = parsePagination(req.query, 25);
   const q = req.query;
-  const result = listTransactions({ userId: q.userId ? String(q.userId) : undefined, type: q.type ? String(q.type) : undefined, status: q.status ? String(q.status) : undefined, currency: q.currency ? String(q.currency) : undefined, search: q.search ? String(q.search) : undefined, from: q.from ? String(q.from) : undefined, to: q.to ? String(q.to) : undefined, page, pageSize });
+  const result = listTransactions({
+    userId: q.userId ? String(q.userId) : undefined,
+    type: q.type ? String(q.type) : undefined,
+    status: q.status ? String(q.status) : undefined,
+    currency: q.currency ? String(q.currency) : undefined,
+    search: q.search ? String(q.search) : undefined,
+    from: q.from ? String(q.from) : undefined,
+    to: q.to ? String(q.to) : undefined,
+    page,
+    pageSize,
+  });
   const users = usersById(result.items.flatMap((t) => [t.senderUserId!, t.receiverUserId!]));
   res.json({ ...result, items: result.items.map((t) => ({ ...t, sender: users.get(t.senderUserId!) ?? null, receiver: users.get(t.receiverUserId!) ?? null })), page, pageSize });
 });
@@ -492,7 +752,10 @@ adminRouter.get('/withdrawals', requirePermission('approvals'), (req, res) => {
 });
 // Administrative payout settlement is maker-checker: this PROPOSES with documentary evidence; a different admin approves in the console.
 adminRouter.post('/withdrawals/:id/approve', requirePermission('approvals'), (req, res) => {
-  const body = validate(z.object({ payoutReference: z.string().min(4).max(80), note: z.string().min(8).max(500).default('Payout executed manually; reference checked against the operator/bank statement') }), req.body ?? {});
+  const body = validate(
+    z.object({ payoutReference: z.string().min(4).max(80), note: z.string().min(8).max(500).default('Payout executed manually; reference checked against the operator/bank statement') }),
+    req.body ?? {},
+  );
   const verification = proposeVerification(req.user!, String(req.params.id), { subjectType: 'withdrawal', action: 'confirm', note: body.note, externalRef: body.payoutReference });
   audit(req.user!.id, 'withdrawal.approve.proposed', 'transaction', String(req.params.id), { verificationId: verification.id, payoutReference: body.payoutReference });
   res.json({ verification, transaction: toTransaction(getTransaction(String(req.params.id))!) });
@@ -505,11 +768,30 @@ adminRouter.post('/withdrawals/:id/reject', requirePermission('approvals'), (req
 });
 adminRouter.get('/payments', requirePermission('approvals'), (req, res) => {
   const { page, pageSize } = parsePagination(req.query, 25);
-  const result = listPayments({ purpose: req.query.purpose ? String(req.query.purpose) : undefined, status: req.query.status ? String(req.query.status) : undefined, method: req.query.method ? String(req.query.method) : undefined, page, pageSize });
-  const rows = getDb().prepare(`SELECT id, user_id, payer_email, payer_name, metadata FROM gateway_payments WHERE id IN (${result.items.map(() => '?').join(',') || "''"})`).all(...result.items.map((p) => p.id)) as any[];
+  const result = listPayments({
+    purpose: req.query.purpose ? String(req.query.purpose) : undefined,
+    status: req.query.status ? String(req.query.status) : undefined,
+    method: req.query.method ? String(req.query.method) : undefined,
+    page,
+    pageSize,
+  });
+  const rows = getDb()
+    .prepare(`SELECT id, user_id, payer_email, payer_name, metadata FROM gateway_payments WHERE id IN (${result.items.map(() => '?').join(',') || "''"})`)
+    .all(...result.items.map((p) => p.id)) as any[];
   const byId = new Map(rows.map((r) => [r.id, r]));
   const users = usersById(rows.map((r) => r.user_id));
-  res.json({ ...result, items: result.items.map((p) => ({ ...p, user: users.get(byId.get(p.id)?.user_id) ?? null, payerEmail: byId.get(p.id)?.payer_email, payerName: byId.get(p.id)?.payer_name, proof: JSON.parse(byId.get(p.id)?.metadata || '{}').proof ?? null })), page, pageSize });
+  res.json({
+    ...result,
+    items: result.items.map((p) => ({
+      ...p,
+      user: users.get(byId.get(p.id)?.user_id) ?? null,
+      payerEmail: byId.get(p.id)?.payer_email,
+      payerName: byId.get(p.id)?.payer_name,
+      proof: JSON.parse(byId.get(p.id)?.metadata || '{}').proof ?? null,
+    })),
+    page,
+    pageSize,
+  });
 });
 // Manual settlement is maker-checker: /payments/:id/confirm and /reject PROPOSE a decision; a different admin approves it under step-up.
 adminRouter.post('/payments/:id/confirm', requirePermission('approvals'), (req, res) => {
@@ -528,7 +810,12 @@ adminRouter.get('/payments/:id/case', requirePermission('approvals'), (req, res)
 adminRouter.get('/verifications', requirePermission('approvals'), (req, res) => {
   const queue = listPayments({ stages: req.query.stage ? [String(req.query.stage)] : OPEN_STAGES, page: 1, pageSize: 100 });
   const users = usersById(queue.items.map((p) => (getPayment(p.id).user_id as string) ?? '').filter(Boolean));
-  res.json({ queue: queue.items.map((p) => ({ ...p, user: users.get(getPayment(p.id).user_id ?? '') ?? null })), pending: listVerifications({ status: 'proposed' }), recent: listVerifications({}).slice(0, 50), stages: STAGE_LABELS });
+  res.json({
+    queue: queue.items.map((p) => ({ ...p, user: users.get(getPayment(p.id).user_id ?? '') ?? null })),
+    pending: listVerifications({ status: 'proposed' }),
+    recent: listVerifications({}).slice(0, 50),
+    stages: STAGE_LABELS,
+  });
 });
 adminRouter.post('/verifications/:id/approve', requirePermission('approvals'), (req, res) => {
   const body = validate(z.object({ pin: z.string().optional() }), req.body ?? {});
@@ -544,7 +831,15 @@ adminRouter.post('/verifications/:id/decline', requirePermission('approvals'), (
 });
 /** Verifier types in an SMS/statement line by hand: recorded as manual evidence that still needs maker-checker approval. */
 adminRouter.post('/payments/:id/evidence', requirePermission('approvals'), (req, res) => {
-  const body = validate(z.object({ text: z.string().min(5).max(2000), operatorId: z.string().optional().nullable(), from: z.string().max(40).optional().nullable(), receivedAt: z.string().datetime({ offset: true }).optional().nullable() }), req.body);
+  const body = validate(
+    z.object({
+      text: z.string().min(5).max(2000),
+      operatorId: z.string().optional().nullable(),
+      from: z.string().max(40).optional().nullable(),
+      receivedAt: z.string().datetime({ offset: true }).optional().nullable(),
+    }),
+    req.body,
+  );
   const evidence = ingestEvidence({ source: 'manual', text: body.text, operatorId: body.operatorId, from: body.from, receivedAt: body.receivedAt, actor: { type: 'admin', id: req.user!.id } });
   audit(req.user!.id, 'evidence.manual', 'payment', String(req.params.id), { evidenceId: evidence.id, outcome: evidence.outcome });
   res.status(201).json({ evidence, payment: toPaymentView(getPayment(String(req.params.id))) });
@@ -555,7 +850,20 @@ adminRouter.get('/evidence', requirePermission('approvals'), (req, res) => {
 });
 adminRouter.get('/evidence/devices', requirePermission('gateways'), (_req, res) => res.json({ items: listDevices() }));
 adminRouter.post('/evidence/devices', requirePermission('gateways'), (req, res) => {
-  const body = validate(z.object({ name: z.string().min(2).max(80), publicKey: z.string().min(32).max(2000), operatorIds: z.array(z.string()).max(50).optional().nullable(), kind: z.enum(['collection', 'payout']).optional().nullable(), simMsisdn: z.string().max(30).optional().nullable(), simIccid: z.string().max(30).optional().nullable(), agentUserId: z.string().optional().nullable(), payoutAccountId: z.string().optional().nullable(), ownerUserId: z.string().optional().nullable() }), req.body);
+  const body = validate(
+    z.object({
+      name: z.string().min(2).max(80),
+      publicKey: z.string().min(32).max(2000),
+      operatorIds: z.array(z.string()).max(50).optional().nullable(),
+      kind: z.enum(['collection', 'payout']).optional().nullable(),
+      simMsisdn: z.string().max(30).optional().nullable(),
+      simIccid: z.string().max(30).optional().nullable(),
+      agentUserId: z.string().optional().nullable(),
+      payoutAccountId: z.string().optional().nullable(),
+      ownerUserId: z.string().optional().nullable(),
+    }),
+    req.body,
+  );
   const owner = body.ownerUserId ? getUserById(body.ownerUserId) : req.user!;
   const device = registerDevice(owner, body, req.user!.id);
   audit(req.user!.id, 'evidence_device.register', 'device', device.id, { name: body.name });
@@ -568,7 +876,10 @@ adminRouter.delete('/evidence/devices/:id', requirePermission('gateways'), (req,
 });
 adminRouter.get('/evidence/templates', requirePermission('gateways'), (_req, res) => res.json({ items: listTemplates() }));
 adminRouter.put('/evidence/templates/:id', requirePermission('gateways'), (req, res) => {
-  const body = validate(z.object({ operatorId: z.string().min(1), name: z.string().min(2).max(120), patterns: z.record(z.string(), z.any()), priority: z.number().int().optional(), enabled: z.boolean().optional() }), req.body);
+  const body = validate(
+    z.object({ operatorId: z.string().min(1), name: z.string().min(2).max(120), patterns: z.record(z.string(), z.any()), priority: z.number().int().optional(), enabled: z.boolean().optional() }),
+    req.body,
+  );
   const template = upsertTemplate({ id: String(req.params.id) === 'new' ? null : String(req.params.id), ...body });
   audit(req.user!.id, 'parse_template.update', 'template', template.id, { operatorId: body.operatorId });
   res.json({ template });
@@ -583,7 +894,12 @@ adminRouter.post('/evidence/parse-test', requirePermission('gateways'), (req, re
 });
 adminRouter.get('/events', requirePermission('admins'), (req, res) => {
   const { page, pageSize } = parsePagination(req.query, 50);
-  res.json({ ...listEvents({ stream: req.query.stream ? (String(req.query.stream) as any) : undefined, subjectId: req.query.subjectId ? String(req.query.subjectId) : undefined, limit: pageSize, page }), page, pageSize, chain: verifyEventChain() });
+  res.json({
+    ...listEvents({ stream: req.query.stream ? (String(req.query.stream) as any) : undefined, subjectId: req.query.subjectId ? String(req.query.subjectId) : undefined, limit: pageSize, page }),
+    page,
+    pageSize,
+    chain: verifyEventChain(),
+  });
 });
 adminRouter.get('/reconcile', requirePermission('reports'), (_req, res) => res.json({ ledger: reconcileLedger(), events: verifyEventChain() }));
 adminRouter.get('/sanctions', requirePermission('settings'), (_req, res) => res.json({ items: listSanctions() }));
@@ -607,14 +923,48 @@ adminRouter.get('/route-catalog', requirePermission('gateways'), (req, res) => r
 // ---------------- Corridors, liquidity, payouts, chargebacks ----------------
 adminRouter.get('/corridors', requirePermission('gateways'), (_req, res) => res.json({ items: listCorridors(), compliance: getSetting('compliance') }));
 adminRouter.put('/corridors/:id', requirePermission('gateways'), (req, res) => {
-  const body = validate(z.object({ sourceCountry: z.string().length(2).optional().nullable(), sourceCurrency: z.string().min(1).max(3), destCountry: z.string().length(2), destCurrency: z.string().length(3), operatorId: z.string().optional().nullable(), rail: z.enum(['mobile_money', 'bank', 'agent']).default('mobile_money'), estimatedPayoutMinutes: z.number().int().min(1).optional(), maxAmount: z.number().int().min(0).optional(), notes: z.string().max(1000).optional().nullable(), enabled: z.boolean().optional(), collectionPartner: z.string().max(200).optional().nullable(), payoutPartner: z.string().max(200).optional().nullable(), licenceRef: z.string().max(200).optional().nullable(), compliance: complianceSchema.optional().nullable(), licenceExpiresAt: z.string().datetime({ offset: true }).optional().nullable(), payoutCurrencies: z.array(z.string().length(3)).max(20).optional().nullable(), beneficiaryConsent: z.boolean().optional().nullable(), payoutConfirmation: z.enum(['PROCESSOR_WEBHOOK', 'SIGNED_SMS_FORWARDER', 'SECURED_DEVICE_CONFIRMATION', 'AGENT_WITH_EVIDENCE', 'ADMIN_MAKER_CHECKER']).optional().nullable() }), req.body);
+  const body = validate(
+    z.object({
+      sourceCountry: z.string().length(2).optional().nullable(),
+      sourceCurrency: z.string().min(1).max(3),
+      destCountry: z.string().length(2),
+      destCurrency: z.string().length(3),
+      operatorId: z.string().optional().nullable(),
+      rail: z.enum(['mobile_money', 'bank', 'agent']).default('mobile_money'),
+      estimatedPayoutMinutes: z.number().int().min(1).optional(),
+      maxAmount: z.number().int().min(0).optional(),
+      notes: z.string().max(1000).optional().nullable(),
+      enabled: z.boolean().optional(),
+      collectionPartner: z.string().max(200).optional().nullable(),
+      payoutPartner: z.string().max(200).optional().nullable(),
+      licenceRef: z.string().max(200).optional().nullable(),
+      compliance: complianceSchema.optional().nullable(),
+      licenceExpiresAt: z.string().datetime({ offset: true }).optional().nullable(),
+      payoutCurrencies: z.array(z.string().length(3)).max(20).optional().nullable(),
+      beneficiaryConsent: z.boolean().optional().nullable(),
+      payoutConfirmation: z.enum(['PROCESSOR_WEBHOOK', 'SIGNED_SMS_FORWARDER', 'SECURED_DEVICE_CONFIRMATION', 'AGENT_WITH_EVIDENCE', 'ADMIN_MAKER_CHECKER']).optional().nullable(),
+    }),
+    req.body,
+  );
   const corridor = upsertCorridor({ id: String(req.params.id) === 'new' ? undefined : String(req.params.id), ...body }, { type: 'admin', id: req.user!.id });
   audit(req.user!.id, 'corridor.upsert', 'corridor', corridor.id, { destCountry: body.destCountry, operatorId: body.operatorId ?? null });
   res.json({ corridor });
 });
 /** Live / suspended: an explicit, step-up protected decision that records the regulatory arrangements. */
 adminRouter.post('/corridors/:id/status', requirePermission('settings'), (req, res) => {
-  const body = validate(z.object({ status: z.enum(['sandbox', 'live', 'suspended']), collectionPartner: z.string().max(200).optional().nullable(), payoutPartner: z.string().max(200).optional().nullable(), licenceRef: z.string().max(200).optional().nullable(), notes: z.string().max(1000).optional().nullable(), compliance: complianceSchema.optional().nullable(), licenceExpiresAt: z.string().datetime({ offset: true }).optional().nullable(), pin: z.string().optional() }), req.body);
+  const body = validate(
+    z.object({
+      status: z.enum(['sandbox', 'live', 'suspended']),
+      collectionPartner: z.string().max(200).optional().nullable(),
+      payoutPartner: z.string().max(200).optional().nullable(),
+      licenceRef: z.string().max(200).optional().nullable(),
+      notes: z.string().max(1000).optional().nullable(),
+      compliance: complianceSchema.optional().nullable(),
+      licenceExpiresAt: z.string().datetime({ offset: true }).optional().nullable(),
+      pin: z.string().optional(),
+    }),
+    req.body,
+  );
   assertAdminStepUp(req.user!, body.pin, req);
   const corridor = setCorridorStatus(String(req.params.id), body.status, req.user!, body);
   audit(req.user!.id, `corridor.${body.status}`, 'corridor', corridor.id, { collectionPartner: body.collectionPartner, payoutPartner: body.payoutPartner, licenceRef: body.licenceRef });
@@ -626,16 +976,47 @@ adminRouter.delete('/corridors/:id', requirePermission('gateways'), (req, res) =
 });
 adminRouter.get('/liquidity', requirePermission('gateways'), (_req, res) => res.json({ items: liquidityOverview() }));
 adminRouter.post('/liquidity/accounts', requirePermission('gateways'), (req, res) => {
-  const body = validate(z.object({ rail: z.enum(['mobile_money', 'bank']), operatorId: z.string().optional().nullable(), country: z.string().length(2), currency: z.string().length(3), label: z.string().min(2).max(120), msisdn: z.string().max(30).optional().nullable(), simIccid: z.string().max(30).optional().nullable(), bankName: z.string().max(120).optional().nullable(), accountNumber: z.string().max(60).optional().nullable(), agentUserId: z.string().optional().nullable(), deviceId: z.string().optional().nullable(), dailyLimit: z.number().int().min(0).optional(), perTxLimit: z.number().int().min(0).optional() }), req.body);
+  const body = validate(
+    z.object({
+      rail: z.enum(['mobile_money', 'bank']),
+      operatorId: z.string().optional().nullable(),
+      country: z.string().length(2),
+      currency: z.string().length(3),
+      label: z.string().min(2).max(120),
+      msisdn: z.string().max(30).optional().nullable(),
+      simIccid: z.string().max(30).optional().nullable(),
+      bankName: z.string().max(120).optional().nullable(),
+      accountNumber: z.string().max(60).optional().nullable(),
+      agentUserId: z.string().optional().nullable(),
+      deviceId: z.string().optional().nullable(),
+      dailyLimit: z.number().int().min(0).optional(),
+      perTxLimit: z.number().int().min(0).optional(),
+    }),
+    req.body,
+  );
   const account = createPayoutAccount(body, { type: 'admin', id: req.user!.id });
   audit(req.user!.id, 'payout_account.create', 'payout_account', account.id, { rail: body.rail, operatorId: body.operatorId ?? null });
   res.status(201).json({ account });
 });
 adminRouter.patch('/liquidity/accounts/:id', requirePermission('gateways'), (req, res) => {
-  const body = validate(z.object({ label: z.string().min(2).max(120).optional(), status: z.enum(['active', 'paused']).optional(), agentUserId: z.string().optional().nullable(), deviceId: z.string().optional().nullable(), dailyLimit: z.number().int().min(0).optional(), perTxLimit: z.number().int().min(0).optional(), msisdn: z.string().max(30).optional().nullable(), simIccid: z.string().max(30).optional().nullable() }), req.body);
+  const body = validate(
+    z.object({
+      label: z.string().min(2).max(120).optional(),
+      status: z.enum(['active', 'paused']).optional(),
+      agentUserId: z.string().optional().nullable(),
+      deviceId: z.string().optional().nullable(),
+      dailyLimit: z.number().int().min(0).optional(),
+      perTxLimit: z.number().int().min(0).optional(),
+      msisdn: z.string().max(30).optional().nullable(),
+      simIccid: z.string().max(30).optional().nullable(),
+    }),
+    req.body,
+  );
   res.json({ account: updatePayoutAccount(String(req.params.id), body, { type: 'admin', id: req.user!.id }) });
 });
-adminRouter.get('/liquidity/accounts/:id/movements', requirePermission('gateways'), (req, res) => res.json({ account: getPayoutAccount(String(req.params.id)), items: listMovements(String(req.params.id)) }));
+adminRouter.get('/liquidity/accounts/:id/movements', requirePermission('gateways'), (req, res) =>
+  res.json({ account: getPayoutAccount(String(req.params.id)), items: listMovements(String(req.params.id)) }),
+);
 /** Prefund / rebalance (step-up protected): treasury → local float. Waiting payouts are re-queued automatically. */
 adminRouter.post('/liquidity/accounts/:id/prefund', requirePermission('approvals'), (req, res) => {
   const body = validate(z.object({ amount: z.string(), reference: z.string().max(120).optional().nullable(), note: z.string().max(300).optional().nullable(), pin: z.string().optional() }), req.body);
@@ -656,7 +1037,12 @@ adminRouter.post('/liquidity/accounts/:id/adjust', requirePermission('approvals'
 });
 adminRouter.get('/payouts', requirePermission('approvals'), (req, res) => {
   const { page, pageSize } = parsePagination(req.query, 50);
-  res.json({ ...listPayouts({ stage: req.query.stage ? String(req.query.stage) : null, payoutAccountId: req.query.accountId ? String(req.query.accountId) : null, page, pageSize }), page, pageSize, pending: listVerifications({ status: 'proposed' }).filter((v) => v.subjectType === 'payout' || v.subjectType === 'withdrawal' || v.subjectType.startsWith('route')) });
+  res.json({
+    ...listPayouts({ stage: req.query.stage ? String(req.query.stage) : null, payoutAccountId: req.query.accountId ? String(req.query.accountId) : null, page, pageSize }),
+    page,
+    pageSize,
+    pending: listVerifications({ status: 'proposed' }).filter((v) => v.subjectType === 'payout' || v.subjectType === 'withdrawal' || v.subjectType.startsWith('route')),
+  });
 });
 adminRouter.get('/payouts/:id', requirePermission('approvals'), (req, res) => res.json(payoutCase(String(req.params.id))));
 adminRouter.post('/payouts/:id/requeue', requirePermission('approvals'), (req, res) => {
@@ -688,7 +1074,9 @@ adminRouter.post('/payouts/:id/cancel', requirePermission('approvals'), (req, re
   audit(req.user!.id, 'payout.cancel', 'payout', payout.id, body);
   res.json({ payout });
 });
-adminRouter.get('/money-routes/:id', requirePermission('transactions'), (req, res) => res.json({ route: adminRouteView(String(req.params.id)), events: listEvents({ subjectId: String(req.params.id), limit: 200 }).items }));
+adminRouter.get('/money-routes/:id', requirePermission('transactions'), (req, res) =>
+  res.json({ route: adminRouteView(String(req.params.id)), events: listEvents({ subjectId: String(req.params.id), limit: 200 }).items }),
+);
 /** Release a held transfer (MANUAL_REVIEW) or refund it – both maker-checker proposals. */
 adminRouter.post('/money-routes/:id/release', requirePermission('approvals'), (req, res) => {
   const body = validate(z.object({ approve: z.boolean().default(true), note: z.string().max(500).optional().nullable() }), req.body ?? {});
@@ -719,7 +1107,9 @@ adminRouter.post('/chargebacks/:id/resolve', requirePermission('approvals'), (re
 });
 adminRouter.get('/remittances', requirePermission('approvals'), (req, res) => {
   const where = req.query.status ? 'WHERE status = ?' : '';
-  const rows = getDb().prepare(`SELECT * FROM remittances ${where} ORDER BY created_at DESC LIMIT 200`).all(...(req.query.status ? [String(req.query.status)] : []));
+  const rows = getDb()
+    .prepare(`SELECT * FROM remittances ${where} ORDER BY created_at DESC LIMIT 200`)
+    .all(...(req.query.status ? [String(req.query.status)] : []));
   res.json({ items: rows.map(toRemittance) });
 });
 adminRouter.post('/remittances/:id/settle', requirePermission('approvals'), (req, res) => {
@@ -766,6 +1156,9 @@ adminRouter.get('/settings', requirePermission('settings'), (_req, res) => {
     sms: getSetting('sms', { provider: 'console' }),
     site: getSiteSettings(),
     languages: listLanguages(),
+    webhooks: getWebhookSettings(),
+    emoney: getEmoneySettings(),
+    gateway_products: getGatewayProductSettings(),
   });
 });
 adminRouter.put(
@@ -773,7 +1166,31 @@ adminRouter.put(
   requirePermission('settings'),
   wrap(async (req, res) => {
     const key = String(req.params.key);
-    const allowed = ['fees', 'limits', 'referral', 'app', 'modules', 'countries', 'smtp', 'sms', 'gateway', 'fx', 'risk', 'compliance', 'fraud', 'kycTiers', 'aml', 'agentIntel', 'accountProtection', 'commissions', 'disputes', 'routing', 'webhooks'];
+    const allowed = [
+      'fees',
+      'limits',
+      'referral',
+      'app',
+      'modules',
+      'countries',
+      'smtp',
+      'sms',
+      'gateway',
+      'fx',
+      'risk',
+      'compliance',
+      'fraud',
+      'kycTiers',
+      'aml',
+      'agentIntel',
+      'accountProtection',
+      'commissions',
+      'disputes',
+      'routing',
+      'webhooks',
+      'emoney',
+      'gateway_products',
+    ];
     if (!allowed.includes(key)) throw badRequest('Unknown settings key');
     let value = req.body?.value ?? req.body;
     if (key === 'smtp' && value?.pass === '••••••••') value = { ...value, pass: getSmtpSettings().pass };
@@ -785,7 +1202,15 @@ adminRouter.put(
     }
     if (key === 'compliance' && value?.mode === 'live' && getSetting<{ mode: string }>('compliance').mode !== 'live') {
       const checklist = goLiveChecklist();
-      if (!checklist.readyForLive) throw badRequest(`Cannot switch to live: ${checklist.items.filter((i) => i.blocking && !i.ok).map((i) => i.label).join('; ')}`, 'go_live_blocked', checklist);
+      if (!checklist.readyForLive)
+        throw badRequest(
+          `Cannot switch to live: ${checklist.items
+            .filter((i) => i.blocking && !i.ok)
+            .map((i) => i.label)
+            .join('; ')}`,
+          'go_live_blocked',
+          checklist,
+        );
       assertAdminStepUp(req.user!, req.body?.pin, req);
     }
     if (key === 'fees') for (const [t, f] of Object.entries<any>(value)) if (typeof f?.bps !== 'number' || typeof f?.fixed !== 'number') throw badRequest(`Invalid fee config for ${t}`);
@@ -819,7 +1244,17 @@ adminRouter.put(
   '/currencies/:code',
   requirePermission('settings'),
   wrap(async (req, res) => {
-    const body = validate(z.object({ name: z.string().min(1), symbol: z.string().min(1).max(6), decimals: z.number().int().min(0).max(4), rateToBase: z.number().positive(), enabled: z.boolean(), sortOrder: z.number().int().optional() }), req.body);
+    const body = validate(
+      z.object({
+        name: z.string().min(1),
+        symbol: z.string().min(1).max(6),
+        decimals: z.number().int().min(0).max(4),
+        rateToBase: z.number().positive(),
+        enabled: z.boolean(),
+        sortOrder: z.number().int().optional(),
+      }),
+      req.body,
+    );
     const cur = upsertCurrency({ code: String(req.params.code).toUpperCase(), ...body });
     audit(req.user!.id, 'currency.update', 'currency', cur.code, body);
     res.json({ currency: cur });
@@ -835,7 +1270,9 @@ adminRouter.post(
   }),
 );
 /** Rate provider status, freshness and the versioned snapshot history. */
-adminRouter.get('/currencies/rate-status', requirePermission('settings'), (_req, res) => res.json({ status: getRateStatus(), freshness: rateFreshness(), providers: RATE_PROVIDERS.map((p) => ({ id: p.id, name: p.name, keyed: p.keyed })), snapshots: listRateSnapshots(20) }));
+adminRouter.get('/currencies/rate-status', requirePermission('settings'), (_req, res) =>
+  res.json({ status: getRateStatus(), freshness: rateFreshness(), providers: RATE_PROVIDERS.map((p) => ({ id: p.id, name: p.name, keyed: p.keyed })), snapshots: listRateSnapshots(20) }),
+);
 /** Versioned manual import (1 base = rate quote) for environments without outbound access – labelled non-live everywhere. */
 adminRouter.post('/currencies/import', requirePermission('settings'), (req, res) => {
   const body = validate(z.object({ rates: z.record(z.string(), z.number().positive()), note: z.string().max(300).optional().nullable() }), req.body);
@@ -878,7 +1315,12 @@ adminRouter.put(
       }),
       req.body,
     );
-    const gateway = upsertGateway({ id: String(req.params.id).toLowerCase().replace(/[^a-z0-9_]/g, '_'), ...body });
+    const gateway = upsertGateway({
+      id: String(req.params.id)
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '_'),
+      ...body,
+    });
     audit(req.user!.id, 'gateway.update', 'gateway', gateway.id, { enabled: body.enabled, methods: body.methods });
     res.json({ gateway });
   }),
@@ -892,7 +1334,21 @@ adminRouter.delete('/gateways/:id', requirePermission('gateways'), (req, res) =>
 // ---------------- Catalogs: billers, operators, gift cards ----------------
 adminRouter.get('/billers', requirePermission('catalogs'), (_req, res) => res.json({ items: listBillers(false) }));
 adminRouter.put('/billers/:id', requirePermission('catalogs'), (req, res) => {
-  const body = validate(z.object({ category: z.string(), name: z.string(), country: z.string().length(2), currency: z.string().length(3), minAmount: z.number().int().min(0), maxAmount: z.number().int().min(0), feeBps: z.number().int().min(0), accountLabel: z.string().default('Account number'), enabled: z.boolean(), color: z.string().optional() }), req.body);
+  const body = validate(
+    z.object({
+      category: z.string(),
+      name: z.string(),
+      country: z.string().length(2),
+      currency: z.string().length(3),
+      minAmount: z.number().int().min(0),
+      maxAmount: z.number().int().min(0),
+      feeBps: z.number().int().min(0),
+      accountLabel: z.string().default('Account number'),
+      enabled: z.boolean(),
+      color: z.string().optional(),
+    }),
+    req.body,
+  );
   res.json({ biller: upsertBiller({ id: String(req.params.id) === 'new' ? undefined : String(req.params.id), ...body }) });
 });
 adminRouter.delete('/billers/:id', requirePermission('catalogs'), (req, res) => {
@@ -901,7 +1357,19 @@ adminRouter.delete('/billers/:id', requirePermission('catalogs'), (req, res) => 
 });
 adminRouter.get('/operators', requirePermission('catalogs'), (_req, res) => res.json({ items: listOperators(false) }));
 adminRouter.put('/operators/:id', requirePermission('catalogs'), (req, res) => {
-  const body = validate(z.object({ name: z.string(), country: z.string().length(2), currency: z.string().length(3), minAmount: z.number().int().min(0), maxAmount: z.number().int().min(0), denominations: z.array(z.number().int().positive()), enabled: z.boolean(), color: z.string().optional() }), req.body);
+  const body = validate(
+    z.object({
+      name: z.string(),
+      country: z.string().length(2),
+      currency: z.string().length(3),
+      minAmount: z.number().int().min(0),
+      maxAmount: z.number().int().min(0),
+      denominations: z.array(z.number().int().positive()),
+      enabled: z.boolean(),
+      color: z.string().optional(),
+    }),
+    req.body,
+  );
   res.json({ operator: upsertOperator({ id: String(req.params.id) === 'new' ? undefined : String(req.params.id), ...body }) });
 });
 adminRouter.delete('/operators/:id', requirePermission('catalogs'), (req, res) => {
@@ -910,7 +1378,19 @@ adminRouter.delete('/operators/:id', requirePermission('catalogs'), (req, res) =
 });
 adminRouter.get('/gift-products', requirePermission('catalogs'), (_req, res) => res.json({ items: listGiftProducts(false) }));
 adminRouter.put('/gift-products/:id', requirePermission('catalogs'), (req, res) => {
-  const body = validate(z.object({ brand: z.string(), name: z.string(), description: z.string().optional().nullable(), category: z.string().default('shopping'), currency: z.string().length(3), denominations: z.array(z.number().int().positive()), color: z.string().optional(), enabled: z.boolean() }), req.body);
+  const body = validate(
+    z.object({
+      brand: z.string(),
+      name: z.string(),
+      description: z.string().optional().nullable(),
+      category: z.string().default('shopping'),
+      currency: z.string().length(3),
+      denominations: z.array(z.number().int().positive()),
+      color: z.string().optional(),
+      enabled: z.boolean(),
+    }),
+    req.body,
+  );
   res.json({ product: upsertGiftProduct({ id: String(req.params.id) === 'new' ? undefined : String(req.params.id), ...body }) });
 });
 adminRouter.delete('/gift-products/:id', requirePermission('catalogs'), (req, res) => {
@@ -925,10 +1405,28 @@ adminRouter.put(
   requirePermission('gateways'),
   wrap(async (req, res) => {
     const body = validate(
-      z.object({ name: z.string().min(1), brand: z.string().min(1), country: z.string().length(2), currency: z.string().length(3), ussd: z.string().max(20).optional().nullable(), color: z.string().optional(), collectionNumber: z.string().max(40).optional().nullable(), collectionName: z.string().max(120).optional().nullable(), instructions: z.string().max(1000).optional().nullable(), payoutEnabled: z.boolean().default(true), enabled: z.boolean().default(true), sortOrder: z.number().int().optional() }),
+      z.object({
+        name: z.string().min(1),
+        brand: z.string().min(1),
+        country: z.string().length(2),
+        currency: z.string().length(3),
+        ussd: z.string().max(20).optional().nullable(),
+        color: z.string().optional(),
+        collectionNumber: z.string().max(40).optional().nullable(),
+        collectionName: z.string().max(120).optional().nullable(),
+        instructions: z.string().max(1000).optional().nullable(),
+        payoutEnabled: z.boolean().default(true),
+        enabled: z.boolean().default(true),
+        sortOrder: z.number().int().optional(),
+      }),
       req.body,
     );
-    const op = upsertMomo({ id: String(req.params.id).toLowerCase().replace(/[^a-z0-9_]/g, '_'), ...body });
+    const op = upsertMomo({
+      id: String(req.params.id)
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '_'),
+      ...body,
+    });
     audit(req.user!.id, 'momo_operator.update', 'momo_operator', op.id, { enabled: body.enabled, collectionNumber: body.collectionNumber ? '***' : null });
     res.json({ operator: op });
   }),
@@ -945,7 +1443,24 @@ adminRouter.get('/money-routes', requirePermission('transactions'), (req, res) =
   const total = (db.prepare(`SELECT COUNT(*) c FROM money_routes ${where}`).get(...params) as any).c;
   const rows = db.prepare(`SELECT * FROM money_routes ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, pageSize, (page - 1) * pageSize) as any[];
   const users = usersById(rows.map((r) => r.user_id));
-  res.json({ items: rows.map((r) => ({ id: r.id, user: users.get(r.user_id) ?? null, source: r.source_method, destination: r.destination_method, destinationDetails: JSON.parse(r.destination_details || '{}'), amount: r.amount, currency: r.currency, targetCurrency: r.target_currency, status: r.status, error: r.error, createdAt: r.created_at })), total, page, pageSize });
+  res.json({
+    items: rows.map((r) => ({
+      id: r.id,
+      user: users.get(r.user_id) ?? null,
+      source: r.source_method,
+      destination: r.destination_method,
+      destinationDetails: JSON.parse(r.destination_details || '{}'),
+      amount: r.amount,
+      currency: r.currency,
+      targetCurrency: r.target_currency,
+      status: r.status,
+      error: r.error,
+      createdAt: r.created_at,
+    })),
+    total,
+    page,
+    pageSize,
+  });
 });
 
 // ---------------- CMS: pages, languages, translations, contact, newsletter, notifications ----------------
@@ -1016,7 +1531,12 @@ adminRouter.post('/support/tickets/:id/status', requirePermission('support'), (r
   res.json({ ticket: setTicketStatus(String(req.params.id), req.user!, body.status) });
 });
 adminRouter.get('/support/chats', requirePermission('support'), (_req, res) => res.json({ items: chatConversations() }));
-adminRouter.get('/support/chats/:userId', requirePermission('support'), (req, res) => res.json({ items: chatHistory(String(req.params.userId), req.query.since ? String(req.query.since) : null, 'admin'), user: findUserById(String(req.params.userId)) ? toPublicUser(findUserById(String(req.params.userId))!) : null }));
+adminRouter.get('/support/chats/:userId', requirePermission('support'), (req, res) =>
+  res.json({
+    items: chatHistory(String(req.params.userId), req.query.since ? String(req.query.since) : null, 'admin'),
+    user: findUserById(String(req.params.userId)) ? toPublicUser(findUserById(String(req.params.userId))!) : null,
+  }),
+);
 adminRouter.post('/support/chats/:userId', requirePermission('support'), (req, res) => {
   const body = validate(z.object({ body: z.string().min(1) }), req.body);
   res.status(201).json({ message: sendChat(req.user!, body.body, String(req.params.userId)) });
@@ -1047,21 +1567,87 @@ adminRouter.get('/reports/transactions', requirePermission('reports'), (req, res
   const params: unknown[] = [from, to];
   const curSql = currency ? 'AND currency = ?' : '';
   if (currency) params.push(currency);
-  const byType = db.prepare(`SELECT type, status, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE created_at BETWEEN ? AND ? ${curSql} GROUP BY type, status, currency ORDER BY volume DESC`).all(...params);
-  const byDay = db.prepare(`SELECT substr(created_at,1,10) day, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE status = 'completed' AND created_at BETWEEN ? AND ? ${curSql} GROUP BY day, currency ORDER BY day`).all(...params);
-  const byCurrency = db.prepare(`SELECT currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE status = 'completed' AND created_at BETWEEN ? AND ? ${curSql} GROUP BY currency`).all(...params);
-  const topMerchants = db.prepare(`SELECT receiver_user_id id, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume FROM transactions WHERE type = 'merchant_payment' AND status = 'completed' AND created_at BETWEEN ? AND ? ${curSql} GROUP BY receiver_user_id, currency ORDER BY volume DESC LIMIT 10`).all(...params) as any[];
-  const topAgents = db.prepare(`SELECT sender_user_id id, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume FROM transactions WHERE type = 'agent_cash_in' AND status = 'completed' AND created_at BETWEEN ? AND ? ${curSql} GROUP BY sender_user_id, currency ORDER BY volume DESC LIMIT 10`).all(...params) as any[];
+  const byType = db
+    .prepare(
+      `SELECT type, status, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE created_at BETWEEN ? AND ? ${curSql} GROUP BY type, status, currency ORDER BY volume DESC`,
+    )
+    .all(...params);
+  const byDay = db
+    .prepare(
+      `SELECT substr(created_at,1,10) day, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE status = 'completed' AND created_at BETWEEN ? AND ? ${curSql} GROUP BY day, currency ORDER BY day`,
+    )
+    .all(...params);
+  const byCurrency = db
+    .prepare(
+      `SELECT currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees FROM transactions WHERE status = 'completed' AND created_at BETWEEN ? AND ? ${curSql} GROUP BY currency`,
+    )
+    .all(...params);
+  const topMerchants = db
+    .prepare(
+      `SELECT receiver_user_id id, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume FROM transactions WHERE type = 'merchant_payment' AND status = 'completed' AND created_at BETWEEN ? AND ? ${curSql} GROUP BY receiver_user_id, currency ORDER BY volume DESC LIMIT 10`,
+    )
+    .all(...params) as any[];
+  const topAgents = db
+    .prepare(
+      `SELECT sender_user_id id, currency, COUNT(*) c, COALESCE(SUM(amount),0) volume FROM transactions WHERE type = 'agent_cash_in' AND status = 'completed' AND created_at BETWEEN ? AND ? ${curSql} GROUP BY sender_user_id, currency ORDER BY volume DESC LIMIT 10`,
+    )
+    .all(...params) as any[];
   const users = usersById([...topMerchants, ...topAgents].map((r) => r.id));
   if (req.query.format === 'csv') {
-    const rows = db.prepare(`SELECT reference, type, status, amount, fee, currency, receive_amount, receive_currency, sender_user_id, receiver_user_id, note, created_at FROM transactions WHERE created_at BETWEEN ? AND ? ${curSql} ORDER BY created_at DESC LIMIT 50000`).all(...params) as any[];
+    const rows = db
+      .prepare(
+        `SELECT reference, type, status, amount, fee, currency, receive_amount, receive_currency, sender_user_id, receiver_user_id, note, created_at FROM transactions WHERE created_at BETWEEN ? AND ? ${curSql} ORDER BY created_at DESC LIMIT 50000`,
+      )
+      .all(...params) as any[];
     const header = 'reference,type,status,amount,fee,currency,receive_amount,receive_currency,sender_user_id,receiver_user_id,note,created_at';
-    const csv = [header, ...rows.map((r) => [r.reference, r.type, r.status, r.amount, r.fee, r.currency, r.receive_amount ?? '', r.receive_currency ?? '', r.sender_user_id ?? '', r.receiver_user_id ?? '', JSON.stringify(r.note ?? ''), r.created_at].join(','))].join('\n');
+    const csv = [
+      header,
+      ...rows.map((r) =>
+        [
+          r.reference,
+          r.type,
+          r.status,
+          r.amount,
+          r.fee,
+          r.currency,
+          r.receive_amount ?? '',
+          r.receive_currency ?? '',
+          r.sender_user_id ?? '',
+          r.receiver_user_id ?? '',
+          JSON.stringify(r.note ?? ''),
+          r.created_at,
+        ].join(','),
+      ),
+    ].join('\n');
     res.setHeader('Content-Disposition', `attachment; filename="transactions-${from.slice(0, 10)}-${to.slice(0, 10)}.csv"`);
     return res.type('text/csv').send(csv);
   }
-  res.json({ from, to, currency, byType, byDay, byCurrency, topMerchants: topMerchants.map((r) => ({ ...r, user: users.get(r.id) })), topAgents: topAgents.map((r) => ({ ...r, user: users.get(r.id) })) });
+  res.json({
+    from,
+    to,
+    currency,
+    byType,
+    byDay,
+    byCurrency,
+    topMerchants: topMerchants.map((r) => ({ ...r, user: users.get(r.id) })),
+    topAgents: topAgents.map((r) => ({ ...r, user: users.get(r.id) })),
+  });
 });
+// ---------------- Signing keys (QR / webhook / device key registry) ----------------
+adminRouter.get('/signing-keys', requirePermission('settings'), (req, res) => {
+  const party = String(req.query.party ?? 'platform');
+  res.json({ items: listKeys(party).map((k) => ({ ...k, publicKey: k.publicKey.slice(0, 16) + '…' })) });
+});
+adminRouter.post('/signing-keys/:keyId/revoke', requirePermission('settings'), (req, res) => {
+  const body = validate(z.object({ reason: z.string().min(4).max(300), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  const key = getKey(String(req.params.keyId));
+  if (key.revokedAt) throw conflict('Key already revoked', 'key_revoked');
+  revokeKey(key.keyId);
+  audit(req.user!.id, 'signing_key.revoked', 'signing_key', key.keyId, { party: key.partyId, scope: key.scope, reason: body.reason });
+  res.json({ key: getKey(key.keyId) });
+});
+
 adminRouter.get('/audit-logs', requirePermission('admins'), (req, res) => {
   const { page, pageSize } = parsePagination(req.query, 50);
   res.json({ ...listAuditLogs(page, pageSize, req.query.search ? String(req.query.search) : undefined), page, pageSize });
@@ -1072,7 +1658,22 @@ adminRouter.get('/audit-logs', requirePermission('admins'), (req, res) => {
 // ---------------------------------------------------------------------------------------------------------------------
 adminRouter.get('/agents', requirePermission('agents'), (_req, res) => {
   const s = getAssistSettings();
-  res.json({ agents: agentStats(), runtime: runtimeStatus(), policies: listPolicies(), approvals: listApprovals({ status: 'proposed' }), forbidden: FORBIDDEN, addon: addonReport(), billing: billingReport(), tools: TOOLS.map((t) => ({ name: t.name, description: t.description, roles: t.roles, permission: t.permission ?? null, sideEffect: t.sideEffect, requiresApproval: !!t.requiresApproval })), settings: { ...s, apiKey: s.apiKey ? '••••••••' : '' }, usage: getDb().prepare("SELECT day, agent_key, model, SUM(runs) runs, SUM(tokens_in) tokens_in, SUM(tokens_out) tokens_out, SUM(cost_micros) cost_micros, SUM(acu) acu FROM agent_usage WHERE day >= ? GROUP BY day, agent_key, model ORDER BY day DESC").all(new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)) });
+  res.json({
+    agents: agentStats(),
+    runtime: runtimeStatus(),
+    policies: listPolicies(),
+    approvals: listApprovals({ status: 'proposed' }),
+    forbidden: FORBIDDEN,
+    addon: addonReport(),
+    billing: billingReport(),
+    tools: TOOLS.map((t) => ({ name: t.name, description: t.description, roles: t.roles, permission: t.permission ?? null, sideEffect: t.sideEffect, requiresApproval: !!t.requiresApproval })),
+    settings: { ...s, apiKey: s.apiKey ? '••••••••' : '' },
+    usage: getDb()
+      .prepare(
+        'SELECT day, agent_key, model, SUM(runs) runs, SUM(tokens_in) tokens_in, SUM(tokens_out) tokens_out, SUM(cost_micros) cost_micros, SUM(acu) acu FROM agent_usage WHERE day >= ? GROUP BY day, agent_key, model ORDER BY day DESC',
+      )
+      .all(new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)),
+  });
 });
 adminRouter.post('/agents/:key/pause', requirePermission('agents'), (req, res) => {
   const s = getAssistSettings();
@@ -1114,7 +1715,15 @@ adminRouter.put('/agents/settings', requirePermission('agents'), (req, res) => {
   next.billing.platformCapPctOfFees = Math.max(0, Math.min(100, Number(next.billing.platformCapPctOfFees) || 0));
   next.billing.platformCapFloorMinor = Math.max(0, Math.round(Number(next.billing.platformCapFloorMinor) || 0));
   next.billing.freeRunsPerMonth = Math.max(0, Math.min(1000, Math.round(Number(next.billing.freeRunsPerMonth) || 0)));
-  if (body.billing && (JSON.stringify(body.billing.prices ?? {}) !== '{}' || body.billing.taxRateBps !== undefined || body.billing.freeRunsPerMonth !== undefined) && body.billing.disclosureVersion === undefined && (JSON.stringify(next.billing.prices) !== JSON.stringify(current.billing.prices) || next.billing.taxRateBps !== current.billing.taxRateBps || next.billing.freeRunsPerMonth !== current.billing.freeRunsPerMonth)) next.billing.disclosureVersion = (current.billing.disclosureVersion || 1) + 1;
+  if (
+    body.billing &&
+    (JSON.stringify(body.billing.prices ?? {}) !== '{}' || body.billing.taxRateBps !== undefined || body.billing.freeRunsPerMonth !== undefined) &&
+    body.billing.disclosureVersion === undefined &&
+    (JSON.stringify(next.billing.prices) !== JSON.stringify(current.billing.prices) ||
+      next.billing.taxRateBps !== current.billing.taxRateBps ||
+      next.billing.freeRunsPerMonth !== current.billing.freeRunsPerMonth)
+  )
+    next.billing.disclosureVersion = (current.billing.disclosureVersion || 1) + 1;
   next.addon = { ...current.addon, ...(body.addon ?? {}) };
   next.addon.priceMinor = Math.max(0, Math.round(Number(next.addon.priceMinor) || 0));
   next.addon.periodDays = Math.max(1, Math.min(365, Number(next.addon.periodDays) || 30));
@@ -1126,7 +1735,16 @@ adminRouter.put('/agents/settings', requirePermission('agents'), (req, res) => {
   audit(req.user!.id, 'agents.settings.update', 'settings', 'assist', { keys: Object.keys(body) });
   res.json({ settings: { ...next, apiKey: next.apiKey ? '••••••••' : '' }, runtime: runtimeStatus() });
 });
-adminRouter.get('/agents/runs', requirePermission('agents'), (req, res) => res.json({ items: listAgentRuns({ userId: req.query.user ? String(req.query.user) : null, agentKey: req.query.agent ? String(req.query.agent) : null, status: req.query.status ? String(req.query.status) : null, limit: Math.min(200, Number(req.query.limit) || 50) }) }));
+adminRouter.get('/agents/runs', requirePermission('agents'), (req, res) =>
+  res.json({
+    items: listAgentRuns({
+      userId: req.query.user ? String(req.query.user) : null,
+      agentKey: req.query.agent ? String(req.query.agent) : null,
+      status: req.query.status ? String(req.query.status) : null,
+      limit: Math.min(200, Number(req.query.limit) || 50),
+    }),
+  }),
+);
 adminRouter.get('/agents/runs/:id', requirePermission('agents'), (req, res) => {
   const run = getRun(String(req.params.id));
   const user = findUserById(run.userId);
@@ -1143,7 +1761,22 @@ adminRouter.post(
 );
 adminRouter.get('/agents/policies', requirePermission('agents'), (req, res) => res.json({ items: listPolicies(req.query.all === '1'), forbidden: FORBIDDEN }));
 adminRouter.put('/agents/policies', requirePermission('agents'), (req, res) => {
-  const body = validate(z.object({ scope: z.enum(['global', 'agent', 'user']), scopeId: z.string().default('*'), rules: z.object({ deny: z.array(z.string()).optional(), requireApproval: z.array(z.string()).optional(), allow: z.array(z.string()).optional(), maxStepsPerRun: z.number().optional(), maxRunsPerDay: z.number().optional() }), note: z.string().max(300).optional().nullable(), pin: z.string().optional() }), req.body);
+  const body = validate(
+    z.object({
+      scope: z.enum(['global', 'agent', 'user']),
+      scopeId: z.string().default('*'),
+      rules: z.object({
+        deny: z.array(z.string()).optional(),
+        requireApproval: z.array(z.string()).optional(),
+        allow: z.array(z.string()).optional(),
+        maxStepsPerRun: z.number().optional(),
+        maxRunsPerDay: z.number().optional(),
+      }),
+      note: z.string().max(300).optional().nullable(),
+      pin: z.string().optional(),
+    }),
+    req.body,
+  );
   assertAdminStepUp(req.user!, body.pin, req);
   const policy = publishPolicy(body.scope, body.scope === 'global' ? '*' : body.scopeId, body.rules, req.user!.id, body.note ?? null);
   audit(req.user!.id, 'agents.policy.publish', 'policy', policy.id, { scope: policy.scope, scopeId: policy.scopeId, version: policy.version });
@@ -1177,13 +1810,22 @@ adminRouter.post(
 // ---------------------------------------------------------------------------------------------------------------------
 adminRouter.get('/channels', requirePermission('settings'), (_req, res) => {
   const s = getChannelSettings();
-  res.json({ settings: { ...s, ussd: { ...s.ussd, secret: s.ussd.secret ? '••••••••' : '' }, sms: { ...s.sms, secret: s.sms.secret ? '••••••••' : '' } }, ussdSessions: recentUssdSessions(30), sms: recentSms(40), liteUrl: `${config.apiUrl}/lite` });
+  res.json({
+    settings: { ...s, ussd: { ...s.ussd, secret: s.ussd.secret ? '••••••••' : '' }, sms: { ...s.sms, secret: s.sms.secret ? '••••••••' : '' } },
+    ussdSessions: recentUssdSessions(30),
+    sms: recentSms(40),
+    liteUrl: `${config.apiUrl}/lite`,
+  });
 });
 adminRouter.put('/channels/settings', requirePermission('settings'), (req, res) => {
   const current = getChannelSettings();
   const body = req.body ?? {};
   const keep = (given: unknown, cur: string) => (given === undefined || given === '••••••••' ? cur : String(given ?? ''));
-  const next = { ussd: { ...current.ussd, ...(body.ussd ?? {}), secret: keep(body.ussd?.secret, current.ussd.secret) }, sms: { ...current.sms, ...(body.sms ?? {}), secret: keep(body.sms?.secret, current.sms.secret) }, lite: { ...current.lite, ...(body.lite ?? {}) } };
+  const next = {
+    ussd: { ...current.ussd, ...(body.ussd ?? {}), secret: keep(body.ussd?.secret, current.ussd.secret) },
+    sms: { ...current.sms, ...(body.sms ?? {}), secret: keep(body.sms?.secret, current.sms.secret) },
+    lite: { ...current.lite, ...(body.lite ?? {}) },
+  };
   setSetting('channels', next);
   audit(req.user!.id, 'channels.settings.update', 'settings', 'channels', { keys: Object.keys(body) });
   res.json({ settings: { ...next, ussd: { ...next.ussd, secret: next.ussd.secret ? '••••••••' : '' }, sms: { ...next.sms, secret: next.sms.secret ? '••••••••' : '' } } });
@@ -1210,11 +1852,21 @@ adminRouter.post('/guardian/run', requirePermission('treasury'), (req, res) => {
   res.json({ result, state: getOperatingState() });
 });
 adminRouter.post('/guardian/mode', requirePermission('treasury'), (req, res) => {
-  const body = validate(z.object({ mode: z.enum(['normal', 'degraded', 'halted']), reason: z.string().max(300).optional().nullable(), queueIntents: z.boolean().optional(), freezeOffline: z.boolean().optional(), pin: z.string().optional() }), req.body);
+  const body = validate(
+    z.object({
+      mode: z.enum(['normal', 'degraded', 'halted']),
+      reason: z.string().max(300).optional().nullable(),
+      queueIntents: z.boolean().optional(),
+      freezeOffline: z.boolean().optional(),
+      pin: z.string().optional(),
+    }),
+    req.body,
+  );
   assertAdminStepUp(req.user!, body.pin, req);
   if (body.mode === 'normal') {
     const last = runGuardian({ haltOnFailure: false });
-    if (!last.ok) return res.status(409).json({ error: { code: 'guardian_findings', message: 'The ledger still has findings; repair them before returning to normal operation.', details: last.findings } });
+    if (!last.ok)
+      return res.status(409).json({ error: { code: 'guardian_findings', message: 'The ledger still has findings; repair them before returning to normal operation.', details: last.findings } });
   }
   const state = setOperatingMode(body.mode, body.reason ?? null, req.user!.id, { queueIntents: body.queueIntents, freezeOffline: body.freezeOffline });
   audit(req.user!.id, `platform.mode.${body.mode}`, 'settings', 'operating_mode', { reason: body.reason ?? null });
@@ -1223,19 +1875,60 @@ adminRouter.post('/guardian/mode', requirePermission('treasury'), (req, res) => 
 adminRouter.get('/capabilities', requirePermission('settings'), (_req, res) => res.json({ items: listCountryCapabilities(), purposeCodes: PURPOSE_CODES }));
 adminRouter.get('/capabilities/:country', requirePermission('settings'), (req, res) => res.json({ capabilities: countryCapabilities(String(req.params.country)) }));
 adminRouter.put('/capabilities/:country', requirePermission('settings'), (req, res) => {
-  const body = validate(z.object({ wallet: z.boolean().optional(), cardCollection: z.boolean().optional(), bankPayout: z.boolean().optional(), mobileMoney: z.boolean().optional(), agentCashOut: z.boolean().optional(), crossBorder: z.boolean().optional(), bitcoin: z.boolean().optional(), stablecoin: z.boolean().optional(), kycProvider: z.string().max(60).optional().nullable(), settlementCurrencies: z.array(z.string().length(3)).optional(), collectionCurrencies: z.array(z.string().length(3)).optional(), maxPerTransaction: z.number().int().min(0).optional(), requiredDisclosures: z.array(z.string()).optional(), purposeCodes: z.array(z.string()).optional(), nationalSwitch: z.object({ required: z.boolean(), connector: z.string().nullable() }).optional(), licencePhase: z.enum(['aggregator', 'full']).optional(), notes: z.string().max(500).optional().nullable() }), req.body);
+  const body = validate(
+    z.object({
+      wallet: z.boolean().optional(),
+      cardCollection: z.boolean().optional(),
+      bankPayout: z.boolean().optional(),
+      mobileMoney: z.boolean().optional(),
+      agentCashOut: z.boolean().optional(),
+      crossBorder: z.boolean().optional(),
+      bitcoin: z.boolean().optional(),
+      stablecoin: z.boolean().optional(),
+      kycProvider: z.string().max(60).optional().nullable(),
+      settlementCurrencies: z.array(z.string().length(3)).optional(),
+      collectionCurrencies: z.array(z.string().length(3)).optional(),
+      maxPerTransaction: z.number().int().min(0).optional(),
+      requiredDisclosures: z.array(z.string()).optional(),
+      purposeCodes: z.array(z.string()).optional(),
+      nationalSwitch: z.object({ required: z.boolean(), connector: z.string().nullable() }).optional(),
+      licencePhase: z.enum(['aggregator', 'full']).optional(),
+      notes: z.string().max(500).optional().nullable(),
+    }),
+    req.body,
+  );
   const caps = setCountryCapabilities(String(req.params.country), body as any);
   audit(req.user!.id, 'capabilities.update', 'country', caps.country, { keys: Object.keys(body) });
   res.json({ capabilities: caps });
 });
-adminRouter.get('/intents', requirePermission('transactions'), (req, res) => res.json({ items: listIntents({ merchantUserId: req.query.merchant ? String(req.query.merchant) : null, status: req.query.status ? String(req.query.status) : null, limit: Math.min(200, Number(req.query.limit) || 50) }) }));
+adminRouter.get('/intents', requirePermission('transactions'), (req, res) =>
+  res.json({
+    items: listIntents({
+      merchantUserId: req.query.merchant ? String(req.query.merchant) : null,
+      status: req.query.status ? String(req.query.status) : null,
+      limit: Math.min(200, Number(req.query.limit) || 50),
+    }),
+  }),
+);
 adminRouter.get('/intents/:id', requirePermission('transactions'), (req, res) => res.json(intentTimeline(String(req.params.id))));
 
 // Refund objects: MANUAL / PENDING processor refunds are confirmed or refused by operations once the processor reports.
-adminRouter.get('/refunds', requirePermission('transactions'), (req, res) => res.json({ items: listRefunds({ merchantUserId: req.query.merchant ? String(req.query.merchant) : null, status: req.query.status ? String(req.query.status) : null, limit: Math.min(200, Number(req.query.limit) || 50) }) }));
-adminRouter.post('/refunds/:id/resolve', requirePermission('treasury'), wrap(async (req, res) => {
-  const body = validate(z.object({ outcome: z.enum(['succeeded', 'failed']), note: z.string().max(300).optional().nullable() }), req.body);
-  const refund = await resolveRefund(String(req.params.id), body.outcome, req.user!, body.note ?? null);
-  audit(req.user!.id, 'refund.resolve', 'refund', refund.id, { outcome: body.outcome, note: body.note ?? null });
-  res.json({ refund });
-}));
+adminRouter.get('/refunds', requirePermission('transactions'), (req, res) =>
+  res.json({
+    items: listRefunds({
+      merchantUserId: req.query.merchant ? String(req.query.merchant) : null,
+      status: req.query.status ? String(req.query.status) : null,
+      limit: Math.min(200, Number(req.query.limit) || 50),
+    }),
+  }),
+);
+adminRouter.post(
+  '/refunds/:id/resolve',
+  requirePermission('treasury'),
+  wrap(async (req, res) => {
+    const body = validate(z.object({ outcome: z.enum(['succeeded', 'failed']), note: z.string().max(300).optional().nullable() }), req.body);
+    const refund = await resolveRefund(String(req.params.id), body.outcome, req.user!, body.note ?? null);
+    audit(req.user!.id, 'refund.resolve', 'refund', refund.id, { outcome: body.outcome, note: body.note ?? null });
+    res.json({ refund });
+  }),
+);

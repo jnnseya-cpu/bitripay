@@ -1,39 +1,648 @@
-### BitriPay API quick reference (VS Code REST Client format)
-@api = http://localhost:4000
-@token = paste-jwt-here
+### BitriPay Gateway API quick reference (VS Code REST Client format) — generated from GET /api/v1/openapi.json, do not edit by hand
+### Merchant keys: sk_live_/sk_test_ secret keys, rk_ restricted keys with scopes, pk_ publishable keys. Every money-moving POST takes an Idempotency-Key.
+@api = http://localhost:4000/api/v1
+@key = sk_test_paste-your-key-here
 
-### Public config
-GET {{api}}/api/config
-
-### Register
-POST {{api}}/api/auth/register
+### ---------------- Payment intents ----------------
+### Create a payment intent (returns checkout_url, qr_payload and client_secret) (scope: payment_intents:write)
+POST {{api}}/payment_intents
+Authorization: Bearer {{key}}
+Idempotency-Key: {{$guid}}
 Content-Type: application/json
 
-{ "fullName": "Alice", "email": "alice@example.com", "password": "Password123!", "role": "user" }
+{
+  "amount_minor": 0,
+  "currency": "",
+  "rails": [],
+  "capture_method": "",
+  "payment_method_policy": "",
+  "reference": "",
+  "description": "",
+  "purpose_code": "",
+  "expires_in_minutes": 0,
+  "metadata": {},
+  "customer_msisdn": "",
+  "customer_country": "",
+  "success_url": "",
+  "cancel_url": "",
+  "qr": false,
+  "splits": []
+}
 
-### Login
-POST {{api}}/api/auth/login
+### List payment intents (scope: payment_intents:read)
+GET {{api}}/payment_intents?status=&limit=
+Authorization: Bearer {{key}}
+
+### Retrieve a payment intent (scope: payment_intents:read)
+GET {{api}}/payment_intents/{{id}}
+Authorization: Bearer {{key}}
+
+### Every state change and attempt of an intent (scope: payment_intents:read)
+GET {{api}}/payment_intents/{{id}}/timeline
+Authorization: Bearer {{key}}
+
+### Cancel an intent that has not been captured (scope: payment_intents:write)
+POST {{api}}/payment_intents/{{id}}/cancel
+Authorization: Bearer {{key}}
 Content-Type: application/json
 
-{ "identifier": "alice@example.com", "password": "Password123!" }
+{}
 
-### Send money
-POST {{api}}/api/transfers
-Authorization: Bearer {{token}}
+### Payment methods available to the payer for this intent (scope: payment_intents:read)
+GET {{api}}/payment_intents/{{id}}/methods
+Authorization: Bearer {{key}}
+
+### Split payouts made from a captured intent (scope: payment_intents:read)
+GET {{api}}/payment_intents/{{id}}/splits
+Authorization: Bearer {{key}}
+
+### ---------------- Refunds ----------------
+### Amount still refundable on an intent (scope: refunds:read)
+GET {{api}}/payment_intents/{{id}}/refundable
+Authorization: Bearer {{key}}
+
+### Refund a captured intent (atomic reservation; wallet or processor) (scope: refunds:write)
+POST {{api}}/refunds
+Authorization: Bearer {{key}}
+Idempotency-Key: {{$guid}}
 Content-Type: application/json
 
-{ "to": "@bob", "amount": "12.50", "currency": "USD", "note": "Lunch", "pin": "1234" }
+{
+  "payment_intent": "",
+  "amount_minor": 0,
+  "reason": ""
+}
 
-### Resolve a scanned QR
-POST {{api}}/api/qr/resolve
-Authorization: Bearer {{token}}
+### List refunds (scope: refunds:read)
+GET {{api}}/refunds
+Authorization: Bearer {{key}}
+
+### Retrieve a refund (scope: refunds:read)
+GET {{api}}/refunds/{{id}}
+Authorization: Bearer {{key}}
+
+### ---------------- Checkout ----------------
+### Create a hosted checkout session with line items (scope: checkout_sessions:write)
+POST {{api}}/checkout_sessions
+Authorization: Bearer {{key}}
+Idempotency-Key: {{$guid}}
 Content-Type: application/json
 
-{ "data": "bitripay://pay?v=1&t=u&id=bob" }
+{}
 
-### Merchant API: create a payment request
-POST {{api}}/v1/payment-requests
-Authorization: Bearer bp_live_xxx
+### List checkout sessions (scope: payment_intents:read)
+GET {{api}}/checkout_sessions
+Authorization: Bearer {{key}}
+
+### Retrieve a checkout session (scope: payment_intents:read)
+GET {{api}}/checkout_sessions/{{id}}
+Authorization: Bearer {{key}}
+
+### Expire an open session (scope: checkout_sessions:write)
+POST {{api}}/checkout_sessions/{{id}}/expire
+Authorization: Bearer {{key}}
 Content-Type: application/json
 
-{ "amount": "49.99", "currency": "USD", "description": "Order #1001", "metadata": { "orderId": 1001 } }
+{}
+
+### ---------------- Payment links ----------------
+### Create a single-use or reusable payment link (scope: payment_links:write)
+POST {{api}}/payment_links
+Authorization: Bearer {{key}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+
+{}
+
+### List payment links (scope: payment_links:write)
+GET {{api}}/payment_links
+Authorization: Bearer {{key}}
+
+### Deactivate a link (scope: payment_links:write)
+POST {{api}}/payment_links/{{id}}/deactivate
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### ---------------- QR ----------------
+### Create a static BitriQR (EMVCo + signed extension) (scope: qr_codes:write)
+POST {{api}}/qr_codes
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### List QR codes (scope: qr_codes:read)
+GET {{api}}/qr_codes
+Authorization: Bearer {{key}}
+
+### Scan analytics (scope: qr_codes:read)
+GET {{api}}/qr_codes/analytics
+Authorization: Bearer {{key}}
+
+### Revoke a code (lost, stolen, tampered, replaced, retired) (scope: qr_codes:write)
+POST {{api}}/qr_codes/{{id}}/revoke
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Resolve any scanned payload (public; trust from the key registry)
+POST {{api}}/resolve
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Public signing-key registry (ed25519, ETag cached)
+GET {{api}}/keys
+Authorization: Bearer {{key}}
+
+### Create a merchant location (scope: qr_codes:write)
+POST {{api}}/locations
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Add a terminal to a location (scope: qr_codes:write)
+POST {{api}}/locations/{{id}}/terminals
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### ---------------- Verifications (KODA) ----------------
+### Scan-to-Verify: did a payment reach me? (reference, or MSISDN + amount) (scope: verifications:write)
+POST {{api}}/verifications
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Free quota and price (scope: verifications:write)
+GET {{api}}/verifications/quota
+Authorization: Bearer {{key}}
+
+### ---------------- Wallets ----------------
+### Wallet balances with the available amount after holds (scope: wallets:read)
+GET {{api}}/wallets
+Authorization: Bearer {{key}}
+
+### ---------------- Transfers ----------------
+### Quote a transfer with the full fee and FX disclosure, plus rails ranked by the smart router (scope: transfers:write)
+POST {{api}}/transfers/quote
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{
+  "amount_minor": 0,
+  "currency": "",
+  "target_currency": "",
+  "destination": {},
+  "source_method": "",
+  "policy": ""
+}
+
+### Send from the wallet to another BitriPay account (scope: transfers:write)
+POST {{api}}/transfers
+Authorization: Bearer {{key}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+
+{
+  "to": "",
+  "amount_minor": 0,
+  "currency": "",
+  "note": ""
+}
+
+### Retrieve a transfer (scope: transfers:read)
+GET {{api}}/transfers/{{id}}
+Authorization: Bearer {{key}}
+
+### ---------------- Cross-border routes ----------------
+### Quote any → any: fund from the wallet or any card / bank / mobile money, deliver to a wallet, QR, bank account, mobile money number or agent anywhere, in the currency the recipient will receive; rate, margin and every fee disclosed (scope: routes:read)
+POST {{api}}/routes/quote
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{
+  "amount_minor": 0,
+  "currency": "",
+  "target_currency": "",
+  "source": {},
+  "destination": {}
+}
+
+### Which currencies the recipient can receive for a destination right now (corridor rules, licence, liquidity) (scope: routes:read)
+POST {{api}}/routes/payout-currencies
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{
+  "amount_minor": 0,
+  "currency": "",
+  "destination": {},
+  "requested": ""
+}
+
+### Create a route: the funding leg runs through the processor (card / bank / mobile money) or the wallet, the payout leg follows automatically once funds are confirmed (scope: routes:write)
+POST {{api}}/routes
+Authorization: Bearer {{key}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+
+{
+  "amount_minor": 0,
+  "currency": "",
+  "target_currency": "",
+  "source": {},
+  "destination": {},
+  "note": "",
+  "quote_id": "",
+  "source_of_funds": ""
+}
+
+### List routes (scope: routes:read)
+GET {{api}}/routes?limit=
+Authorization: Bearer {{key}}
+
+### Retrieve a route with its stage, quote, funding payment and payout (scope: routes:read)
+GET {{api}}/routes/{{id}}
+Authorization: Bearer {{key}}
+
+### Receipt for a settled route (scope: routes:read)
+GET {{api}}/routes/{{id}}/receipt
+Authorization: Bearer {{key}}
+
+### Cancel before the payout is executed (funds return; card funding refunded where the processor allows) (scope: routes:write)
+POST {{api}}/routes/{{id}}/cancel
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{
+  "reason": ""
+}
+
+### ---------------- Remittances ----------------
+### Quote an international transfer (scope: remittances:read)
+GET {{api}}/remittances/quote?amount_minor=&currency=&target_currency=
+Authorization: Bearer {{key}}
+
+### Send an international transfer to a wallet, bank account, mobile money number or cash pickup in the recipient currency; add a `source` (any card, bank or mobile money) to fund it through a processor instead of the wallet (scope: remittances:write)
+POST {{api}}/remittances
+Authorization: Bearer {{key}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+
+{
+  "amount_minor": 0,
+  "currency": "",
+  "target_currency": "",
+  "payout_method": "",
+  "recipient": {},
+  "source": {},
+  "note": ""
+}
+
+### List remittances (scope: remittances:read)
+GET {{api}}/remittances
+Authorization: Bearer {{key}}
+
+### ---------------- Bulk payouts ----------------
+### CSV columns accepted for a batch upload (scope: payouts:read)
+GET {{api}}/payouts/batches/columns
+Authorization: Bearer {{key}}
+
+### Upload a payout batch (rows or CSV); every row is validated and the totals are returned before approval (scope: payouts:write)
+POST {{api}}/payouts/batches
+Authorization: Bearer {{key}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+
+{
+  "currency": "",
+  "rows": [],
+  "csv": "",
+  "reference": "",
+  "note": "",
+  "skip_invalid": false
+}
+
+### List payout batches (scope: payouts:read)
+GET {{api}}/payouts/batches?status=&limit=
+Authorization: Bearer {{key}}
+
+### Retrieve a batch with its rows and readiness (funds, invalid rows, approval rule) (scope: payouts:read)
+GET {{api}}/payouts/batches/{{id}}
+Authorization: Bearer {{key}}
+
+### Approve and execute a batch: four-eyes by another account holder, or the creator under PIN / passkey step-up (scope: payouts:approve)
+POST {{api}}/payouts/batches/{{id}}/approve
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{
+  "pin": ""
+}
+
+### Cancel a batch awaiting approval (scope: payouts:write)
+POST {{api}}/payouts/batches/{{id}}/cancel
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### ---------------- Agents ----------------
+### Run an agent (canonical names such as RouteOptimiser, FraudScorer, SavingsAdvisor accepted); metered in ACU, provider and model never disclosed (scope: ai:run)
+POST {{api}}/ai/{{agent}}
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{
+  "input": "",
+  "context": {},
+  "depth": "",
+  "wait": false
+}
+
+### Retrieve an agent run (scope: ai:run)
+GET {{api}}/ai/runs/{{id}}
+Authorization: Bearer {{key}}
+
+### ---------------- Subscriptions ----------------
+### List your subscription plans (scope: subscriptions:read)
+GET {{api}}/plans
+Authorization: Bearer {{key}}
+
+### Create a plan (interval, trial, tax, metered usage) (scope: subscriptions:write)
+POST {{api}}/plans
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{
+  "name": "",
+  "currency": "",
+  "amount_minor": 0,
+  "interval": "",
+  "interval_count": 0,
+  "trial_days": 0,
+  "tax_bps": 0,
+  "tax_label": "",
+  "usage_unit": "",
+  "usage_price_minor": 0,
+  "code": ""
+}
+
+### Retrieve a plan (scope: subscriptions:read)
+GET {{api}}/plans/{{id}}
+Authorization: Bearer {{key}}
+
+### Stop offering a plan (existing subscriptions continue) (scope: subscriptions:write)
+POST {{api}}/plans/{{id}}/archive
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### List subscriptions with a billing overview (recurring revenue, collections, dunning) (scope: subscriptions:read)
+GET {{api}}/subscriptions?status=&limit=
+Authorization: Bearer {{key}}
+
+### Retrieve a subscription with its invoices (scope: subscriptions:read)
+GET {{api}}/subscriptions/{{id}}
+Authorization: Bearer {{key}}
+
+### Record metered usage for the current period (scope: subscriptions:write)
+POST {{api}}/subscriptions/{{id}}/usage
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{
+  "quantity": 0,
+  "note": ""
+}
+
+### Cancel at period end (or immediately) (scope: subscriptions:write)
+POST {{api}}/subscriptions/{{id}}/cancel
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{
+  "immediately": false
+}
+
+### List invoices (scope: subscriptions:read)
+GET {{api}}/invoices?limit=
+Authorization: Bearer {{key}}
+
+### ---------------- Credit readiness ----------------
+### Read a consented credit-readiness signal (score, band, factors); never the transactions, never a lending decision (scope: credit:read)
+GET {{api}}/credit_readiness/{{code}}
+Authorization: Bearer {{key}}
+
+### ---------------- Payouts ----------------
+### Pay out to a bank account or mobile-money number (scope: payouts:write)
+POST {{api}}/payouts
+Authorization: Bearer {{key}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+
+{}
+
+### List payouts (scope: payouts:read)
+GET {{api}}/payouts
+Authorization: Bearer {{key}}
+
+### ---------------- Balance ----------------
+### Balance classes: available, pending, reserved, settlement_pending, held, disputed, frozen (scope: balance:read)
+GET {{api}}/balance
+Authorization: Bearer {{key}}
+
+### ---------------- Settlement ----------------
+### Settlement profiles per rail and currency (scope: settlements:read)
+GET {{api}}/settlement_profiles
+Authorization: Bearer {{key}}
+
+### Create or update a profile (T0/T1/T2/weekly/manual, cut-off, destination, minimum) (scope: settlements:write)
+POST {{api}}/settlement_profiles
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Upcoming cut-offs, obligations and recent cycles (scope: settlements:read)
+GET {{api}}/settlement_calendar
+Authorization: Bearer {{key}}
+
+### List cycles (scope: settlements:read)
+GET {{api}}/settlement_cycles
+Authorization: Bearer {{key}}
+
+### Close the running period now (optionally pay) (scope: settlements:write)
+POST {{api}}/settlement_cycles
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Numbered, hashed statement (format=json|csv|pdf) (scope: settlements:read)
+GET {{api}}/settlement_cycles/{{id}}/statement?format=
+Authorization: Bearer {{key}}
+
+### Pay a closed cycle to its destination (scope: settlements:write)
+POST {{api}}/settlement_cycles/{{id}}/pay
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### ---------------- Disputes ----------------
+### Disputes against my payments (scope: disputes:read)
+GET {{api}}/disputes
+Authorization: Bearer {{key}}
+
+### Open a dispute on a payment I received (scope: disputes:write)
+POST {{api}}/disputes
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Respond with evidence before the deadline (scope: disputes:write)
+POST {{api}}/disputes/{{id}}/respond
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### ---------------- Webhooks ----------------
+### Create an endpoint (returns whsec_ secret once) (scope: webhooks:manage)
+POST {{api}}/webhook_endpoints
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Deliveries with attempts and status (scope: webhooks:manage)
+GET {{api}}/webhook_endpoints/{{id}}/deliveries
+Authorization: Bearer {{key}}
+
+### Replay a delivery (scope: webhooks:manage)
+POST {{api}}/webhook_deliveries/{{id}}/replay
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Event log (scope: events:read)
+GET {{api}}/events
+Authorization: Bearer {{key}}
+
+### Replay an event to every endpoint (scope: webhooks:manage)
+POST {{api}}/events/{{id}}/replay
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### ---------------- Keys ----------------
+### List API keys (session only; keys cannot mint keys)
+GET {{api}}/api_keys
+Authorization: Bearer {{key}}
+
+### Create sk_ / rk_ / pk_ key with scopes
+POST {{api}}/api_keys
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### ---------------- Sandbox ----------------
+### Magic MSISDNs and simulated outcomes
+GET {{api}}/sandbox
+Authorization: Bearer {{key}}
+
+### ---------------- Offline ----------------
+### Register a device offline subkey (ed25519 SPKI, 72h)
+POST {{api}}/offline/devices
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Server-signed offline QR with nonce (scope: qr_codes:write)
+POST {{api}}/offline/qr
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Prefetch nonces for a merchant device
+POST {{api}}/offline/nonces
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Submit signed promises in order; each is SETTLED, REJECTED (with restoreMinor) or DUPLICATE
+POST {{api}}/offline/sync
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### My offline promises
+GET {{api}}/offline/promises
+Authorization: Bearer {{key}}
+
+### ---------------- Diaspora-Direct ----------------
+### Published, platform-signed rate cards (≤ 4h validity)
+GET {{api}}/diaspora/rate-cards
+Authorization: Bearer {{key}}
+
+### Verified institutions and their purpose codes
+GET {{api}}/institutions?country=&purpose=&q=
+Authorization: Bearer {{key}}
+
+### Purpose-locked quote at the current rate card
+POST {{api}}/diaspora/quotes
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### Pay a quote from the source-currency wallet
+POST {{api}}/diaspora/quotes/{{id}}/pay
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### ---------------- National switch ----------------
+### Create an interinstitutional payment (IDM-001/002/003; route computed server-side) (scope: payments:create)
+POST {{api}}/payments
+Authorization: Bearer {{key}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+
+{}
+
+### Five status dimensions and journal (scope: payments:read)
+GET {{api}}/payments/{{id}}
+Authorization: Bearer {{key}}
+
+### Cancel before emission (never after) (scope: payments:cancel)
+POST {{api}}/payments/{{id}}/cancel
+Authorization: Bearer {{key}}
+Content-Type: application/json
+
+{}
+
+### ---------------- Platform ----------------
+### Operating state (guardian mode, degraded flags)
+GET {{api}}/status
+Authorization: Bearer {{key}}
+

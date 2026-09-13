@@ -53,21 +53,31 @@ siteRouter.get('/contact', publicLimit, (_req, res) => res.type('html').send(leg
 siteRouter.get('/sitemap.xml', (_req, res) => {
   const posts = listPosts({ pageSize: 100 }).items;
   const pages = listPages(true).filter((p) => !['about', 'contact', 'faq'].includes(p.slug));
-  res.type('application/xml').send(sitemapXml([
-    { path: '/', changefreq: 'weekly', priority: 1 },
-    { path: '/register', changefreq: 'monthly', priority: 0.8 },
-    { path: '/about', changefreq: 'monthly', priority: 0.7 },
-    { path: '/blog', changefreq: 'daily', priority: 0.9 },
-    ...posts.map((p) => ({ path: p.url, lastmod: p.updatedAt, changefreq: 'weekly', priority: 0.8 })),
-    ...pages.map((p) => ({ path: `/legal/${p.slug}`, lastmod: p.updatedAt, changefreq: 'yearly', priority: 0.3 })),
-  ]));
+  res
+    .type('application/xml')
+    .send(
+      sitemapXml([
+        { path: '/', changefreq: 'weekly', priority: 1 },
+        { path: '/register', changefreq: 'monthly', priority: 0.8 },
+        { path: '/about', changefreq: 'monthly', priority: 0.7 },
+        { path: '/blog', changefreq: 'daily', priority: 0.9 },
+        ...posts.map((p) => ({ path: p.url, lastmod: p.updatedAt, changefreq: 'weekly', priority: 0.8 })),
+        ...pages.map((p) => ({ path: `/legal/${p.slug}`, lastmod: p.updatedAt, changefreq: 'yearly', priority: 0.3 })),
+      ]),
+    );
 });
 siteRouter.get('/feed.xml', (_req, res) => res.type('application/rss+xml').send(rssXml(listPosts({ pageSize: 20 }).items.map((p) => renderPost(p.id)))));
 siteRouter.get('/robots.txt', (_req, res) => res.type('text/plain').send(robotsTxt()));
 siteRouter.get('/llms.txt', (_req, res) => res.type('text/plain').send(llmsTxt(listPosts({ pageSize: 100 }).items)));
 siteRouter.get('/llms-full.txt', (_req, res) => {
   const items = listPosts({ pageSize: 50 }).items;
-  res.type('text/plain').send(llmsTxt(items, true, items.map((p) => renderPost(p.id))));
+  res.type('text/plain').send(
+    llmsTxt(
+      items,
+      true,
+      items.map((p) => renderPost(p.id)),
+    ),
+  );
 });
 /** IndexNow key file. */
 siteRouter.get('/:key.txt', (req, res, next) => {
@@ -79,12 +89,18 @@ siteRouter.get('/:key.txt', (req, res, next) => {
 // ---- JSON API for the apps
 export const blogApiRouter = Router();
 blogApiRouter.get('/', (req, res) => {
-  const q = validate(z.object({ tag: z.string().max(60).optional(), q: z.string().max(100).optional(), page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(50).default(12) }), req.query);
+  const q = validate(
+    z.object({ tag: z.string().max(60).optional(), q: z.string().max(100).optional(), page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(50).default(12) }),
+    req.query,
+  );
   res.json({ ...listPosts({ tag: q.tag ?? null, q: q.q ?? null, page: q.page, pageSize: q.pageSize }), tags: listTags() });
 });
-blogApiRouter.get('/:slug', wrap(async (req, res) => {
-  const post = renderPost(String(req.params.slug));
-  bumpPostViews(post.id);
-  res.json({ post });
-}));
+blogApiRouter.get(
+  '/:slug',
+  wrap(async (req, res) => {
+    const post = renderPost(String(req.params.slug));
+    bumpPostViews(post.id);
+    res.json({ post });
+  }),
+);
 export { getPost };

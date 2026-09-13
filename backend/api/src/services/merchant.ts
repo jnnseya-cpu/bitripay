@@ -1,5 +1,5 @@
 import { getDb } from '../db';
-import { uuid, now, secretToken, shortCode } from '../lib/ids';
+import { uuid, now, secretToken } from '../lib/ids';
 import { sha256 } from '../lib/crypto';
 import { badRequest, conflict, notFound, unprocessable } from '../lib/errors';
 import type { ApiKey } from '@bitripay/shared';
@@ -72,7 +72,12 @@ export type ApiKeyKind = 'secret' | 'publishable' | 'restricted';
  * `publishable` keys (pk_) identify the merchant from a browser or app and can only read public intent state and
  * create client-side payment method attempts. Legacy `bp_` keys keep working as secret keys.
  */
-export function createApiKey(user: UserRow, label: string, mode: 'live' | 'test' = 'live', options: { kind?: ApiKeyKind; scopes?: string[]; ipAllowlist?: string[] | null } = {}): ApiKey & { secret: string; kind: ApiKeyKind; scopes: string[]; mode: string } {
+export function createApiKey(
+  user: UserRow,
+  label: string,
+  mode: 'live' | 'test' = 'live',
+  options: { kind?: ApiKeyKind; scopes?: string[]; ipAllowlist?: string[] | null } = {},
+): ApiKey & { secret: string; kind: ApiKeyKind; scopes: string[]; mode: string } {
   if (!getModules().merchantGateway) throw unprocessable('The merchant gateway is currently disabled', 'module_disabled');
   const count = (getDb().prepare('SELECT COUNT(*) c FROM api_keys WHERE user_id = ? AND revoked_at IS NULL').get(user.id) as any).c;
   if (count >= 10) throw conflict('You can have at most 10 active API keys');
@@ -87,7 +92,9 @@ export function createApiKey(user: UserRow, label: string, mode: 'live' | 'test'
   const secret = `${prefixKind}_${mode}_${secretToken(24)}`;
   const id = uuid();
   const prefix = secret.slice(0, 12) + '…' + secret.slice(-4);
-  getDb().prepare('INSERT INTO api_keys (id, user_id, label, prefix, key_hash, mode, kind, scopes, ip_allowlist, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, user.id, label.trim() || 'API key', prefix, sha256(secret), mode, kind, JSON.stringify(scopes), options.ipAllowlist?.length ? JSON.stringify(options.ipAllowlist) : null, now());
+  getDb()
+    .prepare('INSERT INTO api_keys (id, user_id, label, prefix, key_hash, mode, kind, scopes, ip_allowlist, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, user.id, label.trim() || 'API key', prefix, sha256(secret), mode, kind, JSON.stringify(scopes), options.ipAllowlist?.length ? JSON.stringify(options.ipAllowlist) : null, now());
   return { ...toApiKey(getDb().prepare('SELECT * FROM api_keys WHERE id = ?').get(id)), secret, kind, scopes, mode };
 }
 
@@ -139,13 +146,19 @@ export function merchantStats(user: UserRow) {
   const dayAgo = new Date(Date.now() - 86400_000).toISOString();
   const monthAgo = new Date(Date.now() - 30 * 86400_000).toISOString();
   const rows = db
-    .prepare("SELECT currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees, SUM(CASE WHEN created_at >= ? THEN amount ELSE 0 END) today FROM transactions WHERE receiver_user_id = ? AND type IN ('merchant_payment','qr_payment') AND status = 'completed' AND created_at >= ? GROUP BY currency")
+    .prepare(
+      "SELECT currency, COUNT(*) c, COALESCE(SUM(amount),0) volume, COALESCE(SUM(fee),0) fees, SUM(CASE WHEN created_at >= ? THEN amount ELSE 0 END) today FROM transactions WHERE receiver_user_id = ? AND type IN ('merchant_payment','qr_payment') AND status = 'completed' AND created_at >= ? GROUP BY currency",
+    )
     .all(dayAgo, user.id, monthAgo) as any[];
   const methods = db
-    .prepare("SELECT json_extract(metadata, '$.method') method, COUNT(*) c FROM transactions WHERE receiver_user_id = ? AND type IN ('merchant_payment','qr_payment') AND status = 'completed' AND created_at >= ? GROUP BY method")
+    .prepare(
+      "SELECT json_extract(metadata, '$.method') method, COUNT(*) c FROM transactions WHERE receiver_user_id = ? AND type IN ('merchant_payment','qr_payment') AND status = 'completed' AND created_at >= ? GROUP BY method",
+    )
     .all(user.id, monthAgo) as any[];
   const daily = db
-    .prepare("SELECT substr(created_at, 1, 10) day, currency, COALESCE(SUM(amount),0) volume, COUNT(*) c FROM transactions WHERE receiver_user_id = ? AND type IN ('merchant_payment','qr_payment') AND status = 'completed' AND created_at >= ? GROUP BY day, currency ORDER BY day")
+    .prepare(
+      "SELECT substr(created_at, 1, 10) day, currency, COALESCE(SUM(amount),0) volume, COUNT(*) c FROM transactions WHERE receiver_user_id = ? AND type IN ('merchant_payment','qr_payment') AND status = 'completed' AND created_at >= ? GROUP BY day, currency ORDER BY day",
+    )
     .all(user.id, monthAgo) as any[];
   const openLinks = (db.prepare("SELECT COUNT(*) c FROM payment_requests WHERE requester_user_id = ? AND status = 'open'").get(user.id) as any).c;
   return { byCurrency: rows, byMethod: methods.map((m) => ({ method: m.method || 'wallet', count: m.c })), daily, openPaymentRequests: openLinks, wallets: listWallets(user.id) };
@@ -174,7 +187,15 @@ export function runAutoSettlements(): { settled: number; skipped: number } {
     }
     try {
       const tx = requestWithdrawal(m, { amount: wallet.balance, currency: bank.currency, bankAccountId: bank.id, note: 'Automated settlement' });
-      db.prepare("INSERT INTO settlements (id, user_id, bank_account_id, amount, currency, status, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)").run(uuid(), m.id, bank.id, wallet.balance, bank.currency, tx.id, now());
+      db.prepare("INSERT INTO settlements (id, user_id, bank_account_id, amount, currency, status, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)").run(
+        uuid(),
+        m.id,
+        bank.id,
+        wallet.balance,
+        bank.currency,
+        tx.id,
+        now(),
+      );
       settled += 1;
     } catch {
       skipped += 1;
@@ -185,9 +206,21 @@ export function runAutoSettlements(): { settled: number; skipped: number } {
 
 export function listSettlements(userId?: string) {
   const rows = userId
-    ? getDb().prepare('SELECT s.*, t.status tx_status, t.reference FROM settlements s LEFT JOIN transactions t ON t.id = s.transaction_id WHERE s.user_id = ? ORDER BY s.created_at DESC LIMIT 100').all(userId)
+    ? getDb()
+        .prepare('SELECT s.*, t.status tx_status, t.reference FROM settlements s LEFT JOIN transactions t ON t.id = s.transaction_id WHERE s.user_id = ? ORDER BY s.created_at DESC LIMIT 100')
+        .all(userId)
     : getDb().prepare('SELECT s.*, t.status tx_status, t.reference FROM settlements s LEFT JOIN transactions t ON t.id = s.transaction_id ORDER BY s.created_at DESC LIMIT 200').all();
-  return (rows as any[]).map((r) => ({ id: r.id, userId: r.user_id, amount: r.amount, currency: r.currency, status: r.tx_status || r.status, reference: r.reference, transactionId: r.transaction_id, createdAt: r.created_at, merchant: findUserById(r.user_id)?.business_name ?? null }));
+  return (rows as any[]).map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    amount: r.amount,
+    currency: r.currency,
+    status: r.tx_status || r.status,
+    reference: r.reference,
+    transactionId: r.transaction_id,
+    createdAt: r.created_at,
+    merchant: findUserById(r.user_id)?.business_name ?? null,
+  }));
 }
 
 export function upgradeToMerchant(user: UserRow, businessName: string) {
@@ -197,5 +230,3 @@ export function upgradeToMerchant(user: UserRow, businessName: string) {
   publish('merchant.created', { merchantId: user.id, businessName: businessName.trim(), country: user.country ?? null }, { aggregateId: user.id, tenantId: user.id });
   return upgraded;
 }
-
-export const shortRef = () => shortCode(8);

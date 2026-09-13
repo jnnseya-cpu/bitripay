@@ -9,11 +9,33 @@ import { now, uuid } from '../lib/ids';
 import { parseJson } from '../lib/json';
 
 export const DOMAIN_EVENT_TYPES = [
-  'transaction.created', 'transaction.fraud_scored', 'transaction.authorised', 'transaction.settled', 'transaction.failed',
-  'wallet.credited', 'wallet.debited', 'income.received', 'kyc.tier_changed', 'agent.float_low', 'settlement.cycle_closed',
-  'dispute.opened', 'acu.budget_low', 'attempt.unknown', 'connector.degraded', 'statement.imported', 'recon.exception_aged',
-  'verification.requested', 'sanctions.hit', 'merchant.created', 'offline.promise_rejected', 'diaspora.quote_created',
-  'fx.alert_triggered', 'credit.readiness_updated', 'subscription.charged', 'open_banking.linked', 'open_banking.income_verified',
+  'transaction.created',
+  'transaction.fraud_scored',
+  'transaction.authorised',
+  'transaction.settled',
+  'transaction.failed',
+  'wallet.credited',
+  'wallet.debited',
+  'income.received',
+  'kyc.tier_changed',
+  'agent.float_low',
+  'settlement.cycle_closed',
+  'dispute.opened',
+  'acu.budget_low',
+  'attempt.unknown',
+  'connector.degraded',
+  'statement.imported',
+  'recon.exception_aged',
+  'verification.requested',
+  'sanctions.hit',
+  'merchant.created',
+  'offline.promise_rejected',
+  'diaspora.quote_created',
+  'fx.alert_triggered',
+  'credit.readiness_updated',
+  'subscription.charged',
+  'open_banking.linked',
+  'open_banking.income_verified',
 ] as const;
 export type DomainEventType = (typeof DOMAIN_EVENT_TYPES)[number] | (string & {});
 export interface DomainEvent {
@@ -40,7 +62,9 @@ export function subscribe(name: string, types: DomainEventType[] | '*', handler:
 /** Publish: persisted first, then delivered. Returns the envelope. */
 export function publish(type: DomainEventType, payload: Record<string, unknown> = {}, opts: { tenantId?: string | null; aggregateId?: string | null; version?: number } = {}): DomainEvent {
   const ev: DomainEvent = { eventId: uuid(), type, tenantId: opts.tenantId ?? 'platform', aggregateId: opts.aggregateId ?? null, occurredAt: now(), payload, version: opts.version ?? 1 };
-  getDb().prepare('INSERT INTO domain_events (event_id, type, tenant_id, aggregate_id, occurred_at, payload, version, handled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(ev.eventId, ev.type, ev.tenantId, ev.aggregateId, ev.occurredAt, JSON.stringify(ev.payload), ev.version, '[]');
+  getDb()
+    .prepare('INSERT INTO domain_events (event_id, type, tenant_id, aggregate_id, occurred_at, payload, version, handled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(ev.eventId, ev.type, ev.tenantId, ev.aggregateId, ev.occurredAt, JSON.stringify(ev.payload), ev.version, '[]');
   const handled: string[] = [];
   for (const s of subscribers) {
     if (s.types && !s.types.has(type)) continue;
@@ -71,5 +95,18 @@ export function listDomainEvents(filter: { type?: string | null; aggregateId?: s
     where.push('occurred_at >= ?');
     params.push(filter.since);
   }
-  return (getDb().prepare(`SELECT * FROM domain_events ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY occurred_at DESC LIMIT ?`).all(...params, Math.min(500, filter.limit ?? 100)) as any[]).map((r) => ({ eventId: r.event_id, type: r.type, tenantId: r.tenant_id, aggregateId: r.aggregate_id, occurredAt: r.occurred_at, payload: parseJson(r.payload, {}), version: r.version, handled: parseJson(r.handled, []) })) as DomainEvent[];
+  return (
+    getDb()
+      .prepare(`SELECT * FROM domain_events ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY occurred_at DESC LIMIT ?`)
+      .all(...params, Math.min(500, filter.limit ?? 100)) as any[]
+  ).map((r) => ({
+    eventId: r.event_id,
+    type: r.type,
+    tenantId: r.tenant_id,
+    aggregateId: r.aggregate_id,
+    occurredAt: r.occurred_at,
+    payload: parseJson(r.payload, {}),
+    version: r.version,
+    handled: parseJson(r.handled, []),
+  })) as DomainEvent[];
 }

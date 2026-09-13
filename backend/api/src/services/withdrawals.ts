@@ -43,7 +43,12 @@ export function addBankAccount(userId: string, input: { bankName: string; accoun
   );
   const account = toBankAccount(db.prepare('SELECT * FROM bank_accounts WHERE id = ?').get(id));
   const owner = findUserById(userId);
-  if (owner) registerDestinationChange(owner, { kind: 'bank_account', refId: id, previous: null, next: { bankName: account.bankName, accountNumber: account.accountNumber, currency: account.currency } }, { type: 'user', id: userId });
+  if (owner)
+    registerDestinationChange(
+      owner,
+      { kind: 'bank_account', refId: id, previous: null, next: { bankName: account.bankName, accountNumber: account.accountNumber, currency: account.currency } },
+      { type: 'user', id: userId },
+    );
   return account;
 }
 
@@ -62,7 +67,21 @@ export type WithdrawalDestination =
  * Funds are held until an admin (or an agent with float for that operator) marks the payout as sent –
  * no operator API is required.
  */
-export function requestWithdrawal(user: UserRow, input: { amount: number; currency: string; bankAccountId?: string | null; destination?: WithdrawalDestination; note?: string | null; routeId?: string | null; sourceCurrency?: string | null; stepUpVerified?: boolean; deviceHash?: string | null; ipCountry?: string | null }): TransactionRow {
+export function requestWithdrawal(
+  user: UserRow,
+  input: {
+    amount: number;
+    currency: string;
+    bankAccountId?: string | null;
+    destination?: WithdrawalDestination;
+    note?: string | null;
+    routeId?: string | null;
+    sourceCurrency?: string | null;
+    stepUpVerified?: boolean;
+    deviceHash?: string | null;
+    ipCountry?: string | null;
+  },
+): TransactionRow {
   if (!getModules().withdrawals) throw unprocessable('Withdrawals are currently disabled', 'module_disabled');
   if (getAppSettings().requireKycForWithdrawals && user.kyc_status !== 'verified') throw forbidden('Complete KYC verification before withdrawing', 'kyc_required');
   const cur = getCurrency(input.currency);
@@ -84,7 +103,10 @@ export function requestWithdrawal(user: UserRow, input: { amount: number; curren
     note = note ?? `Withdrawal to ${bank.bank_name} •••• ${String(bank.account_number).slice(-4)}`;
   } else if ('bankName' in dest) {
     if (!dest.bankName || !dest.accountNumber) throw badRequest('Bank name and account number are required');
-    metadata = { bankAccount: { bankName: dest.bankName, accountName: dest.accountName, accountNumber: dest.accountNumber, country: dest.country ?? null, swift: dest.swift ?? null, currency: cur.code }, method: 'bank' };
+    metadata = {
+      bankAccount: { bankName: dest.bankName, accountName: dest.accountName, accountNumber: dest.accountNumber, country: dest.country ?? null, swift: dest.swift ?? null, currency: cur.code },
+      method: 'bank',
+    };
     note = note ?? `Bank transfer to ${dest.bankName} •••• ${String(dest.accountNumber).slice(-4)}`;
   } else {
     throw badRequest('Choose a payout destination');
@@ -93,15 +115,34 @@ export function requestWithdrawal(user: UserRow, input: { amount: number; curren
   enforceLimits(user, input.amount, cur.code);
   // New beneficiaries cool off: a bank account added minutes ago, or a mobile money number never paid before.
   const beneficiaryCreatedAt = (() => {
-    if (metadata.method === 'bank' && 'bankAccountId' in dest && dest.bankAccountId) return (getDb().prepare('SELECT created_at FROM bank_accounts WHERE id = ?').get(dest.bankAccountId) as any)?.created_at ?? now();
+    if (metadata.method === 'bank' && 'bankAccountId' in dest && dest.bankAccountId)
+      return (getDb().prepare('SELECT created_at FROM bank_accounts WHERE id = ?').get(dest.bankAccountId) as any)?.created_at ?? now();
     if (metadata.method === 'mobile_money') {
-      const prior = getDb().prepare("SELECT created_at FROM transactions WHERE sender_user_id = ? AND type = 'withdrawal' AND status = 'completed' AND metadata LIKE ? ORDER BY created_at ASC LIMIT 1").get(user.id, `%${(metadata as any).phone}%`) as any;
+      const prior = getDb()
+        .prepare("SELECT created_at FROM transactions WHERE sender_user_id = ? AND type = 'withdrawal' AND status = 'completed' AND metadata LIKE ? ORDER BY created_at ASC LIMIT 1")
+        .get(user.id, `%${(metadata as any).phone}%`) as any;
       return prior?.created_at ?? now();
     }
     return now(); // free-form bank details are always a brand-new beneficiary
   })();
-  const counterparty = metadata.method === 'mobile_money' ? { name: (metadata as any).recipientName, phone: (metadata as any).phone, country: (metadata as any).operator?.country } : { name: (metadata as any).bankAccount?.accountName, country: (metadata as any).bankAccount?.country };
-  const risk = enforceOutboundRisk({ userId: user.id, kind: 'withdrawal', amount: input.amount, currency: cur.code, subjectType: 'withdrawal', counterparty, beneficiaryCreatedAt, method: metadata.method as string, newBeneficiary: Date.now() - Date.parse(beneficiaryCreatedAt) < 60_000, stepUpVerified: input.stepUpVerified ?? false, deviceHash: input.deviceHash ?? null, ipCountry: input.ipCountry ?? null });
+  const counterparty =
+    metadata.method === 'mobile_money'
+      ? { name: (metadata as any).recipientName, phone: (metadata as any).phone, country: (metadata as any).operator?.country }
+      : { name: (metadata as any).bankAccount?.accountName, country: (metadata as any).bankAccount?.country };
+  const risk = enforceOutboundRisk({
+    userId: user.id,
+    kind: 'withdrawal',
+    amount: input.amount,
+    currency: cur.code,
+    subjectType: 'withdrawal',
+    counterparty,
+    beneficiaryCreatedAt,
+    method: metadata.method as string,
+    newBeneficiary: Date.now() - Date.parse(beneficiaryCreatedAt) < 60_000,
+    stepUpVerified: input.stepUpVerified ?? false,
+    deviceHash: input.deviceHash ?? null,
+    ipCountry: input.ipCountry ?? null,
+  });
   if (risk.action === 'review') metadata = { ...metadata, riskFlags: risk.flags, riskScore: risk.score };
   if (metadata.method === 'bank' && 'bankAccountId' in dest && dest.bankAccountId) assertDestinationUsable(user, 'bank_account', dest.bankAccountId, toBase(input.amount, cur.code));
   const wallet = getUserWallet(user.id, cur.code);
@@ -120,10 +161,44 @@ export function requestWithdrawal(user: UserRow, input: { amount: number; curren
   });
   // Every external payout becomes a payout instruction routed to a prefunded local account / approved agent.
   const md = metadata as any;
-  const bankDetails = md.bankAccount ? { bankName: md.bankAccount.bankName, accountName: md.bankAccount.accountName, accountNumber: md.bankAccount.accountNumber, country: md.bankAccount.country ?? null, swift: md.bankAccount.swift ?? null } : null;
-  const payout = createPayoutInstruction({ transactionId: tx.id, userId: user.id, routeId: input.routeId ?? null, rail: md.method === 'mobile_money' ? 'mobile_money' : 'bank', operatorId: md.method === 'mobile_money' ? md.operator.id : null, recipientMsisdn: md.method === 'mobile_money' ? md.phone : null, recipientName: md.method === 'mobile_money' ? md.recipientName : bankDetails?.accountName ?? null, bankDetails, country: md.method === 'mobile_money' ? md.operator.country : bankDetails?.country ?? user.country, amount: input.amount, currency: cur.code, sourceCurrency: input.sourceCurrency ?? cur.code, sourceCountry: user.country }, { type: 'user', id: user.id });
-  getDb().prepare('UPDATE transactions SET metadata = ? WHERE id = ?').run(JSON.stringify({ ...JSON.parse(tx.metadata), payoutId: payout.id, payoutReference: payout.reference, payoutStage: payout.stage }), tx.id);
-  notify(user.id, 'Payout requested', payout.stage === 'QUEUED' ? `Your payout of ${formatMoney(input.amount, cur)} is queued for execution from a local payout account.` : `Your payout of ${formatMoney(input.amount, cur)} is waiting for local liquidity; your funds are held safely.`, { kind: 'withdrawal', transactionId: tx.id, payoutId: payout.id });
+  const bankDetails = md.bankAccount
+    ? {
+        bankName: md.bankAccount.bankName,
+        accountName: md.bankAccount.accountName,
+        accountNumber: md.bankAccount.accountNumber,
+        country: md.bankAccount.country ?? null,
+        swift: md.bankAccount.swift ?? null,
+      }
+    : null;
+  const payout = createPayoutInstruction(
+    {
+      transactionId: tx.id,
+      userId: user.id,
+      routeId: input.routeId ?? null,
+      rail: md.method === 'mobile_money' ? 'mobile_money' : 'bank',
+      operatorId: md.method === 'mobile_money' ? md.operator.id : null,
+      recipientMsisdn: md.method === 'mobile_money' ? md.phone : null,
+      recipientName: md.method === 'mobile_money' ? md.recipientName : (bankDetails?.accountName ?? null),
+      bankDetails,
+      country: md.method === 'mobile_money' ? md.operator.country : (bankDetails?.country ?? user.country),
+      amount: input.amount,
+      currency: cur.code,
+      sourceCurrency: input.sourceCurrency ?? cur.code,
+      sourceCountry: user.country,
+    },
+    { type: 'user', id: user.id },
+  );
+  getDb()
+    .prepare('UPDATE transactions SET metadata = ? WHERE id = ?')
+    .run(JSON.stringify({ ...JSON.parse(tx.metadata), payoutId: payout.id, payoutReference: payout.reference, payoutStage: payout.stage }), tx.id);
+  notify(
+    user.id,
+    'Payout requested',
+    payout.stage === 'QUEUED'
+      ? `Your payout of ${formatMoney(input.amount, cur)} is queued for execution from a local payout account.`
+      : `Your payout of ${formatMoney(input.amount, cur)} is waiting for local liquidity; your funds are held safely.`,
+    { kind: 'withdrawal', transactionId: tx.id, payoutId: payout.id },
+  );
   return getTransaction(tx.id)!;
 }
 

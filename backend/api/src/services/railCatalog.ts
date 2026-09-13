@@ -32,9 +32,18 @@ export interface LegDeclaration {
 export type ConfirmationMethod = 'PROCESSOR_WEBHOOK' | 'SIGNED_SMS_FORWARDER' | 'SECURED_DEVICE_CONFIRMATION' | 'AGENT_WITH_EVIDENCE' | 'ADMIN_MAKER_CHECKER' | 'INTERNAL_LEDGER';
 export const CONFIRMATION_METHODS: Record<ConfirmationMethod, { label: string; description: string }> = {
   PROCESSOR_WEBHOOK: { label: 'Processor webhook', description: 'A licensed card / payment processor confirms the funds by signed webhook (replay-protected) before the ledger is credited.' },
-  SIGNED_SMS_FORWARDER: { label: 'Signed SMS forwarder', description: 'A registered device forwards the operator SMS signed with its Ed25519 key; reference, amount, currency, sender and timing must match.' },
-  SECURED_DEVICE_CONFIRMATION: { label: 'Secured payout device', description: 'The Android payout device that executed the USSD payout forwards the operator confirmation signed with its key and SIM identity.' },
-  AGENT_WITH_EVIDENCE: { label: 'Agent with evidence', description: 'An approved local agent executes the payout and submits the operator reference; a second administrator confirms (maker-checker).' },
+  SIGNED_SMS_FORWARDER: {
+    label: 'Signed SMS forwarder',
+    description: 'A registered device forwards the operator SMS signed with its Ed25519 key; reference, amount, currency, sender and timing must match.',
+  },
+  SECURED_DEVICE_CONFIRMATION: {
+    label: 'Secured payout device',
+    description: 'The Android payout device that executed the USSD payout forwards the operator confirmation signed with its key and SIM identity.',
+  },
+  AGENT_WITH_EVIDENCE: {
+    label: 'Agent with evidence',
+    description: 'An approved local agent executes the payout and submits the operator reference; a second administrator confirms (maker-checker).',
+  },
   ADMIN_MAKER_CHECKER: { label: 'Administrator maker-checker', description: 'Treasury executes the transfer and two administrators confirm against documentary evidence (bank / operator statement).' },
   INTERNAL_LEDGER: { label: 'Internal ledger', description: 'Both sides are BitriPay balances; settlement is a double-entry posting with no external confirmation needed.' },
 };
@@ -74,9 +83,23 @@ export function describeFunding(source: RouteSourceKind, opts: { currency?: stri
   const leg = describeFundingLeg(source, opts);
   return { ...leg, confirmationMethod: fundingMethod(leg) };
 }
-function describeFundingLeg(source: RouteSourceKind, opts: { currency?: string | null; country?: string | null; operatorId?: string | null; gateway?: string | null } = {}): Omit<LegDeclaration, 'confirmationMethod'> {
+function describeFundingLeg(
+  source: RouteSourceKind,
+  opts: { currency?: string | null; country?: string | null; operatorId?: string | null; gateway?: string | null } = {},
+): Omit<LegDeclaration, 'confirmationMethod'> {
   if (source === 'wallet' || source === 'qr') {
-    return { kind: source, initiation: 'Internal wallet debit after biometric or PIN approval', confirmation: 'Immediate (internal ledger)', settlement: 'Double-entry ledger posting', expectedCompletion: 'Instant', processing: 'automatic', refundMethod: 'Ledger reversal to the wallet', feeType: null, regulatedRail: false, carrier: 'internal' };
+    return {
+      kind: source,
+      initiation: 'Internal wallet debit after biometric or PIN approval',
+      confirmation: 'Immediate (internal ledger)',
+      settlement: 'Double-entry ledger posting',
+      expectedCompletion: 'Instant',
+      processing: 'automatic',
+      refundMethod: 'Ledger reversal to the wallet',
+      feeType: null,
+      regulatedRail: false,
+      carrier: 'internal',
+    };
   }
   const gateways = opts.currency ? availableGateways(source, opts.currency, opts.country ?? undefined) : [];
   if (source === 'card') {
@@ -97,13 +120,40 @@ function describeFundingLeg(source: RouteSourceKind, opts: { currency?: string |
   }
   if (source === 'mobile_money') {
     const op = opts.operatorId ? safeOperator(opts.operatorId) : null;
-    const api = gateways.find((g) => g.provider !== 'manual_momo' && g.provider !== 'sandbox' && (!op || ((g.countries.length === 0 || g.countries.includes(op.country)) && (g.currencies.length === 0 || g.currencies.includes(op.currency)))));
+    const api = gateways.find(
+      (g) =>
+        g.provider !== 'manual_momo' &&
+        g.provider !== 'sandbox' &&
+        (!op || ((g.countries.length === 0 || g.countries.includes(op.country)) && (g.currencies.length === 0 || g.currencies.includes(op.currency)))),
+    );
     if (api) {
-      return { kind: 'mobile_money', initiation: `${api.name} sends a payment prompt to the customer's phone`, confirmation: 'Operator API callback / status query', settlement: 'Operator settles collections to the platform account; ledger credited on confirmation', expectedCompletion: 'Under a minute', processing: 'automatic', refundMethod: 'Operator API refund or payout to the same number', feeType: 'mobile_money_deposit', regulatedRail: true, carrier: api.id };
+      return {
+        kind: 'mobile_money',
+        initiation: `${api.name} sends a payment prompt to the customer's phone`,
+        confirmation: 'Operator API callback / status query',
+        settlement: 'Operator settles collections to the platform account; ledger credited on confirmation',
+        expectedCompletion: 'Under a minute',
+        processing: 'automatic',
+        refundMethod: 'Operator API refund or payout to the same number',
+        feeType: 'mobile_money_deposit',
+        regulatedRail: true,
+        carrier: api.id,
+      };
     }
     const direct = op?.collectionNumber ? 'direct_rail' : gateways.find((g) => g.provider === 'sandbox') ? 'sandbox' : 'none';
     if (direct === 'sandbox') {
-      return { kind: 'mobile_money', initiation: 'Sandbox mobile money prompt (test only)', confirmation: 'Simulated approval', settlement: 'No real funds move in sandbox', expectedCompletion: 'Seconds', processing: 'automatic', refundMethod: 'Sandbox', feeType: 'mobile_money_deposit', regulatedRail: false, carrier: 'sandbox' };
+      return {
+        kind: 'mobile_money',
+        initiation: 'Sandbox mobile money prompt (test only)',
+        confirmation: 'Simulated approval',
+        settlement: 'No real funds move in sandbox',
+        expectedCompletion: 'Seconds',
+        processing: 'automatic',
+        refundMethod: 'Sandbox',
+        feeType: 'mobile_money_deposit',
+        regulatedRail: false,
+        carrier: 'sandbox',
+      };
     }
     return {
       kind: 'mobile_money',
@@ -121,7 +171,18 @@ function describeFundingLeg(source: RouteSourceKind, opts: { currency?: string |
   // bank
   const api = gateways.find((g) => g.provider !== 'manual_bank' && g.provider !== 'sandbox');
   if (api) {
-    return { kind: 'bank', initiation: `Bank transfer / open-banking through ${api.name}`, confirmation: 'Processor webhook', settlement: 'Processor settles to the platform account; ledger credited on confirmation', expectedCompletion: 'Minutes to 1 business day', processing: 'automatic', refundMethod: 'Refund through the processor', feeType: 'bank_deposit', regulatedRail: true, carrier: api.id };
+    return {
+      kind: 'bank',
+      initiation: `Bank transfer / open-banking through ${api.name}`,
+      confirmation: 'Processor webhook',
+      settlement: 'Processor settles to the platform account; ledger credited on confirmation',
+      expectedCompletion: 'Minutes to 1 business day',
+      processing: 'automatic',
+      refundMethod: 'Refund through the processor',
+      feeType: 'bank_deposit',
+      regulatedRail: true,
+      carrier: api.id,
+    };
   }
   return {
     kind: 'bank',
@@ -147,15 +208,59 @@ function describePayoutLeg(destination: RouteDestKind, opts: { operatorId?: stri
     case 'qr':
     case 'merchant':
     case 'keep':
-      return { kind: destination, initiation: destination === 'keep' ? 'Funds stay in the wallet' : 'Internal wallet credit to the recipient (user, merchant or QR target)', confirmation: 'Immediate (internal ledger)', settlement: 'Double-entry ledger posting', expectedCompletion: 'Instant', processing: 'automatic', refundMethod: 'Ledger reversal', feeType: destination === 'merchant' || destination === 'keep' ? null : 'transfer', regulatedRail: false, carrier: 'internal' };
+      return {
+        kind: destination,
+        initiation: destination === 'keep' ? 'Funds stay in the wallet' : 'Internal wallet credit to the recipient (user, merchant or QR target)',
+        confirmation: 'Immediate (internal ledger)',
+        settlement: 'Double-entry ledger posting',
+        expectedCompletion: 'Instant',
+        processing: 'automatic',
+        refundMethod: 'Ledger reversal',
+        feeType: destination === 'merchant' || destination === 'keep' ? null : 'transfer',
+        regulatedRail: false,
+        carrier: 'internal',
+      };
     case 'mobile_money': {
       const op = opts.operatorId ? safeOperator(opts.operatorId) : null;
-      return { kind: 'mobile_money', initiation: `Payout instruction routed to a prefunded ${op?.name ?? 'operator'} payout account; funds held in escrow`, confirmation: 'The secured Android payout device (or approved agent) executes the USSD transfer; the operator confirmation SMS is signed and verified before settlement', settlement: 'Operator transfer from the prefunded local account (merchant SIM) to the recipient number', expectedCompletion: 'Minutes to a few hours during business hours', processing: 'manual', refundMethod: 'Escrow released back to the wallet if the payout is rejected', feeType: 'withdrawal', regulatedRail: true, carrier: 'treasury' };
+      return {
+        kind: 'mobile_money',
+        initiation: `Payout instruction routed to a prefunded ${op?.name ?? 'operator'} payout account; funds held in escrow`,
+        confirmation: 'The secured Android payout device (or approved agent) executes the USSD transfer; the operator confirmation SMS is signed and verified before settlement',
+        settlement: 'Operator transfer from the prefunded local account (merchant SIM) to the recipient number',
+        expectedCompletion: 'Minutes to a few hours during business hours',
+        processing: 'manual',
+        refundMethod: 'Escrow released back to the wallet if the payout is rejected',
+        feeType: 'withdrawal',
+        regulatedRail: true,
+        carrier: 'treasury',
+      };
     }
     case 'bank':
-      return { kind: 'bank', initiation: 'Payout request to the bank account; funds held in escrow', confirmation: 'Treasury operator executes a bank transfer and records the bank reference; approval is maker-checker', settlement: 'Bank transfer from the platform account', expectedCompletion: 'Same day to 2 business days', processing: 'manual', refundMethod: 'Escrow released back to the wallet if the payout is rejected', feeType: 'withdrawal', regulatedRail: true, carrier: 'treasury' };
+      return {
+        kind: 'bank',
+        initiation: 'Payout request to the bank account; funds held in escrow',
+        confirmation: 'Treasury operator executes a bank transfer and records the bank reference; approval is maker-checker',
+        settlement: 'Bank transfer from the platform account',
+        expectedCompletion: 'Same day to 2 business days',
+        processing: 'manual',
+        refundMethod: 'Escrow released back to the wallet if the payout is rejected',
+        feeType: 'withdrawal',
+        regulatedRail: true,
+        carrier: 'treasury',
+      };
     case 'agent':
-      return { kind: 'agent', initiation: 'Cash-out code issued; funds held in escrow', confirmation: 'Agent confirms the code and hands over cash (biometric/PIN on the agent app)', settlement: 'Escrow released to the agent float', expectedCompletion: 'When the customer visits the agent (code expires otherwise)', processing: 'assisted', refundMethod: 'Escrow released back to the wallet when the code expires or is cancelled', feeType: 'agent_cash_out', regulatedRail: false, carrier: 'agent' };
+      return {
+        kind: 'agent',
+        initiation: 'Cash-out code issued; funds held in escrow',
+        confirmation: 'Agent confirms the code and hands over cash (biometric/PIN on the agent app)',
+        settlement: 'Escrow released to the agent float',
+        expectedCompletion: 'When the customer visits the agent (code expires otherwise)',
+        processing: 'assisted',
+        refundMethod: 'Escrow released back to the wallet when the code expires or is cancelled',
+        feeType: 'agent_cash_out',
+        regulatedRail: false,
+        carrier: 'agent',
+      };
   }
 }
 
@@ -167,7 +272,19 @@ function safeOperator(id: string) {
   }
 }
 
-export function describeRoute(source: RouteSourceKind, destination: RouteDestKind, opts: { currency?: string | null; targetCurrency?: string | null; country?: string | null; operatorId?: string | null; destinationOperatorId?: string | null; gateway?: string | null; payoutConfirmation?: string | null } = {}): RouteDeclaration {
+export function describeRoute(
+  source: RouteSourceKind,
+  destination: RouteDestKind,
+  opts: {
+    currency?: string | null;
+    targetCurrency?: string | null;
+    country?: string | null;
+    operatorId?: string | null;
+    destinationOperatorId?: string | null;
+    gateway?: string | null;
+    payoutConfirmation?: string | null;
+  } = {},
+): RouteDeclaration {
   const funding = describeFunding(source, { currency: opts.currency, country: opts.country, operatorId: opts.operatorId, gateway: opts.gateway });
   const payout = describePayout(destination, { operatorId: opts.destinationOperatorId, payoutConfirmation: opts.payoutConfirmation });
   const crossCurrency = !!opts.currency && !!opts.targetCurrency && opts.currency !== opts.targetCurrency;
@@ -180,7 +297,12 @@ export function describeRoute(source: RouteSourceKind, destination: RouteDestKin
     payout,
     exchange: crossCurrency ? { feeType: 'exchange', note: 'Converted in the platform ledger at the disclosed rate before the payout leg.' } : null,
     processing,
-    expectedCompletion: funding.expectedCompletion === 'Instant' ? payout.expectedCompletion : payout.expectedCompletion === 'Instant' ? funding.expectedCompletion : `${funding.expectedCompletion}, then ${payout.expectedCompletion.toLowerCase()}`,
+    expectedCompletion:
+      funding.expectedCompletion === 'Instant'
+        ? payout.expectedCompletion
+        : payout.expectedCompletion === 'Instant'
+          ? funding.expectedCompletion
+          : `${funding.expectedCompletion}, then ${payout.expectedCompletion.toLowerCase()}`,
     settlementMechanism: `${funding.settlement}. ${payout.settlement}.`,
     refundMethod: payout.processing === 'automatic' ? funding.refundMethod : `${payout.refundMethod}; ${funding.refundMethod.toLowerCase()}`,
     disclosure: external
