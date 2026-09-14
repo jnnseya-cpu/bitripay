@@ -1,12 +1,14 @@
 /**
- * Rails provisioned from the environment: credentials present → connectivity check → enabled only when the check
- * passes, recorded as a system event; absent credentials leave the rail untouched; direct mobile-money rails from
- * MOMO_DIRECT_RAILS; the go-live checklist names every rail and the production URLs.
+ * Money movement needs no external API: transfers and remittance complete with zero external rail enabled, the go-live
+ * checklist blocks on the BitriPay digital rail and never on a bank, mobile-money or BTCPay API. Optional external rails
+ * provisioned from the environment: credentials present → connectivity check → enabled only when the check passes,
+ * recorded as a system event; absent credentials leave the rail untouched; collection numbers may be pre-filled from
+ * MOMO_DIRECT_RAILS; the checklist names every rail and the production URLs.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import http from 'node:http';
-import { setupApp, adminToken } from './helpers';
+import { setupApp, adminToken, registerUser, fund } from './helpers';
 import { provisionRailsFromEnvironment, getGateway, listGateways } from '../payments';
 import { provisionDirectRailsFromEnvironment, listOperators } from '../services/momo';
 import { goLiveChecklist } from '../services/goLive';
@@ -93,15 +95,59 @@ describe('rails from the environment', () => {
     expect(listOperators({ onlyDirect: true }).find((o) => o.id === 'orange_cd')!.collectionNumber).toBe('+243899999999');
   });
 
-  it('shows rails, direct rails, the switch and the public URLs on the go-live checklist', async () => {
+  it('moves money end to end with no bank, mobile-money or BTCPay API and blocks go-live only on the digital rail', async () => {
+    // nothing external is enabled in this environment: no processor, no operator adapter, no BTCPay
+    const external = listGateways().filter((g) => g.enabled && !['sandbox', 'manual_bank', 'manual_momo', 'open_banking'].includes(g.provider));
+    expect(external).toEqual([]);
+    const sender = await registerUser(app, { tag: 'digitalsender' });
+    const receiver = await registerUser(app, { tag: 'digitalreceiver' });
+    await fund(app, sender.user.id, '300.00');
+    const transfer = await request(app).post('/api/transfers').set(sender.auth).send({ to: '@digitalreceiver', amount: '40.00', currency: 'USD', pin: '1234' });
+    expect(transfer.status).toBe(201);
+    const remittance = await request(app)
+      .post('/api/remittances')
+      .set(sender.auth)
+      .send({ amount: '100', sourceCurrency: 'USD', targetCurrency: 'NGN', payoutMethod: 'wallet', recipient: { name: 'Family', tag: 'digitalreceiver' }, pin: '1234' });
+    expect(remittance.status).toBe(201);
+    expect(remittance.body.remittance.status).toBe('completed');
+    const wallets = await request(app).get('/api/wallets').set(receiver.auth);
+    expect(wallets.body.items.find((w: any) => w.currency === 'USD').balance).toBe(4000);
+    expect(wallets.body.items.find((w: any) => w.currency === 'NGN').balance).toBeGreaterThan(0);
+
+    const check = goLiveChecklist();
+    const digital = check.items.find((i) => i.id === 'digital_rail')!;
+    expect(digital.blocking).toBe(true);
+    expect(digital.ok).toBe(true);
+    expect(digital.detail).toMatch(/direct mobile money on/);
+    // no checklist item asks for an operator, bank or BTCPay API setting
+    for (const item of check.items) expect(`${item.detail} ${item.fix ?? ''}`).not.toMatch(/MTN_MOMO|MPESA_|BTCPAY_|MOMO_DIRECT_RAILS/);
+    // a card processor serves cards only: with none enabled the processor items are satisfied, not blocking
+    for (const id of ['processor', 'processor_live_keys', 'processor_webhooks']) {
+      const item = check.items.find((i) => i.id === id)!;
+      expect(item.ok).toBe(true);
+      expect(item.detail).toMatch(/not offered/);
+    }
+    // external rails are optional: none enabled is a green, non-blocking line
+    const rails = check.items.find((i) => i.id === 'rails')!;
+    expect(rails.blocking).toBe(false);
+    expect(rails.ok).toBe(true);
+    expect(rails.detail).toMatch(/digital rail/);
+    // switching the direct mobile-money rail off is the one thing that turns the digital rail red
+    getDb().prepare("UPDATE gateways SET enabled = 0 WHERE id = 'manual_momo'").run();
+    expect(goLiveChecklist().items.find((i) => i.id === 'digital_rail')!.ok).toBe(false);
+    getDb().prepare("UPDATE gateways SET enabled = 1 WHERE id = 'manual_momo'").run();
+  });
+
+  it('shows the digital rail, external rails, collection numbers, the switch and the public URLs on the go-live checklist', async () => {
     const check = goLiveChecklist();
     const ids = check.items.map((i) => i.id);
-    for (const id of ['rails', 'direct_rails', 'switch', 'public_urls', 'processor', 'secrets']) expect(ids).toContain(id);
+    for (const id of ['digital_rail', 'rails', 'direct_rails', 'switch', 'public_urls', 'processor', 'secrets']) expect(ids).toContain(id);
+    expect(ids.indexOf('digital_rail')).toBe(0);
     expect(check.items.find((i) => i.id === 'direct_rails')!.ok).toBe(true);
     expect(check.items.find((i) => i.id === 'switch')!.detail).toMatch(/simulation/);
     const admin = await adminToken(app);
     const res = await request(app).get('/api/admin/go-live').set(admin.auth);
     expect(res.status).toBe(200);
-    expect(res.body.items.map((i: any) => i.id)).toContain('rails');
+    expect(res.body.items.map((i: any) => i.id)).toContain('digital_rail');
   });
 });

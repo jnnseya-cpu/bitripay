@@ -20,6 +20,8 @@ import { toBase } from './currencies';
 import { getOperatingState } from './guardian';
 import { listOperators } from './momo';
 import { listConnections } from './switch/connections';
+import { getModules } from './modules';
+import { listAgents } from './agents';
 
 export interface ChecklistItem {
   id: string;
@@ -35,32 +37,62 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
   const items: ChecklistItem[] = [];
   const compliance = getComplianceSettings();
   const gateways = listGateways();
+  // Money movement (transfers, QR, cross-payments, remittance) runs on the BitriPay digital rail: the double-entry
+  // ledger, direct operator collection numbers, the bank-transfer instructions, payout accounts, payout devices and
+  // agents. No bank, mobile-money operator or BTCPay API is required for it, so none may ever block go-live.
+  const modules = getModules();
+  const directMomo = gateways.find((g) => g.provider === 'manual_momo');
+  const directBank = gateways.find((g) => g.provider === 'manual_bank');
+  const collectionNumbers = listOperators({ onlyDirect: true, onlyEnabled: true });
+  const payoutAccounts = listPayoutAccounts({ status: 'active' });
+  const payoutDevices = listDevices().filter((d) => d.status === 'active' && d.kind === 'payout');
+  const agents = listAgents();
+  const moneyMoveModules = (['transfers', 'qrPayments', 'remittance', 'agents', 'withdrawals'] as const).filter((m) => !modules[m]);
+  items.push({
+    id: 'digital_rail',
+    label: 'Money moves on the BitriPay digital rail (ledger, direct operator numbers, bank instructions, payout devices, agents) without any bank, mobile-money or BTCPay API',
+    ok: !!directMomo?.enabled && !!directBank?.enabled && moneyMoveModules.length === 0,
+    blocking: true,
+    detail: [
+      `direct mobile money ${directMomo?.enabled ? 'on' : 'off'} (${collectionNumbers.length} collection number${collectionNumbers.length === 1 ? '' : 's'})`,
+      `bank transfer ${directBank?.enabled ? 'on' : 'off'}${directBank?.configuredKeys.includes('accountNumber') ? '' : ' (account details not yet entered)'}`,
+      `${payoutAccounts.length} payout account(s)`,
+      `${payoutDevices.length} payout device(s)`,
+      `${agents.length} active agent(s)`,
+      moneyMoveModules.length ? `modules off: ${moneyMoveModules.join(', ')}` : 'transfers, QR, remittance, agents and withdrawals on',
+    ].join(' · '),
+    fix: 'Deposit / payment gateways → enable "Mobile money (direct, all operators)" and "Bank transfer" (enter the account details); Modules → transfers, QR payments, remittance, agents, withdrawals on. Collection numbers, payout accounts and payout devices are enrolled in the console and the payout-device app, never through an operator API',
+  });
+  // A licensed card processor is the one external API in the model and it serves card acceptance only: the three items
+  // below block when a processor is enabled and are satisfied ("cards not offered") when none is, because the digital
+  // rail never depends on one.
   const processors = gateways.filter((g) => ['stripe', 'paystack', 'flutterwave'].includes(g.provider) && g.enabled);
   const tested = processors.filter((g) => g.lastHealth?.ok);
+  const cardsNotOffered = 'No card processor enabled: payment cards are not offered (not needed for the digital rail); add one only to accept cards';
   items.push({
     id: 'processor',
-    label: 'Licensed card processor connected and tested',
-    ok: tested.length > 0,
+    label: 'Licensed card processor connected and tested (only if cards are offered)',
+    ok: processors.length === 0 || tested.length > 0,
     blocking: true,
     detail: processors.length
       ? processors.map((g) => `${g.name}: ${g.mode} keys, ${g.lastHealth ? (g.lastHealth.ok ? `test passed ${g.lastHealth.at}` : `test failed: ${g.lastHealth.message}`) : 'not tested'}`).join(' · ')
-      : 'No processor enabled',
+      : cardsNotOffered,
     fix: 'Deposit / payment gateways → add Stripe, Paystack or Flutterwave keys → Test connection',
   });
   items.push({
     id: 'processor_live_keys',
-    label: 'Processor uses live keys',
-    ok: processors.some((g) => g.mode === 'live'),
+    label: 'Card processor uses live keys (only if cards are offered)',
+    ok: processors.length === 0 || processors.some((g) => g.mode === 'live'),
     blocking: true,
-    detail: processors.map((g) => `${g.name}: ${g.mode}`).join(' · ') || 'none',
+    detail: processors.map((g) => `${g.name}: ${g.mode}`).join(' · ') || cardsNotOffered,
     fix: 'Replace test keys with live keys once the processor has approved the account',
   });
   items.push({
     id: 'processor_webhooks',
-    label: 'Processor webhook secret configured',
-    ok: processors.length > 0 && processors.every((g) => g.configuredKeys.includes('webhookSecret') || g.configuredKeys.includes('webhookHash') || g.provider === 'paystack'),
+    label: 'Card processor webhook secret configured (only if cards are offered)',
+    ok: processors.length === 0 || processors.every((g) => g.configuredKeys.includes('webhookSecret') || g.configuredKeys.includes('webhookHash') || g.provider === 'paystack'),
     blocking: true,
-    detail: `Webhook URLs: ${processors.map((g) => `${config.apiUrl}/api/webhooks/${g.id}`).join(', ') || 'n/a'}`,
+    detail: processors.length ? `Webhook URLs: ${processors.map((g) => `${config.apiUrl}/api/webhooks/${g.id}`).join(', ')}` : cardsNotOffered,
     fix: 'Register the webhook URL at the processor and paste the signing secret',
   });
   items.push({
@@ -101,7 +133,7 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
       : 'No live corridor',
     fix: 'Corridors → Go live (regulator, licence, safeguarding, AML, partners, expiry)',
   });
-  const accounts = listPayoutAccounts({ status: 'active' });
+  const accounts = payoutAccounts;
   items.push({
     id: 'liquidity',
     label: 'Every live corridor has a prefunded payout account',
@@ -110,7 +142,7 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
     detail: accounts.map((a) => `${a.label}: ${a.balance} ${a.currency}`).join(' · ') || 'No active payout accounts',
     fix: 'Corridors → Liquidity → create and prefund payout accounts',
   });
-  const devices = listDevices().filter((d) => d.status === 'active' && d.kind === 'payout');
+  const devices = payoutDevices;
   items.push({
     id: 'devices',
     label: 'Registered payout devices or approved agents for each payout account',
@@ -193,27 +225,27 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
     detail: getSmtpSettings().host ? getSmtpSettings().host : 'Not configured',
     fix: 'SMTP_HOST / SMTP_USER / SMTP_PASS / SMTP_FROM in the API environment, or Messaging → Email in the console',
   });
-  // Rails provisioned from the environment: every enabled live rail must have passed its connectivity check.
+  // External rails are optional add-ons (card processors; operator and Bitcoin adapters kept for deployments that
+  // contract them). One that is enabled must have passed its connectivity check; none is required.
   const liveRails = gateways.filter((g) => g.enabled && !['sandbox', 'manual_bank', 'manual_momo', 'open_banking'].includes(g.provider));
   const untested = liveRails.filter((g) => !g.lastHealth?.ok);
   items.push({
     id: 'rails',
-    label: 'Every enabled rail passed its connectivity check (processors, mobile money, Bitcoin)',
-    ok: liveRails.length > 0 && untested.length === 0,
+    label: 'Every enabled external rail passed its connectivity check (none is required for money movement)',
+    ok: untested.length === 0,
     blocking: false,
     detail: liveRails.length
       ? liveRails.map((g) => `${g.name}: ${g.mode}${g.lastHealth ? (g.lastHealth.ok ? ' ✓' : ` ✗ ${g.lastHealth.message}`) : ' (not tested)'}`).join(' · ')
-      : 'No live rail enabled',
-    fix: 'Provide the credentials in the API environment (STRIPE_*, PAYSTACK_*, FLUTTERWAVE_*, MTN_MOMO_*, MPESA_*, BTCPAY_*, MOMO_DIRECT_RAILS) or in the console, then Test connection; rails that pass are enabled at start-up',
+      : 'No external rail enabled: transfers, QR, cross-payments and remittance run on the digital rail',
+    fix: 'Deposit / payment gateways → Test connection on each enabled rail, or disable the rail; a card processor only matters if you accept cards',
   });
-  const directRails = listOperators({ onlyDirect: true, onlyEnabled: true });
   items.push({
     id: 'direct_rails',
-    label: 'Direct mobile-money rails (prefunded operator SIMs) configured',
-    ok: directRails.length > 0,
+    label: 'Direct mobile-money collection numbers enrolled (customers pay the operator number shown; receipts confirmed by the payout device, the SMS forwarder or maker-checker)',
+    ok: collectionNumbers.length > 0,
     blocking: false,
-    detail: directRails.length ? directRails.map((o) => `${o.name} ${o.collectionNumber}`).join(' · ') : 'None: set MOMO_DIRECT_RAILS or add collection numbers in the console',
-    fix: 'MOMO_DIRECT_RAILS="orange_cd=+243…:Account name;mpesa_ke=+254…" or Mobile money → operator → collection number',
+    detail: collectionNumbers.length ? collectionNumbers.map((o) => `${o.name} ${o.collectionNumber}`).join(' · ') : 'None yet: Mobile money → operator → collection number',
+    fix: 'Mobile money → operator → collection number and account name (your own SIM at that operator; no operator API), then register the payout device that holds the SIM',
   });
   const connections = listConnections();
   const certified = connections.filter((c) => c.enabled && c.certification.status === 'CERTIFIED');

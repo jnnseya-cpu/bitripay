@@ -33,11 +33,19 @@ cp deploy/.env.production.example deploy/.env.production
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"   # run twice: JWT_SECRET, APP_SECRET
 ```
 
-Fill `deploy/.env.production`: secrets, the administrator password, the credentials of the processors and mobile-money
-APIs you contract with, your prefunded operator SIMs in `MOMO_DIRECT_RAILS`, BTCPay if you offer the Bitcoin rail,
-SMTP / SMS providers, and the model key for the assist agents. Every rail whose credentials are present is
-connectivity-checked at start-up and enabled when the check passes (`RAILS_AUTO_ENABLE=1`); a rail without credentials
-stays off; a failing check never enables a rail. The file is git-ignored.
+Fill `deploy/.env.production`: secrets, the administrator password, SMTP / SMS providers, the model key for the
+assist agents and, only if you accept payment cards, the live keys of the card processor you contract with (health-checked
+and enabled at start-up with `RAILS_AUTO_ENABLE=1`; a failing check never enables it). The file is git-ignored.
+
+**Money movement needs no external API.** Transfers, QR payments, cross-payments and remittance run on the BitriPay
+digital rail: the double-entry ledger, your own collection numbers at each mobile-money operator, bank-transfer
+instructions, prefunded payout accounts, Android payout devices and agents. No bank, mobile-money operator or BTCPay
+API is configured or required, and the go-live checklist blocks on the digital rail being on, never on such an API.
+The connections are made digitally after the first sign-in: Mobile money → operator → collection number (your SIM at
+that operator), Deposit / payment gateways → Bank transfer → account details, Corridors → Liquidity → payout accounts,
+and the payout-device app enrols the phone that holds each SIM (signed receipts confirm every operator payment; the
+maker-checker queue covers the rest). Operator-API adapters and BTCPay remain available as optional extras
+(`backend/api/.env.optional-integrations.example`) for a deployment that contracts them.
 
 ## 3. Deploy
 
@@ -46,7 +54,7 @@ npm run deploy
 ```
 
 The script builds the three images, starts the stack, waits for the API health check and runs the go-live command
-inside the API container. The go-live command prints the rails it provisioned, the checklist (blocking items marked ✗)
+inside the API container. The go-live command prints the digital-rail status, any optional external rail it provisioned, the checklist (blocking items marked ✗)
 and the gate-to-scale metrics, and exits non-zero until every blocking item is green. Run it again at any time:
 
 ```bash
@@ -55,14 +63,13 @@ docker compose --env-file deploy/.env.production -f deploy/docker-compose.prod.y
 
 ## 4. Register the inbound webhooks
 
-| Provider | URL to register | Secret |
+| Source | URL to register | Secret |
 | --- | --- | --- |
 | Stripe | `https://api.bitripay.com/api/webhooks/stripe` | `STRIPE_WEBHOOK_SECRET` |
 | Paystack | `https://api.bitripay.com/api/webhooks/paystack` | account secret key |
 | Flutterwave | `https://api.bitripay.com/api/webhooks/flutterwave` | `FLUTTERWAVE_WEBHOOK_HASH` |
-| MTN MoMo | `https://api.bitripay.com/api/webhooks/mtn_momo` | API user / key |
-| M-Pesa (Daraja) | `https://api.bitripay.com/api/webhooks/mpesa` | consumer key / secret |
-| BTCPay Server | `https://api.bitripay.com/api/webhooks/bitcoin` | `BTCPAY_WEBHOOK_SECRET` (BTCPay-Sig) |
+| Payout device / SMS forwarder (operator receipts, no operator API) | `https://api.bitripay.com/api/evidence/sms` | Ed25519 device key from enrolment in Admin → Mobile money & evidence |
+| Direct mobile-money auto-confirm (any SMS-forwarder app on the collection phone) | `https://api.bitripay.com/api/webhooks/manual_momo` | `smsSecret` on the "Mobile money (direct)" gateway |
 | WhatsApp Cloud API | `https://api.bitripay.com/api/whatsapp` (GET verification + POST messages) | verify token and app secret set in Admin → Channels → WhatsApp |
 | USSD aggregator | `https://api.bitripay.com/api/ussd` | `X-Channel-Secret` from Admin → Channels |
 | SMS aggregator | `https://api.bitripay.com/api/sms` | `X-Channel-Secret` from Admin → Channels |
