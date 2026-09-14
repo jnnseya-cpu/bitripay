@@ -75,5 +75,5 @@ if [ "$MODE" = shared-host ]; then
     echo "Point your existing web server at them: deploy/shared-host/nginx-bitripay.conf (or apache-bitripay.conf, Caddyfile.snippet), then certbot."
   fi
 else
-  echo "Stack is up. Web https://${DOMAIN_VALUE}, admin https://admin.${DOMAIN_VALUE}, API https://api.${DOMAIN_VALUE}"
+  echo "Stack is up. Web https://www.${DOMAIN_VALUE}, admin https://admin.${DOMAIN_VALUE}, API https://api.${DOMAIN_VALUE}"
 fi

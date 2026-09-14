@@ -1,14 +1,14 @@
-# TLS for bitripay.com (web), www.bitripay.com (redirect), admin.bitripay.com and api.bitripay.com.
+# TLS for www.bitripay.com (web), bitripay.com (redirect to www), admin.bitripay.com and api.bitripay.com.
 # Caddy obtains and renews Let's Encrypt certificates automatically; HTTP is redirected to HTTPS.
 {
 	email {$ACME_EMAIL}
 }
 
-www.{$DOMAIN} {
-	redir https://{$DOMAIN}{uri} permanent
+{$DOMAIN} {
+	redir https://www.{$DOMAIN}{uri} permanent
 }
 
-{$DOMAIN} {
+www.{$DOMAIN} {
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"

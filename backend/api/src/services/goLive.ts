@@ -278,7 +278,7 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
     ok: !config.isProduction || [config.webUrl, config.adminUrl, config.apiUrl].every((u) => u.startsWith('https://')),
     blocking: config.isProduction,
     detail: `web ${config.webUrl} · admin ${config.adminUrl} · api ${config.apiUrl}`,
-    fix: 'WEB_URL=https://bitripay.com ADMIN_URL=https://admin.bitripay.com API_URL=https://api.bitripay.com (deploy/.env.production.example)',
+    fix: 'WEB_URL=https://www.bitripay.com ADMIN_URL=https://admin.bitripay.com API_URL=https://api.bitripay.com (deploy/.env.production.example)',
   });
   items.push({
     id: 'secrets',

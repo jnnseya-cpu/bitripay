@@ -6,8 +6,8 @@ SQLite database lives on the `api-data` volume with a nightly backup on `backups
 
 | Host name | Serves | Container |
 | --- | --- | --- |
-| `bitripay.com` | customer / merchant / agent web app, hosted checkout, landing pages, BitriPay Lite, blog, legal pages, feeds | `web` (static) + `api` (server-rendered paths and `/api`, `/v1`) |
-| `www.bitripay.com` | permanent redirect to `bitripay.com` | `caddy` |
+| `www.bitripay.com` | customer / merchant / agent web app, hosted checkout, landing pages, BitriPay Lite, blog, legal pages, feeds (canonical host) | `web` (static) + `api` (server-rendered paths and `/api`, `/v1`) |
+| `bitripay.com` | permanent redirect to `www.bitripay.com` | `caddy` |
 | `admin.bitripay.com` | administration console | `admin` (static) + `api` |
 | `api.bitripay.com` | partner API, webhooks, channels (USSD, SMS, WhatsApp), OpenAPI | `api` |
 
@@ -23,7 +23,7 @@ pages, blog, legal pages and sitemap are served from, so it is not used. No othe
 | Layer | Folder | Recommended home | Alternative |
 | --- | --- | --- | --- |
 | Backend (API, ledger, jobs, SSR site pages, webhooks, channels) | `backend/api` | Hostinger VPS, container `api` behind Caddy | none: it needs a persistent disk and long-running jobs |
-| Customer web app (bitripay.com) | `frontend/web` | Hostinger VPS, container `web` | Vercel project with root `frontend/web` (`vercel.json` is included) |
+| Customer web app (www.bitripay.com) | `frontend/web` | Hostinger VPS, container `web` | Vercel project with root `frontend/web` (`vercel.json` is included) |
 | Administration console (admin.bitripay.com) | `frontend/admin` | Hostinger VPS, container `admin` | Vercel project with root `frontend/admin` (`vercel.json` is included) |
 | Shared packages (`@bitripay/shared`, BitriQR, SDKs) | `shared/*` | not deployed: built into the three layers at image / build time | same |
 | Phone apps and payout device | `frontend/mobile`, `frontend/payout-device` | built with EAS against `https://api.bitripay.com` | same |
@@ -82,7 +82,7 @@ Firewall) must allow 22, 80 and 443.
 Create two Vercel projects from the same repository, root directory `frontend/web` and `frontend/admin`, framework
 Vite, build command `npm run build`, output `dist`; set the environment variable `VITE_API_URL=https://api.bitripay.com`
 on both. The included `vercel.json` files proxy `/api`, `/v1` and the site pages to the API and serve the SPA
-fallback. Point `bitripay.com` and `admin.bitripay.com` at Vercel (its A / CNAME targets) and keep
+fallback. Point `www.bitripay.com` (and the `bitripay.com` redirect) and `admin.bitripay.com` at Vercel (its A / CNAME targets) and keep
 `api.bitripay.com` on the VPS. Set `WEB_URL` / `ADMIN_URL` in `deploy/.env.production` to the same hosts; the API
 already allows those origins.
 
@@ -213,7 +213,7 @@ administrator decisions under step-up because they carry regulatory responsibili
 
 `.github/workflows/deploy.yml` deploys on a version tag (`git tag v1.0.0 && git push --tags`) or by hand from the
 Actions tab. It re-runs the full verification, then connects to the production host over SSH, checks out the tag and
-runs `npm run deploy`, and finally smokes `https://bitripay.com/`, `https://admin.bitripay.com/` and
+runs `npm run deploy`, and finally smokes `https://www.bitripay.com/`, `https://admin.bitripay.com/` and
 `https://api.bitripay.com/api/health`. Add these repository secrets once (Settings → Secrets → Actions):
 
 | Secret | Value |

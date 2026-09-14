@@ -9,7 +9,7 @@ TMP=$(mktemp -d)
 PORT=${BOOT_CHECK_PORT:-4321}
 gen() { node -e "console.log(require('crypto').randomBytes($1).toString('base64url'))"; }
 NODE_ENV=production PORT=$PORT DATABASE_PATH="$TMP/boot.db" JWT_SECRET=$(gen 48) APP_SECRET=$(gen 48) ADMIN_PASSWORD=$(gen 18) \
-  WEB_URL=https://bitripay.com ADMIN_URL=https://admin.bitripay.com API_URL=https://api.bitripay.com SMTP_HOST= SMS_PROVIDER=console \
+  WEB_URL=https://www.bitripay.com ADMIN_URL=https://admin.bitripay.com API_URL=https://api.bitripay.com SMTP_HOST= SMS_PROVIDER=console \
   node backend/api/dist/index.js > "$TMP/boot.log" 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null; rm -rf "$TMP"' EXIT

@@ -183,7 +183,7 @@ export const COMMS_EVENTS: CommsEvent[] = [
   ev('security', 'password.reset_link', 'Password reset', 'Reset your {{appName}} password', 'Use this link within {{minutes}} minutes to choose a new password: {{link}}', {
     mandatory: true,
     channels: ['email'],
-    sample: { minutes: '15', link: 'https://bitripay.com/reset?token=…' },
+    sample: { minutes: '15', link: 'https://www.bitripay.com/reset?token=…' },
   }),
   ev('security', 'password.changed', 'Password changed', 'Your password was changed', 'Your {{appName}} password was changed at {{time}}. If this was not you, contact {{supportEmail}} now.', {
     severity: 'success',

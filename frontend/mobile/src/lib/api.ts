@@ -13,7 +13,7 @@ export class ApiError extends Error {
 
 const extra = (Constants.expoConfig?.extra ?? {}) as { apiUrl?: string; webUrl?: string };
 // Production builds point at the public API (EXPO_PUBLIC_API_URL / EXPO_PUBLIC_WEB_URL at build time, e.g.
-// https://api.bitripay.com and https://bitripay.com); development keeps the local servers from app.json.
+// https://api.bitripay.com and https://www.bitripay.com); development keeps the local servers from app.json.
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || extra.apiUrl || 'http://localhost:4000').replace(/\/$/, '');
 export const WEB_URL = (process.env.EXPO_PUBLIC_WEB_URL || extra.webUrl || 'http://localhost:5173').replace(/\/$/, '');
 

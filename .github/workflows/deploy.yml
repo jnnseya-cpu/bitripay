@@ -43,7 +43,7 @@ jobs:
             npm run deploy
       - name: Smoke the public endpoints
         run: |
-          for u in https://bitripay.com/ https://admin.bitripay.com/ https://api.bitripay.com/api/health; do
+          for u in https://www.bitripay.com/ https://admin.bitripay.com/ https://api.bitripay.com/api/health; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$u" || true)
             echo "$u → $code"
             [ "$code" = "200" ] || exit 1

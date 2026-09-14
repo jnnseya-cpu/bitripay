@@ -2,10 +2,10 @@
 # through deploy/docker-compose.edge.yml). Append to the Caddyfile that container mounts, then reload without downtime:
 #   docker exec <caddy container> caddy reload --config /etc/caddy/Caddyfile
 # Caddy obtains the certificates itself once DNS points at this VPS.
-www.bitripay.com {
-	redir https://bitripay.com{uri} permanent
-}
 bitripay.com {
+	redir https://www.bitripay.com{uri} permanent
+}
+www.bitripay.com {
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

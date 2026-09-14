@@ -36,7 +36,7 @@ services:
       NODE_ENV: production
       PORT: 4000
       DATABASE_PATH: /data/bitripay.db
-      WEB_URL: https://${DOMAIN:-bitripay.com}
+      WEB_URL: https://www.${DOMAIN:-bitripay.com}
       ADMIN_URL: https://admin.${DOMAIN:-bitripay.com}
       API_URL: https://api.${DOMAIN:-bitripay.com}
       WEBAUTHN_RP_ID: ${DOMAIN:-bitripay.com}
