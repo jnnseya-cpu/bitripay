@@ -142,8 +142,8 @@
   "smtp": {
     "host": "smtp.example.com",
     "port": 587,
-    "user": "no-reply@bitripay.com",
+    "user": "support@bitripay.com",
     "pass": "smtp-password",
-    "from": "BitriPay <no-reply@bitripay.com>"
+    "from": "BitriPay <support@bitripay.com>"
   }
 }

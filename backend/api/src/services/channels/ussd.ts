@@ -174,7 +174,7 @@ function pinOk(user: UserRow, pin: string): boolean {
 }
 function contact(): string {
   const site = getSiteSettingsSafe();
-  return site?.contactEmail ?? getAppSettings().supportEmail ?? 'support@bitripay.local';
+  return site?.contactEmail ?? getAppSettings().supportEmail ?? 'support@bitripay.com';
 }
 
 /** Pure menu logic: the phone number and the inputs so far → the next screen. */

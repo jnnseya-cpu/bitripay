@@ -29,7 +29,7 @@ export const DEFAULT_SITE: SiteSettings = {
   siteName: 'BitriPay',
   tagline: 'Send, receive and accept money with a QR code',
   description: 'BitriPay is a complete money transfer platform: wallets, QR payments, cards, mobile money, remittance, agents and a merchant payment gateway.',
-  contactEmail: 'support@bitripay.local',
+  contactEmail: 'support@bitripay.com',
   contactPhone: '',
   address: '',
   logoUrl: null,

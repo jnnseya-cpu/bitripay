@@ -59,7 +59,7 @@ const DEFAULT_REFERRAL: ReferralSettings = { enabled: true, rewards: [500, 200, 
 
 const DEFAULT_APP: AppSettings = {
   appName: 'BitriPay',
-  supportEmail: 'support@bitripay.local',
+  supportEmail: 'support@bitripay.com',
   exchangeMarginBps: 100,
   agentCommissionBps: 50,
   // Production starts on live rates from a keyless provider refreshed every 6 hours; development keeps the test rates.

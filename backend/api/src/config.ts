@@ -42,7 +42,7 @@ export const config = {
   /** National switch: path of the certified adapter module (delivered with the official profile); empty until then. */
   switch: { adapterModule: env.SWITCH_ADAPTER_MODULE || '' },
   admin: {
-    email: env.ADMIN_EMAIL || 'admin@bitripay.local',
+    email: env.ADMIN_EMAIL || (env.NODE_ENV === 'production' ? 'admin@bitripay.com' : 'admin@bitripay.local'),
     password: env.ADMIN_PASSWORD || 'Admin123!',
     name: env.ADMIN_NAME || 'BitriPay Admin',
   },
@@ -95,7 +95,7 @@ export const config = {
     port: Number(env.SMTP_PORT || 587),
     user: env.SMTP_USER || '',
     pass: env.SMTP_PASS || '',
-    from: env.SMTP_FROM || 'BitriPay <no-reply@bitripay.local>',
+    from: env.SMTP_FROM || 'BitriPay <support@bitripay.com>',
   },
   sms: {
     provider: env.SMS_PROVIDER || 'console',
