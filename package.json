@@ -32,6 +32,7 @@
     "deps:check": "knip",
     "go-live": "npm run go-live -w @bitripay/api",
     "deploy": "bash scripts/deploy.sh",
+    "release": "bash scripts/release.sh",
     "verify": "bash scripts/verify.sh",
     "smoke": "node scripts/smoke-all.mjs",
     "start": "npm run start -w @bitripay/api",

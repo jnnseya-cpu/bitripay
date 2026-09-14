@@ -1,0 +1,50 @@
+# Production deployment of bitripay.com. Runs on a version tag (v1.2.3) or by hand from the Actions tab, after the
+# verify workflow passed on the same commit. It connects to the production host over SSH, pulls the tag and runs
+# `npm run deploy` there (deploy/.env.production lives on the host, never in GitHub).
+# Required repository secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY (private key of a deploy user that can run docker),
+# optional DEPLOY_PATH (default /opt/bitripay) and DEPLOY_PORT (default 22).
+name: deploy
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to deploy
+        required: true
+        default: main
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency: production-deploy
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          command_timeout: 40m
+          script: |
+            set -euo pipefail
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH || '/opt/bitripay' }}"
+            REF="${{ github.event.inputs.ref || github.ref_name }}"
+            if [ ! -d "$DEPLOY_PATH/.git" ]; then git clone https://github.com/${{ github.repository }}.git "$DEPLOY_PATH"; fi
+            cd "$DEPLOY_PATH"
+            git fetch --all --tags
+            git checkout --force "$REF"
+            test -f deploy/.env.production || { echo "deploy/.env.production is missing on the host (copy deploy/.env.production.example)"; exit 1; }
+            npm run deploy
+      - name: Smoke the public endpoints
+        run: |
+          for u in https://bitripay.com/ https://admin.bitripay.com/ https://api.bitripay.com/api/health; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$u" || true)
+            echo "$u → $code"
+            [ "$code" = "200" ] || exit 1
+          done

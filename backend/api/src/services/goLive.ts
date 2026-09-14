@@ -167,6 +167,7 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
     ok: admins.length > 0 && admins.every((a) => a.two_factor_enabled),
     blocking: false,
     detail: `${admins.filter((a) => a.two_factor_enabled).length}/${admins.length} admins with 2FA`,
+    fix: 'Each administrator: Profile → Two-factor authentication → Set up 2FA (production enforces it after the grace period)',
   });
   items.push({
     id: 'kyc',
@@ -184,7 +185,14 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
     detail: getGatewayControls().sharedSecretAutoConfirm ? 'Shared-secret evidence auto-confirms' : 'Only device-signed evidence settles automatically',
     fix: 'Gateway controls → disable sharedSecretAutoConfirm',
   });
-  items.push({ id: 'smtp', label: 'Email delivery configured', ok: !!getSmtpSettings().host, blocking: false, detail: getSmtpSettings().host ? getSmtpSettings().host : 'Not configured' });
+  items.push({
+    id: 'smtp',
+    label: 'Email delivery configured',
+    ok: !!getSmtpSettings().host,
+    blocking: false,
+    detail: getSmtpSettings().host ? getSmtpSettings().host : 'Not configured',
+    fix: 'SMTP_HOST / SMTP_USER / SMTP_PASS / SMTP_FROM in the API environment, or Messaging → Email in the console',
+  });
   // Rails provisioned from the environment: every enabled live rail must have passed its connectivity check.
   const liveRails = gateways.filter((g) => g.enabled && !['sandbox', 'manual_bank', 'manual_momo', 'open_banking'].includes(g.provider));
   const untested = liveRails.filter((g) => !g.lastHealth?.ok);

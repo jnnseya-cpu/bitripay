@@ -104,3 +104,21 @@ administrator decisions under step-up because they carry regulatory responsibili
 `frontend/mobile/.env.production` and `frontend/payout-device/.env.production` point the Expo production builds at
 `https://api.bitripay.com` (`eas build --profile production`); development builds keep the local servers from
 `app.json`. Register the production package names with the push service before the first store submission.
+
+## Deploying from GitHub
+
+`.github/workflows/deploy.yml` deploys on a version tag (`git tag v1.0.0 && git push --tags`) or by hand from the
+Actions tab. It re-runs the full verification, then connects to the production host over SSH, checks out the tag and
+runs `npm run deploy`, and finally smokes `https://bitripay.com/`, `https://admin.bitripay.com/` and
+`https://api.bitripay.com/api/health`. Add these repository secrets once (Settings → Secrets → Actions):
+
+| Secret | Value |
+| --- | --- |
+| `DEPLOY_HOST` | public address of the production host |
+| `DEPLOY_USER` | deploy user allowed to run Docker |
+| `DEPLOY_SSH_KEY` | private key of that user (the public key in its `~/.ssh/authorized_keys`) |
+| `DEPLOY_PATH` | optional, default `/opt/bitripay` |
+| `DEPLOY_PORT` | optional, default `22` |
+
+`deploy/.env.production` stays on the host. For hosts without git, `npm run release` packs every compiled layer
+(backend, web, admin, shared packages, deploy folder) into `release/bitripay-<version>-<sha>.tar.gz`.
