@@ -64,7 +64,7 @@ aside.toc{position:sticky;top:20px;display:grid;gap:18px}
 .hero-post .eyebrow{color:rgba(255,255,255,.75)}.hero-post h1{color:#fff;font-size:clamp(26px,3.6vw,44px)}.hero-post p{color:rgba(255,255,255,.85);max-width:60ch}.hero-post a.btn{display:inline-block;margin-top:8px;background:#fff;color:#12161c;padding:10px 16px;border-radius:9px;text-decoration:none;font-weight:600}
 .cta-band{margin-top:48px;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:28px;display:flex;gap:20px;align-items:center;flex-wrap:wrap}.cta-band .btn{background:var(--accent);color:#fff;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600}
 footer.site{border-top:1px solid var(--line);background:var(--paper);padding-block:44px 36px;font-size:15px}
-footer .cols{display:grid;grid-template-columns:2fr repeat(3,1fr);gap:32px}@media (max-width:820px){footer .cols{grid-template-columns:1fr 1fr}}@media (max-width:480px){footer .cols{grid-template-columns:1fr}}
+footer .cols{display:grid;grid-template-columns:2fr repeat(4,1fr);gap:28px}@media (max-width:820px){footer .cols{grid-template-columns:1fr 1fr}}@media (max-width:480px){footer .cols{grid-template-columns:1fr}}
 footer h4{margin:0 0 10px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}footer ul{list-style:none;padding:0;margin:0;display:grid;gap:7px}footer a{color:var(--ink);text-decoration:none}footer a:hover{color:var(--accent-2)}
 footer .legal{margin-top:32px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px;display:grid;gap:8px}
 .breadcrumb{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:18px}.breadcrumb a{color:var(--muted)}
@@ -81,6 +81,15 @@ export const FOOTER_LINKS = {
     { label: 'Agents & cash', href: '/app/agents' },
     { label: 'For merchants', href: '/register?role=merchant' },
     { label: 'Become an agent', href: '/register?role=agent' },
+  ],
+  explore: [
+    { label: 'How it works', href: '/how-it-works' },
+    { label: 'Industries', href: '/industries' },
+    { label: 'Enterprise groups', href: '/enterprise' },
+    { label: 'Developers', href: '/developers' },
+    { label: 'Get started', href: '/get-started' },
+    { label: 'Growth & influencers', href: '/growth' },
+    { label: 'Platform status', href: '/status' },
   ],
   company: [
     { label: 'About us', href: '/about' },
@@ -101,6 +110,7 @@ export const FOOTER_LINKS = {
     { label: 'Complaints', href: '/legal/complaints' },
     { label: 'Accessibility', href: '/legal/accessibility' },
     { label: 'Agent & merchant agreement', href: '/legal/agent-merchant-agreement' },
+    { label: 'All policies', href: '/policies' },
   ],
 };
 
@@ -132,13 +142,14 @@ ${seo.languages.map((l) => `<link rel="alternate" hreflang="${l}" href="${escape
 <script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>
 </head>
 <body>
-<header class="top"><div class="wrap"><a class="brand" href="/" aria-label="${escapeHtml(seo.siteName)}"><img src="/brand/logo.svg" alt="${escapeHtml(seo.siteName)}" width="140" height="34"></a><nav class="main"><a href="/blog">Blog</a><a href="/about">About</a><a href="/legal/fees">Fees</a><a href="/login">Sign in</a><a class="cta" href="/register">Open an account</a></nav></div></header>
+<header class="top"><div class="wrap"><a class="brand" href="/" aria-label="${escapeHtml(seo.siteName)}"><img src="/brand/logo.svg" alt="${escapeHtml(seo.siteName)}" width="140" height="34"></a><nav class="main"><a href="/how-it-works">How it works</a><a href="/developers">Developers</a><a href="/blog">Blog</a><a href="/about">About</a><a href="/legal/fees">Fees</a><a href="/login">Sign in</a><a class="cta" href="/register">Open an account</a></nav></div></header>
 <div class="positioning" role="doc-subtitle"><div class="wrap"><strong>${escapeHtml(POSITIONING.oneQr)}</strong><span>${escapeHtml(POSITIONING.payLocal)}</span></div></div>
 <main><div class="wrap">${body}</div></main>
 <footer class="site"><div class="wrap">
 <div class="cols">
 <div><a class="brand" href="/" aria-label="${escapeHtml(seo.siteName)}"><img src="/brand/logo.svg" alt="${escapeHtml(seo.siteName)}" width="140" height="34"></a><p style="color:var(--muted);margin-top:12px;max-width:40ch">Money that works for everyone: the mother selling food at the market, the moto-taxi rider paid by his passengers, the shop on the corner and the family sending money home.</p>${site?.contactEmail ? `<p><a href="mailto:${escapeHtml(site.contactEmail)}">${escapeHtml(site.contactEmail)}</a></p>` : ''}</div>
 <div><h4>Product</h4><ul>${FOOTER_LINKS.product.map((l) => `<li><a href="${l.href}">${l.label}</a></li>`).join('')}</ul></div>
+<div><h4>Explore</h4><ul>${FOOTER_LINKS.explore.map((l) => `<li><a href="${l.href}">${l.label}</a></li>`).join('')}</ul></div>
 <div><h4>Company</h4><ul>${FOOTER_LINKS.company.map((l) => `<li><a href="${l.href}">${l.label}</a></li>`).join('')}</ul></div>
 <div><h4>Legal</h4><ul>${FOOTER_LINKS.legal.map((l) => `<li><a href="${l.href}">${l.label}</a></li>`).join('')}</ul></div>
 </div>
@@ -305,6 +316,10 @@ BitriPay is a digital wallet and payment platform built so that anyone with a ph
 - [Home](${siteUrl()}/): product overview
 - [Open an account](${absoluteUrl('/register')})
 - [About us](${absoluteUrl('/about')}): mission and who we build for
+- [How it works](${absoluteUrl('/how-it-works')}): account, funding, paying, cashing out, tiers, fees, controls
+- [Developers](${absoluteUrl('/developers')}): REST API, scopes, hosted and embedded checkout, sandbox, webhooks
+- [Industries](${absoluteUrl('/industries')}) · [Enterprise groups](${absoluteUrl('/enterprise')}) · [Get started](${absoluteUrl('/get-started')}) · [Growth & influencers](${absoluteUrl('/growth')})
+- [All policies](${absoluteUrl('/policies')}) · [Platform status](${absoluteUrl('/status')})
 - [Fees & charges](${absoluteUrl('/legal/fees')})
 - [Security](${absoluteUrl('/legal/security')})
 - [Safeguarding of funds](${absoluteUrl('/legal/safeguarding')})

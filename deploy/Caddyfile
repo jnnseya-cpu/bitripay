@@ -17,7 +17,7 @@ www.{$DOMAIN} {
 		X-Frame-Options SAMEORIGIN
 	}
 	# server-rendered pages, feeds, crawler files, BitriPay Lite and the partner API are served by the API container
-	@api path /api/* /v1/* /lite* /blog* /legal/* /about /contact /brand* /sitemap.xml /feed.xml /robots.txt /llms.txt /llms-full.txt
+	@api path /api/* /v1/* /lite* /blog* /legal/* /about /contact /how-it-works /industries /enterprise /developers /get-started /growth /policies /status /status.json /brand* /sitemap.xml /feed.xml /robots.txt /llms.txt /llms-full.txt
 	handle @api {
 		reverse_proxy api:4000
 	}

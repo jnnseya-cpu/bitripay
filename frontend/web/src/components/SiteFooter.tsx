@@ -13,6 +13,15 @@ export const FOOTER_LINKS = {
     { label: 'For merchants', to: '/register?role=merchant' },
     { label: 'Become an agent', to: '/register?role=agent' },
   ],
+  explore: [
+    { label: 'How it works', href: '/how-it-works' },
+    { label: 'Industries', href: '/industries' },
+    { label: 'Enterprise groups', href: '/enterprise' },
+    { label: 'Developers', href: '/developers' },
+    { label: 'Get started', href: '/get-started' },
+    { label: 'Growth & influencers', href: '/growth' },
+    { label: 'Platform status', href: '/status' },
+  ],
   company: [
     { label: 'About us', href: '/about' },
     { label: 'Blog', href: '/blog' },
@@ -32,6 +41,7 @@ export const FOOTER_LINKS = {
     { label: 'Complaints', href: '/legal/complaints' },
     { label: 'Accessibility', href: '/legal/accessibility' },
     { label: 'Agent & merchant agreement', href: '/legal/agent-merchant-agreement' },
+    { label: 'All policies', href: '/policies' },
   ],
 };
 
@@ -82,6 +92,16 @@ export function SiteFooter() {
             {FOOTER_LINKS.product.map((l) => (
               <li key={l.to}>
                 <Link to={l.to}>{l.label}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h4>Explore</h4>
+          <ul>
+            {FOOTER_LINKS.explore.map((l) => (
+              <li key={l.href}>
+                <a href={l.href}>{l.label}</a>
               </li>
             ))}
           </ul>

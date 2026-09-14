@@ -794,7 +794,7 @@
 }
 .lp-footer-grid {
   display: grid;
-  grid-template-columns: 1.6fr repeat(3, 1fr);
+  grid-template-columns: 1.6fr repeat(4, 1fr);
   gap: 32px;
 }
 @media (max-width: 860px) {

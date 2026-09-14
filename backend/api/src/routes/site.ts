@@ -1,6 +1,7 @@
 /**
  * Public, server-rendered marketing surface (behind the web domain via the reverse proxy):
- *   /blog, /blog/:slug, /legal/:slug, /about, /contact, /sitemap.xml, /feed.xml, /robots.txt, /llms.txt, /llms-full.txt
+ *   /blog, /blog/:slug, /legal/:slug, /about, /contact, /how-it-works, /industries, /enterprise, /developers, /get-started,
+ *   /growth, /policies, /status (+ /status.json), /sitemap.xml, /feed.xml, /robots.txt, /llms.txt, /llms-full.txt
  * plus the JSON blog API under /api/blog for the apps.
  */
 import { Router } from 'express';
@@ -13,6 +14,7 @@ import { renderMarkdown } from '../services/markdown';
 import { applyDynamicLinks, sitemapXml, robotsTxt, recordReferrer, bumpPageview } from '../services/seo';
 import { getSeoSettings } from '../services/settings';
 import { blogIndexPage, blogPostPage, legalPage, rssXml, llmsTxt } from '../site/render';
+import { howItWorksPage, industriesPage, enterprisePage, developersPage, getStartedPage, growthPage, policiesPage, statusPage, statusData, PRODUCT_PAGES } from '../site/pages';
 
 export const siteRouter = Router();
 const publicLimit = rateLimit({ windowMs: 60_000, max: 240, keyPrefix: 'site' });
@@ -49,6 +51,16 @@ function pageHtml(slug: string) {
 siteRouter.get('/legal/:slug', publicLimit, (req, res) => res.type('html').send(legalPage(pageHtml(String(req.params.slug)), 'legal')));
 siteRouter.get('/about', publicLimit, (_req, res) => res.type('html').send(legalPage(pageHtml('about'), 'about')));
 siteRouter.get('/contact', publicLimit, (_req, res) => res.type('html').send(legalPage(pageHtml('contact'), 'contact')));
+// Product pages: every figure is read from the running platform at request time.
+siteRouter.get('/how-it-works', publicLimit, (_req, res) => res.type('html').send(howItWorksPage()));
+siteRouter.get('/industries', publicLimit, (_req, res) => res.type('html').send(industriesPage()));
+siteRouter.get('/enterprise', publicLimit, (_req, res) => res.type('html').send(enterprisePage()));
+siteRouter.get('/developers', publicLimit, (_req, res) => res.type('html').send(developersPage()));
+siteRouter.get('/get-started', publicLimit, (_req, res) => res.type('html').send(getStartedPage()));
+siteRouter.get('/growth', publicLimit, (_req, res) => res.type('html').send(growthPage()));
+siteRouter.get('/policies', publicLimit, (_req, res) => res.type('html').send(policiesPage()));
+siteRouter.get('/status', publicLimit, (_req, res) => res.setHeader('Cache-Control', 'no-store').type('html').send(statusPage()));
+siteRouter.get('/status.json', publicLimit, (_req, res) => res.setHeader('Cache-Control', 'no-store').json(statusData()));
 
 siteRouter.get('/sitemap.xml', (_req, res) => {
   const posts = listPosts({ pageSize: 100 }).items;
@@ -60,6 +72,7 @@ siteRouter.get('/sitemap.xml', (_req, res) => {
         { path: '/', changefreq: 'weekly', priority: 1 },
         { path: '/register', changefreq: 'monthly', priority: 0.8 },
         { path: '/about', changefreq: 'monthly', priority: 0.7 },
+        ...PRODUCT_PAGES.map((p) => ({ path: p.path, changefreq: p.path === '/status' ? 'hourly' : 'monthly', priority: p.path === '/developers' || p.path === '/how-it-works' ? 0.8 : 0.6 })),
         { path: '/blog', changefreq: 'daily', priority: 0.9 },
         ...posts.map((p) => ({ path: p.url, lastmod: p.updatedAt, changefreq: 'weekly', priority: 0.8 })),
         ...pages.map((p) => ({ path: `/legal/${p.slug}`, lastmod: p.updatedAt, changefreq: 'yearly', priority: 0.3 })),

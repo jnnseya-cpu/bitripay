@@ -32,6 +32,24 @@ describe('public site', () => {
       expect(r.status, path).toBe(200);
       expect(r.text).toContain('<h1>');
     }
+    for (const path of ['/how-it-works', '/industries', '/enterprise', '/developers', '/get-started', '/growth', '/policies', '/status']) {
+      const r = await request(app).get(path);
+      expect(r.status, path).toBe(200);
+      expect(r.text).toContain('<h1>');
+      expect(r.text).toContain('href="/developers"');
+    }
+    const dev = await request(app).get('/developers');
+    expect(dev.text).toContain('/payment_intents');
+    expect(dev.text).toContain('payment_intents:write');
+    expect(dev.text).toContain('+243000000501');
+    const how = await request(app).get('/how-it-works');
+    expect(how.text).toContain('Afrimoney');
+    expect(how.text).toContain('0.75 %');
+    const status = await request(app).get('/status.json');
+    expect(status.body.overall).toBe('operational');
+    expect(status.body.integrity.eventChain.ok).toBe(true);
+    const policies = await request(app).get('/policies');
+    expect(policies.text).toContain('/legal/privacy');
     const about = await request(app).get('/about');
     expect(about.text).toContain('moto-taxi rider');
     expect(about.text).toContain('"@type":"AboutPage"');
@@ -39,6 +57,7 @@ describe('public site', () => {
     expect(sitemap.status).toBe(200);
     expect(sitemap.text).toContain('/blog/sending-money-uk-to-congo-costs-speed-safety');
     expect(sitemap.text).toContain('/legal/privacy');
+    expect(sitemap.text).toContain('/developers');
     const robots = await request(app).get('/robots.txt');
     expect(robots.text).toContain('Sitemap:');
     expect(robots.text).toContain('GPTBot');
