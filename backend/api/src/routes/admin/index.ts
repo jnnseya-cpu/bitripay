@@ -50,6 +50,7 @@ import { emitAsync } from '../../services/comms/engine';
 import { adminInsightsRouter } from './insights';
 import { adminSystemRouter } from './system';
 import { adminWhatsAppRouter } from './whatsapp';
+import { adminSupervisionRouter } from './supervision';
 import { assertPricingAboveFloor } from '../../services/assist/gateway';
 import { toBase as toBaseMinor } from '../../services/currencies';
 /** Price-currency minor units → US dollars (the base currency is USD-denominated; other bases convert at the platform rate). */
@@ -185,6 +186,7 @@ adminRouter.use('/comms', adminCommsRouter);
 adminRouter.use('/insights', adminInsightsRouter);
 adminRouter.use('/system', adminSystemRouter);
 adminRouter.use('/channels/whatsapp', adminWhatsAppRouter);
+adminRouter.use('/supervision', adminSupervisionRouter);
 
 // ---------------- Dashboard ----------------
 adminRouter.get('/stats', requirePermission('reports'), (_req, res) => {

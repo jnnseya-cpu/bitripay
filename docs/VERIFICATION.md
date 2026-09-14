@@ -126,6 +126,7 @@ area to them.
 | Credit readiness signal with explained factors, consented lender access, verified income from linked banks | `services/creditReadiness.ts`, `services/openBanking.ts` | `growth.test.ts` "credit readiness"; `openBanking.test.ts` |
 | Open banking: linking under consent, statement import, income verification, pay by bank, VRP mandates | `services/openBanking.ts`, `payments/openBanking.ts`, web **Linked banks** | `openBanking.test.ts` (3 suites) |
 | Virtual cards, bills, top-ups, gift cards, P2P exchange with escrow and disputes, referrals, support | `services/{virtualCards,services,p2p,referrals,support}.ts` | `core.test.ts` "services & referrals", "P2P trading" |
+| Regulatory supervision: normalised operations journal (pseudonymised parties, KYC tier, channel, evidence ref) exported as CSV/JSON with a SHA-256 integrity manifest and event-chain state; real-time supervisory report; audit-logged exports | `services/supervision.ts`, `routes/admin/supervision.ts`, admin **Regulatory supervision** | `supervision.test.ts` (4 tests) |
 
 ## Known limits (stated, not hidden)
 
