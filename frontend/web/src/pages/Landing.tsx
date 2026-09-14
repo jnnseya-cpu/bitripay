@@ -194,8 +194,8 @@ export function Landing() {
             <a href="/legal/fees" className="hide-sm">
               Fees
             </a>
-            <button type="button" className="lp-btn ghost" onClick={toggleTheme} aria-label="Toggle dark mode" style={{ padding: '8px 10px' }}>
-              {theme === 'dark' ? 'Light' : 'Dark'}
+            <button type="button" className="lp-btn ghost" onClick={toggleTheme} aria-label="Toggle dark mode" aria-pressed={theme === 'dark'} style={{ padding: '8px 10px' }}>
+              {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
             </button>
             {user ? (
               <Link to="/app" className="lp-btn light">

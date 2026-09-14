@@ -125,8 +125,14 @@
   color: var(--lp-night);
 }
 .lp-btn.ghost {
+  /* the theme toggle is a <button>: without an explicit background the browser paints it white, hiding the white label */
+  background: transparent;
   border-color: rgba(255, 255, 255, 0.35);
   color: #fff;
+  font: inherit;
+}
+.lp-btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 .lp-btn.ghost.dark {
   border-color: var(--lp-line);
