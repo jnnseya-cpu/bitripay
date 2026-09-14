@@ -30,6 +30,10 @@
     "shared/sdk-js": {
       "entry": ["src/*.test.ts"],
       "project": ["src/**/*.ts"]
+    },
+    "shared/charts": {
+      "entry": ["src/*.test.ts"],
+      "project": ["src/**/*.ts"]
     }
   },
   "ignoreDependencies": [],

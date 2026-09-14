@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@bitripay/bitriqr": "1.0.0",
+    "@bitripay/charts": "1.0.0",
     "@bitripay/shared": "1.0.0",
     "@simplewebauthn/browser": "^13.3.0",
     "html5-qrcode": "^2.3.8",

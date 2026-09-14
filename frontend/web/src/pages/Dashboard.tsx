@@ -6,12 +6,16 @@ import { PageHeader, TxRow, Empty, useAsync, QrImage } from '../components/ui';
 import type { Transaction } from '@bitripay/shared';
 import { convertMinor } from '@bitripay/shared';
 import { isMerchantClass } from '@bitripay/shared';
+import { areaChart, donutChart, type AnalyticsSeries } from '@bitripay/charts';
+import { Chart } from '@bitripay/charts/react';
+import { tickMoney } from './Insights';
 
 export function Dashboard() {
   const { user, wallets, config, money, currency } = useStore();
   const t = useT();
   const nav = useNavigate();
   const tx = useAsync(() => api.get<{ items: Transaction[] }>('/api/wallets/transactions?pageSize=8'), []);
+  const insights = useAsync(() => api.get<AnalyticsSeries>('/api/account/analytics?days=30'), []);
   const base = config?.baseCurrency ?? 'USD';
   const total = wallets.reduce((sum, w) => sum + (config ? convertMinor(w.balance, currency(w.currency), currency(base)) : 0), 0);
   const m = config?.modules ?? {};
@@ -73,6 +77,42 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+      {insights.data && insights.data.totals.count > 0 && (
+        <div className="grid cols-3 mt">
+          <div className="card" style={{ gridColumn: 'span 2' }}>
+            <div className="card-title">
+              <h3>{t('nav.insights')}</h3>
+              <Link to="/app/insights" className="small">
+                {t('dash.viewAll')} →
+              </Link>
+            </div>
+            <Chart
+              scene={areaChart(
+                insights.data.trend.labels.map((l) => l.slice(5)),
+                [
+                  { name: t('insights.in'), values: insights.data.trend.in },
+                  { name: t('insights.out'), values: insights.data.trend.out },
+                ],
+                { format: tickMoney(money, base), height: 180 },
+              )}
+            />
+          </div>
+          <div className="card">
+            <h3>
+              {t('insights.in')} / {t('insights.out')}
+            </h3>
+            <Chart
+              scene={donutChart(
+                [
+                  { label: t('insights.in'), value: insights.data.totals.in },
+                  { label: t('insights.out'), value: insights.data.totals.out },
+                ],
+                { format: (m) => money(m, base), centre: money(insights.data.totals.in - insights.data.totals.out, base), width: 300, height: 170 },
+              )}
+            />
+          </div>
+        </div>
+      )}
       <h3 className="mt">{t('dash.quickActions')}</h3>
       <div className="actions-grid">
         {actions.map(([to, ico, label]) => (

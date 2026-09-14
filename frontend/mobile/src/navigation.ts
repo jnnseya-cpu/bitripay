@@ -37,6 +37,7 @@ export type RootParams = {
   Agent: undefined;
   Offline: undefined;
   Savings: undefined;
+  Insights: undefined;
 };
 
 export type Nav = NativeStackNavigationProp<RootParams>;

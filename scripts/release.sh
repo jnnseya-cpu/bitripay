@@ -16,7 +16,7 @@ mkdir -p "$OUT/backend/api" "$OUT/frontend/web" "$OUT/frontend/admin" "$OUT/shar
 cp -r backend/api/dist backend/api/package.json backend/api/public backend/api/Dockerfile backend/api/.env.example "$OUT/backend/api/"
 cp -r frontend/web/dist frontend/web/nginx.conf frontend/web/Dockerfile "$OUT/frontend/web/"
 cp -r frontend/admin/dist frontend/admin/nginx.conf frontend/admin/Dockerfile "$OUT/frontend/admin/"
-for p in core bitriqr sdk-node sdk-js; do mkdir -p "$OUT/shared/$p"; cp -r "shared/$p/dist" "shared/$p/package.json" "$OUT/shared/$p/"; done
+for p in core bitriqr charts sdk-node sdk-js; do mkdir -p "$OUT/shared/$p"; cp -r "shared/$p/dist" "shared/$p/package.json" "$OUT/shared/$p/"; done
 cp -r deploy scripts/deploy.sh package.json package-lock.json "$OUT/"
 git log -1 --format='%H %s' > "$OUT/RELEASE"
 tar -C release -czf "$OUT.tar.gz" "$(basename "$OUT")"

@@ -3,6 +3,8 @@ import { api, qs, API_BASE, getToken } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, Field, Input, PageHeader, Select, Table, fmtDate, useAsync } from '../components/ui';
 import { TRANSACTION_TYPE_LABELS } from '@bitripay/shared';
+import { columnChart, donutChart, lineChart } from '@bitripay/charts';
+import { Chart } from '@bitripay/charts/react';
 
 interface Report {
   generatedAt: string;
@@ -144,6 +146,46 @@ export function Supervision() {
               <div className="tiny muted">Sanctions entries loaded</div>
               <div style={{ fontSize: 28, fontWeight: 700 }}>{r.aml.sanctionsEntries.toLocaleString()}</div>
               <div className="tiny">{r.accounts.newInPeriod} accounts opened in period</div>
+            </div>
+          </div>
+
+          <div className="grid cols-3 mt">
+            <div className="card">
+              <h4>Last 24 hours</h4>
+              <Chart
+                scene={lineChart(
+                  r.transactions.hourly.map((h) => h.hour.slice(11) + 'h'),
+                  [
+                    { name: 'Completed', values: r.transactions.hourly.map((h) => h.completed) },
+                    { name: 'Failed', values: r.transactions.hourly.map((h) => h.failed) },
+                  ],
+                  { format: (v) => String(Math.round(v)), height: 200 },
+                )}
+              />
+            </div>
+            <div className="card">
+              <h4>Completed operations by channel</h4>
+              <Chart
+                scene={donutChart(
+                  Object.entries(r.transactions.channels).map(([label, c]) => ({ label, value: c.count })),
+                  { format: (v) => String(Math.round(v)), centre: String(Object.values(r.transactions.channels).reduce((a, c) => a + c.count, 0)), height: 200 },
+                )}
+              />
+            </div>
+            <div className="card">
+              <h4>Accounts by KYC tier</h4>
+              <Chart
+                scene={columnChart(
+                  Array.from(new Set(r.accounts.kyc.map((k) => k.tierLabel.replace(/^Tier \d · /, '')))),
+                  ['user', 'merchant', 'agent'].map((role) => ({
+                    name: role,
+                    values: Array.from(new Set(r.accounts.kyc.map((k) => k.tierLabel))).map((tier) =>
+                      r.accounts.kyc.filter((k) => k.role === role && k.tierLabel === tier).reduce((a, k) => a + k.count, 0),
+                    ),
+                  })),
+                  { stacked: true, format: (v) => String(Math.round(v)), height: 200 },
+                )}
+              />
             </div>
           </div>
 

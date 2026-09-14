@@ -1,0 +1,40 @@
+{
+  "name": "@bitripay/charts",
+  "version": "1.0.0",
+  "description": "BitriPay charts: one geometry engine for bar, column, radar, line, area, gantt, pie, donut, treemap, scatter, histogram, bubble and heatmap charts; renders as SVG, react-native-svg or markup",
+  "main": "dist/cjs/index.js",
+  "types": "dist/cjs/index.d.ts",
+  "module": "dist/esm/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json && tsc -p tsconfig.esm.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types src/*.test.ts"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/cjs/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/esm/index.js"
+    },
+    "./react": {
+      "types": "./dist/cjs/react.d.ts",
+      "import": "./dist/esm/react.js",
+      "require": "./dist/cjs/react.js",
+      "default": "./dist/esm/react.js"
+    }
+  },
+  "license": "MIT",
+  "sideEffects": false,
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  }
+}

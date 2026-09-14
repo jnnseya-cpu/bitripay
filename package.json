@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "build": "npm run build:shared && npm run build -w @bitripay/api && npm run build -w @bitripay/web && npm run build -w @bitripay/admin",
-    "build:shared": "npm run build -w @bitripay/shared && npm run build -w @bitripay/bitriqr && npm run build -w @bitripay/sdk && npm run build -w @bitripay/checkout-js",
+    "build:shared": "npm run build -w @bitripay/shared && npm run build -w @bitripay/bitriqr && npm run build -w @bitripay/charts && npm run build -w @bitripay/sdk && npm run build -w @bitripay/checkout-js",
     "build:backend": "npm run build -w @bitripay/api",
     "build:frontend": "npm run build -w @bitripay/web && npm run build -w @bitripay/admin",
     "dev": "npm run build:shared && concurrently -n api,web,admin -c blue,green,magenta \"npm run dev -w @bitripay/api\" \"npm run dev -w @bitripay/web\" \"npm run dev -w @bitripay/admin\"",
@@ -20,7 +20,7 @@
     "dev:admin": "npm run dev -w @bitripay/admin",
     "seed": "npm run seed -w @bitripay/api",
     "test": "npm run build:shared && npm run test:shared && npm run test:backend",
-    "test:shared": "npm run test -w @bitripay/shared && npm run test -w @bitripay/bitriqr && npm run test -w @bitripay/sdk && npm run test -w @bitripay/checkout-js",
+    "test:shared": "npm run test -w @bitripay/shared && npm run test -w @bitripay/bitriqr && npm run test -w @bitripay/charts && npm run test -w @bitripay/sdk && npm run test -w @bitripay/checkout-js",
     "test:backend": "npm run test -w @bitripay/api",
     "typecheck": "npm run build:shared && npm run typecheck -w @bitripay/api && npm run typecheck -w @bitripay/web && npm run typecheck -w @bitripay/admin",
     "typecheck:mobile": "cd frontend/mobile && npm run typecheck",

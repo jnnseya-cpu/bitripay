@@ -3,6 +3,9 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { PageHeader, useAsync, Loading, Table, StatusBadge, fmtDate } from '../components/ui';
 import { TRANSACTION_TYPE_LABELS } from '@bitripay/shared';
+import { areaChart } from '@bitripay/charts';
+import { Chart } from '@bitripay/charts/react';
+import { tickMoney } from './Analytics';
 
 export function Dashboard() {
   const { money, config } = useStore();
@@ -20,7 +23,6 @@ export function Dashboard() {
     ['P2P disputes', s.pending.disputes, '/p2p'],
   ];
   const daily = (s.daily as any[]).filter((d) => d.currency === base);
-  const max = Math.max(...daily.map((d) => d.volume), 1);
   return (
     <div>
       <PageHeader title="Analytics dashboard" subtitle="Real-time overview of users, volume, revenue and pending work" />
@@ -90,15 +92,25 @@ export function Dashboard() {
       </div>
       <div className="grid cols-3 mt">
         <div className="card" style={{ gridColumn: 'span 2' }}>
-          <h4>Daily volume · {base} (30 days)</h4>
+          <div className="row between">
+            <h4>Daily volume · {base} (30 days)</h4>
+            <Link to="/analytics" className="small">
+              All charts →
+            </Link>
+          </div>
           {daily.length === 0 ? (
             <div className="muted small">No data</div>
           ) : (
-            <div className="row" style={{ alignItems: 'flex-end', height: 160, gap: 4 }}>
-              {daily.map((d) => (
-                <div key={d.day} title={`${d.day}: ${money(d.volume, base)} (${d.c} tx)`} style={{ flex: 1, background: 'var(--primary)', height: `${(d.volume / max) * 100}%`, borderRadius: 4 }} />
-              ))}
-            </div>
+            <Chart
+              scene={areaChart(
+                daily.map((d) => String(d.day).slice(5)),
+                [
+                  { name: 'Volume', values: daily.map((d) => d.volume) },
+                  { name: 'Fees', values: daily.map((d) => d.fees ?? 0) },
+                ],
+                { format: tickMoney(money, base), height: 200 },
+              )}
+            />
           )}
         </div>
         <div className="card">

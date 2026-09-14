@@ -13,6 +13,7 @@ import { listLanguages } from '../services/cms';
 import { COUNTRY_BY_CODE } from '@bitripay/shared';
 import { COMMS_CATEGORIES, COMMS_CHANNELS, COMMS_EVENTS } from '../services/comms/catalogue';
 import { emitAsync, getCommsPrefs, setCommsPrefs } from '../services/comms/engine';
+import { accountAnalytics } from '../services/analytics';
 
 export const accountRouter = Router();
 accountRouter.use(requireAuth);
@@ -150,6 +151,12 @@ accountRouter.get('/pools', (req, res) => res.json({ items: poolsForOwner(req.us
 accountRouter.get('/promo', (req, res) => res.json({ items: listPromoCredits(req.user!.id) }));
 accountRouter.get('/notifications', (req, res) => res.json({ items: listNotifications(req.user!.id), unread: unreadCount(req.user!.id) }));
 /** Notification preferences: opt out per category and channel; mandatory notices (security, money, legal) are always sent. */
+/** Chart series for the signed-in account (customer, merchant or agent), last `days` days (7–365). */
+accountRouter.get('/analytics', (req, res) => {
+  const days = Math.min(365, Math.max(7, Number(req.query.days ?? 30) || 30));
+  res.json(accountAnalytics(req.user!, days));
+});
+
 accountRouter.get('/notifications/preferences', (req, res) =>
   res.json({
     channels: COMMS_CHANNELS,

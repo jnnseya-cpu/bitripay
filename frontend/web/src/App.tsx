@@ -19,6 +19,7 @@ import { Bills, Topup, GiftCards } from './pages/Services';
 import { P2P } from './pages/P2P';
 import { Transactions, TransactionDetail } from './pages/Transactions';
 import { Statements } from './pages/Statements';
+import { Insights } from './pages/Insights';
 import { Assist } from './pages/Assist';
 import { ConfirmCurrency } from './pages/ConfirmCurrency';
 import { Referrals } from './pages/Referrals';
@@ -260,6 +261,14 @@ export function App() {
           element={
             <Protected>
               <Statements />
+            </Protected>
+          }
+        />
+        <Route
+          path="/app/insights"
+          element={
+            <Protected>
+              <Insights />
             </Protected>
           }
         />

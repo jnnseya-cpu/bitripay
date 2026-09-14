@@ -22,6 +22,7 @@ import { Merchant, MerchantGateway, Agent } from './src/screens/Business';
 import { Offline } from './src/screens/Offline';
 import { Savings } from './src/screens/Savings';
 import { PayHub, WalletHub } from './src/screens/Hubs';
+import { Insights } from './src/screens/Insights';
 import type { RootParams } from './src/navigation';
 
 const Stack = createNativeStackNavigator<RootParams>();
@@ -129,6 +130,7 @@ function Root() {
             <Stack.Screen name="Settings" component={Settings} />
             <Stack.Screen name="Security" component={Security} />
             <Stack.Screen name="Statements" component={Statements} />
+            <Stack.Screen name="Insights" component={Insights} />
             <Stack.Screen name="Assist" component={Assist} />
             <Stack.Screen name="Kyc" component={Kyc} />
             <Stack.Screen name="Referrals" component={Referrals} />

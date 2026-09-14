@@ -3,6 +3,10 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, AmountInput, Avatar, Button, Empty, Field, Input, KV, PageHeader, PinModal, StatusBadge, Tabs, useAsync, useDebounce, QrImage } from '../components/ui';
 import type { PublicUser } from '@bitripay/shared';
+import { Link } from 'react-router-dom';
+import { columnChart, type AnalyticsSeries } from '@bitripay/charts';
+import { Chart } from '@bitripay/charts/react';
+import { tickMoney } from './Insights';
 
 export function AgentDashboard() {
   const { user, money, wallets, toast, refreshWallets, config } = useStore();
@@ -10,6 +14,7 @@ export function AgentDashboard() {
   const payouts = useAsync(() => (tab === 'payouts' ? api.get<{ items: any[] }>('/api/payouts/agent/queue') : Promise.resolve(null)), [tab]);
   const [evidence, setEvidence] = useState<{ id: string; text: string; externalRef: string } | null>(null);
   const stats = useAsync(() => api.get<any>('/api/agents/me/stats'), [tab]);
+  const insights = useAsync(() => api.get<AnalyticsSeries>('/api/account/analytics?days=30'), [tab]);
   const requests = useAsync(() => api.get<{ items: any[] }>('/api/agents/cash-requests'), [tab]);
   const [customer, setCustomer] = useState('');
   const dCustomer = useDebounce(customer, 300);
@@ -90,6 +95,26 @@ export function AgentDashboard() {
           </div>
         </div>
       </div>
+      {!!insights.data?.extras.cash && (
+        <div className="card mt">
+          <div className="card-title">
+            <h3>Cash-in and cash-out per day (30 days)</h3>
+            <Link to="/app/insights" className="small">
+              All charts →
+            </Link>
+          </div>
+          <Chart
+            scene={columnChart(
+              (insights.data.extras.cash as { labels: string[] }).labels.map((l) => l.slice(5)),
+              [
+                { name: 'Cash-in', values: (insights.data.extras.cash as { cashIn: number[] }).cashIn },
+                { name: 'Cash-out', values: (insights.data.extras.cash as { cashOut: number[] }).cashOut },
+              ],
+              { format: tickMoney(money, config?.baseCurrency ?? 'USD'), labels: false, height: 200 },
+            )}
+          />
+        </div>
+      )}
       <div className="mt" />
       <Tabs
         tabs={[

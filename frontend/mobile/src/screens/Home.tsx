@@ -152,6 +152,7 @@ export function More() {
     ['Support', '💬', t('nav.support'), 'support'],
     ['Kyc', '🪪', t('settings.kyc'), 'kyc'],
     ['Statements', '🧾', 'Statements'],
+    ['Insights', '📊', t('nav.insights')],
     ['Security', '🔐', t('settings.security')],
     ['Settings', '⚙️', t('nav.settings')],
   ];

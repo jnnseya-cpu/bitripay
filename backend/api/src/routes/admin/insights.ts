@@ -10,6 +10,7 @@ import { validate } from '../../lib/http';
 import { requirePermission } from '../../middleware/permissions';
 import { audit } from '../../services/audit';
 import { getUserById } from '../../services/users';
+import { platformAnalytics } from '../../services/analytics';
 import { toTransaction } from '../../services/ledger';
 import { getCurrency } from '../../services/currencies';
 import { toMinor } from '@bitripay/shared';
@@ -37,6 +38,8 @@ export const adminInsightsRouter = Router();
 const num = (v: unknown, d: number) => (v === undefined || v === '' ? d : Number(v));
 
 // ---------------------------------------------------------------- payment graph (identities: compliance officers only)
+/** Platform-wide chart series for the console, last `days` days (7–365). */
+adminInsightsRouter.get('/analytics', requirePermission('reports'), (req, res) => res.json(platformAnalytics(Math.min(365, Math.max(7, Number(req.query.days ?? 30) || 30)))));
 adminInsightsRouter.get('/graph/stats', requirePermission('reports'), (_req, res) => res.json(graphStats()));
 adminInsightsRouter.get('/graph/nodes/:id', requirePermission('compliance'), (req, res) => res.json({ node: getNode(String(req.params.id)) }));
 adminInsightsRouter.get('/graph/neighbours/:id', requirePermission('compliance'), (req, res) =>

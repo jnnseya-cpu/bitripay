@@ -8,12 +8,7 @@
     "instructions": "Use the reference shown; funds are credited once the transfer is confirmed."
   },
   "currencies": {
-    "enable": [
-      "USD",
-      "GBP",
-      "EUR",
-      "CDF"
-    ],
+    "enable": ["USD", "GBP", "EUR", "CDF"],
     "disable": [
       "INR",
       "BDT",
@@ -132,9 +127,7 @@
         "dataProtectionRef": "ICO ZA000000",
         "consumerDisclosureUrl": "https://www.bitripay.com/legal/terms"
       },
-      "payoutCurrencies": [
-        "USD"
-      ],
+      "payoutCurrencies": ["USD"],
       "maxAmount": 100000000,
       "estimatedPayoutMinutes": 15
     }
@@ -143,16 +136,7 @@
     {
       "fullName": "Second Administrator",
       "email": "approver@bitripay.com",
-      "permissions": [
-        "approvals",
-        "issuance",
-        "treasury",
-        "settings",
-        "gateways",
-        "kyc",
-        "users",
-        "transactions"
-      ]
+      "permissions": ["approvals", "issuance", "treasury", "settings", "gateways", "kyc", "users", "transactions"]
     }
   ],
   "smtp": {

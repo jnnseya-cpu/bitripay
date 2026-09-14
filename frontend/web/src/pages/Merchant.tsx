@@ -3,13 +3,18 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, AmountInput, Button, Chip, CopyButton, Empty, Field, Input, KV, Modal, PageHeader, QrImage, Select, StatusBadge, Tabs, TxRow, useAsync } from '../components/ui';
+import { areaChart, donutChart, type AnalyticsSeries } from '@bitripay/charts';
+import { Chart } from '@bitripay/charts/react';
+import { tickMoney } from './Insights';
 import type { ApiKey, PaymentRequest, Transaction } from '@bitripay/shared';
 import { isMerchantClass } from '@bitripay/shared';
 
 export function MerchantDashboard() {
-  const { user, money } = useStore();
+  const { user, money, config } = useStore();
+  const base = config?.baseCurrency ?? 'USD';
   const stats = useAsync(() => api.get<any>('/api/merchant/stats'), []);
   const tx = useAsync(() => api.get<{ items: Transaction[] }>('/api/wallets/transactions?direction=in&pageSize=10'), []);
+  const insights = useAsync(() => api.get<AnalyticsSeries>('/api/account/analytics?days=30'), []);
   const [apply, setApply] = useState('');
   const { refresh } = useStore();
   if (!isMerchantClass(user?.role) && user?.role !== 'admin') {
@@ -72,6 +77,36 @@ export function MerchantDashboard() {
           </div>
         </div>
       </div>
+      {insights.data && insights.data.totals.count > 0 && (
+        <div className="grid cols-3 mt">
+          <div className="card" style={{ gridColumn: 'span 2' }}>
+            <div className="card-title">
+              <h3>Sales per day (30 days)</h3>
+              <Link to="/app/insights" className="small">
+                All charts →
+              </Link>
+            </div>
+            <Chart
+              scene={areaChart(
+                insights.data.trend.labels.map((l) => l.slice(5)),
+                [{ name: 'Received', values: insights.data.trend.in }],
+                { format: tickMoney(money, base), height: 180 },
+              )}
+            />
+          </div>
+          <div className="card">
+            <h3>Payments by method</h3>
+            <Chart
+              scene={donutChart((insights.data.extras.methods as { label: string; value: number }[] | undefined) ?? [], {
+                format: (m) => money(m, base),
+                centre: money(insights.data.totals.in, base),
+                width: 300,
+                height: 170,
+              })}
+            />
+          </div>
+        </div>
+      )}
       <div className="grid cols-3 mt">
         <div className="card" style={{ gridColumn: 'span 2' }}>
           <h3>Daily volume</h3>

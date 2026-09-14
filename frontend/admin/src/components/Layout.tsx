@@ -73,6 +73,7 @@ const NAV: { section: string; items: { to: string; label: string; ico: string; p
       { to: '/finops', label: 'Finance operations', ico: '🧾', perm: 'transactions' },
       { to: '/risk', label: 'Risk & compliance', ico: '🛡️', perm: 'compliance' },
       { to: '/supervision', label: 'Regulatory supervision', ico: '🏛️', perm: 'reports' },
+      { to: '/analytics', label: 'Analytics & charts', ico: '📊', perm: 'reports' },
       { to: '/intelligence', label: 'Intelligence', ico: '🧠', perm: 'agents' },
     ],
   },

@@ -91,6 +91,7 @@ export function WalletHub() {
         <Tile ico="🎯" label={t('nav.savings')} onPress={() => nav.navigate('Savings')} />
         {m.virtualCards !== false && <Tile ico="💳" label={t('nav.cards')} onPress={() => nav.navigate('Cards')} />}
         <Tile ico="📑" label={t('nav.statements')} hint="Bank-grade statements" onPress={() => nav.navigate('Statements')} />
+        <Tile ico="📊" label={t('nav.insights')} hint="Every chart family" onPress={() => nav.navigate('Insights')} />
         <Tile ico="📜" label={t('nav.transactions')} onPress={() => nav.navigate('Main')} />
       </View>
     </Screen>

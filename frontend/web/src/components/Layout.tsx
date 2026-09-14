@@ -64,6 +64,7 @@ export function Layout({ children }: { children: ReactNode }) {
   ];
   const account: NavItem[] = [
     { to: '/app/transactions', key: 'nav.transactions', ico: '📜' },
+    { to: '/app/insights', key: 'nav.insights', ico: '📊' },
     { to: '/app/statements', key: 'nav.statements', ico: '🧾' },
     { to: '/app/credit', key: 'nav.credit', ico: '📊' },
     { to: '/app/referrals', key: 'nav.referrals', ico: '🎉', module: 'referrals' },
