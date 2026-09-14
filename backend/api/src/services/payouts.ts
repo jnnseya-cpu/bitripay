@@ -604,12 +604,27 @@ export function settlePayout(
         sender.id,
         'Payout delivered',
         `${formatMoney(r.amount, cur)} was delivered to ${r.recipient_name || mask(r.recipient_msisdn) || 'the recipient'} (${r.operator_id ? getOperator(r.operator_id).name : 'bank'}). Operator reference ${input.externalRef ?? r.reference}.`,
-        { kind: 'payout', payoutId: r.id, transactionId: tx.id },
+        {
+          kind: 'payout',
+          payoutId: r.id,
+          transactionId: tx.id,
+          template: 'payout.paid',
+          vars: {
+            amount: formatMoney(r.amount, cur),
+            recipient: r.recipient_name || mask(r.recipient_msisdn) || 'the recipient',
+            rail: r.operator_id ? getOperator(r.operator_id).name : 'bank',
+            reference: input.externalRef ?? r.reference,
+          },
+        },
       );
     if (r.recipient_msisdn)
       void sendSms(
         r.recipient_msisdn,
         `BitriPay: ${formatMoney(r.amount, cur)} was sent to you by ${sender?.full_name ?? 'a BitriPay user'}. Ref ${r.reference}${input.externalRef ? ` / ${input.externalRef}` : ''}.`,
+        {
+          key: 'payout.paid',
+          vars: { amount: formatMoney(r.amount, cur), senderName: sender?.full_name ?? 'a BitriPay user', reference: `${r.reference}${input.externalRef ? ` / ${input.externalRef}` : ''}` },
+        },
       ).catch(() => {});
     return getPayout(id);
   })();

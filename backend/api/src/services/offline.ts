@@ -42,6 +42,28 @@ export interface OfflineSettings {
 const DEFAULT: OfflineSettings = { enabled: true, maxPerPromiseBase: 20_000, maxOutstandingPerDeviceBase: 100_000, promiseValidityHours: 72, qrTtlSeconds: 900 };
 export const getOfflineSettings = (): OfflineSettings => ({ ...DEFAULT, ...getSetting<Partial<OfflineSettings>>('offline', {}) });
 
+/**
+ * Offline payment lifecycle (specification §28). A promise is created and accepted locally on the devices, waits for
+ * the network, is validated online by the platform and ends CONFIRMED or REJECTED. Until CONFIRMED every receipt reads
+ * "Pending confirmation": a successful screen is not proof of payment.
+ */
+export const OFFLINE_STATES = ['OFFLINE_CREATED', 'OFFLINE_ACCEPTED_LOCALLY', 'SYNC_PENDING', 'ONLINE_VALIDATING', 'CONFIRMED', 'REJECTED'] as const;
+export type OfflineState = (typeof OFFLINE_STATES)[number];
+export const PENDING_CONFIRMATION_TEXT = 'Pending confirmation — this payment is final only once BitriPay confirms it online.';
+/** Stored sync_state → lifecycle state. */
+export function offlineLifecycle(syncState: string | null | undefined): OfflineState {
+  switch (syncState) {
+    case 'SETTLED':
+      return 'CONFIRMED';
+    case 'REJECTED':
+      return 'REJECTED';
+    case 'VALIDATING':
+      return 'ONLINE_VALIDATING';
+    default:
+      return 'SYNC_PENDING';
+  }
+}
+
 export const PROMISE_VERSION = 'v1';
 /** The exact bytes both devices sign. Deterministic, pipe-separated, no JSON ambiguity. */
 export function promiseCanonical(p: {
@@ -70,6 +92,8 @@ export interface OfflineDevice {
   registeredAt: string;
   lastSyncAt: string | null;
   keyNotAfter: string;
+  /** Promises whose counter skipped values: a sign of lost or withheld promises on the device. */
+  counterGaps: number;
 }
 const toDevice = (r: any): OfflineDevice => ({
   deviceId: r.device_id,
@@ -80,7 +104,32 @@ const toDevice = (r: any): OfflineDevice => ({
   registeredAt: r.registered_at,
   lastSyncAt: r.last_sync_at,
   keyNotAfter: getKey(r.key_id).notAfter,
+  counterGaps: (getDb().prepare('SELECT COUNT(*) c FROM offline_counter_gaps WHERE device_id = ?').get(r.device_id) as any).c as number,
 });
+export interface CounterGap {
+  deviceId: string;
+  expected: number;
+  received: number;
+  promiseHash: string;
+  detectedAt: string;
+}
+export function listCounterGaps(filter: { deviceId?: string | null; userId?: string | null; limit?: number } = {}): CounterGap[] {
+  const where: string[] = [];
+  const params: unknown[] = [];
+  if (filter.deviceId) {
+    where.push('g.device_id = ?');
+    params.push(filter.deviceId);
+  }
+  if (filter.userId) {
+    where.push('d.user_id = ?');
+    params.push(filter.userId);
+  }
+  return (
+    getDb()
+      .prepare(`SELECT g.* FROM offline_counter_gaps g JOIN offline_devices d ON d.device_id = g.device_id ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY g.detected_at DESC LIMIT ?`)
+      .all(...params, Math.min(500, filter.limit ?? 100)) as any[]
+  ).map((g) => ({ deviceId: g.device_id, expected: g.expected_counter, received: g.received_counter, promiseHash: g.promise_hash, detectedAt: g.detected_at }));
+}
 
 /** Provision (or re-provision) a device's offline subkey. Online only, by definition. */
 export function registerOfflineDevice(user: UserRow, input: { deviceId: string; publicKey: string; label?: string | null }): OfflineDevice {
@@ -124,7 +173,7 @@ export function issueOfflineNonce(userId: string, hours = getOfflineSettings().p
 export function offlineQr(
   merchant: UserRow,
   input: { amountMinor: number; currency: string; reference?: string | null; ttlSeconds?: number | null },
-): { payload: string; nonce: string; expiresAt: string; keyId: string; amountMinor: number; currency: string } {
+): { payload: string; nonce: string; expiresAt: string; keyId: string; amountMinor: number; currency: string; lifecycle: OfflineState; receipt: { status: 'PENDING_CONFIRMATION'; text: string } } {
   const s = getOfflineSettings();
   if (!s.enabled) throw unprocessable('Offline payments are switched off', 'module_disabled');
   const cur = getCurrency(input.currency);
@@ -156,7 +205,16 @@ export function offlineQr(
     } as any,
     (p) => signWithKey(key.keyId, p),
   ) as string;
-  return { payload, nonce, expiresAt: new Date(expiresAt * 1000).toISOString(), keyId: key.keyId, amountMinor: input.amountMinor, currency: cur.code };
+  return {
+    payload,
+    nonce,
+    expiresAt: new Date(expiresAt * 1000).toISOString(),
+    keyId: key.keyId,
+    amountMinor: input.amountMinor,
+    currency: cur.code,
+    lifecycle: 'OFFLINE_CREATED',
+    receipt: { status: 'PENDING_CONFIRMATION', text: PENDING_CONFIRMATION_TEXT },
+  };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -183,6 +241,10 @@ export interface OfflinePromiseInput {
 export interface SyncOutcome {
   hash: string;
   state: 'SETTLED' | 'REJECTED' | 'DUPLICATE';
+  /** Specification §28 lifecycle state: CONFIRMED or REJECTED once the platform has validated the promise. */
+  lifecycle: OfflineState;
+  /** Set when the device counter skipped values before this promise (the promise is still processed). */
+  counterGap?: { expected: number; received: number } | null;
   reason?: string | null;
   transactionId?: string | null;
   receipt?: { hash: string; transactionId: string; amountMinor: number; currency: string; keyId: string; signature: string } | null;
@@ -235,6 +297,7 @@ export async function settlePromise(submitter: UserRow, p: OfflinePromiseInput):
     return {
       hash,
       state: 'DUPLICATE',
+      lifecycle: offlineLifecycle(prior.sync_state),
       reason: prior.sync_state === 'SETTLED' ? 'already_settled' : `already_${String(prior.sync_state).toLowerCase()}`,
       transactionId: prior.transaction_id,
       receipt: prior.transaction_id && prior.receipt_sig ? ({ ...parseJson(prior.receipt_sig, {}) } as any) : null,
@@ -274,7 +337,7 @@ export async function settlePromise(submitter: UserRow, p: OfflinePromiseInput):
         `Your offline payment of ${p.amountMinor / 100} ${p.currency} could not be completed (${reason.replace(/_/g, ' ')}). The amount is back in your balance.`,
         { kind: 'payment_failed', hash },
       );
-    return { hash, state: 'REJECTED', reason, restoreMinor: p.amountMinor };
+    return { hash, state: 'REJECTED', lifecycle: 'REJECTED', reason, restoreMinor: p.amountMinor };
   };
   if (!s.enabled) return reject('offline_disabled');
   const merchant = findUserById(p.merchantId) ?? findUserByIdentifier(p.merchantId);
@@ -348,6 +411,20 @@ export async function settlePromise(submitter: UserRow, p: OfflinePromiseInput):
   if (nonce && nonce.expires_at < now()) return reject('nonce_expired');
   if (nonce && nonce.issued_to && nonce.issued_to !== merchant.id) return reject('nonce_not_merchants');
   if (p.counter <= device.last_counter) return reject('counter_not_monotonic', { lastCounter: device.last_counter });
+  // a skipped counter is not a reason to refuse money, but it is evidence that promises went missing on the device
+  const counterGap = p.counter > device.last_counter + 1 ? { expected: device.last_counter + 1, received: p.counter } : null;
+  if (counterGap) {
+    db.prepare('INSERT INTO offline_counter_gaps (id, device_id, expected_counter, received_counter, promise_hash, detected_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+      uuid(),
+      p.payerDeviceId,
+      counterGap.expected,
+      counterGap.received,
+      hash,
+      now(),
+    );
+    recordEvent('payment', hash, 'offline.counter_gap', { type: 'system' }, { deviceId: p.payerDeviceId, ...counterGap, payerId: payer.id });
+    publish('offline.counter_gap', { hash, deviceId: p.payerDeviceId, payerId: payer.id, ...counterGap }, { aggregateId: hash });
+  }
   // ceilings, guardian, sanctions and fraud policy
   const base = toBase(p.amountMinor, cur.code);
   if (base > s.maxPerPromiseBase) return reject('offline_ceiling');
@@ -447,7 +524,7 @@ export async function settlePromise(submitter: UserRow, p: OfflinePromiseInput):
     kind: 'payment_received',
     transactionId: tx.id,
   });
-  return { hash, state: 'SETTLED', transactionId: tx.id, receipt };
+  return { hash, state: 'SETTLED', lifecycle: 'CONFIRMED', counterGap, transactionId: tx.id, receipt };
 }
 
 /** Submit a batch in the order the device recorded it. */
@@ -480,6 +557,7 @@ export function listPromises(userId: string, filter: { state?: string | null; li
     promisedAt: r.promised_at,
     expiresAt: r.expires_at,
     state: r.sync_state,
+    lifecycle: offlineLifecycle(r.sync_state),
     rejectReason: r.reject_reason,
     transactionId: r.transaction_id,
     receipt: r.receipt_sig ? parseJson(r.receipt_sig, null) : null,

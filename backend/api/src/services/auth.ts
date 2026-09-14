@@ -3,8 +3,8 @@ import { badRequest, forbidden, unauthorized, conflict } from '../lib/errors';
 import { hashPassword, verifyPassword } from '../lib/password';
 import { signToken } from '../lib/jwt';
 import { generateTotpSecret, otpauthUrl, verifyTotp } from '../lib/totp';
-import { encrypt, decrypt } from '../lib/crypto';
-import { now } from '../lib/ids';
+import { encrypt, decrypt, sha256, safeEqual } from '../lib/crypto';
+import { now, uuid, shortCode } from '../lib/ids';
 import { config } from '../config';
 import { createUser, findUserByEmail, findUserByPhone, normalizeEmail, normalizePhone, toUser, updateUser, type UserRow, type CreateUserInput } from './users';
 import { issueOtp, verifyOtp } from './otp';
@@ -39,7 +39,11 @@ export function register(input: CreateUserInput & { password: string }): AuthRes
   assertCountryAllowed(input.country);
   const user = createUser(input);
   onUserRegistered(user);
-  notify(user.id, `Welcome to ${config.appName}!`, 'Your wallet is ready. Add money to get started.', { kind: 'welcome' });
+  notify(user.id, `Welcome to ${config.appName}!`, 'Your wallet is ready. Add money to get started.', {
+    kind: 'welcome',
+    template: 'welcome',
+    vars: { appName: config.appName, name: user.full_name },
+  });
   return { token: signToken({ sub: user.id, role: user.role }), user: toUser(user) };
 }
 
@@ -59,11 +63,69 @@ export function finishLogin(row: UserRow): AuthResult {
   return { token: signToken({ sub: row.id, role: row.role }), user: toUser(row) };
 }
 
+/** A recovery code in place of the authenticator code completes the login; each code works once. */
 export function completeTwoFactor(row: UserRow, code: string): AuthResult {
   if (!row.two_factor_enabled || !row.two_factor_secret) throw badRequest('Two-factor authentication is not enabled');
-  if (!verifyTotp(decrypt(row.two_factor_secret), code)) throw unauthorized('Invalid authentication code', 'invalid_2fa');
+  const viaRecovery = isRecoveryCodeFormat(code);
+  const ok = viaRecovery ? consumeRecoveryCode(row.id, code) : verifyTotp(decrypt(row.two_factor_secret), code);
+  if (!ok) throw unauthorized(viaRecovery ? 'Invalid or already used recovery code' : 'Invalid authentication code', 'invalid_2fa');
   updateUser(row.id, { last_login_at: now() });
+  if (viaRecovery) {
+    const left = recoveryCodesRemaining(row.id);
+    const remaining = `${left} code${left === 1 ? '' : 's'}`;
+    const hint = left === 0 ? ' – generate a new set in Security' : '';
+    notify(row.id, 'Recovery code used', `A recovery code was used to sign in to your account. ${remaining} left${hint}.`, {
+      kind: 'account',
+      loud: true,
+      template: 'recovery_code.used',
+      vars: { remaining, hint },
+    });
+  }
   return { token: signToken({ sub: row.id, role: row.role }), user: toUser(row) };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Recovery codes: 8 one-time codes (xxxx-xxxx) issued when 2FA is enabled; only their SHA-256 is stored.
+// ---------------------------------------------------------------------------------------------------------------------
+export const RECOVERY_CODE_COUNT = 8;
+/** xxxx-xxxx from the unambiguous short-code alphabet (no 0/O/1/I), lowercased so codes survive being read aloud or typed. */
+const recoveryCodeSegment = () => shortCode(4).toLowerCase();
+
+export const normalizeRecoveryCode = (code: string) => code.trim().toLowerCase().replace(/\s+/g, '');
+export const isRecoveryCodeFormat = (code: string) => /^[a-z0-9]{4}-[a-z0-9]{4}$/.test(normalizeRecoveryCode(code));
+
+/** Issue a fresh set: every unused code of the previous set is retired (marked used) so exactly one set is valid. */
+export function issueRecoveryCodes(userId: string): string[] {
+  const db = getDb();
+  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, () => `${recoveryCodeSegment()}-${recoveryCodeSegment()}`);
+  db.transaction(() => {
+    db.prepare('UPDATE recovery_codes SET used_at = ? WHERE user_id = ? AND used_at IS NULL').run(now(), userId);
+    const ins = db.prepare('INSERT INTO recovery_codes (id, user_id, code_hash, used_at, created_at) VALUES (?, ?, ?, NULL, ?)');
+    for (const c of codes) ins.run(uuid(), userId, sha256(c), now());
+  })();
+  return codes;
+}
+
+export function recoveryCodesRemaining(userId: string): number {
+  return (getDb().prepare('SELECT COUNT(*) c FROM recovery_codes WHERE user_id = ? AND used_at IS NULL').get(userId) as { c: number }).c;
+}
+
+/** Spend a recovery code; false when it is unknown or already used. */
+export function consumeRecoveryCode(userId: string, code: string): boolean {
+  const db = getDb();
+  const hash = sha256(normalizeRecoveryCode(code));
+  const rows = db.prepare('SELECT id, code_hash FROM recovery_codes WHERE user_id = ? AND used_at IS NULL').all(userId) as { id: string; code_hash: string }[];
+  const match = rows.find((r) => safeEqual(r.code_hash, hash));
+  if (!match) return false;
+  const res = db.prepare('UPDATE recovery_codes SET used_at = ? WHERE id = ? AND used_at IS NULL').run(now(), match.id);
+  return res.changes === 1;
+}
+
+/** A new set replaces the old one; needs a current authenticator code (never a recovery code). */
+export function regenerateRecoveryCodes(row: UserRow, code: string): string[] {
+  if (!row.two_factor_enabled || !row.two_factor_secret) throw badRequest('Two-factor authentication is not enabled');
+  if (isRecoveryCodeFormat(code) || !verifyTotp(decrypt(row.two_factor_secret), code)) throw badRequest('Invalid authentication code', 'invalid_2fa');
+  return issueRecoveryCodes(row.id);
 }
 
 /** Phone / email OTP login: step 1 sends the code. */
@@ -147,16 +209,20 @@ export function beginTwoFactorSetup(row: UserRow) {
   return { secret, otpauth: otpauthUrl(config.appName, account, secret) };
 }
 
-export function enableTwoFactor(row: UserRow, code: string) {
+/** Enables 2FA and returns the one-time recovery codes; they are shown once and never retrievable again. */
+export function enableTwoFactor(row: UserRow, code: string): { recoveryCodes: string[] } {
   if (!row.two_factor_secret) throw badRequest('Start 2FA setup first');
   if (!verifyTotp(decrypt(row.two_factor_secret), code)) throw badRequest('Invalid authentication code', 'invalid_2fa');
   updateUser(row.id, { two_factor_enabled: 1 });
+  return { recoveryCodes: issueRecoveryCodes(row.id) };
 }
 
 export function disableTwoFactor(row: UserRow, code: string) {
   if (!row.two_factor_enabled || !row.two_factor_secret) throw badRequest('Two-factor authentication is not enabled');
   if (!verifyTotp(decrypt(row.two_factor_secret), code)) throw badRequest('Invalid authentication code', 'invalid_2fa');
   updateUser(row.id, { two_factor_enabled: 0, two_factor_secret: null });
+  // recovery codes belong to the 2FA enrolment: none stays valid once it is turned off
+  getDb().prepare('UPDATE recovery_codes SET used_at = ? WHERE user_id = ? AND used_at IS NULL').run(now(), row.id);
 }
 
 export function ensureAdminExists() {

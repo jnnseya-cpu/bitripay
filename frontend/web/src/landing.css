@@ -864,3 +864,20 @@
   box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.6);
   font-size: 14px;
 }
+
+/* Positioning taglines under the eyebrow: the product in words, identical in every language. */
+.lp-positioning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 10px 0 14px;
+  font-family: var(--lp-mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+.lp-positioning strong {
+  font-weight: 700;
+}
+.lp-positioning span {
+  opacity: 0.8;
+}

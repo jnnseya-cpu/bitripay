@@ -7,6 +7,7 @@ import { escapeHtml } from '../services/markdown';
 import { getSeoSettings, getSiteSettingsSafe } from '../services/settings';
 import { absoluteUrl, organizationJsonLd, websiteJsonLd, breadcrumbJsonLd, pageTitle, siteUrl } from '../services/seo';
 import type { RenderedPost, PostSummary } from '../services/blog';
+import { POSITIONING } from '../content/positioning';
 
 export interface Meta {
   title: string;
@@ -29,6 +30,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font
 a{color:var(--accent-2)}a:hover{text-decoration-thickness:2px}
 .wrap{max-width:1120px;margin:0 auto;padding-inline:clamp(16px,4vw,40px)}
 header.top{border-bottom:1px solid var(--line);background:var(--paper)}
+.positioning{background:var(--ink,#0f172a);color:#fff;font-size:13px;letter-spacing:.04em}.positioning .wrap{display:flex;flex-wrap:wrap;gap:6px 18px;padding:8px 20px;align-items:center}.positioning strong{font-weight:700}.positioning span{opacity:.85}
 header.top .wrap{display:flex;align-items:center;gap:24px;min-height:64px}
 .brand{font-family:var(--display);font-weight:700;font-size:20px;color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:10px;letter-spacing:-.01em}
 .brand i{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:inline-block}.brand img{height:34px;width:auto;display:block}@media (prefers-color-scheme:dark){.brand img{filter:brightness(0) invert(1)}}
@@ -131,6 +133,7 @@ ${seo.languages.map((l) => `<link rel="alternate" hreflang="${l}" href="${escape
 </head>
 <body>
 <header class="top"><div class="wrap"><a class="brand" href="/" aria-label="${escapeHtml(seo.siteName)}"><img src="/brand/logo.svg" alt="${escapeHtml(seo.siteName)}" width="140" height="34"></a><nav class="main"><a href="/blog">Blog</a><a href="/about">About</a><a href="/legal/fees">Fees</a><a href="/login">Sign in</a><a class="cta" href="/register">Open an account</a></nav></div></header>
+<div class="positioning" role="doc-subtitle"><div class="wrap"><strong>${escapeHtml(POSITIONING.oneQr)}</strong><span>${escapeHtml(POSITIONING.payLocal)}</span></div></div>
 <main><div class="wrap">${body}</div></main>
 <footer class="site"><div class="wrap">
 <div class="cols">
@@ -139,7 +142,7 @@ ${seo.languages.map((l) => `<link rel="alternate" hreflang="${l}" href="${escape
 <div><h4>Company</h4><ul>${FOOTER_LINKS.company.map((l) => `<li><a href="${l.href}">${l.label}</a></li>`).join('')}</ul></div>
 <div><h4>Legal</h4><ul>${FOOTER_LINKS.legal.map((l) => `<li><a href="${l.href}">${l.label}</a></li>`).join('')}</ul></div>
 </div>
-<div class="legal"><span>© ${year} ${escapeHtml(seo.organization.legalName || seo.siteName)}. BitriPay balances are electronic money, not bank deposits. Where the platform is not yet authorised in a country, accounts run in sandbox mode with no real-world value and this is shown in the app. Cross-border transfers are a regulated money-transfer service and are offered only through authorised corridors.</span><span><a href="/sitemap.xml">Sitemap</a> · <a href="/feed.xml">RSS</a> · <a href="/llms.txt">llms.txt</a></span></div>
+<div class="legal"><span>© ${year} ${escapeHtml(seo.organization.legalName || seo.siteName)}. BitriPay balances are electronic money, not bank deposits. Where the platform is not yet authorised in a country, accounts run in sandbox mode with no real-world value and this is shown in the app. Cross-border transfers are a regulated money-transfer service and are offered only through authorised corridors. ${escapeHtml(POSITIONING.noCustody)}</span><span><a href="/sitemap.xml">Sitemap</a> · <a href="/feed.xml">RSS</a> · <a href="/llms.txt">llms.txt</a></span></div>
 </div></footer>
 </body></html>`;
 }

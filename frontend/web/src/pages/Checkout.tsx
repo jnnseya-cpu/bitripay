@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
+import { useT } from '../lib/i18n';
 import { Alert, Avatar, Button, Field, Input, KV, Loading, PinModal, QrImage, StatusBadge, Tabs } from '../components/ui';
 import { CardForm, type CardValues } from '../components/CardForm';
 import { PaymentStatus, type PaymentView } from './AddMoney';
@@ -13,7 +14,8 @@ export function Checkout() {
   const { code } = useParams();
   const [params] = useSearchParams();
   const nav = useNavigate();
-  const { user, wallets, refreshWallets } = useStore();
+  const t = useT();
+  const { user, wallets, refreshWallets, config } = useStore();
   const [info, setInfo] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [method, setMethod] = useState<string>('');
@@ -167,6 +169,47 @@ export function Checkout() {
   };
   const wallet = wallets.find((w) => w.currency === cur.code);
   const labels: Record<string, string> = { wallet: 'BitriPay wallet', card: 'Card', mobile_money: 'Mobile money', bank: 'Bank transfer', virtual_card: 'BitriPay virtual card' };
+  /** What the payer sees before confirming: fee, FX rate + margin, receiver currency and exact amount, total, ETA per method (from the API, never computed here). */
+  const disclosure = info.disclosure ?? null;
+  const receiverCur = disclosure
+    ? ((config?.currencies ?? []).find((c) => c.code === disclosure.receiverCurrency) ?? { code: disclosure.receiverCurrency, symbol: disclosure.receiverCurrency, decimals: 2 })
+    : cur;
+  const crossCurrency = !!disclosure && disclosure.receiverCurrency !== cur.code;
+  const methodLabel = (m: string) => labels[m] ?? m.replace(/_/g, ' ');
+  /** Recovery after a failed attempt: the other eligible methods and a one-tap retry of the same one. */
+  const failed = !!payment && payment.status === 'failed';
+  const alternatives: string[] = failed ? (info.methods as string[]).filter((m) => m !== payment!.method && (m !== 'wallet' || !!user)) : [];
+  const retrySame = () => {
+    setPayment(null);
+    setError(null);
+    setPinFor('external');
+    if (user) setPinOpen(true);
+    else void payExternal();
+  };
+  const retryWith = (m: string) => {
+    setPayment(null);
+    setError(null);
+    setMethod(m);
+  };
+  const disclosureBlock = disclosure && (
+    <div className="card soft compact mb" data-testid="checkout-disclosure">
+      <div className="small bold mb-sm">{t('checkout.disclosureTitle')}</div>
+      {disclosure.feeMinor != null && <KV k={disclosure.feeFrom === 'receiver' ? t('checkout.feePaidByReceiver') : 'Fee'} v={money(disclosure.feeMinor)} />}
+      {crossCurrency && (
+        <>
+          <KV k={t('checkout.fxRate')} v={`1 ${cur.code} = ${Number(disclosure.fxRate).toFixed(6)} ${disclosure.receiverCurrency} · ${disclosure.fxProvider}`} />
+          <KV k={t('checkout.fxMargin')} v={`${(disclosure.fxMarginBps / 100).toFixed(2)}% (mid 1 ${cur.code} = ${Number(disclosure.fxMidRate).toFixed(6)} ${disclosure.receiverCurrency})`} />
+        </>
+      )}
+      <KV k={t('checkout.receiverCurrency')} v={disclosure.receiverCurrency} />
+      {disclosure.receiverAmountMinor != null && <KV k={t('checkout.receiverGets')} v={formatMoney(disclosure.receiverAmountMinor, receiverCur)} />}
+      {disclosure.totalMinor != null && <KV k={t('checkout.youPay')} v={<b>{money(disclosure.totalMinor)}</b>} />}
+      {disclosure.etaByMethod?.[method] && <KV k={t('checkout.eta')} v={`${methodLabel(method)} · ${disclosure.etaByMethod[method]}`} />}
+      <p className="tiny muted mt-sm" data-testid="checkout-trust">
+        {t('trust.notProof')}
+      </p>
+    </div>
+  );
 
   return (
     <div className="auth-page" style={{ alignItems: 'flex-start', paddingTop: 40 }}>
@@ -224,25 +267,45 @@ export function Checkout() {
                 )}
               </Alert>
             ) : payment ? (
-              <PaymentStatus
-                payment={payment}
-                declaration={declaration}
-                onDone={() => setPayment(null)}
-                onAuthenticate={
-                  payment.stage === 'AUTHENTICATION_REQUIRED'
-                    ? () => {
-                        setPinFor('authenticate');
-                        setPinOpen(true);
-                      }
-                    : undefined
-                }
-              />
+              <>
+                <PaymentStatus
+                  payment={payment}
+                  declaration={declaration}
+                  onDone={() => setPayment(null)}
+                  onAuthenticate={
+                    payment.stage === 'AUTHENTICATION_REQUIRED'
+                      ? () => {
+                          setPinFor('authenticate');
+                          setPinOpen(true);
+                        }
+                      : undefined
+                  }
+                />
+                {failed && (
+                  <div className="card soft compact mt" data-testid="checkout-recovery">
+                    <div className="small bold">{t('checkout.recoveryTitle')}</div>
+                    <p className="tiny muted">{t('checkout.recoveryHint')}</p>
+                    <div className="row wrap">
+                      <Button size="sm" loading={loading} onClick={retrySame}>
+                        {t('checkout.retry')} · {methodLabel(payment.method)}
+                      </Button>
+                      {alternatives.map((m) => (
+                        <Button key={m} size="sm" variant="secondary" onClick={() => retryWith(m)}>
+                          {t('checkout.retryWith', { method: methodLabel(m) })}
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="tiny muted mt-sm">{t('trust.notProof')}</p>
+                  </div>
+                )}
+              </>
             ) : (
               <>
                 <h3>Pay with</h3>
                 {error && <Alert kind="error">{error}</Alert>}
                 <Tabs pills tabs={info.methods.map((m: string) => ({ id: m, label: labels[m] ?? m }))} value={method} onChange={setMethod} />
                 <div className="mt" />
+                {disclosureBlock}
                 {method === 'wallet' &&
                   (user ? (
                     <>

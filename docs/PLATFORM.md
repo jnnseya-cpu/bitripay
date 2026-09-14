@@ -1,5 +1,7 @@
 # BitriPay platform reference
 
+Registers: [Alias tables](ALIASES.md) · [Sprint traceability](TRACEABILITY.md) · [BCC information requests](BCC-REGISTER.md) · [Switch commitments](SWITCH-COMMITMENTS.md)
+
 The complete feature, configuration, API and deployment reference. The [README](../README.md) keeps only the layout and the quick start; [DEVELOPER.md](DEVELOPER.md) is the day-to-day developer guide and [VERIFICATION.md](VERIFICATION.md) maps every requirement to its implementation and proof.
 
 ## Features

@@ -21,28 +21,123 @@ export interface TierLimits {
   daily: number;
   monthly: number;
 }
+/** Maximum total wallet balance (base minor) per tier; null = no ceiling. */
+export type BalanceCaps = Record<string, number | null>;
 export interface KycTierSettings {
   /** Base-currency minor units per tier; tier 4 (business) is null = custom / no platform ceiling. */
   default: Record<string, TierLimits | null>;
   countries: Record<string, Partial<Record<string, TierLimits | null>>>;
+  /** Balance ceilings per tier, platform-wide and per country (same shape as the transaction limits). */
+  balanceCaps: { default: BalanceCaps; countries: Record<string, Partial<BalanceCaps>> };
   addressDocMaxAgeDays: number;
   /** Monthly collection volume (base minor) above which a merchant must complete KYB. */
   kybMonthlyVolumeThreshold: number;
 }
-const DEFAULT: KycTierSettings = {
-  default: {
+/**
+ * Per-country seed values, in base-currency minor units (USD cents at the default base). They follow the shape of
+ * each regulator's tiered-KYC schedule and are deliberately conservative; every figure is admin-editable under
+ * Risk › KYC tiers and none is read anywhere but through the settings. Seed values, adjust per licence:
+ *  - CD: BCC e-money instruction (compte de monnaie électronique, three categories) – the platform default schedule.
+ *  - KE: CBK National Payment System regulations / operator wallet limits (≈ KES 250k per transaction, 500k daily).
+ *  - NG: CBN three-tier KYC (tier 1 ≈ NGN 50k per transaction, 300k daily/balance; tier 2 ≈ NGN 100k / 500k).
+ *  - GH: Bank of Ghana e-money guidelines (minimum / medium / enhanced KYC daily, monthly and balance ceilings).
+ *  - SN: BCEAO instruction 008-05-2015 (e-money balance ≈ XOF 2M, monthly ≈ XOF 10M at full KYC).
+ *  - UG: Bank of Uganda National Payment Systems Act tiers (≈ UGX 5M per transaction, 10M daily).
+ *  - GB: MLR 2017 reg. 38 simplified due diligence for e-money (£250 stored / monthly), full CDD above.
+ *  - FR: 5AMLD art. 12 / ACPR (€150 anonymous e-money ceiling), full CDD above.
+ *  - US: FinCEN prepaid access rule (31 CFR 1010.100(ww): $1,000 daily load / withdrawal for limited-KYC access).
+ */
+const COUNTRY_SEEDS: Record<string, Record<string, TierLimits | null>> = {
+  CD: {
     '1': { perTransaction: 5_000, daily: 5_000, monthly: 20_000 },
     '2': { perTransaction: 50_000, daily: 50_000, monthly: 200_000 },
     '3': { perTransaction: 500_000, daily: 500_000, monthly: 2_000_000 },
     '4': null,
   },
-  countries: {},
+  KE: {
+    '1': { perTransaction: 10_000, daily: 30_000, monthly: 100_000 },
+    '2': { perTransaction: 190_000, daily: 380_000, monthly: 1_500_000 },
+    '3': { perTransaction: 500_000, daily: 1_000_000, monthly: 4_000_000 },
+    '4': null,
+  },
+  NG: {
+    '1': { perTransaction: 3_500, daily: 20_000, monthly: 60_000 },
+    '2': { perTransaction: 7_000, daily: 35_000, monthly: 150_000 },
+    '3': { perTransaction: 350_000, daily: 700_000, monthly: 3_000_000 },
+    '4': null,
+  },
+  GH: {
+    '1': { perTransaction: 2_000, daily: 2_000, monthly: 20_000 },
+    '2': { perTransaction: 13_000, daily: 13_000, monthly: 130_000 },
+    '3': { perTransaction: 33_000, daily: 33_000, monthly: 330_000 },
+    '4': null,
+  },
+  SN: {
+    '1': { perTransaction: 20_000, daily: 50_000, monthly: 200_000 },
+    '2': { perTransaction: 100_000, daily: 330_000, monthly: 1_650_000 },
+    '3': { perTransaction: 330_000, daily: 1_000_000, monthly: 5_000_000 },
+    '4': null,
+  },
+  UG: {
+    '1': { perTransaction: 5_000, daily: 15_000, monthly: 60_000 },
+    '2': { perTransaction: 135_000, daily: 270_000, monthly: 1_000_000 },
+    '3': { perTransaction: 270_000, daily: 700_000, monthly: 3_000_000 },
+    '4': null,
+  },
+  GB: {
+    '1': { perTransaction: 25_000, daily: 25_000, monthly: 30_000 },
+    '2': { perTransaction: 250_000, daily: 500_000, monthly: 2_000_000 },
+    '3': { perTransaction: 1_000_000, daily: 2_500_000, monthly: 10_000_000 },
+    '4': null,
+  },
+  FR: {
+    '1': { perTransaction: 15_000, daily: 15_000, monthly: 16_000 },
+    '2': { perTransaction: 250_000, daily: 500_000, monthly: 2_000_000 },
+    '3': { perTransaction: 1_000_000, daily: 2_500_000, monthly: 10_000_000 },
+    '4': null,
+  },
+  US: {
+    '1': { perTransaction: 50_000, daily: 100_000, monthly: 200_000 },
+    '2': { perTransaction: 300_000, daily: 500_000, monthly: 2_000_000 },
+    '3': { perTransaction: 1_000_000, daily: 2_500_000, monthly: 10_000_000 },
+    '4': null,
+  },
+};
+/** Balance ceilings from the same schedules (seed values, adjust per licence). */
+const BALANCE_SEEDS: Record<string, BalanceCaps> = {
+  CD: { '1': 50_000, '2': 300_000, '3': 2_000_000, '4': null },
+  KE: { '1': 50_000, '2': 380_000, '3': 1_000_000, '4': null },
+  NG: { '1': 20_000, '2': 35_000, '3': 3_500_000, '4': null },
+  GH: { '1': 7_000, '2': 65_000, '3': 130_000, '4': null },
+  SN: { '1': 100_000, '2': 330_000, '3': 1_000_000, '4': null },
+  UG: { '1': 30_000, '2': 270_000, '3': 700_000, '4': null },
+  GB: { '1': 30_000, '2': 1_000_000, '3': 5_000_000, '4': null },
+  FR: { '1': 16_000, '2': 1_000_000, '3': 5_000_000, '4': null },
+  US: { '1': 100_000, '2': 1_000_000, '3': 5_000_000, '4': null },
+};
+const DEFAULT: KycTierSettings = {
+  // The platform default schedule is the home-market (DRC) schedule; other countries override it below.
+  default: { ...COUNTRY_SEEDS.CD },
+  countries: COUNTRY_SEEDS,
+  balanceCaps: { default: { ...BALANCE_SEEDS.CD }, countries: BALANCE_SEEDS },
   addressDocMaxAgeDays: 90,
   kybMonthlyVolumeThreshold: 1_000_000,
 };
+/** Stored per-country entries override the seeds tier by tier, so an admin edit never wipes the other tiers of a country. */
+function mergeCountries<T>(seed: Record<string, Partial<Record<string, T>>>, stored: Record<string, Partial<Record<string, T>>> | undefined) {
+  const out: Record<string, Partial<Record<string, T>>> = {};
+  for (const cc of new Set([...Object.keys(seed), ...Object.keys(stored ?? {})])) out[cc] = { ...(seed[cc] ?? {}), ...(stored?.[cc] ?? {}) };
+  return out;
+}
 export const getKycTierSettings = (): KycTierSettings => {
   const s = getSetting<Partial<KycTierSettings>>('kycTiers', {});
-  return { ...DEFAULT, ...s, default: { ...DEFAULT.default, ...(s.default ?? {}) }, countries: s.countries ?? {} };
+  return {
+    ...DEFAULT,
+    ...s,
+    default: { ...DEFAULT.default, ...(s.default ?? {}) },
+    countries: mergeCountries(DEFAULT.countries, s.countries),
+    balanceCaps: { default: { ...DEFAULT.balanceCaps.default, ...(s.balanceCaps?.default ?? {}) }, countries: mergeCountries(DEFAULT.balanceCaps.countries, s.balanceCaps?.countries) },
+  };
 };
 
 export const TIER_LABELS: Record<number, string> = { 0: 'Not tiered', 1: 'Tier 1 · Basic', 2: 'Tier 2 · Standard', 3: 'Tier 3 · Enhanced', 4: 'Tier 4 · Business' };
@@ -55,6 +150,39 @@ export function tierLimitsFor(user: { kyc_tier?: number | null; country?: string
   const cc = (user.country ?? '').toUpperCase();
   const byCountry = cc && s.countries[cc] ? s.countries[cc][String(tier)] : undefined;
   return byCountry !== undefined ? byCountry : (s.default[String(tier)] ?? null);
+}
+
+/** Balance ceiling for a user's tier in its country (null = no ceiling; undefined = not tiered). */
+export function balanceCapFor(user: { kyc_tier?: number | null; country?: string | null }): number | null | undefined {
+  const tier = user.kyc_tier ?? 0;
+  if (!tier) return undefined;
+  const s = getKycTierSettings();
+  const cc = (user.country ?? '').toUpperCase();
+  const byCountry = cc && s.balanceCaps.countries[cc] ? s.balanceCaps.countries[cc][String(tier)] : undefined;
+  return byCountry !== undefined ? byCountry : (s.balanceCaps.default[String(tier)] ?? null);
+}
+
+function heldBase(userId: string): number {
+  const rows = getDb().prepare('SELECT balance, currency FROM wallets WHERE user_id = ?').all(userId) as { balance: number; currency: string }[];
+  return rows.reduce((sum, r) => sum + toBase(r.balance, r.currency), 0);
+}
+
+/** A credit that would push a tiered account's total balance above its tier ceiling is refused (BP-5xxx) and audited. */
+export function assertBalanceCap(user: UserRow & { kyc_tier?: number | null }, amount: number, currency: string): void {
+  const cap = balanceCapFor(user);
+  if (cap === undefined || cap === null || !cap) return;
+  const base = toBase(amount, currency);
+  const held = heldBase(user.id);
+  if (held + base <= cap) return;
+  const tier = user.kyc_tier ?? 0;
+  recordEvent('risk', user.id, 'kyc_limit.breach', { type: 'system' }, { tier, code: 'balance_cap_exceeded', base, currency, amount, held, limit: cap, scope: 'balance' });
+  throw unprocessable(`This would exceed the balance limit of your ${TIER_LABELS[tier]} level. Upgrade your verification to hold more.`, 'balance_cap_exceeded', {
+    tier,
+    label: TIER_LABELS[tier],
+    limit: cap,
+    held,
+    scope: 'balance',
+  });
 }
 
 function usedBase(userId: string, sinceMs: number): number {
@@ -94,7 +222,8 @@ export function tierStatus(user: UserRow & { kyc_tier?: number | null; kyb_statu
     tier,
     label: TIER_LABELS[tier],
     limits: limits === undefined ? null : limits,
-    usage: tier ? { daily: usedBase(user.id, 86_400_000), monthly: usedBase(user.id, 30 * 86_400_000) } : null,
+    balanceCap: tier ? (balanceCapFor(user) ?? null) : null,
+    usage: tier ? { daily: usedBase(user.id, 86_400_000), monthly: usedBase(user.id, 30 * 86_400_000), balance: heldBase(user.id) } : null,
     kybStatus: user.kyb_status ?? 'none',
     next:
       tier === 0

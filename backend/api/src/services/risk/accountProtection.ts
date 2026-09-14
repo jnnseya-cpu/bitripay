@@ -26,7 +26,7 @@ export interface AccountProtectionSettings {
 const DEFAULT: AccountProtectionSettings = { coolingOffHours: 24, lockAfterCredentialChangeHours: 24, coolingAmountBase: null };
 export const getAccountProtectionSettings = (): AccountProtectionSettings => ({ ...DEFAULT, ...getSetting<Partial<AccountProtectionSettings>>('accountProtection', {}) });
 
-export type DestinationKind = 'bank_account' | 'settlement_profile' | 'mobile_money';
+export type DestinationKind = 'bank_account' | 'settlement_profile' | 'mobile_money' | 'remittance_recipient';
 export interface DestinationChange {
   id: string;
   userId: string;
@@ -69,6 +69,8 @@ export function describeDestination(d: Record<string, unknown> | null): string {
   if (d.method === 'mobile_money') return `mobile money ${mask(d.phone)}${d.operatorId ? ` (${d.operatorId})` : ''}`;
   if (d.bankAccountId) return `bank account ${mask(d.bankAccountId)}`;
   if (d.accountNumber) return `${d.bankName ?? 'bank'} ${mask(d.accountNumber)}`;
+  if (d.payoutMethod === 'cash_pickup') return `cash pickup for ${d.name ?? 'recipient'}`;
+  if (d.tag || d.phone || d.email) return `recipient ${d.name ?? ''} ${mask(d.tag ?? d.phone ?? d.email)}`.trim();
   return 'wallet';
 }
 
@@ -124,7 +126,7 @@ export function registerDestinationChange(
     user.id,
     'Payout destination changed',
     `${describeDestination(input.next)} was added to your account. Large payouts to it start after ${s.coolingOffHours} hours. Not you? Revoke it now in Security.`,
-    { kind: 'approval', loud: true, changeId: id },
+    { kind: 'approval', loud: true, changeId: id, template: 'destination.changed', vars: { destination: describeDestination(input.next), hours: s.coolingOffHours } },
   );
   if (flags.length >= 2)
     openCase({

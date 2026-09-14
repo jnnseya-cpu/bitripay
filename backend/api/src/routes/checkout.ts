@@ -13,13 +13,80 @@ import { badRequest, conflict } from '../lib/errors';
 import { rateLimit } from '../middleware/rateLimit';
 import { dispatchWebhook } from '../services/webhooks';
 import { parseJson } from '../lib/json';
+import { calculateFee } from '../services/ledger';
+import { fxDisclosure } from '../services/fx';
+import { getGatewaySettings } from '../services/users';
+import { getCurrency } from '../services/currencies';
+import { POSITIONING } from '../content/positioning';
 
 /** Hosted checkout – used by the web checkout page, mobile apps and the WooCommerce plugin. Guest-friendly. */
 export const checkoutRouter = Router();
 
+export interface CheckoutDisclosure {
+  /** Platform fee on this payment in minor units of the request currency (null for open-amount requests). */
+  feeMinor: number | null;
+  /** Who bears the fee: merchant payments are charged to the receiver, so the payer pays the face amount. */
+  feeFrom: 'receiver' | 'sender';
+  /** Effective customer rate (1 payer unit = fxRate receiver units); 1 when the currencies match. */
+  fxRate: number;
+  fxMidRate: number;
+  fxMarginBps: number;
+  fxProvider: string;
+  receiverCurrency: string;
+  /** Exactly what the receiver is credited, in minor units of the receiver currency (null for open-amount requests). */
+  receiverAmountMinor: number | null;
+  /** The total the payer pays in minor units of the request currency (null for open-amount requests). */
+  totalMinor: number | null;
+  /** Expected completion per offered method, from the rail catalogue. */
+  etaByMethod: Record<string, string>;
+  /** Trust statement shown before the payer confirms. */
+  trust: string;
+}
+
+/**
+ * Everything a payer must see before confirming: fee, FX rate and margin when the receiver settles in another
+ * currency, the receiver's currency and exact credited amount, the payer's total and an ETA per method. Reuses the
+ * fee schedule, the FX disclosure and the rail catalogue – no pricing logic of its own.
+ */
+export function checkoutDisclosure(code: string, methods: string[]): CheckoutDisclosure {
+  const row = getPaymentRequestByCode(code);
+  const requester = findUserById(row.requester_user_id)!;
+  const source = getCurrency(row.currency, false);
+  const settings = getGatewaySettings(requester);
+  const receiverCurrency = (requester.role === 'merchant' && settings.settlementCurrency) || source.code;
+  const target = getCurrency(receiverCurrency, false);
+  const fx = fxDisclosure(source.code, target.code, null, false);
+  const feeType = requester.role === 'merchant' ? 'merchant_payment' : row.kind === 'request' ? 'transfer' : 'qr_payment';
+  const feeFrom: 'receiver' | 'sender' = feeType === 'merchant_payment' ? 'receiver' : 'sender';
+  const amount = row.amount ?? null;
+  const feeMinor = amount ? calculateFee(feeType, amount, source.code, null, { userId: requester.id }) : null;
+  const toReceiver = (minor: number) => Math.round((minor / 10 ** source.decimals) * fx.rate * 10 ** target.decimals);
+  const receiverAmountMinor = amount ? toReceiver(feeFrom === 'receiver' ? amount - (feeMinor ?? 0) : amount) : null;
+  const totalMinor = amount ? (feeFrom === 'sender' ? amount + (feeMinor ?? 0) : amount) : null;
+  const etaByMethod: Record<string, string> = {};
+  for (const m of methods) {
+    if (m === 'wallet') etaByMethod[m] = 'Instant';
+    else if (m === 'virtual_card') etaByMethod[m] = 'Seconds';
+    else etaByMethod[m] = describeFunding(m as 'card' | 'mobile_money' | 'bank', { currency: source.code }).expectedCompletion;
+  }
+  return {
+    feeMinor,
+    feeFrom,
+    fxRate: fx.rate,
+    fxMidRate: fx.midRate,
+    fxMarginBps: fx.markupBps,
+    fxProvider: fx.providerLabel,
+    receiverCurrency: target.code,
+    receiverAmountMinor,
+    totalMinor,
+    etaByMethod,
+    trust: POSITIONING.notProof,
+  };
+}
+
 checkoutRouter.get('/:code', (req, res) => {
   const info = checkoutInfo(String(req.params.code));
-  res.json({ ...info, options: paymentOptions(info.paymentRequest.currency, undefined, 'checkout') });
+  res.json({ ...info, options: paymentOptions(info.paymentRequest.currency, undefined, 'checkout'), disclosure: checkoutDisclosure(String(req.params.code), info.methods) });
 });
 
 checkoutRouter.post(

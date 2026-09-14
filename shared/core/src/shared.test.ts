@@ -12,6 +12,9 @@ import { ar } from './locales/ar.ts';
 import { sw } from './locales/sw.ts';
 import { hi } from './locales/hi.ts';
 import { bn } from './locales/bn.ts';
+import { ln } from './locales/ln.ts';
+import { kg } from './locales/kg.ts';
+import { lua } from './locales/lua.ts';
 
 test('money conversion round trips', () => {
   assert.equal(toMinor('12.50', 2), 1250);
@@ -63,13 +66,15 @@ test('card helpers', () => {
 });
 
 test('every built-in locale carries every English key, no orphan keys and the same placeholders', () => {
-  const LOCALES: Record<string, Record<string, string>> = { en, fr, es, pt, ar, sw, hi, bn };
+  const LOCALES: Record<string, Record<string, string>> = { en, fr, es, pt, ar, sw, hi, bn, ln, kg, lua };
+  const PARTIAL = ['ln', 'kg', 'lua']; // launch packs that fall back to French, then English
   const keys = Object.keys(en);
   const placeholders = (v: string) => (v.match(/\{\w+\}/g) ?? []).sort();
   for (const [lang, dict] of Object.entries(LOCALES)) {
     const missing = keys.filter((k) => !(k in dict));
     const extra = Object.keys(dict).filter((k) => !(k in en));
-    assert.deepEqual(missing, [], `${lang} is missing ${missing.join(', ')}`);
+    if (PARTIAL.includes(lang)) assert.ok(Object.keys(dict).length >= 20, `${lang} partial pack carries at least the core keys`);
+    else assert.deepEqual(missing, [], `${lang} is missing ${missing.join(', ')}`);
     assert.deepEqual(extra, [], `${lang} has keys unknown to en: ${extra.join(', ')}`);
     for (const [k, v] of Object.entries(dict)) {
       assert.ok(v.trim().length > 0, `${lang}.${k} is empty`);
@@ -77,6 +82,12 @@ test('every built-in locale carries every English key, no orphan keys and the sa
     }
   }
   assert.equal(fr['nav.statements'], 'Relevés');
+  // partial packs fall back to French before English
+  const chain = (lang: string, key: string) => LOCALES[lang]?.[key] ?? (PARTIAL.includes(lang) ? fr[key] : undefined) ?? en[key];
+  assert.equal(chain('ln', 'nav.send'), 'Kotinda mbongo');
+  assert.equal(chain('ln', 'nav.statements'), 'Relevés');
+  assert.equal(chain('kg', 'dash.welcome'), 'Mbote, {name}');
+  assert.equal(chain('lua', 'nav.savings'), 'Épargne et objectifs');
 });
 
 test('phone normalisation is shared and prefix-tolerant', () => {

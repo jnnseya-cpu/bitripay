@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { config } from '../config';
 import { getSetting } from './settings';
+import { renderTemplate, type TemplateChannel } from './notifications';
 
 export interface SmtpSettings {
   host: string;
@@ -25,8 +26,23 @@ export function getSmtpSettings(): SmtpSettings {
 
 export const outbox: { channel: 'email' | 'sms'; to: string; subject?: string; body: string; at: string }[] = [];
 
-export async function sendEmail(to: string, subject: string, text: string, html?: string): Promise<{ delivered: boolean; via: string }> {
+/** An event key plus placeholder values: the admin-editable template for the channel replaces the literal text. */
+export interface TemplatedMessage {
+  key: string;
+  vars?: Record<string, unknown>;
+  lang?: string | null;
+}
+function applyTemplate(channel: TemplateChannel, template: TemplatedMessage | undefined, fallback: { subject?: string; body: string }) {
+  if (!template) return fallback;
+  const r = renderTemplate(template.key, channel, template.lang, template.vars ?? {});
+  return r ? { subject: r.subject ?? fallback.subject, body: r.body } : fallback;
+}
+
+export async function sendEmail(to: string, subject: string, text: string, html?: string, template?: TemplatedMessage): Promise<{ delivered: boolean; via: string }> {
   const smtp = getSmtpSettings();
+  const rendered = applyTemplate('email', template, { subject, body: text });
+  subject = rendered.subject ?? subject;
+  text = rendered.body;
   outbox.push({ channel: 'email', to, subject, body: text, at: new Date().toISOString() });
   if (outbox.length > 200) outbox.shift();
   if (!smtp.host) {
@@ -48,7 +64,8 @@ export async function sendEmail(to: string, subject: string, text: string, html?
   }
 }
 
-export async function sendSms(to: string, body: string): Promise<{ delivered: boolean; via: string }> {
+export async function sendSms(to: string, body: string, template?: TemplatedMessage): Promise<{ delivered: boolean; via: string }> {
+  body = applyTemplate('sms', template, { body }).body;
   outbox.push({ channel: 'sms', to, body, at: new Date().toISOString() });
   if (outbox.length > 200) outbox.shift();
   const sms = getSetting<{ provider?: string; twilioSid?: string; twilioToken?: string; twilioFrom?: string }>('sms', {});

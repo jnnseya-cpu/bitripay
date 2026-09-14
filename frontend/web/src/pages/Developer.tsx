@@ -150,6 +150,10 @@ export function Developer() {
               Every delivery carries <code>BitriPay-Signature</code> (HMAC, <code>t=…,v1=…</code>, 5-minute tolerance) and <code>BitriPay-Signature-Ed25519</code> (platform key from{' '}
               <code>/v1/keys</code>). Retries: 10s, 30s, 2m, 10m, 30m, then every 2h for 24h; dead letters can be replayed here.
             </p>
+            <p className="tiny muted" data-testid="standards">
+              Standards: the Ed25519 signature is <a href="https://www.rfc-editor.org/rfc/rfc8032">RFC 8032</a> over the raw body; HTTP semantics, status codes and idempotent methods follow{' '}
+              <a href="https://www.rfc-editor.org/rfc/rfc9110">RFC 9110</a>; bearer tokens issued to your users are JSON Web Tokens (<a href="https://www.rfc-editor.org/rfc/rfc7519">RFC 7519</a>).
+            </p>
             <Field label="URL">
               <Input value={ep.url} onChange={(e) => setEp({ ...ep, url: e.target.value })} placeholder="https://shop.example/webhooks/bitripay" />
             </Field>
@@ -391,10 +395,20 @@ function Docs() {
           Every error body is <code>{'{ error: { code, bp, message, details } }'}</code>. Idempotency: send <code>Idempotency-Key</code> on every money-moving POST; a replay returns the same object
           (200), a reuse with a different body is refused (422).
         </p>
+        <h3 className="mt">Signatures and tokens</h3>
+        <p className="small">
+          HTTP semantics, status codes and idempotent methods follow <b>RFC 9110</b>; bearer tokens are JSON Web Tokens (<b>RFC 7519</b>) carrying the key's scopes and tenant; webhook and QR
+          signatures use Ed25519 (<b>RFC 8032</b>) with the platform public key published at <code>/v1/keys</code> and your merchant key in the BitriQR registry. Verify both webhook signatures; never
+          trust a redirect or a success screen as proof of payment – wait for <code>payment_intent.settled</code>.
+        </p>
         <h3 className="mt">Objects</h3>
         <p className="small">
           payment_intents · checkout_sessions · payment_links · qr_codes · locations · refunds · verifications · payouts · balance · webhook_endpoints · events · settlement_profiles ·
           settlement_cycles · disputes · offline · diaspora · payments (national switch)
+        </p>
+        <p className="tiny muted">
+          <b>payments</b> (national switch, DRC): domestic interoperability payments are routed through the Switch Monétique National under <b>Instruction n°58</b> of the Banque Centrale du Congo.
+          BitriPay initiates, orchestrates, normalises and reports; licensed institutions hold and settle the funds. Track them under <Link to="/app/merchant/switch">National switch</Link>.
         </p>
       </div>
     </div>

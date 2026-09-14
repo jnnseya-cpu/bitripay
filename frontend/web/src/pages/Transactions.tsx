@@ -81,6 +81,7 @@ export function Transactions() {
 
 export function TransactionDetail() {
   const { id } = useParams();
+  const t = useT();
   const { money, user } = useStore();
   const data = useAsync(() => api.get<{ transaction: Transaction; sender: PublicUser | null; receiver: PublicUser | null; entries: any[] }>(`/api/wallets/transactions/${id}`), [id]);
   if (data.error)
@@ -156,6 +157,9 @@ export function TransactionDetail() {
           ))}
         </div>
       )}
+      <p className="tiny muted mt" data-testid="receipt-trust">
+        {t('trust.notProof')}
+      </p>
       <div className="row mt">
         <Button variant="secondary" onClick={() => window.print()}>
           Print receipt

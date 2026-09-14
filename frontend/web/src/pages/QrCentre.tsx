@@ -1,34 +1,146 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, qs } from '../lib/api';
+import QRCode from 'qrcode';
+import { api, qs, API_BASE } from '../lib/api';
 import { useStore } from '../lib/store';
+import { useT } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, Field, Input, KV, Modal, PageHeader, QrImage, Select, StatusBadge, Tabs, useAsync } from '../components/ui';
 import { offlineDevice } from '../lib/offline';
+
+/** The scannable content of a code, whichever view produced it (static code, dynamic intent, offline promise). */
+const payloadOf = (q: any): string => String(q.payload ?? q.qrPayload ?? q.uri ?? '');
+function saveBlob(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+const fileStem = (q: any) => `bitripay-qr-${String(q.code ?? q.id ?? 'code').replace(/[^A-Za-z0-9_-]/g, '')}`;
+/** PNG rendered from the same encoder the on-screen image uses; SVG from the API's image route; payload as text. */
+async function downloadPng(q: any) {
+  const dataUrl = await QRCode.toDataURL(payloadOf(q), { margin: 2, width: 1024, errorCorrectionLevel: 'M', color: { dark: '#0f172a', light: '#ffffff' } });
+  saveBlob(`${fileStem(q)}.png`, await (await fetch(dataUrl)).blob());
+}
+async function downloadSvg(q: any) {
+  const r = await fetch(`${API_BASE}/api/qr/image.svg?data=${encodeURIComponent(payloadOf(q))}`);
+  if (!r.ok) throw new Error(`Image route returned ${r.status}`);
+  saveBlob(`${fileStem(q)}.svg`, new Blob([await r.text()], { type: 'image/svg+xml' }));
+}
+function downloadPayload(q: any) {
+  saveBlob(`${fileStem(q)}.txt`, new Blob([payloadOf(q)], { type: 'text/plain' }));
+}
+function DownloadButtons({ q, err, size }: { q: any; err: (e: any) => void; size?: 'sm' }) {
+  const t = useT();
+  return (
+    <>
+      <Button size={size} variant="ghost" onClick={() => downloadPng(q).catch(err)} title="PNG">
+        {t('qr.downloadPng')}
+      </Button>
+      <Button size={size} variant="ghost" onClick={() => downloadSvg(q).catch(err)} title="SVG from /api/qr/image.svg">
+        {t('qr.downloadSvg')}
+      </Button>
+      <Button size={size} variant="ghost" onClick={() => downloadPayload(q)} title="Payload as text">
+        {t('qr.downloadPayload')}
+      </Button>
+    </>
+  );
+}
 
 /**
  * QR centre: locations and terminals, static / dynamic / offline codes, analytics, revocation, printable sheets,
  * and Diaspora-Direct institution codes for purpose-locked payments from abroad.
  */
 export function QrCentre() {
-  const { user, config, toast } = useStore();
+  const { user, config, toast, wallets } = useStore();
+  const t = useT();
   const [tab, setTab] = useState<'codes' | 'locations' | 'analytics' | 'institution'>('codes');
   const codes = useAsync(() => api.get<any>('/api/v1/qr_codes'), [tab]);
   const locations = useAsync(() => api.get<any>('/api/v1/locations'), [tab]);
   const analytics = useAsync(() => (tab === 'analytics' ? api.get<any>('/api/v1/qr_codes/analytics') : Promise.resolve(null)), [tab]);
   const purposes = useAsync(() => api.get<any>('/api/v1/diaspora/rate-cards'), []);
-  const [form, setForm] = useState<any>({ currency: config?.baseCurrency ?? 'USD', kind: 'merchant', purpose_code: '', reference: '', amount: '', location_id: '', sign: true });
+  /** Merchant gateway settings carry the optional QR floor/ceiling (`qrMinAmountMinor` / `qrMaxAmountMinor`) the API enforces. */
+  const gateway = useAsync(() => api.get<any>('/api/merchant/gateway').catch(() => null), []);
+  // Amount rules mirrored from the service: a code can only be denominated in a currency the merchant can receive
+  // (a wallet currency); dynamic codes need an amount > 0; static codes carry none (the payer enters it).
+  const walletCurrencies = Array.from(new Set(wallets.map((w) => w.currency)));
+  const currencyOptions = walletCurrencies.length ? walletCurrencies : (config?.currencies ?? []).map((c) => c.code);
+  const rules = { currencies: walletCurrencies, min: gateway.data?.settings?.qrMinAmountMinor ?? null, max: gateway.data?.settings?.qrMaxAmountMinor ?? null };
+  const [form, setForm] = useState<any>({
+    mode: 'static',
+    currency: currencyOptions[0] ?? config?.baseCurrency ?? 'USD',
+    kind: 'merchant',
+    purpose_code: '',
+    reference: '',
+    amount: '',
+    location_id: '',
+    sign: true,
+  });
   const [offline, setOffline] = useState<any>({ amount: '', currency: config?.baseCurrency ?? 'USD', reference: '' });
   const [shown, setShown] = useState<any>(null);
-  const err = (e: any) => toast(e.message, 'error');
+  const [formError, setFormError] = useState<string | null>(null);
+  const decimalsOf = (code: string) => (config?.currencies ?? []).find((c) => c.code === code)?.decimals ?? 2;
+  const minorToText = (minor: number, code: string) => `${(minor / 10 ** decimalsOf(code)).toFixed(decimalsOf(code))} ${code}`;
+  /** The API's amount-rule error codes, shown in the user's language. */
+  const localised = (e: any): string => {
+    const range = t('qr.amountRange', { min: rules.min ? minorToText(rules.min, form.currency) : '0', max: rules.max ? minorToText(rules.max, form.currency) : '∞' });
+    const map: Record<string, string> = { amount_required: t('qr.amountRequired'), currency_not_receivable: t('qr.currencyNotReceivable'), amount_below_minimum: range, amount_above_maximum: range };
+    return map[e?.code] ?? e?.message ?? String(e);
+  };
+  const err = (e: any) => toast(localised(e), 'error');
   if (user?.role !== 'merchant' && user?.role !== 'admin')
     return (
       <Alert kind="info">
         The QR centre is for merchant accounts. <Link to="/app/merchant">Upgrade</Link> or use <Link to="/app/receive">Receive</Link> for personal codes.
       </Alert>
     );
+  /** Client-side check of the same rules the service applies; returns the message to show or null when the form may be sent. */
+  const amountProblem = (): string | null => {
+    const amountMinor = form.amount ? Math.round(parseFloat(form.amount) * 10 ** decimalsOf(form.currency)) : null;
+    if (rules.currencies.length && !rules.currencies.includes(form.currency)) return t('qr.currencyNotReceivable');
+    if (form.mode === 'dynamic' && (amountMinor == null || !(amountMinor > 0))) return t('qr.amountRequired');
+    if (amountMinor != null && ((rules.min && amountMinor < rules.min) || (rules.max && amountMinor > rules.max)))
+      return t('qr.amountRange', { min: rules.min ? minorToText(rules.min, form.currency) : '0', max: rules.max ? minorToText(rules.max, form.currency) : '∞' });
+    return null;
+  };
   const create = () => {
+    const problem = amountProblem();
+    setFormError(problem);
+    if (problem) return toast(problem, 'error');
+    const amountMinor = form.amount ? Math.round(parseFloat(form.amount) * 10 ** decimalsOf(form.currency)) : null;
+    if (form.mode === 'dynamic') {
+      // a dynamic code is a payment intent with an amount: single use, expires, one QR per sale
+      api
+        .post<any>('/api/v1/payment_intents', {
+          amount_minor: amountMinor,
+          currency: form.currency,
+          reference: form.reference || null,
+          purpose_code: form.purpose_code || null,
+          location_id: form.location_id || null,
+        })
+        .then((intent) => {
+          setShown({
+            ...intent,
+            mode: 'DYNAMIC',
+            code: intent.id,
+            payload: intent.qrPayload ?? intent.uri,
+            amount: intent.amount?.valueMinor ?? null,
+            currency: intent.amount?.currency ?? form.currency,
+            reference: intent.reference ?? form.reference ?? null,
+          });
+          codes.reload();
+          toast('Dynamic code created', 'success');
+        })
+        .catch((e) => {
+          setFormError(localised(e));
+          err(e);
+        });
+      return;
+    }
     const body: any = { currency: form.currency, kind: form.kind, sign: form.sign, purpose_code: form.purpose_code || null, reference: form.reference || null, location_id: form.location_id || null };
-    if (form.amount) body.amount_minor = Math.round(parseFloat(form.amount) * 100);
     api
       .post<any>('/api/v1/qr_codes', body)
       .then((q) => {
@@ -36,7 +148,10 @@ export function QrCentre() {
         codes.reload();
         toast('Code created', 'success');
       })
-      .catch(err);
+      .catch((e) => {
+        setFormError(localised(e));
+        err(e);
+      });
   };
   const offlineCode = async () => {
     try {
@@ -83,12 +198,18 @@ export function QrCentre() {
       {tab === 'codes' && (
         <div className="grid cols-3">
           <div className="card">
-            <h3>New static code</h3>
+            <h3>New code</h3>
             <div className="grid cols-2">
-              <Field label="Currency">
+              <Field label="Mode" hint={form.mode === 'dynamic' ? 'One sale, one code: carries the amount and expires.' : 'Printed at the counter: the payer enters the amount.'}>
+                <Select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value, amount: e.target.value === 'static' ? '' : form.amount })}>
+                  <option value="static">Static</option>
+                  <option value="dynamic">Dynamic (fixed amount)</option>
+                </Select>
+              </Field>
+              <Field label="Currency" hint={walletCurrencies.length ? `Your wallets: ${walletCurrencies.join(', ')}` : undefined}>
                 <Select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
-                  {(config?.currencies ?? []).map((c) => (
-                    <option key={c.code}>{c.code}</option>
+                  {currencyOptions.map((c) => (
+                    <option key={c}>{c}</option>
                   ))}
                 </Select>
               </Field>
@@ -99,9 +220,22 @@ export function QrCentre() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Fixed amount (optional)">
-                <Input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="leave empty: payer enters" />
-              </Field>
+              {form.mode === 'dynamic' ? (
+                <Field
+                  label={`Amount (${form.currency})`}
+                  hint={
+                    rules.min || rules.max
+                      ? t('qr.amountRange', { min: rules.min ? minorToText(rules.min, form.currency) : '0', max: rules.max ? minorToText(rules.max, form.currency) : '∞' })
+                      : undefined
+                  }
+                >
+                  <Input inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value.replace(/[^\d.]/g, '') })} placeholder="0.00" />
+                </Field>
+              ) : (
+                <Field label="Amount">
+                  <Input value="" disabled placeholder="payer enters the amount" />
+                </Field>
+              )}
               <Field label="Purpose">
                 <Select value={form.purpose_code} onChange={(e) => setForm({ ...form, purpose_code: e.target.value })}>
                   <option value="">General</option>
@@ -127,10 +261,15 @@ export function QrCentre() {
                 ))}
               </Select>
             </Field>
-            <label className="checkbox mb">
-              <input type="checkbox" checked={form.sign} onChange={(e) => setForm({ ...form, sign: e.target.checked })} /> Sign with my merchant key (recommended)
-            </label>
-            <Button onClick={create}>Create code</Button>
+            {form.mode === 'static' && (
+              <label className="checkbox mb">
+                <input type="checkbox" checked={form.sign} onChange={(e) => setForm({ ...form, sign: e.target.checked })} /> Sign with my merchant key (recommended)
+              </label>
+            )}
+            {formError && <Alert kind="error">{formError}</Alert>}
+            <Button onClick={create} disabled={form.mode === 'dynamic' && !form.amount}>
+              Create {form.mode} code
+            </Button>
             <h3 className="mt">Offline code</h3>
             <p className="small muted">Works with or without signal. The customer's phone signs a promise; the money is confirmed when either of you is back online.</p>
             <div className="grid cols-2">
@@ -173,10 +312,11 @@ export function QrCentre() {
                     </div>
                   </div>
                   <StatusBadge status={q.status} />
-                  <div className="row">
+                  <div className="row wrap">
                     <Button size="sm" variant="secondary" onClick={() => setShown(q)}>
                       Show
                     </Button>
+                    <DownloadButtons q={q} err={err} size="sm" />
                     {q.status === 'active' && (
                       <Button
                         size="sm"
@@ -215,25 +355,64 @@ export function QrCentre() {
                   </div>
                 </div>
               ))}
-          {analytics.data?.byDay && (
+          {Array.isArray(analytics.data?.byDay) && (
             <div className="card" style={{ gridColumn: 'span 3' }}>
               <h3>Scans by day</h3>
+              <p className="tiny muted">Last {analytics.data.days} days · scans and paid codes per day (days without activity are shown as zero).</p>
               <div className="row" style={{ alignItems: 'flex-end', height: 140, gap: 4 }}>
-                {analytics.data.byDay.map((d: any) => (
-                  <div
-                    key={d.day}
-                    title={`${d.day}: ${d.scans}`}
-                    style={{ flex: 1, background: 'var(--primary)', height: `${(d.scans / Math.max(1, ...analytics.data.byDay.map((x: any) => x.scans))) * 100}%`, borderRadius: 4 }}
-                  />
-                ))}
+                {analytics.data.byDay.map((d: any) => {
+                  const peak = Math.max(1, ...analytics.data.byDay.map((x: any) => x.scans));
+                  return (
+                    <div
+                      key={d.day}
+                      title={`${d.day}: ${d.scans} scans · ${d.paid} paid`}
+                      style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%', gap: 2 }}
+                    >
+                      <div style={{ background: 'var(--primary)', height: `${(d.scans / peak) * 100}%`, minHeight: d.scans ? 3 : 0, borderRadius: 4 }} />
+                      <div style={{ background: 'var(--success)', height: `${(d.paid / peak) * 100}%`, minHeight: d.paid ? 3 : 0, borderRadius: 4 }} />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="table-wrap mt">
+                <table data-testid="qr-by-day">
+                  <thead>
+                    <tr>
+                      <th>Day</th>
+                      <th className="right">Scans</th>
+                      <th className="right">Paid</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.data.byDay
+                      .slice()
+                      .reverse()
+                      .map((d: any) => (
+                        <tr key={d.day}>
+                          <td className="mono">{d.day}</td>
+                          <td className="right">{d.scans}</td>
+                          <td className="right">{d.paid}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
-          {analytics.data?.byOutcome && (
-            <div className="card" style={{ gridColumn: 'span 3' }}>
+          {Array.isArray(analytics.data?.byOutcome) && (
+            <div className="card" style={{ gridColumn: 'span 3' }} data-testid="qr-by-outcome">
               <h3>Outcomes</h3>
-              {Object.entries(analytics.data.byOutcome).map(([k, v]) => (
-                <KV key={k} k={k.replace(/_/g, ' ')} v={String(v)} />
+              {analytics.data.byOutcome.length === 0 && <Empty icon="📈" text="No scans in this window yet" />}
+              {analytics.data.byOutcome.map((o: any) => (
+                <KV key={o.outcome} k={String(o.outcome).replace(/_/g, ' ')} v={String(o.count)} />
+              ))}
+            </div>
+          )}
+          {analytics.data?.byLocation?.length > 0 && (
+            <div className="card" style={{ gridColumn: 'span 3' }}>
+              <h3>By location</h3>
+              {analytics.data.byLocation.map((l: any, i: number) => (
+                <KV key={`${l.name}-${i}`} k={l.name} v={String(l.scans)} />
               ))}
             </div>
           )}
@@ -268,10 +447,11 @@ export function QrCentre() {
                 {shown.uri}
               </div>
             )}
-            <div className="row mt" style={{ justifyContent: 'center' }}>
+            <div className="row wrap mt" style={{ justifyContent: 'center' }}>
               <Button variant="secondary" onClick={() => window.print()}>
                 Print
               </Button>
+              <DownloadButtons q={shown} err={err} />
             </div>
           </div>
         )}

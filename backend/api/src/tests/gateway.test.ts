@@ -329,7 +329,8 @@ describe('ledger, audit and idempotency', () => {
     expect(again.body.transaction.id).toBe(first.body.transaction.id);
     expect(await balance(b.auth, 'USD')).toBe(1000);
     const different = await request(app).post('/api/transfers').set(a.auth).set('Idempotency-Key', key).send({ to: '@idem_rcv', amount: '11', currency: 'USD', pin: '1234' });
-    expect(different.status).toBe(422);
+    // gateway contract: a reused Idempotency-Key is a conflict with the earlier request, so it is 409 (was 422)
+    expect(different.status).toBe(409);
   });
 
   it('signs outbound webhooks with a timestamp and rejects stale or tampered signatures', () => {

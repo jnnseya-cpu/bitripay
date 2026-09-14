@@ -4,12 +4,16 @@ import { handleGatewayWebhook } from '../services/payments';
 import { getGateway, getGatewayCredentials, listGateways } from '../payments';
 import { ingestEvidence } from '../services/evidence';
 import { safeEqual } from '../lib/crypto';
+import { rateLimit } from '../middleware/rateLimit';
+import { getClientIp } from '../lib/http';
 
 /** Inbound webhooks from payment providers: /api/webhooks/:gatewayId (stripe, paystack, flutterwave, mpesa ...). */
 export const webhooksRouter = Router();
 
 webhooksRouter.post(
   '/:gateway',
+  // Inbound provider callbacks: limited per gateway and calling address (a provider's retry storm never starves the others).
+  rateLimit({ windowMs: 60_000, max: 600, keyPrefix: 'webhook_in', keyBy: (req) => `${String(req.params.gateway)}:${getClientIp(req)}` }),
   wrap(async (req, res) => {
     try {
       const id = String(req.params.gateway);

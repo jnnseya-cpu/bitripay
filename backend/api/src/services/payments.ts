@@ -31,6 +31,7 @@ import { PROVIDERS as PROVIDER_MAP } from '../payments';
 import { tryTransitionRoute } from './routeLifecycle';
 import { cancelPayout } from './payouts';
 import { openDispute } from './finops/disputes';
+import { assertBalanceCap } from './risk/kycTiers';
 
 export interface InitiatePaymentInput {
   purpose: 'deposit' | 'checkout';
@@ -227,6 +228,28 @@ function resolveAuthentication(user: UserRow | null, auth: PaymentAuth | undefin
   return { method: null, required: true };
 }
 
+/** Where each processor takes card details itself so the raw PAN never reaches the BitriPay API. */
+const HOSTED_CARD_FLOWS: Record<string, string> = {
+  stripe: 'the Stripe Payment Element or Stripe Checkout (client-side tokenisation)',
+  paystack: 'Paystack Popup / hosted checkout',
+  flutterwave: 'Flutterwave inline / hosted checkout',
+};
+
+/**
+ * PCI gating: the API accepts a raw card number only for the sandbox processor outside production. Every other
+ * processor tokenises the card on its own hosted page or client element (returned as the intent's `next` action),
+ * so a raw PAN sent to the API is refused before anything is stored or forwarded.
+ */
+export function assertRawCardAccepted(gateway: { provider: string; name: string }, card: CardInput | undefined) {
+  if (!card?.number) return;
+  if (gateway.provider === 'sandbox' && !config.isProduction) return;
+  const flow = HOSTED_CARD_FLOWS[gateway.provider] ?? `${gateway.name}'s hosted / tokenised card flow`;
+  throw badRequest(
+    `Raw card numbers are not accepted by this API. Start the payment without card details and complete it through ${flow}; the API returns the hosted/tokenised step as the intent's next action.`,
+    'raw_card_not_accepted',
+  );
+}
+
 /** Create a payment intent. With a signed-in payer the intent waits in AUTHENTICATION_REQUIRED until biometrics/PIN are supplied. */
 export async function initiatePayment(user: UserRow | null, input: InitiatePaymentInput, auth?: PaymentAuth): Promise<PaymentView> {
   const modules = getModules();
@@ -288,6 +311,9 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
     const op = getOperator(input.operatorId);
     if (op.currency !== cur.code) throw badRequest(`${op.name} collects ${op.currency}. Choose ${op.currency} as the currency to pay with this operator.`, 'operator_currency_mismatch');
   }
+  assertRawCardAccepted(gateway, input.card);
+  // Tiered accounts have a wallet balance ceiling per KYC tier and country; a top-up that would breach it is refused up front.
+  if (input.purpose === 'deposit' && user) assertBalanceCap(user, amount, cur.code);
 
   const feeType = input.purpose === 'checkout' ? 'merchant_payment' : input.method === 'card' ? 'card_deposit' : input.method === 'mobile_money' ? 'mobile_money_deposit' : 'bank_deposit';
   const fee = calculateFee(feeType, amount, cur.code);
@@ -374,6 +400,7 @@ export async function authenticatePayment(
     throw conflict('This payment intent has expired. Start again.', 'payment_expired');
   }
   const gateway = getGateway(payment.gateway)!;
+  assertRawCardAccepted(gateway, body.card);
   const authn = resolveAuthentication(user, { pin: body.pin, req }, gateway.provider, payment.method);
   if (authn.required) throw badRequest('Confirm with biometrics or your transaction PIN', 'authentication_required');
   markAuthenticated(id, authn.method!, actorFor(user));
@@ -414,6 +441,7 @@ async function dispatchToProvider(
   try {
     result = await provider.initiate({
       payment,
+      idempotencyKey: payment.id,
       amountMinor: payment.amount,
       amountMajor: payment.amount / 10 ** cur.decimals,
       currency: cur.code,
@@ -594,7 +622,12 @@ export function settlePayment(payment: GatewayPaymentRow, actor: Actor = { type:
       });
       updatePayment(fresh.id, { transaction_id: tx.id });
       transitionStage(fresh.id, 'SETTLED', actor, { transactionId: tx.id, credited });
-      notify(fresh.user_id!, 'Money added', `${formatMoney(credited, cur)} was added to your ${cur.code} wallet.`, { kind: 'deposit', transactionId: tx.id });
+      notify(fresh.user_id!, 'Money added', `${formatMoney(credited, cur)} was added to your ${cur.code} wallet.`, {
+        kind: 'deposit',
+        transactionId: tx.id,
+        template: 'deposit.completed',
+        vars: { amount: formatMoney(credited, cur), currency: cur.code },
+      });
       onDepositCompleted(fresh.user_id!);
       const meta = parseJson<{ route?: RouteDestination | null; routeId?: string | null }>(fresh.metadata, {});
       if (meta.route && meta.routeId) continueRouteAfterFunding(meta.routeId, fresh.id, tx.id, credited);
@@ -645,7 +678,7 @@ export function rejectPayment(id: string, actor: Actor, reason: string): Payment
   if (TERMINAL_STAGES.includes(payment.stage as PaymentStage)) throw conflict(`Payment is already ${payment.stage.toLowerCase()}`, 'invalid_stage_transition');
   mergeMeta(id, { failureReason: reason });
   transitionStage(id, 'REJECTED', actor, { reason });
-  if (payment.user_id) notify(payment.user_id, 'Payment rejected', reason, { kind: 'payment_failed', paymentId: id });
+  if (payment.user_id) notify(payment.user_id, 'Payment rejected', reason, { kind: 'payment_failed', paymentId: id, template: 'payment.rejected', vars: { reason } });
   return toPaymentView(getPayment(id));
 }
 

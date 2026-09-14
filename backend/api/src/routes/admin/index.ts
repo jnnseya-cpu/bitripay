@@ -4,6 +4,7 @@ import { getDb } from '../../db';
 import { validate, wrap, parsePagination } from '../../lib/http';
 import { requireAdmin } from '../../middleware/auth';
 import { requirePermission } from '../../middleware/permissions';
+import { rateLimit, keyByUser, keyByIp } from '../../middleware/rateLimit';
 import { audit, listAuditLogs } from '../../services/audit';
 import { createUser, findUserById, getUserById, toUser, updateUser, normalizeEmail, normalizePhone, type UserRow, toPublicUser } from '../../services/users';
 import { hashPassword } from '../../lib/password';
@@ -42,6 +43,7 @@ import { adminFinopsRouter } from './finops';
 import { adminGrowthRouter } from './growth';
 import { adminRiskRouter } from './risk';
 import { adminIntelligenceRouter } from './intelligence';
+import { adminMessagingRouter } from './messaging';
 import { assertPricingAboveFloor } from '../../services/assist/gateway';
 import { toBase as toBaseMinor } from '../../services/currencies';
 /** Price-currency minor units → US dollars (the base currency is USD-denominated; other bases convert at the platform rate). */
@@ -165,11 +167,14 @@ const complianceSchema = z.object({
 
 export const adminRouter = Router();
 adminRouter.use(...requireAdmin);
+// Administrative writes (POST/PUT/PATCH/DELETE on every admin router) are limited per administrator account.
+adminRouter.use(rateLimit({ windowMs: 60_000, max: 300, keyPrefix: 'admin_write', methods: ['POST', 'PUT', 'PATCH', 'DELETE'], keyBy: (req) => keyByUser(req) ?? keyByIp(req) }));
 adminRouter.use('/switch', adminSwitchRouter);
 adminRouter.use('/finops', adminFinopsRouter);
 adminRouter.use('/growth', adminGrowthRouter);
 adminRouter.use('/risk', adminRiskRouter);
 adminRouter.use('/intelligence', adminIntelligenceRouter);
+adminRouter.use('/messaging', adminMessagingRouter);
 
 // ---------------- Dashboard ----------------
 adminRouter.get('/stats', requirePermission('reports'), (_req, res) => {
@@ -1190,6 +1195,7 @@ adminRouter.put(
       'webhooks',
       'emoney',
       'gateway_products',
+      'security',
     ];
     if (!allowed.includes(key)) throw badRequest('Unknown settings key');
     let value = req.body?.value ?? req.body;

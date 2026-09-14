@@ -32,6 +32,7 @@ import { MoveMoney } from './pages/MoveMoney';
 import { MerchantCentre } from './pages/MerchantCentre';
 import { QrCentre } from './pages/QrCentre';
 import { Developer } from './pages/Developer';
+import { SwitchPayments } from './pages/SwitchPayments';
 import { Savings } from './pages/Savings';
 import { FxTools } from './pages/FxTools';
 import { Credit } from './pages/Credit';
@@ -331,6 +332,14 @@ export function App() {
           element={
             <Protected>
               <Developer />
+            </Protected>
+          }
+        />
+        <Route
+          path="/app/merchant/switch"
+          element={
+            <Protected>
+              <SwitchPayments />
             </Protected>
           }
         />

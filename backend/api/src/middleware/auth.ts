@@ -5,7 +5,7 @@ import { findUserById, type UserRow } from '../services/users';
 import { getDb } from '../db';
 import { sha256 } from '../lib/crypto';
 import { now } from '../lib/ids';
-import { getAppSettings } from '../services/settings';
+import { getAppSettings, getSecuritySettings } from '../services/settings';
 import type { Role } from '@bitripay/shared';
 import type { ApiKeyScope } from '../services/merchant';
 
@@ -75,6 +75,7 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
     const user = resolveBearer(req);
     if (!user) throw unauthorized();
     if (user.status === 'suspended') throw forbidden('Your account has been suspended', 'account_suspended');
+    assertTwoFactorPolicy(req, user);
     const app = getAppSettings();
     if (app.maintenanceMode && user.role !== 'admin' && req.method !== 'GET') {
       throw forbidden('The platform is under maintenance. Please try again later.', 'maintenance');
@@ -84,6 +85,40 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   } catch (err) {
     next(err);
   }
+}
+
+/**
+ * Paths an account that must enable 2FA may still reach: the 2FA setup itself, its own profile, sign-out and what the
+ * settings page needs to render (`/api/auth/me`, `/api/config`).
+ */
+const TWO_FACTOR_EXEMPT: { method?: string; test: (path: string) => boolean }[] = [
+  { test: (p) => p.startsWith('/api/account/2fa/') },
+  { method: 'GET', test: (p) => p === '/api/account/profile' },
+  { test: (p) => p === '/api/auth/logout' },
+  { test: (p) => p === '/api/auth/me' },
+  { test: (p) => p === '/api/config' },
+];
+
+/** Whether an account of a required role is past its grace period without 2FA (null when the policy does not apply). */
+export function twoFactorDeadline(user: Pick<UserRow, 'role' | 'two_factor_enabled' | 'created_at'>): { required: boolean; deadline: string | null; overdue: boolean } {
+  const s = getSecuritySettings();
+  const required = user.role === 'merchant' ? s.require2fa.merchant : user.role === 'agent' ? s.require2fa.agent : user.role === 'admin' ? s.require2fa.admin : false;
+  if (!required || user.two_factor_enabled) return { required, deadline: null, overdue: false };
+  const deadline = new Date(Date.parse(user.created_at) + Math.max(0, s.graceDays) * 86_400_000).toISOString();
+  return { required, deadline, overdue: Date.now() >= Date.parse(deadline) };
+}
+
+/**
+ * 2FA policy: when the security settings require two-factor authentication for the account's role and the grace
+ * period since account creation has passed, session requests are refused with 403 two_factor_required until the
+ * account enables it. Machine credentials (API keys) are not human sessions and are not affected.
+ */
+function assertTwoFactorPolicy(req: Request, user: UserRow) {
+  if (req.authVia === 'api_key') return;
+  const path = (req.originalUrl || req.url || '').split('?')[0];
+  if (TWO_FACTOR_EXEMPT.some((e) => (!e.method || e.method === req.method) && e.test(path))) return;
+  const policy = twoFactorDeadline(user);
+  if (policy.overdue) throw forbidden('Two-factor authentication is required for your account. Enable it in Settings › Security to continue.', 'two_factor_required');
 }
 
 /** Resolves the partially-authenticated user during the 2FA step of login. */

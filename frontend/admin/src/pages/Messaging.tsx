@@ -1,13 +1,31 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Alert, Button, Field, Input, PageHeader, Select, Switch, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
+import { Alert, Button, Chip, Field, Input, Modal, PageHeader, Select, Switch, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
+
+interface NotificationTemplate {
+  id: string;
+  key: string;
+  channel: string;
+  lang: string;
+  subject: string | null;
+  body: string;
+  updatedBy: string | null;
+  updatedAt: string;
+  isDefault: boolean;
+}
+interface TemplateEvent {
+  key: string;
+  description: string;
+  placeholders: string[];
+  sample: Record<string, string>;
+}
 
 export function Messaging() {
   const { toast } = useStore();
   const settings = useAsync(() => api.get<any>('/api/admin/settings'), []);
   const outbox = useAsync(() => api.get<{ items: any[] }>('/api/admin/outbox'), []);
-  const [tab, setTab] = useState<'smtp' | 'sms' | 'push' | 'newsletter' | 'outbox'>('smtp');
+  const [tab, setTab] = useState<'smtp' | 'sms' | 'push' | 'newsletter' | 'templates' | 'outbox'>('smtp');
   const [smtp, setSmtp] = useState<any>(null);
   const [sms, setSms] = useState<any>(null);
   const [test, setTest] = useState('');
@@ -33,6 +51,7 @@ export function Messaging() {
           { id: 'sms', label: 'SMS / phone auth' },
           { id: 'push', label: 'Push notifications' },
           { id: 'newsletter', label: 'Newsletter' },
+          { id: 'templates', label: 'Templates' },
           { id: 'outbox', label: 'Message log' },
         ]}
         value={tab}
@@ -159,6 +178,7 @@ export function Messaging() {
             </div>
           </>
         )}
+        {tab === 'templates' && <Templates />}
         {tab === 'outbox' && (
           <>
             <div className="row mb">
@@ -189,5 +209,224 @@ export function Messaging() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Notification templates: the wording of every message the API sends (OTP codes, payments received, payouts paid…)
+ * per event, channel and language, with {{placeholders}} filled at send time. English defaults ship with the API;
+ * other languages fall back to English until a variant is saved here.
+ */
+function Templates() {
+  const { toast } = useStore();
+  const data = useAsync(() => api.get<{ items: NotificationTemplate[]; channels: string[]; events: TemplateEvent[] }>('/api/admin/messaging/templates'), []);
+  const [filter, setFilter] = useState({ key: '', channel: '' });
+  const [editing, setEditing] = useState<{ key: string; channel: string; lang: string; subject: string; body: string; isNew: boolean } | null>(null);
+  const [preview, setPreview] = useState<{ subject: string | null; body: string } | null>(null);
+  const [variant, setVariant] = useState({ key: '', channel: 'push', lang: 'fr' });
+  const events = data.data?.events ?? [];
+  const channels = data.data?.channels ?? [];
+  const items = (data.data?.items ?? []).filter((t) => (!filter.key || t.key === filter.key) && (!filter.channel || t.channel === filter.channel));
+  const eventFor = (key: string) => events.find((e) => e.key === key);
+  const fail = (e: Error) => toast(e.message, 'error');
+  const openEditor = (t: NotificationTemplate, isNew = false, lang = t.lang) => {
+    setPreview(null);
+    setEditing({ key: t.key, channel: t.channel, lang, subject: t.subject ?? '', body: t.body, isNew });
+  };
+  const save = () => {
+    if (!editing) return;
+    api
+      .put<{ template: NotificationTemplate }>('/api/admin/messaging/templates', {
+        key: editing.key,
+        channel: editing.channel,
+        lang: editing.lang,
+        subject: editing.subject || null,
+        body: editing.body,
+      })
+      .then(() => {
+        toast(`Template ${editing.key} (${editing.channel}, ${editing.lang}) saved`, 'success');
+        setEditing(null);
+        data.reload();
+      })
+      .catch(fail);
+  };
+  const reset = (t: NotificationTemplate) =>
+    api
+      .put('/api/admin/messaging/templates', { key: t.key, channel: t.channel, lang: t.lang, reset: true })
+      .then(() => {
+        toast('Default text restored', 'success');
+        data.reload();
+      })
+      .catch(fail);
+  const renderPreview = (t: { key: string; channel: string; lang: string; subject?: string | null; body?: string | null }) =>
+    api
+      .post<{ rendered: { subject: string | null; body: string } | null }>('/api/admin/messaging/templates/preview', t)
+      .then((r) => setPreview(r.rendered ?? { subject: null, body: '' }))
+      .catch(fail);
+  const addVariant = () => {
+    const base =
+      (data.data?.items ?? []).find((t) => t.key === variant.key && t.channel === variant.channel && t.lang === 'en') ??
+      (data.data?.items ?? []).find((t) => t.key === variant.key && t.channel === variant.channel);
+    const lang = variant.lang.trim().toLowerCase();
+    if (!variant.key || lang.length < 2) return toast('Choose an event and a language code', 'error');
+    openEditor(base ?? { id: '', key: variant.key, channel: variant.channel, lang, subject: null, body: '', updatedBy: null, updatedAt: '', isDefault: false }, true, lang);
+  };
+  return (
+    <>
+      <Alert kind="info">
+        Every OTP, payment, payout, KYC and security message is rendered from these templates. Use <code>{'{{placeholder}}'}</code> for the values listed per event; a language without its own text
+        falls back to English.
+      </Alert>
+      <div className="row wrap mb">
+        <Field label="Event">
+          <Select value={filter.key} onChange={(e) => setFilter({ ...filter, key: e.target.value })}>
+            <option value="">All events</option>
+            {events.map((e) => (
+              <option key={e.key} value={e.key}>
+                {e.key}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Channel">
+          <Select value={filter.channel} onChange={(e) => setFilter({ ...filter, channel: e.target.value })}>
+            <option value="">All channels</option>
+            {channels.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Button size="sm" variant="secondary" onClick={data.reload}>
+          Refresh
+        </Button>
+      </div>
+      <Table
+        head={['Event', 'Channel', 'Lang', 'Subject / body', 'Updated', '']}
+        rows={items.map((t) => [
+          <span>
+            <b>{t.key}</b>
+            <div className="tiny muted">{eventFor(t.key)?.description}</div>
+          </span>,
+          t.channel,
+          t.lang,
+          <span className="small">
+            {t.subject ? (
+              <b>
+                {t.subject}
+                <br />
+              </b>
+            ) : null}
+            {t.body}
+          </span>,
+          <span className="small">
+            {t.isDefault ? <Chip>default</Chip> : <Chip kind="primary">edited</Chip>}
+            <div className="tiny muted">{t.updatedAt ? fmtDate(t.updatedAt) : ''}</div>
+          </span>,
+          <div className="row wrap">
+            <Button size="sm" variant="secondary" onClick={() => openEditor(t)}>
+              Edit
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => renderPreview({ key: t.key, channel: t.channel, lang: t.lang })}>
+              Preview
+            </Button>
+            {!t.isDefault && t.lang === 'en' && (
+              <Button size="sm" variant="ghost" onClick={() => reset(t)}>
+                Reset
+              </Button>
+            )}
+          </div>,
+        ])}
+        empty="No templates match"
+      />
+      <div className="card mt">
+        <h4>Add a language variant</h4>
+        <div className="row wrap">
+          <Field label="Event">
+            <Select value={variant.key} onChange={(e) => setVariant({ ...variant, key: e.target.value })}>
+              <option value="">Choose…</option>
+              {events.map((e) => (
+                <option key={e.key} value={e.key}>
+                  {e.key}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Channel">
+            <Select value={variant.channel} onChange={(e) => setVariant({ ...variant, channel: e.target.value })}>
+              {channels.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Language code" hint="fr, sw, ln, ar…">
+            <Input value={variant.lang} onChange={(e) => setVariant({ ...variant, lang: e.target.value })} style={{ width: 90 }} maxLength={5} />
+          </Field>
+          <Button variant="secondary" onClick={addVariant}>
+            Write variant
+          </Button>
+        </div>
+      </div>
+      {preview && !editing && (
+        <div className="card mt">
+          <h4>Preview (sample values)</h4>
+          {preview.subject ? <b>{preview.subject}</b> : null}
+          <p className="small" style={{ whiteSpace: 'pre-wrap' }}>
+            {preview.body}
+          </p>
+          <Button size="sm" variant="ghost" onClick={() => setPreview(null)}>
+            Close
+          </Button>
+        </div>
+      )}
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing ? `${editing.isNew ? 'New' : 'Edit'} template · ${editing.key} · ${editing.channel} · ${editing.lang}` : ''} wide>
+        {editing && (
+          <>
+            <p className="small muted">
+              {eventFor(editing.key)?.description}. Placeholders:{' '}
+              {(eventFor(editing.key)?.placeholders ?? []).map((p) => (
+                <code key={p} style={{ marginRight: 6 }}>
+                  {`{{${p}}}`}
+                </code>
+              ))}
+              <code>{'{{appName}}'}</code>
+            </p>
+            {editing.channel !== 'sms' && editing.channel !== 'whatsapp' && (
+              <Field label={editing.channel === 'email' ? 'Subject' : 'Title'}>
+                <Input value={editing.subject} onChange={(e) => setEditing({ ...editing, subject: e.target.value })} maxLength={200} />
+              </Field>
+            )}
+            <Field label="Body" hint={editing.channel === 'sms' ? 'Keep SMS under 160 characters where possible' : undefined}>
+              <Textarea value={editing.body} onChange={(e) => setEditing({ ...editing, body: e.target.value })} style={{ minHeight: 120 }} maxLength={4000} />
+            </Field>
+            {preview && (
+              <Alert kind="success">
+                {preview.subject ? (
+                  <b>
+                    {preview.subject}
+                    <br />
+                  </b>
+                ) : null}
+                <span style={{ whiteSpace: 'pre-wrap' }}>{preview.body}</span>
+              </Alert>
+            )}
+            <div className="row wrap">
+              <Button onClick={save} disabled={!editing.body.trim()}>
+                Save
+              </Button>
+              <Button variant="secondary" onClick={() => renderPreview({ key: editing.key, channel: editing.channel, lang: editing.lang, subject: editing.subject || null, body: editing.body })}>
+                Preview with sample values
+              </Button>
+              <Button variant="ghost" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+            </div>
+          </>
+        )}
+      </Modal>
+    </>
   );
 }

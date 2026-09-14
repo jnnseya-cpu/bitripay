@@ -48,6 +48,7 @@ import { routingRouter } from './routes/routing';
 import { evidenceRouter } from './routes/evidence';
 import { payoutsRouter } from './routes/payouts';
 import { idempotency } from './middleware/idempotency';
+import { correlation } from './middleware/correlation';
 import { ensureParseTemplates } from './services/evidence';
 import { ensureMomoOperators } from './services/momo';
 import { ensureDefaultCurrencies } from './services/currencies';
@@ -80,6 +81,9 @@ export function createApp() {
   const app = express();
   app.set('trust proxy', true);
   app.disable('x-powered-by');
+  // Correlation id first: every response (including parse errors and 404s) echoes X-Correlation-Id and every
+  // service down the chain can read it from the request context.
+  app.use(correlation);
   app.use(
     cors({
       origin: (origin, cb) => cb(null, true),

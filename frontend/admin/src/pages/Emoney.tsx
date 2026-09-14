@@ -50,40 +50,45 @@ export function Emoney() {
         title="E-money & safeguarded reserves"
         subtitle="BitriPay balances are a redeemable claim on the authorised issuer, backed 1:1 by cleared safeguarded funds. Issuable ≤ cleared reserves − pending redemptions − reserved exposure − e-money outstanding. No administrator can type an amount into existence."
         actions={
-          treasury && (
-            <>
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  api
-                    .post('/api/admin/emoney/reconcile', {})
-                    .then((r: any) => {
-                      ok(`Reconciled ${r.items.length} programme(s)`);
+          <>
+            <Chip kind={treasury ? 'primary' : undefined} selected={treasury}>
+              TREASURY_SUPER_ADMIN{treasury ? '' : ' · view only'}
+            </Chip>
+            {treasury && (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    api
+                      .post('/api/admin/emoney/reconcile', {})
+                      .then((r: any) => {
+                        ok(`Reconciled ${r.items.length} programme(s)`);
+                      })
+                      .catch(err)
+                  }
+                >
+                  Run reconciliation now
+                </Button>
+                <Button
+                  onClick={() =>
+                    setEdit({
+                      currency: config?.baseCurrency ?? 'USD',
+                      jurisdiction: '',
+                      issuerModel: 'own_authorisation',
+                      issuerName: '',
+                      licenceRef: '',
+                      regulator: '',
+                      safeguardingBank: '',
+                      safeguardingAccountRef: '',
+                      reservedExposure: 0,
                     })
-                    .catch(err)
-                }
-              >
-                Run reconciliation now
-              </Button>
-              <Button
-                onClick={() =>
-                  setEdit({
-                    currency: config?.baseCurrency ?? 'USD',
-                    jurisdiction: '',
-                    issuerModel: 'own_authorisation',
-                    issuerName: '',
-                    licenceRef: '',
-                    regulator: '',
-                    safeguardingBank: '',
-                    safeguardingAccountRef: '',
-                    reservedExposure: 0,
-                  })
-                }
-              >
-                + Issuer programme
-              </Button>
-            </>
-          )
+                  }
+                >
+                  + Issuer programme
+                </Button>
+              </>
+            )}
+          </>
         }
       />
       {overview.data?.compliance === 'sandbox' && (

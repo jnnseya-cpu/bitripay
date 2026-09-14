@@ -8,7 +8,7 @@ import { getDb } from '../../db';
 import { now, shortCode } from '../../lib/ids';
 import { parseJson } from '../../lib/json';
 import { badRequest, conflict, notFound } from '../../lib/errors';
-import { getFees } from '../settings';
+import { getFees, getSetting, setSetting } from '../settings';
 import { recordEvent } from '../events';
 import { FEE_TYPES } from '@bitripay/shared';
 
@@ -189,6 +189,49 @@ export function effectiveFees(ctx: FeeContext): { type: string; rule: FeeRule; s
     const r = resolveFeeRule(type, ctx);
     return r ? { type, rule: r.rule, source: r.source } : { type, rule: { fixed: 0, bps: 0 }, source: { scope: 'settings' as const, scheduleId: null, version: null } };
   });
+}
+
+/** Financial-operations settings: the tax applied to the BitriPay fee (VAT / digital-services tax), tax-inclusive. */
+export interface FinopsSettings {
+  /** Basis points of tax contained in every BitriPay fee (0 = no tax configured). */
+  feeTaxRateBps: number;
+  /** Label printed on statements next to the tax line (VAT, DST, …). */
+  feeTaxLabel: string;
+}
+const DEFAULT_FINOPS: FinopsSettings = { feeTaxRateBps: 0, feeTaxLabel: 'VAT' };
+export const getFinopsSettings = (): FinopsSettings => ({ ...DEFAULT_FINOPS, ...getSetting<Partial<FinopsSettings>>('finops', {}) });
+
+/**
+ * Tax on the BitriPay fee (VAT / digital-services tax), in basis points. Read from the `finops` setting
+ * (`feeTaxRateBps`), falling back to a `taxRateBps` on the `fees` setting; tax-inclusive: the fee charged already
+ * contains it. 0 when no rate is configured.
+ */
+export function feeTaxRateBps(): number {
+  const configured = getFinopsSettings().feeTaxRateBps;
+  const raw = configured || (getSetting<Record<string, unknown>>('fees', {}) as Record<string, unknown>).taxRateBps;
+  const bps = Number(raw ?? 0);
+  return Number.isFinite(bps) && bps > 0 ? Math.min(10_000, Math.round(bps)) : 0;
+}
+
+/** Administrative change of the fee tax rate (and its label); every change is recorded in the event log. */
+export function setFeeTaxRate(input: { feeTaxRateBps: number; feeTaxLabel?: string | null }, adminId: string): FinopsSettings {
+  if (!Number.isInteger(input.feeTaxRateBps) || input.feeTaxRateBps < 0 || input.feeTaxRateBps > 10_000) throw badRequest('feeTaxRateBps must be an integer between 0 and 10000', 'invalid_tax_rate');
+  const previous = getFinopsSettings();
+  const next: FinopsSettings = { ...previous, feeTaxRateBps: input.feeTaxRateBps, feeTaxLabel: input.feeTaxLabel?.trim() || previous.feeTaxLabel };
+  setSetting('finops', next);
+  recordEvent('ledger', 'finops', 'finops.fee_tax_rate.set', { type: 'admin', id: adminId }, { previous, next });
+  return next;
+}
+
+/**
+ * Break a fee charged by the platform into the BitriPay fee proper and the tax it contains, so statements never
+ * show one blended figure. Tax-inclusive: `platformFeeMinor + feeTaxMinor === feeMinor`.
+ */
+export function splitFeeTax(feeMinor: number, taxRateBps = feeTaxRateBps()): { platformFeeMinor: number; feeTaxMinor: number; taxRateBps: number } {
+  const total = Math.max(0, Math.round(feeMinor));
+  if (!taxRateBps) return { platformFeeMinor: total, feeTaxMinor: 0, taxRateBps: 0 };
+  const platformFeeMinor = Math.round((total * 10_000) / (10_000 + taxRateBps));
+  return { platformFeeMinor, feeTaxMinor: total - platformFeeMinor, taxRateBps };
 }
 
 export function setFeeTier(userId: string, tier: string | null, adminId: string): void {

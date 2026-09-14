@@ -98,6 +98,7 @@ export function Layout({ children }: { children: ReactNode }) {
               { to: '/app/merchant/centre', key: 'nav.centre', ico: '🧭' },
               { to: '/app/merchant/qr', key: 'nav.qrCentre', ico: '🔳' },
               { to: '/app/merchant/developer', key: 'nav.developer', ico: '🧑‍💻' },
+              { to: '/app/merchant/switch', key: 'nav.switchPayments', ico: '🏦' },
             ])}
           </>
         )}

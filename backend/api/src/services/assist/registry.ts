@@ -368,6 +368,51 @@ export const AGENTS: AgentDef[] = [
     budget: { maxSteps: 4, maxTokens: 10_000 },
   },
   {
+    key: 'smart_route',
+    aliases: ['RouteOptimiser'],
+    name: 'Smart Route',
+    icon: '🧭',
+    roles: ['merchant', 'admin'],
+    tagline: 'Explains how rails are ranked and why a payment took the route it did',
+    charter: `You are the Smart Route agent (route optimisation). You explain the rail ranking: for a payment method and currency you read the routing report (success rate, p95 latency, cost, health state, merchant preference, settlement speed, FX cost, fraud risk, liquidity, concentration) and say which connector wins, why, and what would change the choice. For merchants you use their route quotes and money routes; administrators also see every connector's health. You never change a route, pause a connector or move money; propose a pause to the Connector Medic when a rail is failing.`,
+    tools: ['rails.health', 'routes.quote', 'routes.list', 'routes.get', 'fees.quote', 'rates.list', 'knowledge.search', 'memory.remember'],
+    suggestions: {
+      merchant: ['Which rail will my next mobile money payment use?', 'Why did this payment go through the sandbox rail?'],
+      admin: ['Rank the card connectors', 'Which connector is degraded right now?'],
+    },
+    budget: { maxSteps: 6, maxTokens: 20_000 },
+    plan: (input, c) => {
+      const t = input.toLowerCase();
+      const routeId = ctxStr(c, 'routeId');
+      if (routeId) return [{ tool: 'routes.get', input: { id: routeId } }];
+      const amt = input.match(/(\d+(?:\.\d{1,2})?)\s*([A-Z]{3})/);
+      const plan: { tool: string; input: Record<string, unknown> }[] = [{ tool: 'rails.health', input: {} }];
+      if (amt)
+        plan.push({ tool: 'routes.quote', input: { amount: amt[1], currency: amt[2], targetCurrency: amt[2], method: /mobile|momo/.test(t) ? 'mobile_money' : /bank/.test(t) ? 'bank' : 'wallet' } });
+      else plan.push({ tool: 'routes.list', input: { limit: 10 } });
+      return plan;
+    },
+  },
+  {
+    key: 'seo_content',
+    aliases: ['ContentEngine'],
+    name: 'Content Engine',
+    icon: '✍️',
+    roles: ['merchant', 'admin'],
+    tagline: 'Drafts and audits articles from BitriPay knowledge, clearly marked machine-generated',
+    charter: `You are the Content Engine (SEO content). You draft and audit articles, guides and product pages about BitriPay: search the knowledge base for the facts (fees, limits, corridors, safeguarding, KYC, mobile money), propose an outline, a draft and a short audit (accuracy against the sources, readability, keywords, internal links to the pages you cite). Everything you produce is machine-generated and says so; a human editor publishes. You never invent figures, rates or policies: when the knowledge base does not cover a claim, mark it as needing a source.`,
+    tools: ['knowledge.search', 'profile.summary', 'memory.remember'],
+    suggestions: { all: ['Draft an article on how BitriPay protects balances', 'Audit the fees page for accuracy', 'Outline a guide to mobile money payouts in Ghana'] },
+    budget: { maxSteps: 6, maxTokens: 30_000 },
+    plan: (input) => {
+      const topic = input
+        .replace(/^(please\s+)?(draft|write|audit|outline|review)\s+(an?\s+)?(article|guide|page|post)?\s*(on|about|for)?\s*/i, '')
+        .trim()
+        .slice(0, 120);
+      return [{ tool: 'knowledge.search', input: { query: topic.length >= 2 ? topic : input.slice(0, 120), limit: 8 } }];
+    },
+  },
+  {
     key: 'operations',
     name: 'Operations',
     icon: '🛰️',

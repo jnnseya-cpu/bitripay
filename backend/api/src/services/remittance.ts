@@ -3,7 +3,8 @@ import { uuid, now, shortCode } from '../lib/ids';
 import { badRequest, conflict, forbidden, notFound, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
 import { formatMoney } from '@bitripay/shared';
-import { convertWithMargin, getCurrency } from './currencies';
+import { convertWithMargin, getCurrency, toBase } from './currencies';
+import { registerDestinationChange, assertDestinationUsable } from './risk/accountProtection';
 import { calculateFee, completeTransaction, enforceLimits, postTransaction, reverseTransaction } from './ledger';
 import { ensureWallet, getUserWallet } from './wallets';
 import { findUserByIdentifier, findUserById, toPublicUser, type UserRow } from './users';
@@ -83,6 +84,9 @@ export function sendRemittance(
   if (!getModules().remittance) throw unprocessable('Remittance is currently disabled', 'module_disabled');
   const db = getDb();
   const quote = quoteRemittance(input.amount, input.sourceCurrency, input.targetCurrency);
+  // A saved beneficiary that was added or changed recently is a cooling payout destination: large remittances wait.
+  const savedId = input.savedRecipientId ?? matchSavedRecipient(sender.id, input.recipient)?.id ?? null;
+  if (savedId) assertDestinationUsable(sender, 'remittance_recipient', savedId, toBase(input.amount, quote.sourceCurrency));
   enforceLimits(sender, input.amount, quote.sourceCurrency);
   const fromWallet = getUserWallet(sender.id, quote.sourceCurrency);
   const remittanceId = uuid();
@@ -142,7 +146,12 @@ export function sendRemittance(
     if (input.saveRecipient) saveRecipient(sender.id, { ...input.recipient, payoutMethod: input.payoutMethod, currency: quote.targetCurrency });
     const target = getCurrency(quote.targetCurrency);
     if (recipientUser) {
-      notify(recipientUser.id, 'Remittance received', `${sender.full_name} sent you ${formatMoney(quote.targetAmount, target)} from abroad.`, { kind: 'remittance_in', transactionId: tx.id });
+      notify(recipientUser.id, 'Remittance received', `${sender.full_name} sent you ${formatMoney(quote.targetAmount, target)} from abroad.`, {
+        kind: 'remittance_in',
+        transactionId: tx.id,
+        template: 'remittance.received',
+        vars: { senderName: sender.full_name, amount: formatMoney(quote.targetAmount, target) },
+      });
     }
     notify(
       sender.id,
@@ -154,6 +163,8 @@ export function sendRemittance(
         kind: 'remittance_out',
         transactionId: tx.id,
         remittanceId,
+        template: 'remittance.sent',
+        vars: { amount: formatMoney(quote.targetAmount, target), status: instant ? 'was delivered instantly' : 'is being processed', pickupCode: pickupCode ? `. Pickup code: ${pickupCode}` : '' },
       },
     );
     return { ...toRemittance(db.prepare('SELECT * FROM remittances WHERE id = ?').get(remittanceId)), transaction: tx };
@@ -203,7 +214,12 @@ export function payoutCashPickup(agent: UserRow, pickupCode: string, recipientId
       row.sender_user_id,
       'Cash picked up',
       `${recipient.name} collected ${formatMoney(row.target_amount, getCurrency(row.target_currency, false))} at agent ${agent.business_name || agent.full_name}.`,
-      { kind: 'remittance_pickup', remittanceId: row.id },
+      {
+        kind: 'remittance_pickup',
+        remittanceId: row.id,
+        template: 'remittance.pickup',
+        vars: { recipientName: recipient.name, amount: formatMoney(row.target_amount, getCurrency(row.target_currency, false)), agentName: agent.business_name || agent.full_name },
+      },
     );
     return toRemittance(db.prepare('SELECT * FROM remittances WHERE id = ?').get(row.id));
   })();
@@ -218,11 +234,22 @@ export function settleRemittance(id: string, adminId: string, outcome: 'complete
   if (outcome === 'completed') {
     completeTransaction(row.transaction_id, { settledBy: adminId });
     db.prepare("UPDATE remittances SET status = 'completed', completed_at = ? WHERE id = ?").run(now(), id);
-    notify(row.sender_user_id, 'Remittance delivered', `Your remittance to ${parseJson<any>(row.recipient, {}).name} has been paid out.`, { kind: 'remittance_out', remittanceId: id });
+    const recipientName = parseJson<any>(row.recipient, {}).name;
+    notify(row.sender_user_id, 'Remittance delivered', `Your remittance to ${recipientName} has been paid out.`, {
+      kind: 'remittance_out',
+      remittanceId: id,
+      template: 'remittance.delivered',
+      vars: { recipientName },
+    });
   } else {
     reverseTransaction(row.transaction_id, 'rejected', reason);
     db.prepare("UPDATE remittances SET status = 'rejected' WHERE id = ?").run(id);
-    notify(row.sender_user_id, 'Remittance refunded', `Your remittance was cancelled${reason ? `: ${reason}` : ''}. Funds returned to your wallet.`, { kind: 'remittance_out', remittanceId: id });
+    notify(row.sender_user_id, 'Remittance refunded', `Your remittance was cancelled${reason ? `: ${reason}` : ''}. Funds returned to your wallet.`, {
+      kind: 'remittance_out',
+      remittanceId: id,
+      template: 'remittance.refunded',
+      vars: { reason: reason ? `: ${reason}` : '' },
+    });
   }
   return toRemittance(db.prepare('SELECT * FROM remittances WHERE id = ?').get(id));
 }
@@ -243,8 +270,28 @@ export function listSavedRecipients(userId: string) {
   }));
 }
 
+const recipientKey = (v?: string | null) => (v ?? '').replace(/[\s-]/g, '').replace(/^@/, '').toLowerCase();
+/** The saved recipient an ad-hoc recipient resolves to (same tag, phone, email or bank account), if any. */
+export function matchSavedRecipient(userId: string, r: RecipientInput): { id: string } | undefined {
+  const rows = getDb().prepare('SELECT id, tag, phone, email, account_number FROM saved_recipients WHERE user_id = ?').all(userId) as any[];
+  return rows.find(
+    (s) =>
+      (r.tag && recipientKey(s.tag) === recipientKey(r.tag)) ||
+      (r.phone && recipientKey(s.phone) === recipientKey(r.phone)) ||
+      (r.email && recipientKey(s.email) === recipientKey(r.email)) ||
+      (r.accountNumber && recipientKey(s.account_number) === recipientKey(r.accountNumber)),
+  );
+}
+
+/**
+ * Saving a beneficiary is a payout-destination change: it is recorded, announced loudly and cools off before it can
+ * receive high-value remittances (the same protection bank accounts get). Re-saving an existing beneficiary with
+ * different details is recorded as a change from the previous one.
+ */
 export function saveRecipient(userId: string, input: RecipientInput & { payoutMethod: PayoutMethod; currency?: string | null }) {
   const id = uuid();
+  const previous = matchSavedRecipient(userId, input);
+  const previousRow = previous ? (getDb().prepare('SELECT * FROM saved_recipients WHERE id = ?').get(previous.id) as any) : null;
   getDb()
     .prepare('INSERT INTO saved_recipients (id, user_id, name, country, phone, email, tag, payout_method, bank_name, account_number, currency, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(
@@ -260,6 +307,37 @@ export function saveRecipient(userId: string, input: RecipientInput & { payoutMe
       input.accountNumber ?? null,
       input.currency ?? null,
       now(),
+    );
+  const owner = findUserById(userId);
+  if (owner)
+    registerDestinationChange(
+      owner,
+      {
+        kind: 'remittance_recipient',
+        refId: id,
+        previous: previousRow
+          ? {
+              name: previousRow.name,
+              payoutMethod: previousRow.payout_method,
+              tag: previousRow.tag,
+              phone: previousRow.phone,
+              email: previousRow.email,
+              bankName: previousRow.bank_name,
+              accountNumber: previousRow.account_number,
+            }
+          : null,
+        next: {
+          name: input.name,
+          payoutMethod: input.payoutMethod,
+          tag: input.tag ?? null,
+          phone: input.phone ?? null,
+          email: input.email ?? null,
+          bankName: input.bankName ?? null,
+          accountNumber: input.accountNumber ?? null,
+          country: input.country ?? null,
+        },
+      },
+      { type: 'user', id: userId },
     );
   return listSavedRecipients(userId).find((r) => r.id === id)!;
 }

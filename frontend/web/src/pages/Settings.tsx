@@ -4,7 +4,7 @@ import { alertsEnabled, armAlerts, loudAlert, setAlertsEnabled } from '../lib/al
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
-import { Alert, Avatar, Button, Chip, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
+import { Alert, Avatar, Button, Chip, CopyButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
 import type { User } from '@bitripay/shared';
 import { registerPasskey, passkeysSupported, biometricsAvailable } from '../lib/passkeys';
 
@@ -216,6 +216,14 @@ function Security() {
   const [setup, setSetup] = useState<{ qr: string; secret: string } | null>(null);
   const [code, setCode] = useState('');
   const [disableOpen, setDisableOpen] = useState(false);
+  // recovery codes are shown exactly once (on enable or regenerate); the API only keeps their hashes
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [regenOpen, setRegenOpen] = useState(false);
+  const policy = useAsync(() => api.get<{ required: boolean; deadline: string | null; overdue: boolean; enabled: boolean }>('/api/account/2fa/policy'), [user?.twoFactorEnabled]);
+  const remaining = useAsync(
+    () => (user?.twoFactorEnabled ? api.get<{ remaining: number; total: number }>('/api/account/2fa/recovery-codes') : Promise.resolve(null)),
+    [user?.twoFactorEnabled, recoveryCodes],
+  );
   const run = async (fn: () => Promise<unknown>, msg: string) => {
     try {
       await fn();
@@ -227,6 +235,15 @@ function Security() {
   };
   return (
     <div className="grid cols-2">
+      {policy.data?.required && !policy.data.enabled && (
+        <div style={{ gridColumn: 'span 2' }}>
+          <Alert kind={policy.data.overdue ? 'error' : 'warning'}>
+            {policy.data.overdue
+              ? 'Two-factor authentication is required for your account. Enable it below to keep using BitriPay.'
+              : `Two-factor authentication becomes mandatory for your account on ${policy.data.deadline ? new Date(policy.data.deadline).toLocaleDateString() : 'the end of the grace period'}. Set it up now.`}
+          </Alert>
+        </div>
+      )}
       <Passkeys />
       <div className="card">
         <h3>{t('settings.password')}</h3>
@@ -282,15 +299,65 @@ function Security() {
               <Field label="Enter the 6-digit code from your app">
                 <Input className="pin-input" value={code} onChange={(e) => setCode(e.target.value)} />
               </Field>
-              <Button onClick={() => run(() => api.post('/api/account/2fa/enable', { code }), '2FA enabled').then(() => setSetup(null))}>Enable</Button>
+              <Button
+                onClick={() =>
+                  run(
+                    () =>
+                      api.post<{ recoveryCodes: string[] }>('/api/account/2fa/enable', { code }).then((r) => {
+                        setRecoveryCodes(r.recoveryCodes);
+                        setCode('');
+                      }),
+                    '2FA enabled',
+                  ).then(() => setSetup(null))
+                }
+              >
+                Enable
+              </Button>
             </div>
           </div>
         )}
-        {user?.twoFactorEnabled && (
-          <Button variant="danger" onClick={() => setDisableOpen(true)}>
-            Disable 2FA
-          </Button>
+        {recoveryCodes && <RecoveryCodes codes={recoveryCodes} onDone={() => setRecoveryCodes(null)} />}
+        {user?.twoFactorEnabled && !recoveryCodes && (
+          <>
+            <p className="small muted">
+              Recovery codes let you sign in if you lose your authenticator. Each code works once.{' '}
+              {remaining.data ? (
+                <b>
+                  {remaining.data.remaining} of {remaining.data.total} unused.
+                </b>
+              ) : null}
+            </p>
+            <div className="row wrap">
+              <Button variant="secondary" onClick={() => setRegenOpen(true)}>
+                Regenerate recovery codes
+              </Button>
+              <Button variant="danger" onClick={() => setDisableOpen(true)}>
+                Disable 2FA
+              </Button>
+            </div>
+          </>
         )}
+        <Modal open={regenOpen} onClose={() => setRegenOpen(false)} title="Regenerate recovery codes">
+          <p className="small muted">Your current codes stop working the moment a new set is issued. Confirm with the code from your authenticator app.</p>
+          <Field label="Authenticator code">
+            <Input className="pin-input" value={code} onChange={(e) => setCode(e.target.value)} />
+          </Field>
+          <Button
+            block
+            onClick={() =>
+              run(
+                () =>
+                  api.post<{ recoveryCodes: string[] }>('/api/account/2fa/recovery-codes/regenerate', { code }).then((r) => {
+                    setRecoveryCodes(r.recoveryCodes);
+                    setCode('');
+                  }),
+                'New recovery codes issued',
+              ).then(() => setRegenOpen(false))
+            }
+          >
+            Issue new codes
+          </Button>
+        </Modal>
         <Modal open={disableOpen} onClose={() => setDisableOpen(false)} title="Disable 2FA">
           <Field label="Authenticator code">
             <Input className="pin-input" value={code} onChange={(e) => setCode(e.target.value)} />
@@ -299,6 +366,28 @@ function Security() {
             Disable
           </Button>
         </Modal>
+      </div>
+    </div>
+  );
+}
+
+/** One-time display of 2FA recovery codes: they are never retrievable again, so the holder copies them before moving on. */
+function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }) {
+  return (
+    <div className="mt">
+      <Alert kind="warning">Save these recovery codes somewhere safe. They are shown only once and each one signs you in a single time if you lose your authenticator.</Alert>
+      <div className="grid cols-2 mono" style={{ gap: 6, margin: '12px 0' }}>
+        {codes.map((c) => (
+          <div key={c} className="card" style={{ padding: '6px 10px', textAlign: 'center' }}>
+            {c}
+          </div>
+        ))}
+      </div>
+      <div className="row wrap">
+        <CopyButton text={codes.join('\n')} label="Copy all codes" />
+        <Button variant="secondary" onClick={onDone}>
+          I have saved my codes
+        </Button>
       </div>
     </div>
   );

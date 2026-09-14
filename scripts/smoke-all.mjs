@@ -246,6 +246,73 @@ await check('Create restricted key, quote a cross-border route, read wallets', a
   return `recipient gets ${q.body.quote.recipientAmount} KES minor for 50.00 USD by card`;
 });
 
+console.log('\nPositioning, checkout disclosure and QR analytics (contract UI)');
+await check('Landing taglines (ONE QR / Pay Local)', async () => {
+  await page.goto(web + '/');
+  await page.waitForSelector('text=ONE QR. ONE GATEWAY. EVERY ELIGIBLE RAIL.', { timeout: 15000 });
+  await page.waitForSelector('text=Pay Local. Fund Global. Settle Your Way.', { timeout: 15000 });
+  await page.screenshot({ path: `${shotsDir}/landing-positioning.png` });
+});
+await check('Site home and About carry the taglines and the no-custody wording', async () => {
+  for (const p of ['/blog', '/about']) {
+    const html = await (await fetch(api + p)).text();
+    for (const phrase of ['ONE QR. ONE GATEWAY. EVERY ELIGIBLE RAIL.', 'Pay Local. Fund Global. Settle Your Way.']) if (!html.includes(phrase)) throw new Error(`${p} lacks "${phrase}"`);
+  }
+  const about = await (await fetch(api + '/about')).text();
+  if (!about.includes('never holds funds it is not licensed to hold')) throw new Error('About lacks the no-custody wording');
+  const regulatory = await (await fetch(api + '/legal/regulatory')).text();
+  if (!regulatory.includes('Instruction n°58')) throw new Error('Regulatory page lacks Instruction n°58');
+});
+const merchantLogin = await json('/api/auth/login', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ identifier: 'merchant@example.com', password: 'Password123!' }),
+});
+const merchantAuth = { Authorization: `Bearer ${merchantLogin.body.token}`, 'content-type': 'application/json' };
+let seededLinkCode = null;
+await check('Checkout disclosure block on the seeded payment link (API)', async () => {
+  const links = await json('/api/payment-requests?kind=link&status=open', { headers: merchantAuth });
+  const link = (links.body.items ?? []).find((l) => l.kind === 'link' && l.amount != null) ?? (links.body.items ?? [])[0];
+  if (!link) throw new Error('no seeded payment link for merchant@example.com');
+  seededLinkCode = link.code;
+  const info = await json(`/api/checkout/${link.code}`);
+  const d = info.body.disclosure;
+  if (info.status !== 200 || !d) throw new Error(`status ${info.status}, no disclosure`);
+  for (const k of ['feeFrom', 'fxRate', 'receiverCurrency', 'etaByMethod', 'trust']) if (d[k] == null) throw new Error(`disclosure lacks ${k}`);
+  if (!d.trust.includes('A successful screen is not proof of payment')) throw new Error('trust copy missing');
+  for (const m of info.body.methods) if (typeof d.etaByMethod[m] !== 'string') throw new Error(`no ETA for ${m}`);
+  return `fee ${d.feeMinor} (${d.feeFrom}), receiver gets ${d.receiverAmountMinor} ${d.receiverCurrency}, total ${d.totalMinor}`;
+});
+await check('Checkout page shows the disclosure before confirmation', async () => {
+  if (!seededLinkCode) throw new Error('no link code from the previous check');
+  await page.goto(web + `/pay/${seededLinkCode}`);
+  await page.waitForSelector('[data-testid="checkout-disclosure"]', { timeout: 15000 });
+  await page.waitForSelector('text=A successful screen is not proof of payment', { timeout: 15000 });
+  await page.screenshot({ path: `${shotsDir}/checkout-disclosure.png`, fullPage: true });
+});
+await check('QR centre analytics by-day list (API)', async () => {
+  const r = await json('/api/v1/qr_codes/analytics?days=14', { headers: merchantAuth });
+  if (r.status !== 200) throw new Error(`status ${r.status}`);
+  if (!Array.isArray(r.body.byDay) || r.body.byDay.length !== 14) throw new Error(`byDay has ${r.body.byDay?.length} entries`);
+  if (!Array.isArray(r.body.byOutcome)) throw new Error('byOutcome is not an array');
+  const last = r.body.byDay[r.body.byDay.length - 1];
+  if (typeof last.scans !== 'number' || typeof last.paid !== 'number') throw new Error('byDay entry lacks scans/paid');
+  return `${r.body.byDay.length} days, ${r.body.byOutcome.length} outcome(s)`;
+});
+await check('QR centre analytics by-day list (page)', async () => {
+  await login('merchant@example.com');
+  await page.goto(web + '/app/merchant/qr');
+  await page.waitForSelector('text=QR centre', { timeout: 15000 });
+  await page.click('button:has-text("Analytics")');
+  await page.waitForSelector('[data-testid="qr-by-day"]', { timeout: 15000 });
+  await page.waitForSelector('text=Scans by day', { timeout: 15000 });
+  await page.screenshot({ path: `${shotsDir}/qr-analytics.png`, fullPage: true });
+});
+await check('National switch page uses the customer wording component', async () => {
+  await page.goto(web + '/app/merchant/switch');
+  await page.waitForSelector('text=Instruction n°58', { timeout: 15000 });
+});
+
 await browser.close();
 console.log(`\n${results.length - failed} passed, ${failed} failed${pageErrors.length ? `; page errors: ${pageErrors.slice(0, 3).join(' | ')}` : ''}`);
 fs.writeFileSync(`${shotsDir}/results.json`, JSON.stringify({ at: new Date().toISOString(), results, pageErrors }, null, 2));

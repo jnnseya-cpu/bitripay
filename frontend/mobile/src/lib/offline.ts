@@ -3,6 +3,10 @@
  * generated on the device and kept in the secure store, a monotonic counter, prefetched merchant nonces, a queue of
  * signed promises in local storage, and an in-order sync when the network is back. Nothing here needs the server
  * to sign a payment; the server validates every promise (double spend, replay, ceilings) when it syncs.
+ *
+ * The queue is encrypted at rest (XSalsa20-Poly1305 with a key that lives in the secure store) so a copied phone
+ * backup never exposes who paid whom. Every queued item carries its specification §28 lifecycle state and reads
+ * "Pending confirmation" until the platform confirms it online.
  */
 import nacl from 'tweetnacl';
 import * as SecureStore from 'expo-secure-store';
@@ -10,7 +14,7 @@ import * as Crypto from 'expo-crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as bitriqr from '@bitripay/bitriqr';
 import { api } from './api';
-import { sha256Hex, utf8 } from './sha256';
+import { sha256Hex, utf8, fromUtf8 } from './sha256';
 
 nacl.setPRNG((x, n) => {
   x.set(Crypto.getRandomBytes(n));
@@ -22,6 +26,11 @@ const KEY_COUNTER = 'bitripay.offline.counter';
 const KEY_NONCES = 'bitripay.offline.nonces';
 const KEY_QUEUE = 'bitripay.offline.queue';
 const KEY_LASTSYNC = 'bitripay.offline.lastSync';
+const KEY_QUEUE_KEY = 'bitripay.offline.queueKey';
+
+export const OFFLINE_STATES = ['OFFLINE_CREATED', 'OFFLINE_ACCEPTED_LOCALLY', 'SYNC_PENDING', 'ONLINE_VALIDATING', 'CONFIRMED', 'REJECTED'] as const;
+export type OfflineState = (typeof OFFLINE_STATES)[number];
+export const PENDING_CONFIRMATION_TEXT = 'Pending confirmation — this payment is final only once BitriPay confirms it online.';
 
 const b64 = (u: Uint8Array) => {
   let s = '';
@@ -57,6 +66,20 @@ export interface QueuedPromise {
   currency: string;
   merchantName: string;
   queuedAt: string;
+  /** §28 lifecycle: OFFLINE_ACCEPTED_LOCALLY once signed on this phone, SYNC_PENDING while waiting for the network. */
+  state: OfflineState;
+  /** What the local receipt says until the platform confirms. */
+  receiptText: string;
+}
+export interface SyncResultItem {
+  hash: string;
+  state: 'SETTLED' | 'REJECTED' | 'DUPLICATE';
+  lifecycle: OfflineState;
+  reason?: string | null;
+  transactionId?: string | null;
+  restoreMinor?: number;
+  counterGap?: { expected: number; received: number } | null;
+  receipt?: { transactionId: string; signature: string; keyId: string } | null;
 }
 export interface OfflineQr {
   payload: string;
@@ -72,13 +95,42 @@ async function getJson<T>(key: string): Promise<T | null> {
 async function setJson(key: string, value: unknown): Promise<void> {
   await AsyncStorage.setItem(key, JSON.stringify(value));
 }
+/** Symmetric key for the queue, created once and kept in the secure store (never in AsyncStorage). */
+async function queueKey(): Promise<Uint8Array> {
+  const existing = await SecureStore.getItemAsync(KEY_QUEUE_KEY);
+  if (existing) return fromB64(existing);
+  const k = Crypto.getRandomBytes(nacl.secretbox.keyLength);
+  await SecureStore.setItemAsync(KEY_QUEUE_KEY, b64(k));
+  return k;
+}
+const ENC_PREFIX = 'enc1:';
+async function readQueue(): Promise<QueuedPromise[]> {
+  const raw = await AsyncStorage.getItem(KEY_QUEUE);
+  if (!raw) return [];
+  if (!raw.startsWith(ENC_PREFIX)) {
+    // queue written before encryption: migrate it in place
+    const legacy = JSON.parse(raw) as QueuedPromise[];
+    await writeQueue(legacy);
+    return legacy.map(withState);
+  }
+  const [nonceB64, boxB64] = raw.slice(ENC_PREFIX.length).split('.');
+  const opened = nacl.secretbox.open(fromB64(boxB64), fromB64(nonceB64), await queueKey());
+  if (!opened) throw new Error('The offline queue on this phone cannot be read (wrong key)');
+  return (JSON.parse(fromUtf8(opened)) as QueuedPromise[]).map(withState);
+}
+async function writeQueue(items: QueuedPromise[]): Promise<void> {
+  const nonce = Crypto.getRandomBytes(nacl.secretbox.nonceLength);
+  const box = nacl.secretbox(utf8(JSON.stringify(items)), nonce, await queueKey());
+  await AsyncStorage.setItem(KEY_QUEUE, `${ENC_PREFIX}${b64(nonce)}.${b64(box)}`);
+}
+const withState = (q: QueuedPromise): QueuedPromise => ({ ...q, state: q.state ?? 'SYNC_PENDING', receiptText: q.receiptText ?? PENDING_CONFIRMATION_TEXT });
 const nowIso = () => new Date().toISOString();
 
 export const offlineDevice = {
   async status() {
     const rec = await getJson<DeviceRecord>(KEY_DEVICE);
     const nonces = ((await getJson<{ nonce: string; expiresAt: string }[]>(KEY_NONCES)) ?? []).filter((n) => n.expiresAt > nowIso());
-    const queue = (await getJson<QueuedPromise[]>(KEY_QUEUE)) ?? [];
+    const queue = await readQueue();
     return {
       deviceId: rec?.deviceId ?? null,
       keyId: rec?.keyId ?? null,
@@ -158,10 +210,14 @@ export const offlineDevice = {
 
 export const offlineQueue = {
   async list(): Promise<QueuedPromise[]> {
-    return ((await getJson<QueuedPromise[]>(KEY_QUEUE)) ?? []).sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
+    return (await readQueue()).sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
   },
   async count(): Promise<number> {
-    return ((await getJson<QueuedPromise[]>(KEY_QUEUE)) ?? []).length;
+    return (await readQueue()).length;
+  },
+  /** The receipt a payer or merchant can show before the sync: explicit about not being final. */
+  localReceipt(q: QueuedPromise): { title: string; status: OfflineState; text: string } {
+    return { title: `${q.merchantName} · ${q.currency} ${(q.amountMinor / 100).toFixed(2)}`, status: q.state, text: q.receiptText };
   },
   /** Is this QR an offline code this phone can pay without the network? */
   decodeOffline(
@@ -213,24 +269,38 @@ export const offlineQueue = {
       promisedAt: nowIso(),
       qrPayload,
     };
-    const item: QueuedPromise = { hash, body, amountMinor, currency: d.currency, merchantName: d.merchantName, queuedAt: nowIso() };
-    const queue = ((await getJson<QueuedPromise[]>(KEY_QUEUE)) ?? []).filter((q) => q.hash !== hash);
-    await setJson(KEY_QUEUE, [...queue, item]);
+    const item: QueuedPromise = {
+      hash,
+      body,
+      amountMinor,
+      currency: d.currency,
+      merchantName: d.merchantName,
+      queuedAt: nowIso(),
+      state: 'OFFLINE_ACCEPTED_LOCALLY',
+      receiptText: PENDING_CONFIRMATION_TEXT,
+    };
+    const queue = (await readQueue()).filter((q) => q.hash !== hash);
+    await writeQueue([...queue, { ...item, state: 'SYNC_PENDING' }]);
     return item;
   },
   /** Submit everything queued, in order; the server answers per promise and the queue is cleared. */
-  async sync(): Promise<{ settled: number; rejected: number; duplicates: number; results: any[] }> {
+  async sync(): Promise<{ settled: number; rejected: number; duplicates: number; results: SyncResultItem[] }> {
     const items = await this.list();
     if (!items.length) return { settled: 0, rejected: 0, duplicates: 0, results: [] };
-    const r = await api.post<{ settled: number; rejected: number; duplicates: number; results: any[] }>('/api/v1/offline/sync', { promises: items.map((i) => i.body) });
-    await setJson(KEY_QUEUE, []);
+    await writeQueue(items.map((q) => ({ ...q, state: 'ONLINE_VALIDATING' })));
+    let r: { settled: number; rejected: number; duplicates: number; results: SyncResultItem[] };
+    try {
+      r = await api.post('/api/v1/offline/sync', { promises: items.map((i) => i.body) });
+    } catch (e) {
+      await writeQueue(items.map((q) => ({ ...q, state: 'SYNC_PENDING' }))); // still pending: nothing was confirmed
+      throw e;
+    }
+    // every promise now has an authoritative outcome (CONFIRMED / REJECTED / already known): the queue is empty
+    await writeQueue([]);
     await AsyncStorage.setItem(KEY_LASTSYNC, nowIso());
     return r;
   },
   async remove(hash: string): Promise<void> {
-    await setJson(
-      KEY_QUEUE,
-      ((await getJson<QueuedPromise[]>(KEY_QUEUE)) ?? []).filter((q) => q.hash !== hash),
-    );
+    await writeQueue((await readQueue()).filter((q) => q.hash !== hash));
   },
 };

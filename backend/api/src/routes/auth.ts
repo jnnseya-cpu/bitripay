@@ -89,7 +89,8 @@ authRouter.post(
   authLimit,
   requireMfaToken,
   wrap(async (req, res) => {
-    const body = validate(z.object({ code: z.string().min(6).max(8) }), req.body);
+    // a 6–8 digit authenticator code or a one-time recovery code (xxxx-xxxx)
+    const body = validate(z.object({ code: z.string().min(6).max(12) }), req.body);
     res.json(auth.completeTwoFactor(req.user!, body.code));
   }),
 );

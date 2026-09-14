@@ -1,9 +1,19 @@
 import { getDb } from '../db';
 import { uuid, now } from '../lib/ids';
 import { badRequest, conflict, notFound } from '../lib/errors';
+import { encrypt, decrypt } from '../lib/crypto';
 import { getKycTierSettings, setTier } from './risk/kycTiers';
 import { updateUser, type UserRow, toPublicUser, findUserById } from './users';
 import { notify } from './notifications';
+
+/** Document images are encrypted at rest (AES-256-GCM); rows written before migration 027 are plaintext and flagged 0. */
+export const DOCUMENT_FIELDS = ['doc_front', 'doc_back', 'selfie', 'proof_of_address'] as const;
+const sealDocument = (value?: string | null) => (value ? encrypt(value) : null);
+/** Decrypts one document column of a row for the admin review view; plaintext legacy rows pass through unchanged. */
+export function openDocument(r: { documents_encrypted?: number }, value: string | null | undefined): string | null {
+  if (!value) return null;
+  return r.documents_encrypted ? decrypt(value) : value;
+}
 
 export function toKyc(r: any, includeDocs = false) {
   return {
@@ -22,7 +32,10 @@ export function toKyc(r: any, includeDocs = false) {
     liveness: !!r.liveness,
     hasProofOfAddress: !!r.proof_of_address,
     addressDocDate: r.address_doc_date ?? null,
-    ...(includeDocs ? { docFront: r.doc_front, docBack: r.doc_back, selfie: r.selfie } : { hasDocFront: !!r.doc_front, hasDocBack: !!r.doc_back, hasSelfie: !!r.selfie }),
+    documentsEncrypted: !!r.documents_encrypted,
+    ...(includeDocs
+      ? { docFront: openDocument(r, r.doc_front), docBack: openDocument(r, r.doc_back), selfie: openDocument(r, r.selfie), proofOfAddress: openDocument(r, r.proof_of_address) }
+      : { hasDocFront: !!r.doc_front, hasDocBack: !!r.doc_back, hasSelfie: !!r.selfie }),
     user: findUserById(r.user_id) ? toPublicUser(findUserById(r.user_id)!) : null,
   };
 }
@@ -53,7 +66,7 @@ export function submitKyc(
   const addressFresh = !!input.proofOfAddress && !!input.addressDocDate && Date.now() - Date.parse(input.addressDocDate) <= maxAge * 86_400_000;
   if (input.proofOfAddress && !addressFresh) throw badRequest(`The proof of address must be dated within the last ${maxAge} days`, 'address_doc_too_old');
   db.prepare(
-    'INSERT INTO kyc_submissions (id, user_id, doc_type, doc_number, full_name, dob, address, doc_front, doc_back, selfie, status, created_at, proof_of_address, address_doc_date, requested_tier, liveness) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO kyc_submissions (id, user_id, doc_type, doc_number, full_name, dob, address, doc_front, doc_back, selfie, status, created_at, proof_of_address, address_doc_date, requested_tier, liveness, documents_encrypted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
   ).run(
     id,
     user.id,
@@ -62,12 +75,12 @@ export function submitKyc(
     input.fullName,
     input.dob ?? null,
     input.address ?? null,
-    input.docFront ?? null,
-    input.docBack ?? null,
-    input.selfie ?? null,
+    sealDocument(input.docFront),
+    sealDocument(input.docBack),
+    sealDocument(input.selfie),
     'pending',
     now(),
-    input.proofOfAddress ?? null,
+    sealDocument(input.proofOfAddress),
     input.addressDocDate ?? null,
     addressFresh ? 3 : 2,
     input.liveness ? 1 : 0,
@@ -108,7 +121,7 @@ export function reviewKyc(id: string, adminId: string, decision: 'verified' | 'r
     row.user_id,
     decision === 'verified' ? 'Identity verified' : 'Verification rejected',
     decision === 'verified' ? 'Your KYC verification was approved. Higher limits are now active.' : `Your KYC submission was rejected${note ? `: ${note}` : ''}. You can submit again.`,
-    { kind: 'kyc' },
+    { kind: 'kyc', template: decision === 'verified' ? 'kyc.approved' : 'kyc.rejected', vars: { reason: note ? `: ${note}` : '' } },
   );
   return toKyc(db.prepare('SELECT * FROM kyc_submissions WHERE id = ?').get(id));
 }

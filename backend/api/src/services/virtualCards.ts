@@ -1,6 +1,7 @@
 import { getDb } from '../db';
 import { uuid, now, numericCode } from '../lib/ids';
-import { encrypt, decrypt, sha256 } from '../lib/crypto';
+import { encrypt, decrypt, sha256, hmacSha256, safeEqual } from '../lib/crypto';
+import { config } from '../config';
 import { badRequest, conflict, forbidden, notFound, unprocessable } from '../lib/errors';
 import { BITRIPAY_CARD_PREFIX, luhnCheckDigit, formatMoney, type VirtualCard } from '@bitripay/shared';
 import { getCurrency } from './currencies';
@@ -22,6 +23,20 @@ export function toVirtualCard(row: any): VirtualCard {
     status: row.status,
     createdAt: row.created_at,
   };
+}
+
+/**
+ * The CVV is never stored. It is derived from what the card already is – its PAN hash and expiry – under APP_SECRET:
+ * HMAC-SHA256(APP_SECRET, pan_hash + exp_month + exp_year + 'cvv') reduced to three digits. Cards issued before
+ * this scheme keep their encrypted CVV and are verified against it.
+ */
+export function deriveCvv(panHash: string, expMonth: number, expYear: number): string {
+  const digest = hmacSha256(config.appSecret, `${panHash}${expMonth}${expYear}cvv`);
+  return String(parseInt(digest.slice(0, 12), 16) % 1000).padStart(3, '0');
+}
+
+function cardCvv(row: { pan_hash: string; exp_month: number; exp_year: number; cvv_encrypted: string | null }): string {
+  return row.cvv_encrypted ? decrypt(row.cvv_encrypted) : deriveCvv(row.pan_hash, Number(row.exp_month), Number(row.exp_year));
 }
 
 function generatePan(): string {
@@ -55,15 +70,20 @@ export function issueVirtualCard(user: UserRow, currency: string, label?: string
     .prepare(
       'INSERT INTO virtual_cards (id, user_id, currency, balance, pan_encrypted, pan_hash, last4, exp_month, exp_year, cvv_encrypted, holder_name, label, status, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     )
-    .run(id, user.id, cur.code, encrypt(pan), sha256(pan), pan.slice(-4), exp.getMonth() + 1, exp.getFullYear(), encrypt(numericCode(3)), user.full_name.toUpperCase(), label ?? null, 'active', now());
-  notify(user.id, 'Virtual card issued', `Your new ${cur.code} virtual card ending in ${pan.slice(-4)} is ready.`, { kind: 'virtual_card', cardId: id });
+    .run(id, user.id, cur.code, encrypt(pan), sha256(pan), pan.slice(-4), exp.getMonth() + 1, exp.getFullYear(), null, user.full_name.toUpperCase(), label ?? null, 'active', now());
+  notify(user.id, 'Virtual card issued', `Your new ${cur.code} virtual card ending in ${pan.slice(-4)} is ready.`, {
+    kind: 'virtual_card',
+    cardId: id,
+    template: 'virtual_card.issued',
+    vars: { currency: cur.code, last4: pan.slice(-4) },
+  });
   return toVirtualCard(getCardRow(user.id, id));
 }
 
 /** Reveal full card details (PIN-protected at the route level). */
 export function revealVirtualCard(userId: string, id: string) {
   const row = getCardRow(userId, id);
-  return { ...toVirtualCard(row), number: decrypt(row.pan_encrypted), cvv: decrypt(row.cvv_encrypted) };
+  return { ...toVirtualCard(row), number: decrypt(row.pan_encrypted), cvv: cardCvv(row) };
 }
 
 export function setVirtualCardStatus(userId: string, id: string, status: 'active' | 'frozen' | 'closed') {
@@ -145,7 +165,7 @@ export function chargeVirtualCard(
     if (row.status !== 'active') throw badRequest('Card declined: card is frozen or closed', 'card_declined');
     if (row.exp_month !== Number(card.expMonth) || row.exp_year !== (Number(card.expYear) < 100 ? 2000 + Number(card.expYear) : Number(card.expYear)))
       throw badRequest('Card declined: invalid expiry', 'card_declined');
-    if (decrypt(row.cvv_encrypted) !== card.cvc) throw badRequest('Card declined: invalid security code', 'card_declined');
+    if (!safeEqual(cardCvv(row), String(card.cvc ?? '').trim())) throw badRequest('Card declined: invalid security code', 'card_declined');
     if (row.currency !== currency) throw badRequest(`Card declined: this card is denominated in ${row.currency}`, 'card_declined');
     if (row.balance < amount) throw unprocessable('Card declined: insufficient balance', 'insufficient_funds');
     const owner = findUserById(row.user_id)!;
@@ -176,6 +196,8 @@ export function chargeVirtualCard(
     notify(owner.id, 'Card payment', `${formatMoney(amount, getCurrency(currency, false))} was charged to your virtual card •••• ${row.last4} at ${merchant.business_name || merchant.full_name}.`, {
       kind: 'virtual_card_charge',
       transactionId: tx.id,
+      template: 'virtual_card.charged',
+      vars: { amount: formatMoney(amount, getCurrency(currency, false)), last4: row.last4, merchantName: merchant.business_name || merchant.full_name },
     });
     return { tx, owner };
   })();

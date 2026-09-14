@@ -87,7 +87,8 @@ describe('checkout sessions, links and refunds', () => {
       });
     expect(again.body.id).toBe(cs.body.id);
     const reused = await request(app).post('/api/v1/checkout_sessions').set(m.auth).set('Idempotency-Key', 'order-77').send({ currency: 'USD', amount_minor: 1200 });
-    expect(reused.status).toBe(422);
+    // gateway contract: a reused Idempotency-Key is a conflict with the earlier request, so it is 409 (was 422)
+    expect(reused.status).toBe(409);
     expect(reused.body.error.code).toBe('idempotency_key_reused');
     // a mismatching total is refused
     const bad = await request(app)
@@ -282,10 +283,11 @@ describe('webhook engine', () => {
 describe('scoped API keys', () => {
   it('restricts keys to their scopes, keeps publishable keys read-only and never lets a key mint keys', async () => {
     const m = await registerUser(app, { role: 'merchant', businessName: 'Keys Ltd' });
+    // gateway contract: minting a live key from a session needs PIN / passkey step-up (test keys need none, see contract_gateway.test.ts)
     const ro = await request(app)
       .post('/api/v1/api_keys')
       .set(m.auth)
-      .send({ label: 'reporting', kind: 'restricted', scopes: ['payment_intents:read'] });
+      .send({ label: 'reporting', kind: 'restricted', scopes: ['payment_intents:read'], pin: '1234' });
     expect(ro.status, JSON.stringify(ro.body)).toBe(201);
     expect(ro.body.secret).toMatch(/^rk_live_/);
     const pk = await request(app).post('/api/v1/api_keys').set(m.auth).send({ label: 'browser', kind: 'publishable', mode: 'test' });

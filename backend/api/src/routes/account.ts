@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, twoFactorDeadline } from '../middleware/auth';
 import * as auth from '../services/auth';
 import { toUser, updateUser, normalizeTag, findUserByTag, findUserByIdentifier, toPublicUser } from '../services/users';
 import { badRequest, conflict } from '../lib/errors';
@@ -15,6 +15,8 @@ import { COUNTRY_BY_CODE } from '@bitripay/shared';
 export const accountRouter = Router();
 accountRouter.use(requireAuth);
 
+/** The signed-in account's own profile (always reachable, even while the 2FA policy blocks the rest of the API). */
+accountRouter.get('/profile', (req, res) => res.json({ user: toUser(req.user!) }));
 accountRouter.patch(
   '/profile',
   wrap(async (req, res) => {
@@ -111,10 +113,22 @@ accountRouter.post(
   '/2fa/enable',
   wrap(async (req, res) => {
     const body = validate(z.object({ code: z.string().min(6).max(8) }), req.body);
-    auth.enableTwoFactor(req.user!, body.code);
-    res.json({ ok: true });
+    const { recoveryCodes } = auth.enableTwoFactor(req.user!, body.code);
+    res.json({ ok: true, recoveryCodes });
   }),
 );
+/** How many one-time recovery codes are still unused (the codes themselves are never retrievable). */
+accountRouter.get('/2fa/recovery-codes', (req, res) => res.json({ remaining: auth.recoveryCodesRemaining(req.user!.id), total: auth.RECOVERY_CODE_COUNT }));
+/** A fresh set of recovery codes (needs a current authenticator code); the previous set stops working. */
+accountRouter.post(
+  '/2fa/recovery-codes/regenerate',
+  wrap(async (req, res) => {
+    const body = validate(z.object({ code: z.string().min(6).max(8) }), req.body);
+    res.json({ recoveryCodes: auth.regenerateRecoveryCodes(req.user!, body.code) });
+  }),
+);
+/** 2FA policy for this account: whether the role requires it and the grace deadline (the settings page shows the banner). */
+accountRouter.get('/2fa/policy', (req, res) => res.json({ ...twoFactorDeadline(req.user!), enabled: !!req.user!.two_factor_enabled }));
 accountRouter.post(
   '/2fa/disable',
   wrap(async (req, res) => {

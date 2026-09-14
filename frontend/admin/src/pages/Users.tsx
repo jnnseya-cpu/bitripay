@@ -26,6 +26,8 @@ import {
 import { TRANSACTION_TYPE_LABELS } from '@bitripay/shared';
 
 const PERMS = ['users', 'transactions', 'approvals', 'kyc', 'settings', 'gateways', 'catalogs', 'cms', 'support', 'p2p', 'reports', 'admins', 'issuance', 'treasury', 'agents'];
+/** Labels for the permission chips; the treasury permission is the TREASURY_SUPER_ADMIN role of the e-money console. */
+const PERM_LABELS: Record<string, string> = { treasury: 'Treasury (TREASURY_SUPER_ADMIN)', issuance: 'Issuance (maker-checker)' };
 
 export function Users() {
   const [params, setParams] = useSearchParams();
@@ -162,7 +164,7 @@ export function Users() {
                   kind={form.permissions.includes(p) ? 'primary' : undefined}
                   onClick={() => setForm({ ...form, permissions: form.permissions.includes(p) ? form.permissions.filter((x) => x !== p) : [...form.permissions, p] })}
                 >
-                  {p}
+                  {PERM_LABELS[p] ?? p}
                 </Chip>
               ))}
             </div>
@@ -383,7 +385,7 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                         kind={edit.permissions.includes(p) ? 'primary' : undefined}
                         onClick={() => setEdit({ ...edit, permissions: edit.permissions.includes(p) ? edit.permissions.filter((x: string) => x !== p) : [...edit.permissions, p] })}
                       >
-                        {p}
+                        {PERM_LABELS[p] ?? p}
                       </Chip>
                     ))}
                   </div>

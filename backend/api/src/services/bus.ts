@@ -36,7 +36,46 @@ export const DOMAIN_EVENT_TYPES = [
   'subscription.charged',
   'open_banking.linked',
   'open_banking.income_verified',
+  // §62 specification events (wallet.credited / wallet.debited / kyc.tier_changed / agent.float_low are listed above).
+  'payment.captured',
+  'payment.settled',
+  'payment.refunded',
+  'payment.disputed',
+  'payout.created',
+  'payout.executed',
+  'settlement.closed',
+  'settlement.paid',
+  'rail.state_changed',
+  /** Published by the gateway after a refund's ledger entries are posted; the split engine allocates it across recipients. */
+  'refund.succeeded',
 ] as const;
+
+/** Payload contract of `refund.succeeded` (what subscribers such as the split refund allocation rely on). */
+export type RefundSucceededPayload = {
+  refundId: string;
+  intentId: string | null;
+  transactionId: string | null;
+  refundTransactionId: string | null;
+  /** The merchant that refunded (specification name) … */
+  merchantUserId: string;
+  /** … and the same value under the bus contract's original name. */
+  merchantId: string;
+  amountMinor: number;
+  currency: string;
+};
+
+/** Payload contract of `settlement.closed` and `settlement.paid` (§62): who is owed, which cycle, and what amount in which currency. */
+export type SettlementEventPayload = {
+  userId: string;
+  cycleId: string;
+  currency: string;
+  amountMinor: number;
+};
+
+/** True when every domain event type is listed once (the catalogue is a contract; duplicates would hide a typo). */
+export function domainEventTypesUnique(): boolean {
+  return new Set(DOMAIN_EVENT_TYPES).size === DOMAIN_EVENT_TYPES.length;
+}
 export type DomainEventType = (typeof DOMAIN_EVENT_TYPES)[number] | (string & {});
 export interface DomainEvent {
   eventId: string;

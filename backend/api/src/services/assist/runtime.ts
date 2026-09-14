@@ -11,7 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getDb } from '../../db';
 import { uuid, now } from '../../lib/ids';
 import { parseJson } from '../../lib/json';
-import { decrypt } from '../../lib/crypto';
+import { decrypt, sha256 } from '../../lib/crypto';
 import { AppError, badRequest, forbidden, notFound } from '../../lib/errors';
 import { findUserById, toPublicUser, type UserRow } from '../users';
 import { getAssistSettings, getSeoSettings } from '../settings';
@@ -27,8 +27,14 @@ import { planRun, settleRun, type BillingPlan } from './billing';
 import { routeModels, projectEconomics, type TaskType } from './gateway';
 
 export type RunStatus = 'queued' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'cancelled' | 'budget_exhausted';
+/** Every artefact an agent produces is machine-generated and says so. */
+export const MACHINE_GENERATED = { generatedBy: 'machine' as const, machineGenerated: true as const };
 export interface RunView {
   id: string;
+  generatedBy: 'machine';
+  machineGenerated: true;
+  /** sha256 of the composed system prompt and the tool list the run was executed with. */
+  promptHash: string | null;
   agent: string;
   agentName: string;
   userId: string;
@@ -55,6 +61,7 @@ export interface RunView {
 }
 export interface ActionView {
   id: string;
+  generatedBy: 'machine';
   stepNo: number;
   tool: string;
   input: unknown;
@@ -67,6 +74,7 @@ export interface ActionView {
 }
 export interface ApprovalView {
   id: string;
+  generatedBy: 'machine';
   runId: string;
   agent: string;
   requestedFor: ReturnType<typeof toPublicUser> | null;
@@ -93,6 +101,7 @@ function redact(v: unknown, depth = 0): unknown {
 
 const toAction = (r: any): ActionView => ({
   id: r.id,
+  generatedBy: 'machine',
   stepNo: r.step_no,
   tool: r.tool,
   input: parseJson(r.input, null),
@@ -111,6 +120,8 @@ function toRun(r: any, withActions = true): RunView {
     .filter(Boolean);
   return {
     id: r.id,
+    ...MACHINE_GENERATED,
+    promptHash: r.prompt_hash ?? null,
     agent: r.agent_key,
     agentName: getAgentDef(r.agent_key)?.name ?? r.agent_key,
     userId: r.user_id,
@@ -142,6 +153,7 @@ const pub = (id: string | null) => {
 };
 const toApproval = (r: any): ApprovalView => ({
   id: r.id,
+  generatedBy: 'machine',
   runId: r.run_id,
   agent: r.agent_key,
   requestedFor: pub(r.requested_for),
@@ -365,6 +377,16 @@ export interface StartOptions {
   readOnly?: boolean;
 }
 
+/**
+ * The prompt hash of a run: sha256 over the stable system prompt (charter + base rules) and the ordered list of tools
+ * the policy lets this account use. Two runs of one agent under one policy share it; a charter, rule or policy change
+ * yields a new one, so reviewers can tell which prompt produced an artefact.
+ */
+export function computePromptHash(agent: AgentDef, user: UserRow): string {
+  const { tools } = usableTools(agent.key, user);
+  return sha256(JSON.stringify({ system: `${agent.charter}\n\n${BASE_RULES_FOR_MODEL}`, tools: [...tools].sort() }));
+}
+
 export async function startRun(user: UserRow, agentKey: string, input: string, opts: StartOptions = {}): Promise<RunView> {
   const s = getAssistSettings();
   if (!s.enabled) throw new AppError(503, 'assist_disabled', 'The command centre is switched off by the administrators.');
@@ -381,11 +403,12 @@ export async function startRun(user: UserRow, agentKey: string, input: string, o
   const runsToday = (getDb().prepare('SELECT COUNT(*) c FROM agent_runs WHERE user_id = ? AND created_at >= ?').get(user.id, `${today}T00:00:00.000Z`) as any).c;
   if (runsToday >= policy.maxRunsPerDay) throw new AppError(429, 'run_limit', 'Daily run limit reached for this account.');
   const usage = usageSummary(user);
+  const promptHash = computePromptHash(agent, user);
   if (usage.allowance && usage.acuUsed >= usage.allowance) {
     const id = uuid();
     getDb()
       .prepare(
-        "INSERT INTO agent_runs (id, agent_key, user_id, trigger_type, trigger_ref, status, input, context, provider, error_code, error, finished_at, created_at) VALUES (?, ?, ?, ?, ?, 'budget_exhausted', ?, ?, 'none', 'budget_exhausted', ?, ?, ?)",
+        "INSERT INTO agent_runs (id, agent_key, user_id, trigger_type, trigger_ref, status, input, context, provider, error_code, error, finished_at, prompt_hash, created_at) VALUES (?, ?, ?, ?, ?, 'budget_exhausted', ?, ?, 'none', 'budget_exhausted', ?, ?, ?, ?)",
       )
       .run(
         id,
@@ -397,6 +420,7 @@ export async function startRun(user: UserRow, agentKey: string, input: string, o
         opts.context ? JSON.stringify(opts.context) : null,
         `Monthly allowance of ${usage.allowance} ACU used up.`,
         now(),
+        promptHash,
         now(),
       );
     return getRun(id);
@@ -409,9 +433,9 @@ export async function startRun(user: UserRow, agentKey: string, input: string, o
   const id = uuid();
   getDb()
     .prepare(
-      "INSERT INTO agent_runs (id, agent_key, user_id, trigger_type, trigger_ref, status, input, context, provider, billing, created_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, 'offline', ?, ?)",
+      "INSERT INTO agent_runs (id, agent_key, user_id, trigger_type, trigger_ref, status, input, context, provider, billing, prompt_hash, created_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, 'offline', ?, ?, ?)",
     )
-    .run(id, agentKey, user.id, opts.trigger ?? 'user', opts.triggerRef ?? null, text, opts.context ? JSON.stringify(opts.context) : null, JSON.stringify(plan), now());
+    .run(id, agentKey, user.id, opts.trigger ?? 'user', opts.triggerRef ?? null, text, opts.context ? JSON.stringify(opts.context) : null, JSON.stringify(plan), promptHash, now());
   recordEvent(
     'admin',
     id,

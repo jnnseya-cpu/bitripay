@@ -70,6 +70,8 @@ export interface RouteView {
   status: string;
   stage: RouteStage;
   stageLabel: string;
+  /** Specification name of the stage (see docs/ALIASES.md). */
+  stageAlias: string;
   stageGroup: string;
   stageDescription: string;
   quote: RouteQuote | null;
@@ -109,6 +111,7 @@ function toView(r: any): RouteView {
     status: r.status,
     stage: r.stage ?? 'CREATED',
     stageLabel: label.label,
+    stageAlias: label.alias,
     stageGroup: label.group,
     stageDescription: label.description,
     quote: parseJson<RouteQuote | null>(r.quote, null),

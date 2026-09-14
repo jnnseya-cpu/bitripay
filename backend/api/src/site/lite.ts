@@ -23,6 +23,7 @@ import { getChannelSettings, getAppSettings } from '../services/settings';
 import { formatMoney } from '@bitripay/shared';
 import { escapeHtml as e } from '../services/markdown';
 import { config } from '../config';
+import { POSITIONING } from '../content/positioning';
 
 export const liteRouter = Router();
 const limit = rateLimit({ windowMs: 60_000, max: 120, keyPrefix: 'lite' });
@@ -92,7 +93,7 @@ liteRouter.get('/', limit, (req, res) => {
   res.send(
     page(
       'Sign in',
-      `${flash(req.query)}<div class="card"><form method="post" action="/lite/login"><label>Phone number or email</label><input name="identifier" autocomplete="username" required><label>PIN (phone) or password (email)</label><input name="secret" type="password" autocomplete="current-password" required><input type="hidden" name="next" value="${e(String(req.query.next ?? ''))}"><button>Sign in</button></form></div><div class="card">New to BitriPay? <a href="/lite/register">Open a wallet</a> with your phone number, or dial ${e(getChannelSettings().ussd.serviceCode)}.</div>`,
+      `${flash(req.query)}<p class="b">${e(POSITIONING.oneQr)}</p><p class="m">${e(POSITIONING.payLocal)}</p><div class="card"><form method="post" action="/lite/login"><label>Phone number or email</label><input name="identifier" autocomplete="username" required><label>PIN (phone) or password (email)</label><input name="secret" type="password" autocomplete="current-password" required><input type="hidden" name="next" value="${e(String(req.query.next ?? ''))}"><button>Sign in</button></form></div><div class="card">New to BitriPay? <a href="/lite/register">Open a wallet</a> with your phone number, or dial ${e(getChannelSettings().ussd.serviceCode)}.</div>`,
     ),
   );
 });
@@ -153,7 +154,7 @@ liteRouter.get('/home', (req, res) => {
   res.send(
     page(
       'Home',
-      `${flash(req.query)}<div class="card"><div class="b">${e(u.full_name)} · @${e(u.tag)}</div>${ws.length ? ws.map((w) => `<div><span class="b">${money(w.balance, w.currency)}</span>${w.frozen_at ? ' <span class="m">(frozen)</span>' : ''}</div>`).join('') : '<div class="m">No wallet yet. Cash in at an agent or ask someone to send to @' + e(u.tag) + '.</div>'}</div><h2>Recent</h2><div class="card">${tx.length ? `<table>${tx.map((t) => `<tr><td>${t.createdAt.slice(0, 10)}<br><span class="m">${e(t.counterparty ? '@' + t.counterparty.tag : t.type.replace(/_/g, ' '))}</span></td><td class="r ${t.direction === 'in' ? 'b' : ''}">${t.direction === 'in' ? '+' : '−'}${money(t.amount, t.currency)}</td></tr>`).join('')}</table>` : '<span class="m">Nothing yet.</span>'}</div>`,
+      `${flash(req.query)}<p class="m">${e(POSITIONING.oneQr)} ${e(POSITIONING.payLocal)}</p><div class="card"><div class="b">${e(u.full_name)} · @${e(u.tag)}</div>${ws.length ? ws.map((w) => `<div><span class="b">${money(w.balance, w.currency)}</span>${w.frozen_at ? ' <span class="m">(frozen)</span>' : ''}</div>`).join('') : '<div class="m">No wallet yet. Cash in at an agent or ask someone to send to @' + e(u.tag) + '.</div>'}</div><h2>Recent</h2><div class="card">${tx.length ? `<table>${tx.map((t) => `<tr><td>${t.createdAt.slice(0, 10)}<br><span class="m">${e(t.counterparty ? '@' + t.counterparty.tag : t.type.replace(/_/g, ' '))}</span></td><td class="r ${t.direction === 'in' ? 'b' : ''}">${t.direction === 'in' ? '+' : '−'}${money(t.amount, t.currency)}</td></tr>`).join('')}</table>` : '<span class="m">Nothing yet.</span>'}</div>`,
       u,
     ),
   );

@@ -21,6 +21,32 @@ export function utf8(s: string): Uint8Array {
   }
   return new Uint8Array(out);
 }
+/** Inverse of utf8(): bytes → string (the queue is stored as encrypted UTF-8 JSON). */
+export function fromUtf8(bytes: Uint8Array): string {
+  let out = '';
+  for (let i = 0; i < bytes.length;) {
+    const b = bytes[i];
+    let c: number;
+    if (b < 0x80) {
+      c = b;
+      i += 1;
+    } else if (b < 0xe0) {
+      c = ((b & 0x1f) << 6) | (bytes[i + 1] & 0x3f);
+      i += 2;
+    } else if (b < 0xf0) {
+      c = ((b & 0x0f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f);
+      i += 3;
+    } else {
+      c = ((b & 0x07) << 18) | ((bytes[i + 1] & 0x3f) << 12) | ((bytes[i + 2] & 0x3f) << 6) | (bytes[i + 3] & 0x3f);
+      i += 4;
+    }
+    if (c >= 0x10000) {
+      c -= 0x10000;
+      out += String.fromCharCode(0xd800 + (c >> 10), 0xdc00 + (c & 0x3ff));
+    } else out += String.fromCharCode(c);
+  }
+  return out;
+}
 export function sha256Hex(input: string | Uint8Array): string {
   const msg = typeof input === 'string' ? utf8(input) : input;
   const l = msg.length;

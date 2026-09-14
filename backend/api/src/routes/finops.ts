@@ -21,10 +21,12 @@ import {
   settlementCalendar,
   closeCycle,
   payCycle,
+  previewProfile,
+  settlementView,
 } from '../services/finops/settlement';
 import { listDisputes, getDispute, merchantRespond, addEvidence, withdrawDispute, openDispute, disputeChronology, getDisputeSettings } from '../services/finops/disputes';
 import { effectiveFees } from '../services/finops/fees';
-import { listSplitPayouts, retrySplits } from '../services/finops/splits';
+import { listSplitPayouts, retrySplits, listSplitRefundAllocations, retrySplitRefundAllocations } from '../services/finops/splits';
 import { listHolds } from '../services/finops/holds';
 import { getDb } from '../db';
 import { forbidden } from '../lib/errors';
@@ -57,6 +59,10 @@ const profileSchema = z.object({
   min_amount: z.number().int().min(0).optional(),
   auto: z.boolean().optional(),
   active: z.boolean().optional(),
+  /** Currency the merchant is paid in; when it differs from `currency` the obligation is converted at the platform rate with the disclosed margin. */
+  settlement_currency: z.string().length(3).optional().nullable(),
+  /** Convert at close (true) or only when the cycle is paid (false). */
+  auto_convert: z.boolean().optional(),
 });
 finopsRouter.get('/settlement_profiles', ...merchantOnly, requireScope('settlements:read', 'settlements:write'), (req, res) => res.json({ data: listProfiles(req.user!.id) }));
 finopsRouter.post('/settlement_profiles', ...merchantOnly, requireScope('settlements:write'), writeLimit, (req, res) => {
@@ -70,10 +76,16 @@ finopsRouter.post('/settlement_profiles', ...merchantOnly, requireScope('settlem
     minAmount: b.min_amount,
     auto: b.auto,
     active: b.active,
+    settlementCurrency: b.settlement_currency ? b.settlement_currency.toUpperCase() : null,
+    autoConvert: b.auto_convert,
   });
   res.status(201).json(p);
 });
 finopsRouter.get('/settlement_profiles/:id', ...merchantOnly, requireScope('settlements:read', 'settlements:write'), (req, res) => res.json(getProfile(req.user!.id, String(req.params.id))));
+/** What the next cycle of this profile would settle right now: collection currency totals, the fee lines, and the conversion into the settlement currency disclosed. */
+finopsRouter.get('/settlement_profiles/:id/preview', ...merchantOnly, requireScope('settlements:read', 'settlements:write'), (req, res) =>
+  res.json(previewProfile(req.user!.id, String(req.params.id))),
+);
 
 // ---------------------------------------------------------------- settlement cycles, obligations, statements
 finopsRouter.get('/settlement_calendar', ...merchantOnly, requireScope('settlements:read', 'settlements:write'), (req, res) => res.json(settlementCalendar(req.user!.id)));
@@ -98,6 +110,8 @@ finopsRouter.get('/settlement_cycles/:id', ...merchantOnly, requireScope('settle
   const c = getCycle(req.user!.id, String(req.params.id));
   res.json({ ...c, items: cycleItems(c.id) });
 });
+/** A settlement (cycle) with its items and the statement summary: provider fee, BitriPay fee and tax as separate lines, plus the conversion when the settlement currency differs. */
+finopsRouter.get('/settlements/:id', ...merchantOnly, requireScope('settlements:read', 'settlements:write'), (req, res) => res.json(settlementView(req.user!.id, String(req.params.id))));
 finopsRouter.post('/settlement_cycles/:id/pay', ...merchantOnly, requireScope('settlements:write'), writeLimit, (req, res) => {
   const c = getCycle(req.user!.id, String(req.params.id));
   const b = validate(z.object({ destination: profileSchema.shape.destination }), req.body ?? {});
@@ -192,6 +206,17 @@ finopsRouter.get('/payment_intents/:id/splits', ...merchantOnly, requireScope('p
   const i = getDb().prepare('SELECT merchant_user_id FROM payment_intents WHERE id = ?').get(String(req.params.id)) as any;
   if (!i || i.merchant_user_id !== req.user!.id) throw forbidden('That payment intent is not yours', 'not_owner');
   res.json({ data: listSplitPayouts(String(req.params.id)) });
+});
+/** What each split recipient gave back on the refunds of this intent (pro rata) or kept (merchant absorbs). */
+finopsRouter.get('/payment_intents/:id/split_refunds', ...merchantOnly, requireScope('payment_intents:read', 'payment_intents:write'), (req, res) => {
+  const i = getDb().prepare('SELECT merchant_user_id FROM payment_intents WHERE id = ?').get(String(req.params.id)) as any;
+  if (!i || i.merchant_user_id !== req.user!.id) throw forbidden('That payment intent is not yours', 'not_owner');
+  res.json({ data: listSplitRefundAllocations(String(req.params.id), req.query.refund ? String(req.query.refund) : null) });
+});
+finopsRouter.post('/payment_intents/:id/split_refunds/retry', ...merchantOnly, requireScope('payment_intents:write'), writeLimit, (req, res) => {
+  const i = getDb().prepare('SELECT merchant_user_id FROM payment_intents WHERE id = ?').get(String(req.params.id)) as any;
+  if (!i || i.merchant_user_id !== req.user!.id) throw forbidden('That payment intent is not yours', 'not_owner');
+  res.json({ data: retrySplitRefundAllocations(String(req.params.id)) });
 });
 finopsRouter.post(
   '/payment_intents/:id/splits/retry',

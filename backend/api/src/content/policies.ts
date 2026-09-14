@@ -3,6 +3,7 @@
  * platform serving people who may be reading on a small phone; an administrator edits them in Admin → Pages.
  * Country-specific details (regulator, licence numbers, safeguarding bank) are filled in from the go-live records.
  */
+import { POSITIONING } from './positioning';
 export interface DefaultPage {
   slug: string;
   title: string;
@@ -29,6 +30,8 @@ We build for the mother selling grilled fish at the market who cannot read the s
 - **Local rails, no fragile integrations.** Mobile-money payouts are executed from prefunded local accounts by secured payout devices and confirmed by the operator's own message, so a transfer to a village works even where no operator API exists.
 - **Every fee is shown before you confirm.** The exchange rate, the margin, the charges and what the recipient gets are on the screen before your fingerprint touches it.
 - **Your balance is a claim on safeguarded money.** Where BitriPay operates as an authorised e-money institution or the distributor of a licensed issuer, every balance is backed one-to-one by funds held apart from our own. Where we are not yet authorised, the app says so clearly and runs in sandbox mode.
+- **No custody we are not licensed for.** ${POSITIONING.noCustody} In aggregator markets the funds are held and settled by licensed institutions through the national switch; BitriPay initiates, orchestrates, normalises and reports.
+- **One QR, one gateway, every eligible rail.** ${POSITIONING.oneQr} ${POSITIONING.payLocal}
 
 ## How we are run
 
@@ -412,8 +415,13 @@ The BitriPay entity you contract with, its registration number, registered addre
 
 For each authorised market this page lists the ombudsman or alternative dispute-resolution scheme you can use free of charge if you are not satisfied with our final answer to a complaint.
 
+## National payment switch (Democratic Republic of the Congo)
+
+${POSITIONING.drcSwitch} During this aggregator phase BitriPay does not hold customer funds in the DRC: ${POSITIONING.noCustody} Every domestic interoperability payment (a payer at one institution paying a merchant at another) is routed through the switch and reported under ${POSITIONING.drcInstruction}; closed-loop wallet payments stay internal until the full licence.
+
 ## Important reminders
 
+- ${POSITIONING.noCustody}
 - Electronic money is not a bank deposit and is not covered by a deposit-guarantee scheme; it is protected by safeguarding (see Safeguarding of funds).
 - Cross-border transfers are a regulated money-transfer service. We offer them only through authorised corridors with contracted collection and payout partners.
 - Card payments are processed by licensed card processors; BitriPay never stores full card numbers.`,

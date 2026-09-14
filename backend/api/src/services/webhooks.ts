@@ -32,9 +32,18 @@ import { getWebhookSettings } from './settings';
 import { notify } from './notifications';
 import { platformSigningKey, signWithKey } from './keys';
 import { parseJson } from '../lib/json';
+import { subscribe } from './bus';
 
 export const WEBHOOK_API_VERSION = '2026-09-01';
 export const WEBHOOK_SCHEMA_VERSION = 1;
+
+/** Developer-portal wording that ships with the catalogue endpoint: the rules every receiver must build on. */
+export const WEBHOOK_CATALOGUE_NOTES: readonly string[] = [
+  'Deliveries are at-least-once: dedupe by event id.',
+  'A successful screen is not proof of payment; only a ledger posting is.',
+  "We surface reality; we don't hide it: AMBIGUOUS means we do not know yet.",
+  'Verified holds are applied per risk appetite before funds become available.',
+];
 
 /** Event catalogue (published on the developer portal and `GET /v1/webhook_events/types`). */
 export const WEBHOOK_EVENT_TYPES: { type: string; description: string }[] = [
@@ -47,6 +56,10 @@ export const WEBHOOK_EVENT_TYPES: { type: string; description: string }[] = [
   { type: 'payment_intent.created', description: 'An intent was created (API, QR, link, checkout session or USSD).' },
   { type: 'payment_intent.requires_action', description: 'The payer must authorise the payment (PIN, prompt, redirect).' },
   { type: 'payment_intent.processing', description: 'An attempt is in flight on a rail. Do not create a second payment.' },
+  {
+    type: 'payment_intent.authorised',
+    description: 'The payer authorised the payment and the funds are held (capture_method manual). Capture it with POST /payment_intents/{id}/capture, or cancel to void.',
+  },
   { type: 'payment_intent.succeeded', description: 'Captured and posted to the ledger. Ship the goods.' },
   { type: 'payment_intent.settled', description: 'Funds settled to the merchant balance.' },
   { type: 'payment_intent.failed', description: 'The intent ended without a capture (declined, expired, cancelled).' },
@@ -54,16 +67,27 @@ export const WEBHOOK_EVENT_TYPES: { type: string; description: string }[] = [
   { type: 'payment_intent.expired', description: 'The intent expired without capture.' },
   { type: 'payment_intent.ambiguous_hold', description: 'The provider could not say whether money moved. Funds are in suspense; a human or reconciliation resolves it. Do not retry.' },
   { type: 'payment_intent.disputed', description: 'A dispute or chargeback was opened on the payment.' },
+  { type: 'dispute.opened', description: 'A dispute object was created on one of your payments (same moment as payment_intent.disputed; carries the dispute).' },
   { type: 'refund.created', description: 'A refund object was created.' },
-  { type: 'refund.updated', description: 'A refund moved state (PENDING, SUCCEEDED, FAILED, MANUAL).' },
+  {
+    type: 'refund.updated',
+    description:
+      'A refund moved state. `status` is the stored value (REQUESTED, PENDING, MANUAL, SUCCEEDED, FAILED, REJECTED); `lifecycle` maps it to REQUESTED → APPROVED → PROCESSING → SUCCEEDED | FAILED | REJECTED, plus REVERSED.',
+  },
   { type: 'refund.succeeded', description: 'The refund was executed and posted.' },
   { type: 'refund.failed', description: 'The refund could not be executed.' },
   { type: 'checkout.session.completed', description: 'A hosted checkout session was paid.' },
   { type: 'checkout.session.expired', description: 'A hosted checkout session expired unpaid.' },
   { type: 'verification.completed', description: 'A Scan-to-Verify (KODA) request produced a result.' },
+  { type: 'verification.confirmed', description: 'A Scan-to-Verify (KODA) request found the payment settled on the ledger (VERIFIED). Sent next to verification.completed.' },
   { type: 'payout.created', description: 'A payout request was accepted.' },
+  { type: 'payout.processing', description: 'The payout was handed to the payout network (queued to a prefunded account or agent) and is being executed.' },
   { type: 'payout.completed', description: 'A payout was paid out.' },
+  { type: 'payout.succeeded', description: 'The payout was paid out (same moment as payout.completed).' },
+  { type: 'payout.settled', description: 'The payout left the platform ledger for good: the withdrawal posted to the treasury and the funds are with the recipient rail.' },
   { type: 'payout.failed', description: 'A payout was rejected or failed.' },
+  { type: 'settlement.created', description: 'A settlement cycle was closed: the collections of the period were netted (gross, fees, refunds, splits, holds) and the statement is available.' },
+  { type: 'settlement.completed', description: 'A settlement cycle was paid to its destination (or kept available in the wallet for wallet settlement).' },
   { type: 'payment.completed', description: 'Legacy event: a payment request was paid (kept for existing integrations).' },
   { type: 'payment_request.created', description: 'Legacy event: an API or link payment request was created.' },
   { type: 'reconciliation.exception', description: 'Reconciliation found a discrepancy involving one of your payments.' },
@@ -356,6 +380,48 @@ export function emitEvent(userId: string, type: string, data: Record<string, unk
 export async function dispatchWebhook(userId: string, event: string, data: Record<string, unknown>, opts: EmitOptions = {}) {
   emitEvent(userId, event, data, opts);
 }
+
+/** The developer catalogue: version, schema, the receiver rules and every event with its description. */
+export function webhookCatalogue() {
+  return { api_version: WEBHOOK_API_VERSION, schema_version: WEBHOOK_SCHEMA_VERSION, notes: [...WEBHOOK_CATALOGUE_NOTES], data: WEBHOOK_EVENT_TYPES };
+}
+
+/**
+ * Settlement cycle events: `created` when a cycle is closed, `completed` when it is paid. The finops settlement
+ * service calls this at both moments; the closing moment is also covered by the `settlement.cycle_closed` domain
+ * event below, so `settlement.created` is delivered even when only the bus is wired.
+ */
+export function emitSettlementEvent(userId: string, phase: 'created' | 'completed', cycle: { id: string; [key: string]: unknown }): string | null {
+  const type = phase === 'created' ? 'settlement.created' : 'settlement.completed';
+  const ts = now();
+  const recent = getDb()
+    .prepare('SELECT id FROM webhook_events WHERE user_id = ? AND type = ? AND resource_id = ? AND created_at >= ? LIMIT 1')
+    .get(userId, type, cycle.id, new Date(Date.now() - 60_000).toISOString());
+  if (recent) return null; // the bus subscription and a direct call within the same minute describe one moment
+  return emitEvent(userId, type, { settlementCycle: cycle, cycleId: cycle.id, phase }, { resource: { type: 'settlement_cycle', id: cycle.id }, occurredAt: ts });
+}
+
+// Domain-bus companions: the settlement and dispute modules publish their moments on the bus; the merchant-facing
+// events are derived here so the catalogue is complete without those modules calling the engine directly.
+// `settlement.cycle_closed` / `settlement.closed` are the closing moment (finops/settlement.ts publishes both with the
+// same cycle), `settlement.paid` is the payout of the cycle; the payload names the merchant as `merchantId` or `userId`.
+subscribe('webhooks.settlement', ['settlement.cycle_closed', 'settlement.closed', 'settlement.paid'], (ev) => {
+  const merchantId = (ev.payload.merchantId as string | undefined) ?? (ev.payload.userId as string | undefined) ?? (ev.tenantId !== 'platform' ? ev.tenantId : null);
+  const cycleId = (ev.payload.cycleId as string | undefined) ?? ev.aggregateId;
+  if (!merchantId || !cycleId) return;
+  emitSettlementEvent(merchantId, ev.type === 'settlement.paid' ? 'completed' : 'created', { ...ev.payload, id: cycleId });
+});
+subscribe('webhooks.dispute', ['dispute.opened'], (ev) => {
+  const merchantId = (ev.payload.merchantId as string | undefined) ?? (ev.tenantId !== 'platform' ? ev.tenantId : null);
+  const disputeId = (ev.payload.disputeId as string | undefined) ?? ev.aggregateId;
+  if (!merchantId || !disputeId) return;
+  // the dispute module emitted payment_intent.disputed with the full dispute object a moment ago: reuse that projection
+  const twin = getDb()
+    .prepare("SELECT data FROM webhook_events WHERE user_id = ? AND type = 'payment_intent.disputed' AND resource_id = ? ORDER BY created_at DESC LIMIT 1")
+    .get(merchantId, disputeId) as { data: string } | undefined;
+  const dispute = twin ? (envelopeData(twin.data).dispute ?? null) : null;
+  emitEvent(merchantId, 'dispute.opened', { dispute: dispute ?? { id: disputeId, ...ev.payload }, disputeId }, { resource: { type: 'dispute', id: disputeId }, occurredAt: ev.occurredAt });
+});
 
 function delayFor(attempt: number): number | null {
   const s = getWebhookSettings();

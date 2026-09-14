@@ -419,6 +419,7 @@ export const STAGE_STEPS: { id: string; label: string; stages: string[] }[] = [
   { id: 'settled', label: 'Settled', stages: ['SETTLED'] },
 ];
 export function StageTimeline({ stage, stageLabel, stageDescription }: { stage?: string; stageLabel?: string; stageDescription?: string }) {
+  const t = useT();
   if (!stage) return null;
   const terminalBad = ['EXPIRED', 'REJECTED', 'REVERSED'].includes(stage);
   const exception = ['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'].includes(stage);
@@ -449,6 +450,11 @@ export function StageTimeline({ stage, stageLabel, stageDescription }: { stage?:
         <b>{stageLabel ?? stage}</b>
         {stageDescription ? <span className="muted"> – {stageDescription}</span> : null}
       </div>
+      {stage !== 'SETTLED' && (
+        <div className="tiny muted mt-sm" data-testid="lifecycle-trust">
+          {t('trust.notProofShort')}
+        </div>
+      )}
     </div>
   );
 }

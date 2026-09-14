@@ -177,10 +177,25 @@ export function MerchantCentre() {
 }
 
 function Settlement({ calendar, money, toast, currencies }: { calendar: any; money: (m: number, c: string) => string; toast: any; currencies: string[] }) {
-  const [form, setForm] = useState<any>({ currency: currencies[0] ?? 'USD', schedule: 'T1', cutoff_hour_utc: 22, destination: { method: 'wallet' }, min_amount: 0, auto: true });
+  const [form, setForm] = useState<any>({
+    currency: currencies[0] ?? 'USD',
+    schedule: 'T1',
+    cutoff_hour_utc: 22,
+    destination: { method: 'wallet' },
+    min_amount: 0,
+    auto: true,
+    settlement_currency: currencies[0] ?? 'USD',
+    auto_convert: false,
+  });
   const banks = useAsync(() => api.get<{ items: any[] }>('/api/bank-accounts'), []);
   const [statement, setStatement] = useState<any>(null);
+  /** Next-cycle preview of one profile: collection vs settlement currency with the conversion and fee lines disclosed. */
+  const [preview, setPreview] = useState<any>(null);
+  /** A settlement (cycle) with its statement summary from GET /v1/settlements/:id. */
+  const [detail, setDetail] = useState<any>(null);
   const err = (e: any) => toast(e.message, 'error');
+  const loadPreview = (profileId: string) => api.get<any>(`/api/v1/settlement_profiles/${profileId}/preview`).then(setPreview).catch(err);
+  const pct = (bps: number) => `${(bps / 100).toFixed(2)}%`;
   const save = () =>
     api
       .post('/api/v1/settlement_profiles', form)
@@ -240,6 +255,25 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
         <label className="checkbox mb">
           <input type="checkbox" checked={!!form.auto} onChange={(e) => setForm({ ...form, auto: e.target.checked })} /> Run automatically at the cut-off
         </label>
+        <div className="grid cols-2">
+          <Field label="Paid out in" hint="Collections in another currency are converted at the platform rate; the margin is disclosed on every statement.">
+            <Select value={form.settlement_currency} onChange={(e) => setForm({ ...form, settlement_currency: e.target.value })}>
+              {currencies.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Conversion">
+            <label className="checkbox">
+              <input type="checkbox" checked={!!form.auto_convert} disabled={form.settlement_currency === form.currency} onChange={(e) => setForm({ ...form, auto_convert: e.target.checked })} />{' '}
+              {form.settlement_currency === form.currency
+                ? 'Same currency — nothing to convert'
+                : form.auto_convert
+                  ? 'Convert automatically when the cycle closes'
+                  : 'Convert only when the cycle is paid'}
+            </label>
+          </Field>
+        </div>
         <div className="row">
           <Button onClick={save}>Save profile</Button>
           <Button variant="secondary" onClick={() => close(form.currency, false)}>
@@ -251,8 +285,61 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
         </div>
         <h4 className="mt">Profiles</h4>
         {(calendar.data?.profiles ?? []).map((p: any) => (
-          <KV key={p.id} k={`${p.currency} · ${p.rail}`} v={`${p.schedule} · ${p.destination?.method ?? 'wallet'}${p.auto ? ' · auto' : ''}`} />
+          <div key={p.id} className="list-item">
+            <div className="flex1">
+              <div className="main-text">
+                {p.currency} · {p.rail}
+                {p.settlementCurrency && p.settlementCurrency !== p.currency ? ` → paid in ${p.settlementCurrency}` : ''}
+              </div>
+              <div className="sub-text">
+                {p.schedule} · {p.destination?.method ?? 'wallet'}
+                {p.auto ? ' · auto' : ''}
+                {p.settlementCurrency && p.settlementCurrency !== p.currency ? (p.autoConvert ? ' · converts at close' : ' · converts at payment') : ''}
+              </div>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => loadPreview(p.id)}>
+              Preview
+            </Button>
+          </div>
         ))}
+        {preview && (
+          <div className="card mt">
+            <h4>
+              Next cycle · {preview.collectionCurrency}
+              {preview.settlementCurrency !== preview.collectionCurrency ? ` → ${preview.settlementCurrency}` : ''}
+            </h4>
+            <p className="small muted">
+              {preview.itemCount} item{preview.itemCount === 1 ? '' : 's'} since {String(preview.periodFrom).slice(0, 10)}
+              {preview.wouldSkip ? ' — nothing to settle yet' : ''}
+            </p>
+            <KV k="Gross collections" v={preview.totals.formatted.gross} />
+            <KV k="Provider (rail) fee" v={preview.totals.formatted.providerFees} />
+            <KV k="BitriPay fee" v={preview.totals.formatted.platformFees} />
+            <KV k={`Tax on BitriPay fee (${pct(preview.taxRateBps)})`} v={preview.totals.formatted.feeTax} />
+            <KV k="Refunds" v={preview.totals.formatted.refunds} />
+            <KV k="Splits" v={preview.totals.formatted.splits} />
+            <KV k="Holds" v={preview.totals.formatted.holds} />
+            <KV k={`Net in ${preview.collectionCurrency}`} v={<b>{preview.totals.formatted.net}</b>} />
+            {preview.settlement.conversion ? (
+              <>
+                <KV
+                  k="Rate"
+                  v={`1 ${preview.collectionCurrency} = ${Number(preview.settlement.conversion.rate).toFixed(6)} ${preview.settlementCurrency} (mid ${Number(preview.settlement.conversion.midRate).toFixed(6)})`}
+                />
+                <KV k="Margin" v={`${preview.settlement.conversion.marginBps} bps (${pct(preview.settlement.conversion.marginBps)})`} />
+                <KV k={`Paid in ${preview.settlementCurrency}`} v={<b>{preview.settlement.formatted}</b>} />
+                <p className="small muted">
+                  Converted {preview.settlement.convertsAt === 'close' ? 'when the cycle closes' : 'when the cycle is paid'}; the exchange is posted in your ledger with this rate.
+                </p>
+              </>
+            ) : (
+              preview.settlementCurrency !== preview.collectionCurrency && <p className="small muted">The conversion into {preview.settlementCurrency} is quoted once there is something to settle.</p>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => setPreview(null)}>
+              Close preview
+            </Button>
+          </div>
+        )}
       </div>
       <div className="card">
         <h3>Cycles & statements</h3>
@@ -267,10 +354,16 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
                 <div className="sub-text">
                   gross {money(c.grossMinor, c.currency)} · fees {money(c.feesMinor, c.currency)} · refunds {money(c.refundsMinor, c.currency)} · splits {money(c.splitsMinor, c.currency)} · holds{' '}
                   {money(c.holdsMinor, c.currency)} · {c.itemCount} items
+                  {c.settlementCurrency && c.settlementCurrency !== c.currency
+                    ? ` · paid ${money(c.settlementAmountMinor, c.settlementCurrency)}${c.conversion?.transactionId ? ' (converted)' : c.conversion ? ' (quoted)' : ''}`
+                    : ''}
                 </div>
               </div>
               <StatusBadge status={c.status} />
               <div className="row">
+                <Button size="sm" variant="ghost" onClick={() => api.get(`/api/v1/settlements/${c.id}`).then(setDetail).catch(err)}>
+                  Detail
+                </Button>
                 <Button size="sm" variant="ghost" onClick={() => api.get(`/api/v1/settlement_cycles/${c.id}/statement`).then(setStatement).catch(err)}>
                   Statement
                 </Button>
@@ -305,7 +398,17 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
             <>
               <KV k="Merchant" v={statement.merchant.name} />
               <KV k="Period" v={`${statement.cycle.periodFrom.slice(0, 10)} → ${statement.cycle.periodTo.slice(0, 10)}`} />
+              <KV k="Gross" v={statement.totals.formatted.gross} />
+              <KV k="Provider (rail) fee" v={statement.totals.formatted.providerFees} />
+              <KV k="BitriPay fee" v={statement.totals.formatted.platformFees} />
+              <KV k={`Tax on BitriPay fee (${statement.totals.taxLabel ?? 'tax'} ${pct(statement.totals.taxRateBps ?? 0)})`} v={statement.totals.formatted.feeTax} />
               <KV k="Net" v={statement.totals.formatted.net} />
+              {statement.settlement && statement.settlement.currency !== statement.currency && (
+                <KV
+                  k={`Paid in ${statement.settlement.currency}`}
+                  v={`${statement.settlement.formatted}${statement.settlement.conversion ? ` at ${Number(statement.settlement.conversion.rate).toFixed(6)} (margin ${statement.settlement.conversion.marginBps} bps)` : ''}`}
+                />
+              )}
               <KV k="Hash" v={<span className="mono tiny">{statement.hash}</span>} />
               <div className="list mt">
                 {statement.items.map((i: any) => (
@@ -314,12 +417,48 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
                       <div className="main-text">
                         {i.kind} · {i.reference}
                       </div>
-                      <div className="sub-text">{i.occurredAt}</div>
+                      <div className="sub-text">
+                        {i.occurredAt}
+                        {i.kind === 'payment'
+                          ? ` · provider ${money(i.providerFeeMinor ?? 0, statement.currency)} · BitriPay ${money(i.platformFeeMinor ?? 0, statement.currency)} · tax ${money(i.feeTaxMinor ?? 0, statement.currency)}`
+                          : ''}
+                      </div>
                     </div>
                     <b>{money(i.amountMinor, statement.currency)}</b>
                   </div>
                 ))}
               </div>
+            </>
+          )}
+        </Modal>
+        <Modal open={!!detail} onClose={() => setDetail(null)} title={detail ? `Settlement ${detail.statement?.number ?? detail.id}` : undefined} wide>
+          {detail && (
+            <>
+              <KV k="Status" v={<StatusBadge status={detail.status} />} />
+              <KV k="Business date" v={detail.businessDate} />
+              <KV k="Gross" v={detail.statement.totals.formatted.gross} />
+              <KV k="Provider (rail) fee" v={detail.statement.totals.formatted.providerFees} />
+              <KV k="BitriPay fee" v={detail.statement.totals.formatted.platformFees} />
+              <KV k={`Tax on BitriPay fee (${detail.statement.totals.taxLabel ?? 'tax'} ${pct(detail.statement.totals.taxRateBps ?? 0)})`} v={detail.statement.totals.formatted.feeTax} />
+              <KV k="Refunds" v={detail.statement.totals.formatted.refunds} />
+              <KV k="Splits" v={detail.statement.totals.formatted.splits} />
+              <KV k="Holds" v={detail.statement.totals.formatted.holds} />
+              <KV k={`Net in ${detail.currency}`} v={<b>{detail.statement.totals.formatted.net}</b>} />
+              {detail.settlementCurrency !== detail.currency && (
+                <>
+                  <KV k={`Paid in ${detail.settlementCurrency}`} v={<b>{detail.statement.settlement.formatted}</b>} />
+                  {detail.conversion && (
+                    <KV
+                      k="Conversion"
+                      v={`1 ${detail.currency} = ${Number(detail.conversion.rate).toFixed(6)} ${detail.settlementCurrency} · mid ${Number(detail.conversion.midRate).toFixed(6)} · margin ${detail.conversion.marginBps} bps · ${
+                        detail.conversion.transactionId ? `posted ${detail.conversion.transactionId}` : 'quoted, posted at payment'
+                      }`}
+                    />
+                  )}
+                </>
+              )}
+              {detail.dueAt && <KV k="Due" v={String(detail.dueAt).slice(0, 10)} />}
+              <KV k="Hash" v={<span className="mono tiny">{detail.hash}</span>} />
             </>
           )}
         </Modal>

@@ -20,14 +20,20 @@ import { ensureWallet } from './wallets';
 import { getPayment, providerRefund, initiatePayment, verifyPayment } from './payments';
 import { requestWithdrawal, type WithdrawalDestination } from './withdrawals';
 import { getPayoutByTransaction } from './payouts';
-import { emitEvent } from './webhooks';
+import { emitEvent, emitSettlementEvent } from './webhooks';
 import { recordEvent, type Actor } from './events';
-import { getGatewayProductSettings } from './settings';
+import { getGatewayProductSettings, getSetting, type RiskSettings } from './settings';
 import { assertMoneyMovementAllowed } from './guardian';
 import { notify } from './notifications';
 import { formatMoney, nationalSignificant } from '@bitripay/shared';
 import { SANDBOX_MAGIC_MSISDNS } from '../payments/sandbox';
-import { publish } from './bus';
+import { publish, type RefundSucceededPayload } from './bus';
+import { assertPin } from './auth';
+import { calculateFee } from './ledger';
+import { fxDisclosure } from './fx';
+import { createPaymentRequest, getPaymentRequestByCode, cancelPaymentRequest, toPaymentRequest, type PaymentRequestRow } from './paymentRequests';
+import { listApiKeys, createApiKey, revokeApiKey, type ApiKeyKind } from './merchant';
+import { sha256 } from '../lib/crypto';
 
 const paymentRequired = (message: string, code = 'payment_required') => new AppError(402, code, message);
 
@@ -376,8 +382,15 @@ export function deactivatePaymentLink(merchant: UserRow, id: string): PaymentLin
 // ---------------------------------------------------------------------------------------------------------------------
 // Refunds
 // ---------------------------------------------------------------------------------------------------------------------
-export const REFUND_STATES = ['REQUESTED', 'PENDING', 'SUCCEEDED', 'FAILED', 'MANUAL', 'CANCELLED'] as const;
+export const REFUND_STATES = ['REQUESTED', 'PENDING', 'SUCCEEDED', 'FAILED', 'MANUAL', 'CANCELLED', 'REJECTED'] as const;
 export type RefundState = (typeof REFUND_STATES)[number];
+/**
+ * The specification's refund lifecycle, in order: REQUESTED → APPROVED → PROCESSING → SUCCEEDED | FAILED | REJECTED,
+ * plus REVERSED when the refund's own ledger posting was later reversed. `status` keeps the stored value existing
+ * integrations read; `lifecycle` is the mapping onto these states.
+ */
+export const REFUND_LIFECYCLE = ['REQUESTED', 'APPROVED', 'PROCESSING', 'SUCCEEDED', 'FAILED', 'REJECTED', 'REVERSED'] as const;
+export type RefundLifecycle = (typeof REFUND_LIFECYCLE)[number];
 /** States that hold a reservation against the refundable amount (IDM/refund rule: unknown or pending never releases on timeout). */
 const RESERVING_STATES: RefundState[] = ['REQUESTED', 'PENDING', 'SUCCEEDED', 'MANUAL'];
 
@@ -389,13 +402,38 @@ export interface RefundView {
   amount: { valueMinor: number; currency: string };
   reason: string | null;
   status: RefundState;
+  lifecycle: RefundLifecycle;
   method: 'wallet' | 'processor';
   refundTransactionId: string | null;
   providerRef: string | null;
   error: string | null;
+  rejection: { by: string | null; at: string; reason: string | null } | null;
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+}
+/**
+ * Stored status → specification state. REQUESTED is the reservation before execution; PENDING means the processor
+ * accepted the instruction (PROCESSING); MANUAL is approved and waiting for operations to execute it (APPROVED);
+ * a SUCCEEDED refund whose own ledger transaction was reversed is REVERSED.
+ */
+export function refundLifecycle(r: { status: string; refund_transaction_id?: string | null }): RefundLifecycle {
+  switch (r.status) {
+    case 'REQUESTED':
+      return 'REQUESTED';
+    case 'MANUAL':
+      return 'APPROVED';
+    case 'PENDING':
+      return 'PROCESSING';
+    case 'SUCCEEDED': {
+      const tx = r.refund_transaction_id ? getTransaction(r.refund_transaction_id) : undefined;
+      return tx && ['reversed', 'rejected', 'cancelled', 'failed'].includes(tx.status) ? 'REVERSED' : 'SUCCEEDED';
+    }
+    case 'FAILED':
+      return 'FAILED';
+    default:
+      return 'REJECTED'; // REJECTED and the legacy CANCELLED
+  }
 }
 const toRefund = (r: any): RefundView => ({
   id: r.id,
@@ -405,14 +443,64 @@ const toRefund = (r: any): RefundView => ({
   amount: { valueMinor: r.amount, currency: r.currency },
   reason: r.reason,
   status: r.status,
+  lifecycle: refundLifecycle(r),
   method: r.method,
   refundTransactionId: r.refund_transaction_id,
   providerRef: r.provider_ref,
   error: r.error,
+  rejection: r.rejected_at ? { by: r.rejected_by ?? null, at: r.rejected_at, reason: r.rejection_reason ?? null } : null,
   metadata: parseJson(r.metadata, {}),
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
+
+/**
+ * Domain-bus companion of the `refund.succeeded` webhook: published once the refund's ledger entries are posted so
+ * downstream modules (split allocation, settlement netting) follow the money. Carries both `merchantUserId` (the
+ * gateway's name) and `merchantId` (the bus contract, RefundSucceededPayload) for the same value.
+ */
+function publishRefundSucceeded(merchantUserId: string, view: RefundView): void {
+  const payload: RefundSucceededPayload & { merchantUserId: string } = {
+    refundId: view.id,
+    intentId: view.intentId,
+    transactionId: view.transactionId,
+    refundTransactionId: view.refundTransactionId,
+    merchantId: merchantUserId,
+    merchantUserId,
+    amountMinor: view.amount.valueMinor,
+    currency: view.amount.currency,
+  };
+  publish('refund.succeeded', payload, { aggregateId: view.intentId ?? view.transactionId ?? view.id, tenantId: merchantUserId });
+}
+
+/** Threshold above which a refund performed with a session (dashboard) needs PIN / passkey step-up; API keys are pre-authorised credentials. */
+export const HIGH_VALUE_REFUND_DEFAULT_MINOR = 100_000;
+export function highValueRefundThreshold(): number {
+  return (getSetting<RiskSettings & { highValueRefundMinor?: number }>('risk')?.highValueRefundMinor as number | undefined) ?? HIGH_VALUE_REFUND_DEFAULT_MINOR;
+}
+
+/** Step-up for sensitive session actions: a fresh passkey token or the transaction PIN; the error code is always `step_up_required`. */
+export function assertSessionStepUp(user: UserRow, pin: string | undefined, req: { headers?: Record<string, unknown>; body?: any }, what: string): void {
+  const token = (req.headers?.['x-step-up-token'] as string | undefined) || req.body?.stepUpToken;
+  if (!token && !pin) throw forbidden(`${what} requires step-up: send your transaction PIN (pin) or a passkey step-up token (X-Step-Up-Token)`, 'step_up_required');
+  try {
+    assertPin(user, pin, req);
+  } catch (err: any) {
+    if (err?.code === 'pin_required') throw forbidden(`${what} requires step-up. Set a transaction PIN in your security settings.`, 'step_up_required');
+    throw err;
+  }
+}
+
+/** High-value refunds from a session need step-up; the amount defaults to everything still refundable. */
+export function assertRefundStepUp(merchant: UserRow, input: CreateRefundInput, req: { headers?: Record<string, unknown>; body?: any; authVia?: string }): void {
+  if (req.authVia === 'api_key') return;
+  let amount = input.amountMinor ?? null;
+  if (amount == null) {
+    const txId = input.intentId ? getIntentRow(input.intentId).transaction_id : input.transactionId;
+    if (txId && getTransaction(txId)) amount = refundableAmount(txId).refundable;
+  }
+  if ((amount ?? 0) > highValueRefundThreshold()) assertSessionStepUp(merchant, req.body?.pin, req, `A refund above ${highValueRefundThreshold()} minor units`);
+}
 
 /** Amount still refundable on a transaction: principal minus everything reserved, pending or already refunded. */
 export function refundableAmount(transactionId: string): { principal: number; reserved: number; refundable: number } {
@@ -580,6 +668,7 @@ export async function createRefund(merchant: UserRow, input: CreateRefundInput, 
     emitEvent(merchant.id, 'refund.succeeded', { refund: view }, { resource: { type: 'refund', id } });
     emitEvent(merchant.id, 'refund.updated', { refund: view }, { resource: { type: 'refund', id } });
     recordEvent('payment', intent?.id ?? tx.id, 'refund.succeeded', actor, { refundId: id, transactionId: refundTx.id });
+    publishRefundSucceeded(merchant.id, view);
     return view;
   } catch (err) {
     return fail((err as Error).message);
@@ -647,6 +736,36 @@ export async function resolveRefund(id: string, outcome: 'succeeded' | 'failed',
   const view = toRefund(db.prepare('SELECT * FROM refunds WHERE id = ?').get(id));
   emitEvent(merchant.id, 'refund.succeeded', { refund: view }, { resource: { type: 'refund', id } });
   emitEvent(merchant.id, 'refund.updated', { refund: view }, { resource: { type: 'refund', id } });
+  publishRefundSucceeded(merchant.id, view);
+  return view;
+}
+
+/**
+ * Reject a refund that was approved for manual execution (or never left REQUESTED): the reservation is released,
+ * nothing is posted and the intent keeps the state it had before the refund was requested. Merchant or operations.
+ */
+export function rejectRefund(by: UserRow, id: string, reason: string, actor: Actor): RefundView {
+  const db = getDb();
+  const r = db.prepare('SELECT * FROM refunds WHERE id = ?').get(id) as any;
+  if (!r || (by.role !== 'admin' && r.merchant_user_id !== by.id)) throw notFound('Refund not found', 'refund_not_found');
+  if (!['MANUAL', 'REQUESTED'].includes(r.status)) throw conflict(`Refund is ${r.status} (${refundLifecycle(r)}); only refunds awaiting execution can be rejected`, 'refund_not_rejectable');
+  if (!reason?.trim()) throw badRequest('A rejection reason is required', 'reason_required');
+  const before = r.intent_id ? getIntentRow(r.intent_id).status : null;
+  db.prepare("UPDATE refunds SET status = 'REJECTED', rejected_by = ?, rejected_at = ?, rejection_reason = ?, updated_at = ? WHERE id = ?").run(by.id, now(), reason.trim(), now(), id);
+  recordEvent('payment', r.intent_id ?? r.transaction_id, 'refund.rejected', actor, { refundId: id, reason: reason.trim(), intentStatus: before });
+  if (r.intent_id)
+    appendPaymentEvent({
+      intentId: r.intent_id,
+      state: before ?? 'CONFIRMED',
+      source: actor.type,
+      direction: 'internal',
+      amountMinor: r.amount,
+      currency: r.currency,
+      transactionId: r.transaction_id,
+      payload: { refundId: id, rejected: true, reason: reason.trim() },
+    });
+  const view = toRefund(db.prepare('SELECT * FROM refunds WHERE id = ?').get(id));
+  emitEvent(r.merchant_user_id, 'refund.updated', { refund: view }, { resource: { type: 'refund', id } });
   return view;
 }
 
@@ -737,6 +856,172 @@ export interface CreateVerificationInput {
   windowHours?: number | null;
 }
 
+type MatchCriteria = { reference: string | null; msisdn: string | null; amountMinor: number | null; currency: string | null; from: string };
+type Hit = {
+  paymentId: string | null;
+  intentId: string | null;
+  evidenceId: string | null;
+  transactionId: string | null;
+  stage: string | null;
+  amount: number;
+  currency: string;
+  at: string;
+  score: number;
+  why: string;
+};
+
+/**
+ * Score the evidence the platform holds for this merchant against the criteria: settled gateway payments, verified
+ * evidence (SMS/API confirmations) and ledger postings. Reference matches are conclusive (70), MSISDN and amount are
+ * strong (25 each); a candidate needs 50 to count. One hit per underlying payment, best score first.
+ */
+function collectPaymentHits(merchantId: string, c: MatchCriteria): Hit[] {
+  const db = getDb();
+  const candidates = db
+    .prepare(
+      `SELECT gp.id payment_id, gp.stage, gp.amount, gp.currency, gp.provider_ref, gp.payer_phone, gp.transaction_id, gp.updated_at, gp.created_at, pr.intent_id
+       FROM gateway_payments gp JOIN payment_requests pr ON pr.id = gp.payment_request_id
+       WHERE pr.requester_user_id = ? AND gp.created_at >= ?`,
+    )
+    .all(merchantId, c.from) as any[];
+  const evidence = db
+    .prepare(
+      `SELECT e.id evidence_id, e.payment_id, e.parsed, e.outcome, e.external_ref, e.created_at, gp.stage, gp.amount, gp.currency, gp.transaction_id, gp.updated_at, pr.intent_id
+       FROM payment_evidence e JOIN gateway_payments gp ON gp.id = e.payment_id JOIN payment_requests pr ON pr.id = gp.payment_request_id
+       WHERE pr.requester_user_id = ? AND e.created_at >= ?`,
+    )
+    .all(merchantId, c.from) as any[];
+  const ledger = c.reference
+    ? (db
+        .prepare(
+          "SELECT * FROM transactions WHERE receiver_user_id = ? AND (reference = ? OR json_extract(metadata, '$.providerRef') = ? OR json_extract(metadata, '$.reference') = ?) AND created_at >= ?",
+        )
+        .all(merchantId, c.reference, c.reference, c.reference, c.from) as TransactionRow[])
+    : [];
+  const hits: Hit[] = [];
+  const refEq = (a: string | null | undefined) => !!c.reference && !!a && a.replace(/\s+/g, '').toLowerCase() === c.reference.replace(/\s+/g, '').toLowerCase();
+  for (const g of candidates) {
+    let score = 0;
+    const why: string[] = [];
+    if (refEq(g.provider_ref)) {
+      score += 70;
+      why.push('reference');
+    }
+    if (c.msisdn && normaliseMsisdn(g.payer_phone) === c.msisdn) {
+      score += 25;
+      why.push('msisdn');
+    }
+    if (c.amountMinor && g.amount === c.amountMinor && (!c.currency || c.currency === g.currency)) {
+      score += 25;
+      why.push('amount');
+    }
+    if (score >= 50)
+      hits.push({
+        paymentId: g.payment_id,
+        intentId: g.intent_id,
+        evidenceId: null,
+        transactionId: g.transaction_id,
+        stage: g.stage,
+        amount: g.amount,
+        currency: g.currency,
+        at: g.updated_at,
+        score,
+        why: why.join('+'),
+      });
+  }
+  for (const e of evidence) {
+    const parsed = parseJson<Partial<import('./evidence').ParsedEvidence>>(e.parsed, {});
+    let score = 0;
+    const why: string[] = [];
+    if (refEq(parsed.reference) || refEq(parsed.externalRef) || refEq(e.external_ref)) {
+      score += 70;
+      why.push('evidence_reference');
+    }
+    if (c.msisdn && normaliseMsisdn(parsed.senderPhone) === c.msisdn) {
+      score += 25;
+      why.push('evidence_msisdn');
+    }
+    if (c.amountMinor && e.amount === c.amountMinor && (!c.currency || c.currency === e.currency)) {
+      score += 25;
+      why.push('amount');
+    }
+    if (score >= 50)
+      hits.push({
+        paymentId: e.payment_id,
+        intentId: e.intent_id,
+        evidenceId: e.evidence_id,
+        transactionId: e.transaction_id,
+        stage: e.stage,
+        amount: e.amount,
+        currency: e.currency,
+        at: e.updated_at,
+        score,
+        why: why.join('+'),
+      });
+  }
+  for (const t of ledger)
+    hits.push({
+      paymentId: null,
+      intentId: t.intent_id ?? null,
+      evidenceId: null,
+      transactionId: t.id,
+      stage: t.status === 'completed' ? 'SETTLED' : t.status.toUpperCase(),
+      amount: t.amount,
+      currency: t.currency,
+      at: t.completed_at ?? t.created_at,
+      score: 80,
+      why: 'ledger_reference',
+    });
+  return dedupeHits(hits);
+}
+
+/** One hit per underlying payment (gateway payment, else transaction, else evidence), best score first. */
+function dedupeHits(hits: Hit[]): Hit[] {
+  const byKey = new Map<string, Hit>();
+  for (const h of hits.sort((a, b) => b.score - a.score)) {
+    const key = h.paymentId ?? h.transactionId ?? h.evidenceId ?? uuid();
+    if (!byKey.has(key)) byKey.set(key, h);
+  }
+  return [...byKey.values()];
+}
+
+/** Turn the distinct hits into a verdict. Only a settled ledger posting is VERIFIED; equal candidates are AMBIGUOUS. */
+function classifyHits(distinct: Hit[], amountMinor: number | null): { status: VerificationStatus; confidence: number; reasons: string[]; match: Hit | null } {
+  let status: VerificationStatus;
+  let confidence = 0;
+  const reasons: string[] = [];
+  let match: Hit | null = null;
+  if (!distinct.length) {
+    status = 'NOT_FOUND';
+    reasons.push('no_payment_matches_the_criteria_in_window');
+  } else if (distinct.length > 1 && distinct[0].score === distinct[1].score) {
+    status = 'AMBIGUOUS';
+    confidence = Math.min(60, distinct[0].score);
+    reasons.push(`${distinct.length}_candidates_match_equally`);
+  } else {
+    match = distinct[0];
+    if (amountMinor && match.amount !== amountMinor) {
+      status = 'MISMATCH';
+      confidence = 40;
+      reasons.push(`amount_differs:${match.amount}`);
+    } else if (match.stage === 'SETTLED' || (match.transactionId && match.stage === 'SETTLED')) {
+      status = 'VERIFIED';
+      confidence = Math.min(100, match.score);
+      reasons.push(`matched_on:${match.why}`, 'settled');
+    } else if (['REJECTED', 'EXPIRED', 'REVERSED', 'FAILED', 'CANCELLED'].includes(match.stage ?? '')) {
+      status = 'NOT_FOUND';
+      confidence = match.score;
+      reasons.push(`matched_on:${match.why}`, `payment_${(match.stage ?? '').toLowerCase()}`);
+      match = null;
+    } else {
+      status = 'PENDING';
+      confidence = Math.min(90, match.score);
+      reasons.push(`matched_on:${match.why}`, `stage:${match.stage}`);
+    }
+  }
+  return { status, confidence, reasons, match };
+}
+
 /**
  * Answer "did this payment reach me?" from evidence the platform already holds: settled gateway payments, verified
  * evidence (SMS/API confirmations) and ledger postings for this merchant. Reference matches are conclusive;
@@ -776,155 +1061,8 @@ export function createVerification(merchant: UserRow, input: CreateVerificationI
     });
   }
 
-  // candidates: gateway payments on this merchant's requests
-  const candidates = db
-    .prepare(
-      `SELECT gp.id payment_id, gp.stage, gp.amount, gp.currency, gp.provider_ref, gp.payer_phone, gp.transaction_id, gp.updated_at, gp.created_at, pr.intent_id
-       FROM gateway_payments gp JOIN payment_requests pr ON pr.id = gp.payment_request_id
-       WHERE pr.requester_user_id = ? AND gp.created_at >= ?`,
-    )
-    .all(merchant.id, from) as any[];
-  const evidence = db
-    .prepare(
-      `SELECT e.id evidence_id, e.payment_id, e.parsed, e.outcome, e.external_ref, e.created_at, gp.stage, gp.amount, gp.currency, gp.transaction_id, gp.updated_at, pr.intent_id
-       FROM payment_evidence e JOIN gateway_payments gp ON gp.id = e.payment_id JOIN payment_requests pr ON pr.id = gp.payment_request_id
-       WHERE pr.requester_user_id = ? AND e.created_at >= ?`,
-    )
-    .all(merchant.id, from) as any[];
-  const ledger = reference
-    ? (db
-        .prepare(
-          "SELECT * FROM transactions WHERE receiver_user_id = ? AND (reference = ? OR json_extract(metadata, '$.providerRef') = ? OR json_extract(metadata, '$.reference') = ?) AND created_at >= ?",
-        )
-        .all(merchant.id, reference, reference, reference, from) as TransactionRow[])
-    : [];
-
-  type Hit = {
-    paymentId: string | null;
-    intentId: string | null;
-    evidenceId: string | null;
-    transactionId: string | null;
-    stage: string | null;
-    amount: number;
-    currency: string;
-    at: string;
-    score: number;
-    why: string;
-  };
-  const hits: Hit[] = [];
-  const refEq = (a: string | null | undefined) => !!reference && !!a && a.replace(/\s+/g, '').toLowerCase() === reference.replace(/\s+/g, '').toLowerCase();
-  for (const c of candidates) {
-    let score = 0;
-    const why: string[] = [];
-    if (refEq(c.provider_ref)) {
-      score += 70;
-      why.push('reference');
-    }
-    if (msisdn && normaliseMsisdn(c.payer_phone) === msisdn) {
-      score += 25;
-      why.push('msisdn');
-    }
-    if (input.amountMinor && c.amount === input.amountMinor && (!cur || cur === c.currency)) {
-      score += 25;
-      why.push('amount');
-    }
-    if (score >= 50)
-      hits.push({
-        paymentId: c.payment_id,
-        intentId: c.intent_id,
-        evidenceId: null,
-        transactionId: c.transaction_id,
-        stage: c.stage,
-        amount: c.amount,
-        currency: c.currency,
-        at: c.updated_at,
-        score,
-        why: why.join('+'),
-      });
-  }
-  for (const e of evidence) {
-    const parsed = parseJson<Partial<import('./evidence').ParsedEvidence>>(e.parsed, {});
-    let score = 0;
-    const why: string[] = [];
-    if (refEq(parsed.reference) || refEq(parsed.externalRef) || refEq(e.external_ref)) {
-      score += 70;
-      why.push('evidence_reference');
-    }
-    if (msisdn && normaliseMsisdn(parsed.senderPhone) === msisdn) {
-      score += 25;
-      why.push('evidence_msisdn');
-    }
-    if (input.amountMinor && e.amount === input.amountMinor && (!cur || cur === e.currency)) {
-      score += 25;
-      why.push('amount');
-    }
-    if (score >= 50)
-      hits.push({
-        paymentId: e.payment_id,
-        intentId: e.intent_id,
-        evidenceId: e.evidence_id,
-        transactionId: e.transaction_id,
-        stage: e.stage,
-        amount: e.amount,
-        currency: e.currency,
-        at: e.updated_at,
-        score,
-        why: why.join('+'),
-      });
-  }
-  for (const t of ledger)
-    hits.push({
-      paymentId: null,
-      intentId: t.intent_id ?? null,
-      evidenceId: null,
-      transactionId: t.id,
-      stage: t.status === 'completed' ? 'SETTLED' : t.status.toUpperCase(),
-      amount: t.amount,
-      currency: t.currency,
-      at: t.completed_at ?? t.created_at,
-      score: 80,
-      why: 'ledger_reference',
-    });
-
-  // one hit per underlying payment, best score first
-  const byKey = new Map<string, Hit>();
-  for (const h of hits.sort((a, b) => b.score - a.score)) {
-    const key = h.paymentId ?? h.transactionId ?? h.evidenceId ?? uuid();
-    if (!byKey.has(key)) byKey.set(key, h);
-  }
-  const distinct = [...byKey.values()];
-  let status: VerificationStatus;
-  let confidence = 0;
-  const reasons: string[] = [];
-  let match: Hit | null = null;
-  if (!distinct.length) {
-    status = 'NOT_FOUND';
-    reasons.push('no_payment_matches_the_criteria_in_window');
-  } else if (distinct.length > 1 && distinct[0].score === distinct[1].score) {
-    status = 'AMBIGUOUS';
-    confidence = Math.min(60, distinct[0].score);
-    reasons.push(`${distinct.length}_candidates_match_equally`);
-  } else {
-    match = distinct[0];
-    if (input.amountMinor && match.amount !== input.amountMinor) {
-      status = 'MISMATCH';
-      confidence = 40;
-      reasons.push(`amount_differs:${match.amount}`);
-    } else if (match.stage === 'SETTLED' || (match.transactionId && match.stage === 'SETTLED')) {
-      status = 'VERIFIED';
-      confidence = Math.min(100, match.score);
-      reasons.push(`matched_on:${match.why}`, 'settled');
-    } else if (['REJECTED', 'EXPIRED', 'REVERSED', 'FAILED', 'CANCELLED'].includes(match.stage ?? '')) {
-      status = 'NOT_FOUND';
-      confidence = match.score;
-      reasons.push(`matched_on:${match.why}`, `payment_${(match.stage ?? '').toLowerCase()}`);
-      match = null;
-    } else {
-      status = 'PENDING';
-      confidence = Math.min(90, match.score);
-      reasons.push(`matched_on:${match.why}`, `stage:${match.stage}`);
-    }
-  }
+  const distinct = collectPaymentHits(merchant.id, { reference, msisdn, amountMinor: input.amountMinor ?? null, currency: cur, from });
+  const { status, confidence, reasons, match } = classifyHits(distinct, input.amountMinor ?? null);
   const id = `vf_${shortCode(20).toLowerCase()}`;
   const matchJson = match
     ? JSON.stringify({
@@ -973,6 +1111,7 @@ export function createVerification(merchant: UserRow, input: CreateVerificationI
     });
   const view = toVerification(db.prepare('SELECT * FROM verifications WHERE id = ?').get(id));
   emitEvent(merchant.id, 'verification.completed', { verification: view }, { resource: { type: 'verification', id } });
+  if (view.status === 'VERIFIED') emitEvent(merchant.id, 'verification.confirmed', { verification: view }, { resource: { type: 'verification', id } });
   publish(
     'verification.requested',
     { verificationId: view.id, merchantId: merchant.id, reference: view.reference, msisdn: view.msisdn, status: view.status },
@@ -1001,6 +1140,99 @@ export function verificationQuota(merchantUserId: string) {
     remainingFree: Math.max(0, settings.freePerMonth - used),
     price: { valueMinor: settings.priceMinor, currency: settings.priceCurrency },
     windowHours: settings.windowHours,
+  };
+}
+
+export type PaymentResolution = 'CONFIRMED' | 'NOT_FOUND' | 'PENDING' | 'AMBIGUOUS';
+export interface PaymentResolutionView {
+  object: 'payment_resolution';
+  resolution: PaymentResolution;
+  confidence: number;
+  reasons: string[];
+  criteria: { reference: string | null; msisdn: string | null; amountMinor: number | null; currency: string | null; window: { from: string; to: string } };
+  matches: {
+    paymentId: string | null;
+    intentId: string | null;
+    evidenceId: string | null;
+    transactionId: string | null;
+    stage: string | null;
+    amount: number | null;
+    currency: string | null;
+    at: string;
+    score: number;
+    matchedOn: string;
+  }[];
+  note: string;
+}
+
+/** Intent status → the stage vocabulary of the evidence matcher: only a ledger-backed capture counts as settled. */
+function intentStage(status: string): string {
+  if (['CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED', 'PARTIALLY_REFUNDED', 'DISPUTED'].includes(status)) return 'SETTLED';
+  if (['FAILED', 'EXPIRED', 'CANCELLED', 'REVERSED', 'REFUNDED'].includes(status)) return status;
+  return status;
+}
+
+/**
+ * "Did this payment happen?" across intents, transactions and evidence, without creating a verification object or
+ * touching the KODA quota. The same matcher as Scan-to-Verify answers, extended with the merchant's own intent
+ * references, and the verdict is folded into four words: CONFIRMED (a ledger posting exists), PENDING (something is
+ * in flight), AMBIGUOUS (equal candidates, or an amount that does not agree) or NOT_FOUND.
+ */
+export function resolvePayment(merchant: UserRow, input: CreateVerificationInput): PaymentResolutionView {
+  const settings = getGatewayProductSettings().koda;
+  const reference = input.reference?.trim() || null;
+  const msisdn = normaliseMsisdn(input.msisdn);
+  if (!reference && !(msisdn && input.amountMinor)) throw badRequest('Provide a reference, or an MSISDN with an amount', 'criteria_required');
+  const hours = Math.min(30 * 24, Math.max(1, input.windowHours ?? settings.windowHours));
+  const to = now();
+  const from = new Date(Date.now() - hours * 3600_000).toISOString();
+  const cur = input.currency ? getCurrency(input.currency).code : null;
+  const hits = collectPaymentHits(merchant.id, { reference, msisdn, amountMinor: input.amountMinor ?? null, currency: cur, from });
+  const intents = reference
+    ? (getDb().prepare('SELECT * FROM payment_intents WHERE merchant_user_id = ? AND reference = ? AND created_at >= ?').all(merchant.id, reference, from) as IntentRow[])
+    : (
+        getDb()
+          .prepare('SELECT * FROM payment_intents WHERE merchant_user_id = ? AND customer_msisdn IS NOT NULL AND amount_minor = ? AND created_at >= ?')
+          .all(merchant.id, input.amountMinor ?? 0, from) as IntentRow[]
+      ).filter((i) => normaliseMsisdn(i.customer_msisdn) === msisdn);
+  const distinct = dedupeHits([
+    ...hits,
+    ...intents
+      .filter((i) => !hits.some((h) => h.intentId === i.id))
+      .map<Hit>((i) => ({
+        paymentId: i.gateway_payment_id,
+        intentId: i.id,
+        evidenceId: null,
+        transactionId: i.transaction_id,
+        stage: intentStage(i.status),
+        amount: i.amount_minor ?? 0,
+        currency: i.currency,
+        at: i.succeeded_at ?? i.updated_at,
+        score: reference ? 80 : 50,
+        why: reference ? 'intent_reference' : 'intent_msisdn+amount',
+      })),
+  ]);
+  const verdict = classifyHits(distinct, input.amountMinor ?? null);
+  const resolution: PaymentResolution = verdict.status === 'VERIFIED' ? 'CONFIRMED' : verdict.status === 'PENDING' ? 'PENDING' : verdict.status === 'NOT_FOUND' ? 'NOT_FOUND' : 'AMBIGUOUS';
+  return {
+    object: 'payment_resolution',
+    resolution,
+    confidence: verdict.confidence,
+    reasons: verdict.reasons,
+    criteria: { reference, msisdn, amountMinor: input.amountMinor ?? null, currency: cur, window: { from, to } },
+    matches: distinct.map((h) => ({
+      paymentId: h.paymentId,
+      intentId: h.intentId,
+      evidenceId: h.evidenceId,
+      transactionId: h.transactionId,
+      stage: h.stage,
+      amount: h.amount,
+      currency: h.currency,
+      at: h.at,
+      score: h.score,
+      matchedOn: h.why,
+    })),
+    note: "We surface reality; we don't hide it: AMBIGUOUS means we do not know yet. Only a ledger posting is proof of payment.",
   };
 }
 
@@ -1049,20 +1281,39 @@ export function createPayout(merchant: UserRow, input: CreatePayoutInput) {
   if (input.idemKey) db.prepare('UPDATE transactions SET idempotency_key = ? WHERE id = ?').run(`payout:${input.idemKey}`, tx.id);
   const view = payoutView(tx, merchant.id);
   emitEvent(merchant.id, 'payout.created', { payout: view }, { resource: { type: 'payout', id: tx.id } });
+  // every external payout becomes an instruction queued to a prefunded account or agent: execution has started
+  if (view.stage && PAYOUT_EXECUTING_STAGES.has(view.stage)) emitEvent(merchant.id, 'payout.processing', { payout: view, stage: view.stage }, { resource: { type: 'payout', id: tx.id } });
   return view;
 }
+const PAYOUT_EXECUTING_STAGES = new Set(['QUEUED', 'IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING']);
 
-// payout.completed / payout.failed follow the withdrawal's ledger outcome (admin approval, agent payout, rejection)
+// payout.completed / payout.failed follow the withdrawal's ledger outcome (admin approval, agent payout, rejection);
+// payout.succeeded and payout.settled are the specification's names for the same completed moment (the withdrawal
+// posted to the treasury, the funds are with the recipient rail). A cycle paid through that withdrawal is completed.
 transactionStatusHooks.push((tx, outcome) => {
   if (tx.type !== 'withdrawal' || !tx.sender_user_id) return;
   const user = findUserById(tx.sender_user_id);
   if (!user || user.role !== 'merchant') return;
-  emitEvent(
-    tx.sender_user_id,
-    outcome === 'completed' ? 'payout.completed' : 'payout.failed',
-    { payout: payoutView(tx, tx.sender_user_id) },
-    { resource: { type: 'payout', id: tx.id }, occurredAt: tx.completed_at ?? null },
-  );
+  const view = payoutView(tx, tx.sender_user_id);
+  const opts = { resource: { type: 'payout', id: tx.id }, occurredAt: tx.completed_at ?? null };
+  emitEvent(tx.sender_user_id, outcome === 'completed' ? 'payout.completed' : 'payout.failed', { payout: view }, opts);
+  if (outcome === 'completed') {
+    emitEvent(tx.sender_user_id, 'payout.succeeded', { payout: view }, opts);
+    emitEvent(tx.sender_user_id, 'payout.settled', { payout: view, settledAt: tx.completed_at }, opts);
+    const cycle = getDb().prepare('SELECT * FROM settlement_cycles WHERE withdrawal_transaction_id = ?').get(tx.id) as any;
+    if (cycle)
+      emitSettlementEvent(tx.sender_user_id, 'completed', {
+        id: cycle.id,
+        currency: cycle.currency,
+        rail: cycle.rail,
+        periodFrom: cycle.period_from,
+        periodTo: cycle.period_to,
+        netMinor: cycle.net_minor,
+        status: 'PAID',
+        paidAt: tx.completed_at,
+        withdrawalTransactionId: tx.id,
+      });
+  }
 });
 
 export function getPayout(merchantUserId: string, id: string) {
@@ -1075,6 +1326,240 @@ export function listPayouts(merchantUserId: string, limit = 50) {
   return (
     getDb().prepare("SELECT * FROM transactions WHERE sender_user_id = ? AND type = 'withdrawal' ORDER BY created_at DESC LIMIT ?").all(merchantUserId, Math.min(200, limit)) as TransactionRow[]
   ).map((t) => payoutView(t, merchantUserId));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// FX quotes (locked rate, fee and recipient amount for a partner conversion)
+// ---------------------------------------------------------------------------------------------------------------------
+export interface FxQuoteView {
+  id: string;
+  object: 'fx_quote';
+  amount: { valueMinor: number; currency: string };
+  targetCurrency: string;
+  rate: number;
+  midRate: number;
+  marginBps: number;
+  fee: { valueMinor: number; currency: string };
+  recipientAmount: { valueMinor: number; currency: string };
+  provider: string;
+  providerLabel: string | null;
+  rateTimestamp: string | null;
+  stale: boolean;
+  guaranteed: boolean;
+  expiresAt: string;
+  status: 'LOCKED' | 'INDICATIVE' | 'EXPIRED';
+  createdAt: string;
+}
+
+function fxQuoteView(r: any, providerLabel: string | null = null): FxQuoteView {
+  const expired = new Date(r.expires_at).getTime() < Date.now();
+  return {
+    id: r.id,
+    object: 'fx_quote',
+    amount: { valueMinor: r.amount_minor, currency: r.from_currency },
+    targetCurrency: r.to_currency,
+    rate: r.rate,
+    midRate: r.mid_rate,
+    marginBps: r.markup_bps,
+    fee: { valueMinor: r.fee_minor ?? 0, currency: r.from_currency },
+    recipientAmount: { valueMinor: r.recipient_minor ?? 0, currency: r.to_currency },
+    provider: r.provider,
+    providerLabel,
+    rateTimestamp: r.rate_timestamp ?? null,
+    stale: !r.guaranteed,
+    guaranteed: !!r.guaranteed,
+    expiresAt: r.expires_at,
+    status: expired ? 'EXPIRED' : r.guaranteed ? 'LOCKED' : 'INDICATIVE',
+    createdAt: r.created_at,
+  };
+}
+
+/**
+ * Quote a conversion with the full disclosure (mid-market rate, margin, fee, recipient amount) and lock it for the FX
+ * quote TTL when the rate is live and fresh; the same fx_quotes row that transfers, routes and exchanges resolve with
+ * `quote_id`, so a partner can quote here and execute anywhere.
+ */
+export function createFxQuote(user: UserRow, input: { amountMinor: number; currency: string; targetCurrency: string }): FxQuoteView {
+  const from = getCurrency(input.currency);
+  const to = getCurrency(input.targetCurrency);
+  if (!Number.isInteger(input.amountMinor) || input.amountMinor <= 0) throw badRequest('Amount must be a positive integer in minor units', 'invalid_amount');
+  if (from.code === to.code) throw badRequest('Choose two different currencies', 'same_currency');
+  const fee = calculateFee('exchange', input.amountMinor, from.code, null, { userId: user.id });
+  const disclosure = fxDisclosure(from.code, to.code, user.id, true);
+  const recipient = Math.floor(((input.amountMinor - fee) / 10 ** from.decimals) * disclosure.rate * 10 ** to.decimals);
+  if (recipient <= 0) throw badRequest('Amount too small to convert after fees', 'invalid_amount');
+  getDb().prepare('UPDATE fx_quotes SET amount_minor = ?, fee_minor = ?, recipient_minor = ? WHERE id = ?').run(input.amountMinor, fee, recipient, disclosure.quoteId);
+  recordEvent(
+    'ledger',
+    disclosure.quoteId,
+    'fx_quote.created',
+    { type: user.role === 'admin' ? 'admin' : 'merchant', id: user.id },
+    {
+      amount: input.amountMinor,
+      currency: from.code,
+      targetCurrency: to.code,
+      rate: disclosure.rate,
+      marginBps: disclosure.markupBps,
+      fee,
+      recipient,
+      guaranteed: disclosure.guaranteed,
+    },
+  );
+  return fxQuoteView(getDb().prepare('SELECT * FROM fx_quotes WHERE id = ?').get(disclosure.quoteId), disclosure.providerLabel);
+}
+
+export function getFxQuote(user: UserRow, id: string): FxQuoteView {
+  const r = getDb().prepare('SELECT * FROM fx_quotes WHERE id = ?').get(id) as any;
+  if (!r || (r.user_id && r.user_id !== user.id && user.role !== 'admin')) throw notFound('FX quote not found', 'quote_not_found');
+  return fxQuoteView(r);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Money requests (a payment request addressed to a named payer: @tag, phone or email)
+// ---------------------------------------------------------------------------------------------------------------------
+export interface MoneyRequestView {
+  id: string;
+  object: 'money_request';
+  code: string;
+  status: string;
+  amount: { valueMinor: number | null; currency: string };
+  description: string | null;
+  payer: { userId: string | null; tag: string | null; name: string | null } | null;
+  requesterId: string;
+  url: string;
+  qr: string;
+  transactionId: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export function moneyRequestView(row: PaymentRequestRow): MoneyRequestView {
+  const pr = toPaymentRequest(row);
+  return {
+    id: pr.id,
+    object: 'money_request',
+    code: pr.code,
+    status: pr.status,
+    amount: { valueMinor: pr.amount, currency: pr.currency },
+    description: pr.description,
+    payer: pr.payer ? { userId: pr.payer.id, tag: pr.payer.tag ?? null, name: pr.payer.fullName ?? null } : null,
+    requesterId: pr.requesterUserId,
+    url: pr.link ?? `${config.webUrl}/pay/${pr.code}`,
+    qr: pr.qr ?? '',
+    transactionId: pr.paidTransactionId,
+    expiresAt: pr.expiresAt,
+    createdAt: pr.createdAt,
+  };
+}
+
+export function createMoneyRequest(
+  requester: UserRow,
+  input: { payer: string; amountMinor: number; currency: string; description?: string | null; expiresInMinutes?: number | null; metadata?: Record<string, unknown>; idemKey?: string | null },
+): MoneyRequestView {
+  const db = getDb();
+  if (input.idemKey) {
+    const existing = db.prepare("SELECT * FROM payment_requests WHERE requester_user_id = ? AND kind = 'request' AND json_extract(metadata, '$.idemKey') = ?").get(requester.id, input.idemKey) as
+      PaymentRequestRow | undefined;
+    if (existing) return moneyRequestView(existing);
+  }
+  const row = createPaymentRequest(requester, {
+    kind: 'request',
+    amount: input.amountMinor,
+    currency: input.currency,
+    description: input.description ?? null,
+    payer: input.payer,
+    expiresInMinutes: input.expiresInMinutes ?? null,
+    metadata: { ...(input.metadata ?? {}), idemKey: input.idemKey ?? null, source: 'api' },
+  });
+  recordEvent(
+    'payment',
+    row.id,
+    'money_request.created',
+    { type: requester.role === 'admin' ? 'admin' : 'merchant', id: requester.id },
+    {
+      code: row.code,
+      payerUserId: row.payer_user_id,
+      amount: row.amount,
+      currency: row.currency,
+    },
+  );
+  return moneyRequestView(row);
+}
+
+export function getMoneyRequest(user: UserRow, code: string): MoneyRequestView {
+  const row = getPaymentRequestByCode(code);
+  if (row.kind !== 'request' || (row.requester_user_id !== user.id && row.payer_user_id !== user.id && user.role !== 'admin')) throw notFound('Money request not found', 'money_request_not_found');
+  return moneyRequestView(row);
+}
+
+export function cancelMoneyRequest(user: UserRow, code: string): MoneyRequestView {
+  const row = getPaymentRequestByCode(code);
+  if (row.kind !== 'request' || (row.requester_user_id !== user.id && user.role !== 'admin')) throw notFound('Money request not found', 'money_request_not_found');
+  return moneyRequestView(cancelPaymentRequest(user, code));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Ledger transaction detail (the transaction, its balanced entries and the intent it settled)
+// ---------------------------------------------------------------------------------------------------------------------
+export function transactionDetail(user: UserRow, id: string) {
+  const tx = getTransaction(id);
+  if (!tx || (tx.receiver_user_id !== user.id && tx.sender_user_id !== user.id && user.role !== 'admin')) throw notFound('Transaction not found', 'transaction_not_found');
+  const entries = (
+    getDb()
+      .prepare(
+        'SELECT e.id, e.wallet_id, w.user_id, w.currency, e.direction, e.amount, e.balance_after, e.created_at FROM ledger_entries e JOIN wallets w ON w.id = e.wallet_id WHERE e.transaction_id = ? ORDER BY e.created_at, e.rowid',
+      )
+      .all(id) as any[]
+  ).map((e) => ({
+    id: e.id,
+    walletId: e.wallet_id,
+    // other parties' wallets are shown as counterparties, never by id
+    account: e.user_id === user.id ? 'own' : e.user_id === tx.sender_user_id ? 'sender' : e.user_id === tx.receiver_user_id ? 'receiver' : 'platform',
+    currency: e.currency,
+    direction: e.direction,
+    amount: e.amount,
+    balanceAfter: e.user_id === user.id || user.role === 'admin' ? e.balance_after : null,
+    createdAt: e.created_at,
+  }));
+  const intentId = tx.intent_id ?? (getDb().prepare('SELECT id FROM payment_intents WHERE transaction_id = ?').get(id) as any)?.id ?? null;
+  const intent = intentId ? intentView(getIntentRow(intentId)) : null;
+  return {
+    transaction: toTransaction(tx, user.id),
+    entries,
+    balanced: entries.reduce((s, e) => s + (e.direction === 'debit' ? e.amount : -e.amount), 0) === 0,
+    intent: intent ? { id: intent.id, object: 'payment_intent', status: intent.status, reference: intent.reference, url: `/v1/payment_intents/${intent.id}` } : null,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// API key rotation (session only; a live key needs step-up, checked by the route)
+// ---------------------------------------------------------------------------------------------------------------------
+export function apiKeyMode(userId: string, id: string): { mode: 'live' | 'test'; kind: ApiKeyKind; label: string; scopes: string[]; ipAllowlist: string[] | null } {
+  const row = getDb().prepare('SELECT * FROM api_keys WHERE id = ? AND user_id = ? AND revoked_at IS NULL').get(id, userId) as any;
+  if (!row) throw notFound('API key not found', 'api_key_not_found');
+  const k = listApiKeys(userId).find((x) => x.id === id) as (ReturnType<typeof listApiKeys>[number] & { mode: string; kind: string; scopes: string[] }) | undefined;
+  return {
+    mode: row.mode === 'test' ? 'test' : 'live',
+    kind: (k?.kind as ApiKeyKind) ?? 'secret',
+    label: row.label,
+    scopes: k?.scopes ?? ['*'],
+    ipAllowlist: row.ip_allowlist ? parseJson<string[]>(row.ip_allowlist, []) : null,
+  };
+}
+
+/** Rotate: a new secret with the same label, kind, scopes and allowlist; the old key stops working immediately. */
+export function rotateApiKey(user: UserRow, id: string) {
+  const current = apiKeyMode(user.id, id);
+  const next = createApiKey(user, current.label, current.mode, { kind: current.kind, scopes: current.kind === 'restricted' ? current.scopes : undefined, ipAllowlist: current.ipAllowlist });
+  revokeApiKey(user.id, id);
+  recordEvent(
+    'auth',
+    user.id,
+    'api_key.rotated',
+    { type: user.role === 'admin' ? 'admin' : 'merchant', id: user.id },
+    { from: id, to: next.id, mode: current.mode, fingerprint: sha256(next.secret).slice(0, 12) },
+  );
+  return { ...next, rotatedFrom: id };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

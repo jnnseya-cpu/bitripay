@@ -69,6 +69,10 @@ export interface ReservePosition {
   coverage: number;
   status: 'ok' | 'warning' | 'breach';
   sandbox: boolean;
+  /** Promotional credit outstanding: a platform marketing liability, never customer e-money (kept out of `liabilities`). */
+  promotionalLiabilities: number;
+  /** Captured payments awaiting settlement whose funds have not reached the ledger yet: not issued, so not a liability. */
+  pendingNotIssued: number;
 }
 
 export interface ReserveMovement {
@@ -289,7 +293,44 @@ export function reservePosition(r: any): ReservePosition {
   const coverage = clearedReserves + pendingInflows - pendingRedemptions - reservedExposure - liabilities;
   const sandbox = r.status === 'sandbox';
   const status: ReservePosition['status'] = sandbox ? 'ok' : coverage < 0 ? 'breach' : headroom < 0 ? 'warning' : 'ok';
-  return { clearedReserves, pendingInflows, pendingRedemptions, reservedExposure, liabilities, poolBalances: liab.pools, payoutFloat, headroom, coverage, status, sandbox };
+  const promotionalLiabilities = promotionalOutstanding(cur);
+  const pendingNotIssued = pendingSettlementNotIssued(cur);
+  return {
+    clearedReserves,
+    pendingInflows,
+    pendingRedemptions,
+    reservedExposure,
+    liabilities,
+    poolBalances: liab.pools,
+    payoutFloat,
+    headroom,
+    coverage,
+    status,
+    sandbox,
+    promotionalLiabilities,
+    pendingNotIssued,
+  };
+}
+
+/** Promotional credit outstanding in a currency – a marketing liability of the platform, never a redeemable claim. */
+export function promotionalOutstanding(currency: string): number {
+  return sum('SELECT COALESCE(SUM(w.promo_balance), 0) s FROM wallets w JOIN users u ON u.id = w.user_id WHERE u.is_system = 0 AND w.currency = ?', currency);
+}
+
+/** Captured payments in SETTLEMENT_PENDING whose funds are not yet on the ledger (no transaction): announced, not issued. */
+export function pendingSettlementNotIssued(currency: string, merchantUserId?: string | null): number {
+  return merchantUserId
+    ? sum(
+        "SELECT COALESCE(SUM(amount_minor), 0) s FROM payment_intents WHERE merchant_user_id = ? AND currency = ? AND status = 'SETTLEMENT_PENDING' AND transaction_id IS NULL",
+        merchantUserId,
+        currency,
+      )
+    : sum("SELECT COALESCE(SUM(amount_minor), 0) s FROM payment_intents WHERE currency = ? AND status = 'SETTLEMENT_PENDING' AND transaction_id IS NULL", currency);
+}
+
+/** Everything a merchant has in SETTLEMENT_PENDING for a currency (the balance-class figure shown next to the wallet). */
+export function settlementPendingFor(merchantUserId: string, currency: string): number {
+  return sum("SELECT COALESCE(SUM(amount_minor), 0) s FROM payment_intents WHERE merchant_user_id = ? AND currency = ? AND status = 'SETTLEMENT_PENDING'", merchantUserId, currency);
 }
 
 /**
@@ -756,6 +797,8 @@ function toRecon(r: any): Reconciliation {
     coverage: r.cleared_reserves + r.pending_inflows - r.pending_redemptions - r.reserved_exposure - r.liabilities,
     status: r.status,
     sandbox: parseJson<any>(r.details, {}).sandbox ?? false,
+    promotionalLiabilities: parseJson<any>(r.details, {}).promotionalLiabilities ?? 0,
+    pendingNotIssued: parseJson<any>(r.details, {}).pendingNotIssued ?? 0,
     details: parseJson(r.details, {}),
     runBy: r.run_by,
     createdAt: r.created_at,
@@ -770,7 +813,14 @@ export function reconcileReserves(runBy?: string | null): Reconciliation[] {
   for (const r of db.prepare('SELECT * FROM emoney_programmes').all() as any[]) {
     const pos = reservePosition(r);
     const id = uuid();
-    const details = { sandbox: pos.sandbox, issuerModel: r.issuer_model, programmeStatus: r.status };
+    const details = {
+      sandbox: pos.sandbox,
+      issuerModel: r.issuer_model,
+      programmeStatus: r.status,
+      // Balance classes outside e-money: promotional credit is a platform liability, pending captures are not issued yet.
+      promotionalLiabilities: pos.promotionalLiabilities,
+      pendingNotIssued: pos.pendingNotIssued,
+    };
     db.prepare(
       'INSERT INTO reserve_reconciliations (id, programme_id, currency, cleared_reserves, pending_inflows, pending_redemptions, reserved_exposure, liabilities, pool_balances, payout_float, headroom, status, details, run_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ).run(
@@ -828,10 +878,16 @@ export function freezeWallet(userId: string, currency: string, admin: UserRow, r
   return getWallet(w.id);
 }
 
-export type BalanceClass = 'emoney' | 'merchant' | 'agent_float' | 'sandbox';
+/** Classes of the main wallet balance (what the wallet row's `balance` legally is). */
+export type WalletBalanceClass = 'emoney' | 'merchant' | 'agent_float' | 'sandbox';
+/**
+ * Every balance class of the specification table: the four wallet classes plus `promotional` (marketing credit, a
+ * platform liability that is never money) and `pending` (captured, awaiting settlement, not yet issued).
+ */
+export type BalanceClass = WalletBalanceClass | 'promotional' | 'pending';
 
-export interface BalanceClassification {
-  class: BalanceClass;
+export interface BalanceClassification<C extends BalanceClass = BalanceClass> {
+  class: C;
   label: string;
   redeemable: boolean;
   transferable: boolean;
@@ -840,8 +896,43 @@ export interface BalanceClassification {
   programmeStatus: ProgrammeStatus | null;
 }
 
+/** One part of a wallet's value with the class it belongs to (main balance, promotional credit, pending settlement). */
+export interface WalletBalancePart {
+  class: BalanceClass;
+  amountMinor: number;
+  label: string;
+  /** Counted as customer e-money outstanding in the safeguarding reconciliation. */
+  emoney: boolean;
+}
+
+const PROMOTIONAL_CLASSIFICATION: BalanceClassification<'promotional'> = {
+  class: 'promotional',
+  label: 'Promotional credit – not money',
+  redeemable: false,
+  transferable: false,
+  backing: 'Platform marketing liability; may only cover fees',
+  issuer: null,
+  programmeStatus: null,
+};
+const PENDING_CLASSIFICATION: BalanceClassification<'pending'> = {
+  class: 'pending',
+  label: 'Pending settlement',
+  redeemable: false,
+  transferable: false,
+  backing: 'Captured, awaiting settlement; not yet issued as e-money',
+  issuer: null,
+  programmeStatus: null,
+};
+
 /** What a balance legally is – shown next to every balance so promotional and sandbox value is never mistaken for money. */
-export function classifyBalance(user: { role: string }, currency: string): BalanceClassification {
+export function classifyBalance(user: { role: string }, currency: string): BalanceClassification<WalletBalanceClass>;
+export function classifyBalance(user: { role: string }, currency: string, part: 'main'): BalanceClassification<WalletBalanceClass>;
+export function classifyBalance(user: { role: string }, currency: string, part: 'promotional'): BalanceClassification<'promotional'>;
+export function classifyBalance(user: { role: string }, currency: string, part: 'pending'): BalanceClassification<'pending'>;
+export function classifyBalance(user: { role: string }, currency: string, part: 'main' | 'promotional' | 'pending'): BalanceClassification;
+export function classifyBalance(user: { role: string }, currency: string, part: 'main' | 'promotional' | 'pending' = 'main'): BalanceClassification {
+  if (part === 'promotional') return PROMOTIONAL_CLASSIFICATION;
+  if (part === 'pending') return PENDING_CLASSIFICATION;
   const compliance = getComplianceSettings();
   const p =
     (getDb().prepare("SELECT * FROM emoney_programmes WHERE currency = ? ORDER BY CASE status WHEN 'live' THEN 0 WHEN 'suspended' THEN 1 ELSE 2 END LIMIT 1").get(currency.toUpperCase()) as any) ??
@@ -863,6 +954,22 @@ export function classifyBalance(user: { role: string }, currency: string): Balan
   if (user.role === 'merchant')
     return { class: 'merchant', label: 'Merchant balance', redeemable: true, transferable: true, backing: 'Regulated e-money, subject to settlement rules', issuer, programmeStatus: p.status };
   return { class: 'emoney', label: 'BitriPay e-money', redeemable: true, transferable: true, backing: '1:1 cleared safeguarded funds', issuer, programmeStatus: p.status };
+}
+
+/**
+ * Split a wallet's value into its balance classes: the main balance under its wallet class, promotional credit as
+ * `promotional`, and (for merchants) what is captured but still awaiting settlement as `pending`. Only the main part
+ * is customer e-money; the reconciliation treats promotional credit as a platform liability and pending as not issued.
+ */
+export function classifyWalletParts(wallet: Pick<WalletRow, 'user_id' | 'currency' | 'balance' | 'promo_balance'>, user?: { role: string } | null): WalletBalancePart[] {
+  const owner = user ?? findUserById(wallet.user_id) ?? { role: 'user' };
+  const main = classifyBalance(owner, wallet.currency);
+  const parts: WalletBalancePart[] = [{ class: main.class, amountMinor: wallet.balance, label: main.label, emoney: main.class !== 'sandbox' }];
+  const promo = wallet.promo_balance ?? 0;
+  if (promo > 0) parts.push({ class: 'promotional', amountMinor: promo, label: PROMOTIONAL_CLASSIFICATION.label, emoney: false });
+  const pending = settlementPendingFor(wallet.user_id, wallet.currency);
+  if (pending > 0) parts.push({ class: 'pending', amountMinor: pending, label: PENDING_CLASSIFICATION.label, emoney: false });
+  return parts;
 }
 
 // ---------------------------------------------------------------------------------------------

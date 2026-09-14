@@ -193,6 +193,8 @@ export function payWithWallet(payer: UserRow, code: string, amount?: number | nu
       kind: 'payment_received',
       transactionId: tx.id,
       code: row.code,
+      template: 'payment.received',
+      vars: { payerName: `${payer.full_name} (@${payer.tag})`, amount: formatMoney(finalAmount, currency), description: row.description ? ` for "${row.description}"` : '' },
     });
     void dispatchWebhook(requester.id, 'payment.completed', {
       paymentRequest: toPaymentRequest(updated),
@@ -215,6 +217,12 @@ export function markPaidByGateway(code: string, transactionId: string, payerUser
     kind: 'payment_received',
     transactionId,
     code: row.code,
+    template: 'payment.received',
+    vars: {
+      payerName: (payerUserId && findUserById(payerUserId)?.full_name) || 'An external payer',
+      amount: formatMoney(updated.amount ?? 0, getCurrency(updated.currency)),
+      description: row.description ? ` for "${row.description}"` : '',
+    },
   });
   return updated;
 }

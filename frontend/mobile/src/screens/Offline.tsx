@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { useStore } from '../lib/store';
 import { Screen, Card, Button, Input, Alert, T, KV, Row, Qr, useAsync, AmountInput, Chip } from '../components/ui';
 import { Header } from '../components/Header';
-import { offlineDevice, offlineQueue, type OfflineQr } from '../lib/offline';
+import { offlineDevice, offlineQueue, PENDING_CONFIRMATION_TEXT, type OfflineQr } from '../lib/offline';
 
 /** Offline kit: set the phone up with its own signing key, keep merchant codes ready, show a code without network, and sync queued payments. */
 export function Offline() {
@@ -100,6 +100,10 @@ export function Offline() {
               <T muted size={12}>
                 Valid until {new Date(shown.expiresAt).toLocaleTimeString()} · nonce {shown.nonce.slice(0, 8)}…
               </T>
+              <Chip label="OFFLINE_CREATED" />
+              <T muted size={12}>
+                {PENDING_CONFIRMATION_TEXT}
+              </T>
             </View>
           )}
         </Card>
@@ -115,7 +119,10 @@ export function Offline() {
             <View>
               <T>{q.merchantName}</T>
               <T muted size={12}>
-                {new Date(q.queuedAt).toLocaleString()}
+                {new Date(q.queuedAt).toLocaleString()} · {q.state.replace(/_/g, ' ').toLowerCase()}
+              </T>
+              <T muted size={12}>
+                {q.receiptText}
               </T>
             </View>
             <T bold>{money(q.amountMinor, q.currency)}</T>
@@ -124,16 +131,18 @@ export function Offline() {
         {result && (
           <View style={{ gap: 4 }}>
             <Row style={{ gap: 6 }}>
-              <Chip label={`${result.settled} settled`} kind="success" />
+              <Chip label={`${result.settled} confirmed`} kind="success" />
               {result.rejected > 0 && <Chip label={`${result.rejected} rejected`} kind="danger" />}
               {result.duplicates > 0 && <Chip label={`${result.duplicates} duplicates`} />}
             </Row>
             {result.results
-              .filter((r: any) => r.state === 'REJECTED')
+              .filter((r: any) => r.state === 'REJECTED' || r.counterGap)
               .map((r: any, i: number) => (
-                <T key={i} size={13} color="#b91c1c">
-                  {r.reason}
+                <T key={i} size={13} color={r.state === 'REJECTED' ? '#b91c1c' : '#92400e'}>
+                  {r.lifecycle}
+                  {r.reason ? ` · ${r.reason}` : ''}
                   {r.restoreMinor ? ` · ${money(r.restoreMinor, r.currency ?? cur)} restored` : ''}
+                  {r.counterGap ? ` · counter gap (expected ${r.counterGap.expected}, got ${r.counterGap.received})` : ''}
                 </T>
               ))}
           </View>

@@ -14,7 +14,19 @@ import { findUserById } from '../../services/users';
 import { badRequest, notFound } from '../../lib/errors';
 import { getSetting, setSetting } from '../../services/settings';
 import { listAllBatches, getBatch, approveBatch, cancelBatch, batchReadiness, parseCsv } from '../../services/bulkPayouts';
-import { listFeeSchedules, getFeeSchedule, createFeeSchedule, approveFeeSchedule, activateFeeSchedule, retireFeeSchedule, resolveFeeRule, effectiveFees, setFeeTier } from '../../services/finops/fees';
+import {
+  listFeeSchedules,
+  getFeeSchedule,
+  createFeeSchedule,
+  approveFeeSchedule,
+  activateFeeSchedule,
+  retireFeeSchedule,
+  resolveFeeRule,
+  effectiveFees,
+  setFeeTier,
+  getFinopsSettings,
+  setFeeTaxRate,
+} from '../../services/finops/fees';
 import {
   listCycles,
   getCycle,
@@ -27,6 +39,10 @@ import {
   cycleStatementPdf,
   runSettlementSchedules,
   listProfiles,
+  getProfile,
+  setProfileAutoConvert,
+  previewProfile,
+  settlementView,
 } from '../../services/finops/settlement';
 import {
   listDisputes,
@@ -43,7 +59,7 @@ import {
 import { createHold, releaseHold, listHolds, getHold, expireHolds } from '../../services/finops/holds';
 import { listCommissions, commissionStatement, commissionOverview, getCommissionSettings } from '../../services/finops/commissions';
 import { importProcessorStatement, runProcessorReconciliation, workbenchSummary } from '../../services/finops/processorRecon';
-import { listSplitPayouts, retrySplits } from '../../services/finops/splits';
+import { listSplitPayouts, retrySplits, listSplitRefundAllocations, retrySplitRefundAllocations } from '../../services/finops/splits';
 import { getUserWallet } from '../../services/wallets';
 import { FEE_TYPES } from '@bitripay/shared';
 
@@ -119,6 +135,14 @@ r.get('/fees/effective', requirePermission('settings'), (req, res) => {
   const type = req.query.type ? String(req.query.type) : null;
   res.json(type ? { type, resolved: resolveFeeRule(type, ctx) } : { data: effectiveFees(ctx) });
 });
+/** Tax contained in the BitriPay fee (VAT / DST), shown as its own line on every statement. */
+r.get('/fees/tax', requirePermission('settings'), (_req, res) => res.json(getFinopsSettings()));
+r.put('/fees/tax', requirePermission('settings'), (req, res) => {
+  const b = validate(z.object({ feeTaxRateBps: z.number().int().min(0).max(10_000), feeTaxLabel: z.string().min(1).max(40).optional().nullable() }), req.body);
+  const out = setFeeTaxRate({ feeTaxRateBps: b.feeTaxRateBps, feeTaxLabel: b.feeTaxLabel ?? null }, req.user!.id);
+  audit(req.user!.id, 'finops.fee_tax.set', 'settings', 'finops', { feeTaxRateBps: out.feeTaxRateBps, feeTaxLabel: out.feeTaxLabel });
+  res.json(out);
+});
 r.put('/fees/tier/:userId', requirePermission('users'), (req, res) => {
   const b = validate(z.object({ tier: z.string().max(40).nullable() }), req.body);
   if (!findUserById(String(req.params.userId))) throw notFound('User not found', 'user_not_found');
@@ -140,6 +164,25 @@ r.get('/settlements/cycles', requirePermission('transactions'), (req, res) =>
 );
 r.get('/settlements/obligations', requirePermission('transactions'), (req, res) => res.json(obligations(req.query.user ? String(req.query.user) : null)));
 r.get('/settlements/profiles/:userId', requirePermission('transactions'), (req, res) => res.json({ items: listProfiles(String(req.params.userId)) }));
+/** Turn automatic conversion into the settlement currency on or off for a profile (optionally changing that currency); audited. */
+r.post('/settlement_profiles/:id/auto_convert', requirePermission('treasury'), (req, res) => {
+  const b = validate(z.object({ enabled: z.boolean(), settlementCurrency: z.string().length(3).optional().nullable() }), req.body);
+  const before = getProfile(null, String(req.params.id));
+  const p = setProfileAutoConvert(before.id, b.enabled, admin(req), b.settlementCurrency ? b.settlementCurrency.toUpperCase() : null);
+  audit(req.user!.id, 'settlements.profile.auto_convert', 'settlement_profile', p.id, {
+    userId: p.userId,
+    enabled: p.autoConvert,
+    settlementCurrency: p.settlementCurrency,
+    previous: { enabled: before.autoConvert, settlementCurrency: before.settlementCurrency },
+  });
+  res.json(p);
+});
+r.get('/settlement_profiles/:id/preview', requirePermission('transactions'), (req, res) => {
+  const p = getProfile(null, String(req.params.id));
+  res.json(previewProfile(p.userId, p.id));
+});
+/** A settlement with its statement summary (separate provider fee / BitriPay fee / tax lines and the conversion). */
+r.get('/settlements/:id', requirePermission('transactions'), (req, res) => res.json(settlementView(null, String(req.params.id))));
 r.post('/settlements/cycles', requirePermission('treasury'), (req, res) => {
   const b = validate(
     z.object({ userId: z.string(), currency: z.string().length(3), rail: z.string().max(40).optional(), businessDate: z.string().optional().nullable(), pay: z.boolean().optional() }),
@@ -363,6 +406,12 @@ r.post('/reconciliation/processors/:gatewayId/run', requirePermission('reconcili
 
 // ---------------------------------------------------------------- split payouts
 r.get('/splits/:intentId', requirePermission('transactions'), (req, res) => res.json({ items: listSplitPayouts(String(req.params.intentId)) }));
+r.get('/splits/:intentId/refunds', requirePermission('transactions'), (req, res) => res.json({ items: listSplitRefundAllocations(String(req.params.intentId)) }));
+r.post('/splits/:intentId/refunds/retry', requirePermission('treasury'), (req, res) => {
+  const items = retrySplitRefundAllocations(String(req.params.intentId));
+  audit(req.user!.id, 'splits.refund.retry', 'payment_intent', String(req.params.intentId), { recovered: items.filter((i) => i.status === 'RECOVERED').length });
+  res.json({ items });
+});
 r.post('/splits/:intentId/retry', requirePermission('treasury'), (req, res) => {
   const items = retrySplits(String(req.params.intentId));
   audit(req.user!.id, 'splits.retry', 'payment_intent', String(req.params.intentId), { paid: items.filter((i) => i.status === 'PAID').length });

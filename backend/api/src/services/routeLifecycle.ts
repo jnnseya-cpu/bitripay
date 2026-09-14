@@ -94,7 +94,68 @@ export function routeStageToStatus(stage: RouteStage): string {
   }
 }
 
-export const ROUTE_STAGE_LABELS: Record<RouteStage, { label: string; group: 'initiated' | 'funded' | 'paying' | 'settled' | 'exception'; description: string }> = {
+// ---------------------------------------------------------------------------------------------------------------------
+// Specification stage names (message 4). The built stages are finer-grained; every spec name is an alias of exactly
+// one built stage, and every built stage can be rendered under its spec name for clients that speak the spec.
+// ---------------------------------------------------------------------------------------------------------------------
+export const STAGE_ALIASES: Record<string, RouteStage> = {
+  CREATED: 'CREATED',
+  QUOTED: 'QUOTED',
+  APPROVAL_REQUIRED: 'BIOMETRIC_APPROVAL_REQUIRED',
+  APPROVED: 'BIOMETRICALLY_APPROVED',
+  FUNDING_PENDING: 'FUNDING_PENDING',
+  FUNDS_RECEIVED: 'FUNDED',
+  FX_RESERVED: 'FX_RESERVED',
+  AWAITING_CONFIRMATION: 'AWAITING_CONFIRMATION',
+  INSTRUCTION_ISSUED: 'PAYOUT_ROUTED',
+  PAYMENT_SENT: 'PAYOUT_SENT',
+  EVIDENCE_RECEIVED: 'EVIDENCE_RECEIVED',
+  VERIFYING: 'VERIFYING',
+  CONFIRMED: 'VERIFIED',
+  RELEASED: 'SETTLED',
+  EXPIRED: 'EXPIRED',
+  FAILED: 'FAILED',
+  MISMATCHED: 'MISMATCHED',
+  DUPLICATE: 'DUPLICATE',
+  INSUFFICIENT_LIQUIDITY: 'INSUFFICIENT_LIQUIDITY',
+  UNDER_REVIEW: 'MANUAL_REVIEW',
+  DISPUTED: 'DISPUTED',
+  REVERSED: 'REVERSED',
+  REFUNDED: 'REFUNDED',
+};
+
+/** The spec name of every built stage (the first alias that maps to it); a stage without an alias keeps its own name. */
+export const STAGE_ALIAS_OF: Record<RouteStage, string> = Object.fromEntries(
+  ROUTE_STAGES.map((stage) => [stage, Object.entries(STAGE_ALIASES).find(([, built]) => built === stage)?.[0] ?? stage]),
+) as Record<RouteStage, string>;
+
+/** Spec name for a built stage (`FUNDED` → `FUNDS_RECEIVED`, `SETTLED` → `RELEASED`, `MANUAL_REVIEW` → `UNDER_REVIEW`). */
+export function stageAlias(stage: RouteStage): string {
+  return STAGE_ALIAS_OF[stage] ?? stage;
+}
+
+/** Resolve a spec alias or a built stage name (case-insensitive) to the built stage; null when neither. */
+export function stageFromAlias(name: string): RouteStage | null {
+  const key = String(name ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+  if (!key) return null;
+  if (STAGE_ALIASES[key]) return STAGE_ALIASES[key];
+  return (ROUTE_STAGES as readonly string[]).includes(key) ? (key as RouteStage) : null;
+}
+
+/** Decorate a route view with `stageAlias` next to `stage` (used by the route view builder). */
+export function withStageAlias<T extends { stage: RouteStage }>(view: T): T & { stageAlias: string } {
+  return { ...view, stageAlias: stageAlias(view.stage) };
+}
+
+type StageLabel = { label: string; group: 'initiated' | 'funded' | 'paying' | 'settled' | 'exception'; description: string };
+/** Adds the specification alias to every stage label so clients see both names. */
+function withAliases(labels: Record<RouteStage, StageLabel>): Record<RouteStage, StageLabel & { alias: string }> {
+  return Object.fromEntries(Object.entries(labels).map(([stage, l]) => [stage, { ...l, alias: stageAlias(stage as RouteStage) }])) as Record<RouteStage, StageLabel & { alias: string }>;
+}
+export const ROUTE_STAGE_LABELS: Record<RouteStage, StageLabel & { alias: string }> = withAliases({
   CREATED: { label: 'Created', group: 'initiated', description: 'Transfer created. No money has moved.' },
   QUOTED: { label: 'Quoted', group: 'initiated', description: 'Rate, fees and recipient amount quoted.' },
   BIOMETRIC_APPROVAL_REQUIRED: { label: 'Approval required', group: 'initiated', description: 'Approve with Face ID, fingerprint, passkey or PIN.' },
@@ -126,7 +187,7 @@ export const ROUTE_STAGE_LABELS: Record<RouteStage, { label: string; group: 'ini
   DISPUTED: { label: 'Disputed', group: 'exception', description: 'The funding is disputed (chargeback).' },
   REVERSED: { label: 'Reversed', group: 'exception', description: 'The transfer was reversed.' },
   REFUNDED: { label: 'Refunded', group: 'exception', description: 'The sender was refunded.' },
-};
+});
 
 export function routeStage(id: string): RouteStage {
   const r = getDb().prepare('SELECT stage FROM money_routes WHERE id = ?').get(id) as { stage: RouteStage } | undefined;

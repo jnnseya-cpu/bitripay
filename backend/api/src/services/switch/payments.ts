@@ -49,9 +49,19 @@ const TRANSITIONS: Record<SwitchState, SwitchState[]> = {
 };
 const BEFORE_EMISSION: SwitchState[] = ['RECEIVED', 'REQUIRES_ACTION', 'READY'];
 
-/** 7.2 customer-facing wording (FR business rule, EN identifier). */
-export function customerMessage(status: SwitchState, ctx: { amount?: string; reference?: string | null; reason?: string | null } = {}): { fr: string; en: string } {
+/** Link conditions that are not payment states but still need customer wording (link down, timeout, circuit open). */
+export const SWITCH_LINK_CONDITIONS = ['UNAVAILABLE', 'TIMEOUT', 'CIRCUIT_OPEN'] as const;
+export type SwitchLinkCondition = (typeof SWITCH_LINK_CONDITIONS)[number];
+/** Wording for UNAVAILABLE / timeout / circuit-open: the same sentence in both languages, never "try again now". */
+export const SWITCH_UNAVAILABLE_MESSAGE = { fr: 'Service temporairement indisponible. Réessayez plus tard.', en: 'Service temporarily unavailable. Try again later.' } as const;
+
+/** 7.2 customer-facing wording (FR business rule, EN identifier). Every state and link condition has both languages. */
+export function customerMessage(status: SwitchState | SwitchLinkCondition, ctx: { amount?: string; reference?: string | null; reason?: string | null } = {}): { fr: string; en: string } {
   switch (status) {
+    case 'UNAVAILABLE':
+    case 'TIMEOUT':
+    case 'CIRCUIT_OPEN':
+      return { ...SWITCH_UNAVAILABLE_MESSAGE };
     case 'RECEIVED':
     case 'REQUIRES_ACTION':
     case 'READY':

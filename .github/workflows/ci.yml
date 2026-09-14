@@ -20,3 +20,62 @@ jobs:
         run: |
           (cd frontend/mobile && npm ci && npm run typecheck)
           (cd frontend/payout-device && npm ci && npm run typecheck && npm test)
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v3
+  secret-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  docker:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image:
+          - { file: backend/api/Dockerfile, name: api }
+          - { file: frontend/web/Dockerfile, name: web }
+          - { file: frontend/admin/Dockerfile, name: admin }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.image.file }}
+          push: false
+          tags: bitripay/${{ matrix.image.name }}:ci
+  sdk-php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - run: composer validate --strict
+        working-directory: shared/sdk-php
+      - run: for f in $(find shared/sdk-php/src integrations/woocommerce-bitripay -name '*.php'); do php -l "$f"; done
+  sdk-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e shared/sdk-python
+      - run: python -m compileall -q shared/sdk-python/bitripay

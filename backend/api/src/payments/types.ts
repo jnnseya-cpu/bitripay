@@ -57,6 +57,13 @@ export interface InitiateContext {
   description: string;
   /** Mobile money operator chosen by the payer (direct rail / routing hints). */
   operatorId?: string | null;
+  /**
+   * Connector idempotency key: the platform passes the payment / attempt id so a retried initiate never charges twice.
+   * Providers that support idempotent creation send it as their idempotency header; the sandbox derives its provider
+   * reference from it so the same key always yields the same reference. (Optional in the type so every existing
+   * dispatcher compiles; the dispatcher in services/payments.ts should pass `payment.id`.)
+   */
+  idempotencyKey?: string;
 }
 
 export interface NextAction {
@@ -99,6 +106,64 @@ export interface RefundResult {
   message?: string;
 }
 
+/** What a connector can do, sourced from the provider contract and the gateway configuration. */
+export interface ConnectorCapabilities {
+  /** Smallest / largest amount the connector accepts, in minor units of the payment currency (0 = no limit). */
+  minMinor: number;
+  maxMinor: number;
+  /** The connector can refund (part of) a settled charge through its API. */
+  refunds: boolean;
+  /** Settlement delay in days (T+n) between capture and funds availability. */
+  settlementT: number;
+  /** The connector pushes asynchronous status updates (webhooks). */
+  webhooks: boolean;
+  /** When the connector last opened its circuit (platform-observed incident), ISO timestamp or null. */
+  lastIncidentAt: string | null;
+}
+
+/** Inputs for a fee / FX / ETA quote before initiate. FX is owned by the platform: the effective rate is passed in. */
+export interface QuoteContext {
+  amountMinor: number;
+  currency: string;
+  /** Currency the funds settle in when it differs from the charge currency. */
+  targetCurrency?: string | null;
+  method: PaymentMethod;
+  country?: string | null;
+  operatorId?: string | null;
+  /** Platform FX rate (1 currency = fxRate targetCurrency) when currencies differ. */
+  fxRate?: number | null;
+  credentials: Record<string, string>;
+}
+export interface QuoteResult {
+  feeMinor: number;
+  feeBps: number;
+  currency: string;
+  targetCurrency: string;
+  /** Rate applied between currency and targetCurrency (1 when equal, null when the provider cannot quote it). */
+  fxRate: number | null;
+  /** Estimated time to a final status. */
+  etaSeconds: number;
+  expiresAt: string | null;
+}
+
+/** One line of a provider statement, normalised for the processor reconciliation (services/finops/processorRecon). */
+export interface StatementLine {
+  reference: string;
+  amountMinor: number;
+  currency: string | null;
+  status: string;
+  feeMinor: number | null;
+  settlementRef?: string | null;
+  occurredAt?: string | null;
+}
+
+export interface CancelResult {
+  /** `manual`: no API to cancel, operations must void it with the provider; `not_cancellable`: already final. */
+  status: 'cancelled' | 'pending' | 'manual' | 'not_cancellable';
+  providerRef?: string | null;
+  message?: string;
+}
+
 export interface GatewayProvider {
   id: GatewayProviderId;
   name: string;
@@ -115,6 +180,14 @@ export interface GatewayProvider {
   keyMode?(credentials: Record<string, string>): GatewayMode;
   /** Call the provider with the stored credentials to prove they work (onboarding). */
   healthCheck?(credentials: Record<string, string>): Promise<HealthResult>;
+  /** Fee, FX and ETA quote before initiate (shown to the payer / used by Smart Route). */
+  quote?(ctx: QuoteContext): Promise<QuoteResult>;
+  /** Static capabilities of the connector for the stored credentials (limits, refunds, settlement T+n, webhooks). */
+  capabilities?(credentials: Record<string, string>): Partial<ConnectorCapabilities>;
+  /** Parse a provider statement (CSV or JSON export) into normalised lines for the processor reconciliation. */
+  parseStatement?(csvOrJson: string, credentials: Record<string, string>): StatementLine[];
+  /** Cancel / void a payment that has not reached a final state. */
+  cancel?(payment: GatewayPaymentRow, credentials: Record<string, string>): Promise<CancelResult>;
 }
 
 export type GatewayMode = 'test' | 'live' | 'unknown';

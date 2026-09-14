@@ -35,7 +35,9 @@ export async function issueOtp(channel: 'email' | 'sms', target: string, purpose
     now(),
   );
   const message = `Your ${config.appName} verification code is ${code}. It expires in ${TTL_MINUTES} minutes.`;
-  const result = channel === 'email' ? await sendEmail(target, `${config.appName} verification code`, message) : await sendSms(target, message);
+  // the admin-editable `otp` template (per channel) replaces the wording above when one is defined
+  const template = { key: 'otp', vars: { appName: config.appName, code, minutes: TTL_MINUTES } };
+  const result = channel === 'email' ? await sendEmail(target, `${config.appName} verification code`, message, undefined, template) : await sendSms(target, message, template);
   return {
     sent: result.delivered,
     via: result.via,

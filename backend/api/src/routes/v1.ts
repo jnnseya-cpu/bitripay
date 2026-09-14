@@ -23,6 +23,8 @@ import {
   verifyClientSecret,
   setIntentAmount,
   startAttempt,
+  captureIntent,
+  voidAuthorisedIntent,
   type CreateIntentInput,
 } from '../services/intents';
 import {
@@ -70,6 +72,19 @@ import {
   simulateOutcome,
   sandboxCatalogue,
   SIMULATION_OUTCOMES,
+  rejectRefund,
+  assertRefundStepUp,
+  assertSessionStepUp,
+  REFUND_LIFECYCLE,
+  createFxQuote,
+  getFxQuote,
+  resolvePayment,
+  createMoneyRequest,
+  getMoneyRequest,
+  cancelMoneyRequest,
+  transactionDetail,
+  rotateApiKey,
+  apiKeyMode,
 } from '../services/gateway';
 import {
   createEndpoint,
@@ -85,8 +100,7 @@ import {
   replayDelivery,
   replayEvent,
   deliveryStats,
-  WEBHOOK_EVENT_TYPES,
-  WEBHOOK_API_VERSION,
+  webhookCatalogue,
 } from '../services/webhooks';
 import { listApiKeys, createApiKey, revokeApiKey, API_KEY_SCOPES } from '../services/merchant';
 import { availableBalance, heldByKind } from '../services/finops/holds';
@@ -215,11 +229,35 @@ v1Router.get('/payment_intents/:id/timeline', ...merchantOnly, requireScope('pay
   if (row.merchant_user_id !== req.user!.id && req.user!.role !== 'admin') throw forbidden('Not your payment intent', 'forbidden');
   res.json(intentTimeline(row.id));
 });
-v1Router.post('/payment_intents/:id/cancel', ...merchantOnly, requireScope('payment_intents:write'), writeLimit, (req, res) => {
-  const row = getIntentRow(String(req.params.id));
-  if (row.merchant_user_id !== req.user!.id && req.user!.role !== 'admin') throw forbidden('Not your payment intent', 'forbidden');
-  res.json(publicIntent(intentView(cancelIntent(row.id, { type: req.user!.role === 'admin' ? 'admin' : 'merchant', id: req.user!.id }, String(req.body?.reason ?? '') || null))));
-});
+v1Router.post(
+  '/payment_intents/:id/cancel',
+  ...merchantOnly,
+  requireScope('payment_intents:write'),
+  writeLimit,
+  wrap(async (req, res) => {
+    const row = getIntentRow(String(req.params.id));
+    if (row.merchant_user_id !== req.user!.id && req.user!.role !== 'admin') throw forbidden('Not your payment intent', 'forbidden');
+    const actor = { type: req.user!.role === 'admin' ? 'admin' : 'merchant', id: req.user!.id } as const;
+    const reason = String(req.body?.reason ?? '') || null;
+    // an AUTHORISED intent (capture_method manual) is voided: the held funds return to the payer through a refund object
+    const out = row.status === 'AUTHORISED' ? await voidAuthorisedIntent(row.id, actor, reason) : cancelIntent(row.id, actor, reason);
+    res.json(publicIntent(intentView(out)));
+  }),
+);
+/** Manual capture: move an AUTHORISED intent to CAPTURED (optionally a partial amount; the rest returns to the payer). */
+v1Router.post(
+  '/payment_intents/:id/capture',
+  ...merchantOnly,
+  requireScope('payment_intents:write'),
+  writeLimit,
+  wrap(async (req, res) => {
+    const body = validate(z.object({ amount_minor: z.number().int().positive().optional().nullable() }), req.body ?? {});
+    const row = getIntentRow(String(req.params.id));
+    if (row.merchant_user_id !== req.user!.id && req.user!.role !== 'admin') throw forbidden('Not your payment intent', 'forbidden');
+    const out = await captureIntent(row.id, { type: req.user!.role === 'admin' ? 'admin' : 'merchant', id: req.user!.id }, body.amount_minor ?? null);
+    res.json(publicIntent(intentView(out)));
+  }),
+);
 /** Refresh the dynamic QR (new expiry, new signature) for an open intent. */
 v1Router.post('/payment_intents/:id/qr', ...merchantOnly, requireScope('payment_intents:write'), writeLimit, (req, res) => {
   const row = getIntentRow(String(req.params.id));
@@ -567,18 +605,17 @@ v1Router.post(
   writeLimit,
   wrap(async (req, res) => {
     const b = validate(refundSchema, req.body);
-    const refund = await createRefund(
-      req.user!,
-      {
-        intentId: b.payment_intent ?? null,
-        transactionId: b.transaction ?? null,
-        amountMinor: b.amount_minor ?? null,
-        reason: b.reason ?? null,
-        metadata: b.metadata,
-        idemKey: (req.headers['idempotency-key'] as string | undefined) ?? null,
-      },
-      { type: req.user!.role === 'admin' ? 'admin' : 'merchant', id: req.user!.id },
-    );
+    const input = {
+      intentId: b.payment_intent ?? null,
+      transactionId: b.transaction ?? null,
+      amountMinor: b.amount_minor ?? null,
+      reason: b.reason ?? null,
+      metadata: b.metadata,
+      idemKey: (req.headers['idempotency-key'] as string | undefined) ?? null,
+    };
+    // dashboards (sessions) confirm high-value refunds with PIN / passkey; API keys are pre-authorised credentials
+    assertRefundStepUp(req.user!, input, req);
+    const refund = await createRefund(req.user!, input, { type: req.user!.role === 'admin' ? 'admin' : 'merchant', id: req.user!.id });
     res.status(refund.status === 'FAILED' ? 402 : 201).json(refund);
   }),
 );
@@ -590,9 +627,15 @@ v1Router.get('/refunds', ...merchantOnly, requireScope('refunds:read', 'refunds:
       status: req.query.status ? String(req.query.status) : null,
       limit: Number(req.query.limit) || 50,
     }),
+    lifecycle: REFUND_LIFECYCLE,
   }),
 );
 v1Router.get('/refunds/:id', ...merchantOnly, requireScope('refunds:read', 'refunds:write'), (req, res) => res.json(getRefund(req.user!.id, String(req.params.id))));
+/** Reject a refund awaiting manual execution: the reservation is released and the intent keeps its prior state. */
+v1Router.post('/refunds/:id/reject', ...merchantOnly, requireScope('refunds:write'), writeLimit, (req, res) => {
+  const b = validate(z.object({ reason: z.string().min(3).max(200) }), req.body ?? {});
+  res.json(rejectRefund(req.user!, String(req.params.id), b.reason, { type: req.user!.role === 'admin' ? 'admin' : 'merchant', id: req.user!.id }));
+});
 v1Router.get('/payment_intents/:id/refundable', ...merchantOnly, requireScope('refunds:read', 'refunds:write', 'payment_intents:read'), (req, res) => {
   const row = getIntentRow(String(req.params.id));
   if (row.merchant_user_id !== req.user!.id && req.user!.role !== 'admin') throw forbidden('Not your payment intent');
@@ -629,6 +672,80 @@ v1Router.get('/verifications', ...merchantOnly, requireScope('verifications:writ
 );
 v1Router.get('/verifications/quota', ...merchantOnly, requireScope('verifications:write'), (req, res) => res.json(verificationQuota(req.user!.id)));
 v1Router.get('/verifications/:id', ...merchantOnly, requireScope('verifications:write'), (req, res) => res.json(getVerification(req.user!.id, String(req.params.id))));
+
+/** "Did this payment happen?" across intents, transactions and evidence: CONFIRMED, PENDING, AMBIGUOUS or NOT_FOUND. */
+v1Router.get('/payment_resolution', ...merchantOnly, requireScope('verifications:write', 'payment_intents:read'), (req, res) => {
+  const q = validate(
+    z.object({
+      reference: z.string().max(64).optional().nullable(),
+      msisdn: z.string().max(20).optional().nullable(),
+      amount_minor: z.coerce.number().int().positive().optional().nullable(),
+      currency: z.string().length(3).optional().nullable(),
+      window_hours: z.coerce.number().int().min(1).max(720).optional().nullable(),
+    }),
+    req.query,
+  );
+  res.json(
+    resolvePayment(req.user!, {
+      rail: 'any',
+      reference: q.reference ?? null,
+      msisdn: q.msisdn ?? null,
+      amountMinor: q.amount_minor ?? null,
+      currency: q.currency ?? null,
+      windowHours: q.window_hours ?? null,
+    }),
+  );
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// FX quotes
+// ---------------------------------------------------------------------------------------------------------------------
+v1Router.post('/fx/quotes', ...merchantOnly, requireScope('routes:read', 'transfers:read', 'transfers:write', 'routes:write'), writeLimit, (req, res) => {
+  const b = validate(z.object({ amount_minor: z.number().int().positive(), currency: z.string().length(3), target_currency: z.string().length(3) }), req.body);
+  res.status(201).json(createFxQuote(req.user!, { amountMinor: b.amount_minor, currency: b.currency, targetCurrency: b.target_currency }));
+});
+v1Router.get('/fx/quotes/:id', ...merchantOnly, requireScope('routes:read', 'transfers:read', 'transfers:write', 'routes:write'), (req, res) => res.json(getFxQuote(req.user!, String(req.params.id))));
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Money requests (request a payment from a named payer: @tag, phone or email)
+// ---------------------------------------------------------------------------------------------------------------------
+v1Router.post('/money_requests', ...merchantOnly, requireScope('payment_intents:write'), writeLimit, (req, res) => {
+  const b = validate(
+    z.object({
+      payer: z.string().min(2).max(120),
+      amount_minor: z.number().int().positive(),
+      currency: z.string().length(3),
+      description: z.string().max(200).optional().nullable(),
+      expires_in_minutes: z
+        .number()
+        .int()
+        .min(5)
+        .max(60 * 24 * 30)
+        .optional()
+        .nullable(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+    }),
+    req.body,
+  );
+  res.status(201).json(
+    createMoneyRequest(req.user!, {
+      payer: b.payer,
+      amountMinor: b.amount_minor,
+      currency: b.currency,
+      description: b.description ?? null,
+      expiresInMinutes: b.expires_in_minutes ?? null,
+      metadata: b.metadata,
+      idemKey: (req.headers['idempotency-key'] as string | undefined) ?? null,
+    }),
+  );
+});
+v1Router.get('/money_requests/:code', ...merchantOnly, requireScope('payment_intents:read', 'payment_intents:write'), (req, res) => res.json(getMoneyRequest(req.user!, String(req.params.code))));
+v1Router.post('/money_requests/:code/cancel', ...merchantOnly, requireScope('payment_intents:write'), writeLimit, (req, res) => res.json(cancelMoneyRequest(req.user!, String(req.params.code))));
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Ledger transactions (gateway view: the transaction, its balanced entries and the intent link)
+// ---------------------------------------------------------------------------------------------------------------------
+v1Router.get('/transactions/:id', ...merchantOnly, requireScope('balance:read', 'payment_intents:read'), (req, res) => res.json(transactionDetail(req.user!, String(req.params.id))));
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Payouts
@@ -684,7 +801,7 @@ const endpointSchema = z.object({
   description: z.string().max(200).optional().nullable(),
   api_version: z.string().max(20).optional().nullable(),
 });
-v1Router.get('/webhook_events/types', publicLimit, (_req, res) => res.json({ api_version: WEBHOOK_API_VERSION, data: WEBHOOK_EVENT_TYPES }));
+v1Router.get('/webhook_events/types', publicLimit, (_req, res) => res.json(webhookCatalogue()));
 v1Router.post(
   '/webhook_endpoints',
   ...merchantOnly,
@@ -751,12 +868,22 @@ v1Router.post('/api_keys', ...merchantOnly, sessionOnly, writeLimit, (req, res) 
       label: z.string().max(60).default('API key'),
       mode: z.enum(['live', 'test']).default('live'),
       kind: z.enum(['secret', 'publishable', 'restricted']).default('secret'),
-      scopes: z.array(z.string()).optional(),
+      // the request is validated (scopes included) before any step-up is demanded of the caller
+      scopes: z.array(z.enum(API_KEY_SCOPES)).optional(),
       ip_allowlist: z.array(z.string().max(45)).max(20).optional().nullable(),
+      pin: z.string().optional(),
     }),
     req.body,
   );
+  // a live key can move real money: minting one needs the session's PIN or a passkey step-up; test keys do not
+  if (b.mode === 'live') assertSessionStepUp(req.user!, b.pin, req, 'Creating a live API key');
   res.status(201).json(createApiKey(req.user!, b.label, b.mode, { kind: b.kind, scopes: b.scopes, ipAllowlist: b.ip_allowlist ?? null }));
+});
+/** Rotate a key: same label, kind, scopes and allowlist under a new secret; the old secret stops working at once. */
+v1Router.post('/api_keys/:id/rotate', ...merchantOnly, sessionOnly, writeLimit, (req, res) => {
+  const b = validate(z.object({ pin: z.string().optional() }), req.body ?? {});
+  if (apiKeyMode(req.user!.id, String(req.params.id)).mode === 'live') assertSessionStepUp(req.user!, b.pin, req, 'Rotating a live API key');
+  res.status(201).json(rotateApiKey(req.user!, String(req.params.id)));
 });
 v1Router.delete('/api_keys/:id', ...merchantOnly, sessionOnly, writeLimit, (req, res) => {
   revokeApiKey(req.user!.id, String(req.params.id));

@@ -11,7 +11,7 @@ import { getDb } from '../db';
 import { uuid, now, shortCode } from '../lib/ids';
 import { parseJson } from '../lib/json';
 import { sha256 } from '../lib/crypto';
-import { badRequest, conflict, notFound } from '../lib/errors';
+import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { config } from '../config';
 import type { UserRow } from './users';
 import { findUserById, toPublicUser } from './users';
@@ -28,6 +28,9 @@ import { recordRoutingOutcome, pickConnector, type RouteCandidate } from './rail
 import { applySplits } from './finops/splits';
 import { assertKybIfRequired } from './risk/kycTiers';
 import { publish } from './bus';
+import { screenSanctions } from './risk';
+import { createHold, releaseHoldsFor } from './finops/holds';
+import { ensureWallet } from './wallets';
 
 export const INTENT_STATES = [
   'CREATED',
@@ -54,7 +57,7 @@ export type IntentState = (typeof INTENT_STATES)[number];
 export const TERMINAL_INTENT_STATES: IntentState[] = ['SETTLED', 'FAILED', 'EXPIRED', 'CANCELLED', 'REFUNDED', 'REVERSED'];
 
 const TRANSITIONS: Record<IntentState, IntentState[]> = {
-  CREATED: ['REQUIRES_PAYMENT_METHOD', 'CANCELLED', 'EXPIRED'],
+  CREATED: ['REQUIRES_PAYMENT_METHOD', 'CANCELLED', 'EXPIRED', 'UNDER_REVIEW'],
   REQUIRES_PAYMENT_METHOD: ['ROUTING', 'REQUIRES_CUSTOMER_ACTION', 'PROCESSING', 'CAPTURED', 'CANCELLED', 'EXPIRED', 'UNDER_REVIEW'],
   ROUTING: ['REQUIRES_CUSTOMER_ACTION', 'PROCESSING', 'REQUIRES_PAYMENT_METHOD', 'FAILED', 'CANCELLED', 'EXPIRED', 'UNDER_REVIEW'],
   REQUIRES_CUSTOMER_ACTION: ['PROCESSING', 'REQUIRES_PAYMENT_METHOD', 'FAILED', 'CANCELLED', 'EXPIRED', 'AMBIGUOUS'],
@@ -111,6 +114,9 @@ export interface IntentRow {
   expires_at: string | null;
   ambiguous_since: string | null;
   succeeded_at: string | null;
+  /** Manual capture: when the authorisation landed and how much of it was captured. */
+  authorised_at?: string | null;
+  captured_amount_minor?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -157,6 +163,8 @@ export interface IntentView {
   attempts: AttemptView[];
   expiresAt: string | null;
   succeededAt: string | null;
+  authorisedAt: string | null;
+  capturedAmountMinor: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -216,6 +224,8 @@ export function intentView(r: IntentRow): IntentView {
     attempts: listAttempts(r.id),
     expiresAt: r.expires_at,
     succeededAt: r.succeeded_at,
+    authorisedAt: r.authorised_at ?? null,
+    capturedAmountMinor: r.captured_amount_minor ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -293,6 +303,8 @@ export function appendPaymentEvent(input: {
 
 export function transitionIntent(id: string, to: IntentState, actor: Actor, details: Record<string, unknown> = {}): IntentRow {
   const db = getDb();
+  // REVERSED is a ledger fact, not a decision: only a refund object (which posted the reversing entries) may assert it.
+  if (to === 'REVERSED' && !details.refundId) throw conflict('REVERSED is only reachable through a refund', 'reversal_requires_refund');
   return db.transaction(() => {
     const r = getIntentRow(id);
     if (r.status === to) return r;
@@ -354,6 +366,54 @@ export interface CreateIntentInput {
 
 export const DEFAULT_RAILS = ['wallet', 'mpesa', 'airtel', 'orange', 'card', 'bank'];
 
+/** The party screened against the sanctions lists: the customer as the merchant described them (or their account). */
+function sanctionsSubject(input: Pick<CreateIntentInput, 'customerMsisdn' | 'customerUserId' | 'customerCountry'>): {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  country: string | null;
+} {
+  const customer = input.customerUserId ? findUserById(input.customerUserId) : null;
+  return {
+    name: customer?.full_name ?? null,
+    phone: input.customerMsisdn ?? customer?.phone ?? null,
+    email: customer?.email ?? null,
+    country: input.customerCountry ?? customer?.country ?? null,
+  };
+}
+
+/**
+ * Asynchronous sanctions screening of domestic intents (called by the 60-second job). A hit moves the intent to
+ * UNDER_REVIEW where the state machine allows it, records the event and publishes `sanctions.hit` for compliance;
+ * a captured intent keeps its ledger state and only the record and the event are written.
+ */
+export function screenPendingSanctions(limit = 200): { screened: number; hits: number } {
+  const db = getDb();
+  const rows = db.prepare("SELECT * FROM sanctions_screenings WHERE status = 'PENDING' ORDER BY created_at LIMIT ?").all(limit) as any[];
+  let hits = 0;
+  for (const row of rows) {
+    const subject = parseJson<{ name?: string | null; phone?: string | null; email?: string | null; country?: string | null }>(row.payload, {});
+    const found = screenSanctions(subject).filter((h) => h.startsWith('sanctions:'));
+    db.prepare('UPDATE sanctions_screenings SET status = ?, hits = ?, screened_at = ? WHERE id = ?').run(found.length ? 'HIT' : 'CLEAR', JSON.stringify(found), now(), row.id);
+    if (!found.length) continue;
+    hits += 1;
+    if (row.subject_type !== 'payment_intent') continue;
+    const intent = db.prepare('SELECT * FROM payment_intents WHERE id = ?').get(row.subject_id) as IntentRow | undefined;
+    if (!intent) continue;
+    recordEvent('payment', intent.id, 'intent.sanctions_hit', { type: 'system' }, { screeningId: row.id, hits: found });
+    publish(
+      'sanctions.hit',
+      { merchantId: intent.merchant_user_id, intentId: intent.id, kind: 'intent', hits: found, amountMinor: intent.amount_minor, currency: intent.currency, crossBorder: false },
+      {
+        aggregateId: intent.id,
+        tenantId: intent.merchant_user_id,
+      },
+    );
+    if (TRANSITIONS[intent.status].includes('UNDER_REVIEW')) transitionIntent(intent.id, 'UNDER_REVIEW', { type: 'system' }, { reason: 'sanctions_hit', screeningId: row.id, hits: found });
+  }
+  return { screened: rows.length, hits };
+}
+
 /** Create an intent for a merchant (or any account holder: P2P and agent QR use the same object). */
 export function createIntent(merchant: UserRow, input: CreateIntentInput): { row: IntentRow; clientSecret: string } {
   assertMoneyMovementAllowed('intent');
@@ -368,6 +428,18 @@ export function createIntent(merchant: UserRow, input: CreateIntentInput): { row
   if (input.idemKey) {
     const existing = db.prepare('SELECT * FROM payment_intents WHERE merchant_user_id = ? AND idem_key = ?').get(merchant.id, input.idemKey) as IntentRow | undefined;
     if (existing) return { row: existing, clientSecret: '' };
+  }
+  // Sanctions: a cross-border payer is screened before the intent exists (a hit is a compliance block); a domestic
+  // payer is screened asynchronously by the 60-second job (screenPendingSanctions) so checkout latency stays local.
+  const subject = sanctionsSubject(input);
+  const crossBorder = !!input.customerCountry && !!merchant.country && input.customerCountry.toUpperCase() !== merchant.country.toUpperCase();
+  if (crossBorder) {
+    const hits = screenSanctions(subject).filter((h) => h.startsWith('sanctions:'));
+    if (hits.length) {
+      publish('sanctions.hit', { merchantId: merchant.id, kind: 'intent', hits, amountMinor: input.amountMinor ?? null, currency: cur.code, crossBorder: true }, { tenantId: merchant.id });
+      recordEvent('risk', merchant.id, 'intent.sanctions_refused', { type: merchant.role === 'admin' ? 'admin' : 'merchant', id: merchant.id }, { hits, customerCountry: input.customerCountry });
+      throw new AppError(403, 'sanctions_hit', 'This payment cannot be created: the payer is subject to a compliance block', { reason: 'compliance_block', failureCategory: 'compliance_block' });
+    }
   }
   const id = `pi_${shortCode(20).toLowerCase()}`;
   const secret = `${id}_secret_${randomBytes(18).toString('base64url')}`;
@@ -419,6 +491,13 @@ export function createIntent(merchant: UserRow, input: CreateIntentInput): { row
       now(),
     );
     db.prepare('UPDATE payment_requests SET intent_id = ? WHERE id = ?').run(id, request.id);
+    if (!crossBorder && (subject.phone || subject.name || subject.email))
+      db.prepare("INSERT INTO sanctions_screenings (id, subject_type, subject_id, payload, status, created_at) VALUES (?, 'payment_intent', ?, ?, 'PENDING', ?)").run(
+        uuid(),
+        id,
+        JSON.stringify(subject),
+        now(),
+      );
     recordEvent(
       'payment',
       id,
@@ -503,6 +582,10 @@ export function finishAttempt(
     const a = db.prepare('SELECT * FROM payment_attempts WHERE id = ?').get(attemptId) as any;
     if (!a) throw notFound('Attempt not found', 'attempt_not_found');
     if (['CAPTURED', 'FAILED', 'ABANDONED'].includes(a.status) && a.status === outcome) return { attempt: toAttempt(a), intent: getIntentRow(a.intent_id) };
+    // capture_method manual: whatever rail reports "captured" first lands as an authorisation (funds held, not
+    // available); only an explicit capture (POST /payment_intents/{id}/capture) turns the authorised attempt into CAPTURED.
+    const before = getIntentRow(a.intent_id);
+    if (outcome === 'CAPTURED' && before.capture_method === 'manual' && before.status !== 'AUTHORISED' && a.status !== 'AUTHORISED') outcome = 'AUTHORISED';
     db.prepare(
       'UPDATE payment_attempts SET status = ?, failure_category = ?, error = ?, provider_ref = COALESCE(?, provider_ref), transaction_id = COALESCE(?, transaction_id), gateway_payment_id = COALESCE(?, gateway_payment_id), finished_at = ? WHERE id = ?',
     ).run(
@@ -542,7 +625,24 @@ export function finishAttempt(
         console.error(`[intents] split payout failed for ${r.id}: ${(err as Error).message}`);
       }
     } else if (outcome === 'AUTHORISED') {
-      intent = transitionIntent(r.id, 'AUTHORISED', actor, { attemptId });
+      // Manual capture: the funds reached the merchant wallet (the rail's authoritative event) but stay held until the
+      // merchant captures; the intent keeps the ledger link so capture and void refer to the same transaction.
+      if (details.transactionId) {
+        db.prepare('UPDATE payment_intents SET transaction_id = ?, gateway_payment_id = COALESCE(?, gateway_payment_id), authorised_at = COALESCE(authorised_at, ?), updated_at = ? WHERE id = ?').run(
+          details.transactionId,
+          details.gatewayPaymentId ?? null,
+          now(),
+          now(),
+          r.id,
+        );
+        db.prepare('UPDATE transactions SET intent_id = ? WHERE id = ?').run(r.id, details.transactionId);
+        holdAuthorisation(r, actor);
+      }
+      // the rail may answer from REQUIRES_CUSTOMER_ACTION (prompt accepted) or ROUTING: the state machine goes through PROCESSING
+      if (!TRANSITIONS[r.status].includes('AUTHORISED') && r.status !== 'AUTHORISED') transitionIntent(r.id, 'PROCESSING', actor, { attemptId });
+      intent = transitionIntent(r.id, 'AUTHORISED', actor, { attemptId, transactionId: details.transactionId ?? null, source: details.source ?? actor.type });
+      const merchant = findUserById(r.merchant_user_id);
+      if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.authorised', { paymentIntent: intentView(getIntentRow(r.id)), attemptId }, { resource: { type: 'payment_intent', id: r.id } });
     } else if (outcome === 'UNKNOWN') {
       intent = transitionIntent(r.id, r.status === 'PROCESSING' || r.status === 'REQUIRES_CUSTOMER_ACTION' ? 'AMBIGUOUS' : 'UNKNOWN_PROVIDER_STATE', actor, {
         attemptId,
@@ -601,7 +701,79 @@ export function onRequestPaid(request: PaymentRequestRow, transactionId: string,
     if (r.status === 'CREATED') transitionIntent(r.id, 'REQUIRES_PAYMENT_METHOD', actor);
     attempt = { id: startAttempt(r.id, { methodClass, gatewayPaymentId: gatewayPaymentId ?? null }, actor).id };
   }
+  // capture_method manual: finishAttempt lands the payment as an authorisation; the merchant captures (or voids) it explicitly
   finishAttempt(attempt.id, 'CAPTURED', { transactionId, gatewayPaymentId: gatewayPaymentId ?? null, source: methodClass === 'wallet' ? 'ledger' : 'processor' }, actor);
+}
+
+/** Authorised funds sit in the merchant wallet but are not available until captured: one hold per authorisation. */
+function holdAuthorisation(r: IntentRow, actor: Actor): void {
+  if (!r.amount_minor) return;
+  if (getDb().prepare("SELECT 1 FROM holds WHERE ref_type = 'payment_intent_authorisation' AND ref_id = ? AND status = 'ACTIVE'").get(r.id)) return;
+  const wallet = ensureWallet(r.merchant_user_id, r.currency);
+  createHold({ walletId: wallet.id, amountMinor: r.amount_minor, kind: 'settlement', refType: 'payment_intent_authorisation', refId: r.id, reason: 'authorised, awaiting capture' }, actor);
+}
+
+function authorisedAttempt(intentId: string): any {
+  return getDb().prepare("SELECT * FROM payment_attempts WHERE intent_id = ? AND status = 'AUTHORISED' ORDER BY seq DESC LIMIT 1").get(intentId);
+}
+
+/**
+ * Capture an AUTHORISED intent (capture_method manual) through the authoritative path: the in-flight attempt finishes
+ * as CAPTURED with the ledger transaction the authorisation posted, the hold is released, `payment_intent.succeeded`
+ * fires and settlement follows exactly as for automatic capture. A partial capture returns the uncaptured part to the
+ * payer through a refund object before the capture is recorded, so the ledger and the refundable amount stay honest.
+ */
+export async function captureIntent(id: string, actor: Actor, amountMinor?: number | null): Promise<IntentRow> {
+  const r = getIntentRow(id);
+  if (r.status !== 'AUTHORISED') throw conflict(`Payment intent is ${r.status}; only AUTHORISED intents can be captured`, 'intent_not_authorised');
+  const attempt = authorisedAttempt(id);
+  if (!attempt || !r.transaction_id) throw conflict('No authorised attempt with a ledger posting to capture', 'authorisation_missing');
+  const authorised = r.amount_minor ?? 0;
+  const amount = amountMinor ?? authorised;
+  if (!Number.isInteger(amount) || amount <= 0) throw badRequest('Capture amount must be a positive integer in minor units', 'invalid_amount');
+  if (amount > authorised) throw conflict(`Only ${authorised} was authorised; a capture cannot exceed the authorisation`, 'capture_exceeds_authorisation');
+  const merchant = findUserById(r.merchant_user_id);
+  if (!merchant) throw notFound('Merchant not found', 'merchant_not_found');
+  releaseHoldsFor('payment_intent_authorisation', id, actor, 'captured');
+  if (amount < authorised) {
+    const { createRefund } = await import('./gateway');
+    const refund = await createRefund(merchant, { intentId: id, amountMinor: authorised - amount, reason: `partial capture: ${authorised - amount} of ${authorised} returned to the payer` }, actor);
+    if (refund.status === 'FAILED') {
+      holdAuthorisation(r, actor);
+      throw conflict(`The uncaptured ${authorised - amount} could not be returned to the payer: ${refund.error ?? 'refund failed'}`, 'partial_capture_failed');
+    }
+  }
+  getDb().prepare('UPDATE payment_intents SET captured_amount_minor = ?, updated_at = ? WHERE id = ?').run(amount, now(), id);
+  recordEvent('payment', id, 'intent.capture_requested', actor, { attemptId: attempt.id, amount, authorised, partial: amount < authorised });
+  return finishAttempt(attempt.id, 'CAPTURED', { transactionId: r.transaction_id, gatewayPaymentId: r.gateway_payment_id, source: actor.type }, actor).intent;
+}
+
+/**
+ * Void an AUTHORISED intent: the held funds go back to the payer through a refund object (the only way money leaves a
+ * merchant balance), the attempt is closed and the intent is CANCELLED. Nothing is captured, nothing is settled.
+ */
+export async function voidAuthorisedIntent(id: string, actor: Actor, reason?: string | null): Promise<IntentRow> {
+  const r = getIntentRow(id);
+  if (r.status !== 'AUTHORISED') throw conflict(`Payment intent is ${r.status}; only AUTHORISED intents can be voided`, 'intent_not_authorised');
+  const attempt = authorisedAttempt(id);
+  const merchant = findUserById(r.merchant_user_id);
+  if (!merchant) throw notFound('Merchant not found', 'merchant_not_found');
+  releaseHoldsFor('payment_intent_authorisation', id, actor, 'voided');
+  if (r.transaction_id) {
+    const { createRefund } = await import('./gateway');
+    const refund = await createRefund(merchant, { intentId: id, reason: reason ? `void: ${reason}` : 'void: authorisation cancelled before capture' }, actor);
+    if (refund.status === 'FAILED') {
+      holdAuthorisation(r, actor);
+      throw conflict(`The authorised funds could not be returned to the payer: ${refund.error ?? 'refund failed'}`, 'void_failed');
+    }
+  }
+  if (attempt) {
+    getDb()
+      .prepare("UPDATE payment_attempts SET status = 'ABANDONED', failure_category = 'cancelled', error = ?, finished_at = ? WHERE id = ?")
+      .run(reason ?? 'voided before capture', now(), attempt.id);
+    recordEvent('payment', id, 'attempt.abandoned', actor, { attemptId: attempt.id, failureCategory: 'cancelled', reason: reason ?? 'voided before capture' });
+  }
+  return transitionIntent(id, 'CANCELLED', actor, { reason: reason ?? null, voided: true, transactionId: r.transaction_id });
 }
 
 /**

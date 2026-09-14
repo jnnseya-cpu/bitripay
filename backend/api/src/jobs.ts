@@ -17,6 +17,7 @@ import { pingIndexNow, verifyBacklinks } from './services/seo';
 import { runScheduledAgents, expireApprovals } from './services/assist/runtime';
 import { renewSubscriptions } from './services/assist/addon';
 import { expireIntents } from './services/intents';
+import * as intents from './services/intents';
 import { runGuardian } from './services/guardian';
 import { processDueDeliveries } from './services/webhooks';
 import { syncCheckoutSessions } from './services/gateway';
@@ -241,4 +242,27 @@ export function startJobs() {
   };
   setInterval(tick, 60_000).unref();
   void tick();
+  // Domestic sanctions screening runs asynchronously every 60 seconds so intents never wait on the list refresh.
+  setInterval(() => void screenSanctionsTick(), 60_000).unref();
+  void screenSanctionsTick();
+}
+
+/**
+ * One run of the 60-second sanctions job: calls `screenPendingSanctions()` from the intents service when that export
+ * exists at runtime (guarded, so a build without it keeps starting) and logs the counts when anything was screened.
+ * Returns null when the export is absent, otherwise the screened / hit counts.
+ */
+export async function screenSanctionsTick(): Promise<{ screened: number; hits: number } | null> {
+  try {
+    const fn = (intents as Record<string, unknown>).screenPendingSanctions;
+    if (typeof fn !== 'function') return null;
+    const result = (await (fn as () => unknown | Promise<unknown>)()) as number | { screened?: number; hits?: number } | null | undefined;
+    const screened = typeof result === 'number' ? result : (result?.screened ?? 0);
+    const hits = typeof result === 'object' && result ? (result.hits ?? 0) : 0;
+    if (screened > 0) console.log(`[compliance] screened ${screened} pending intent(s) against the sanctions lists${hits ? `, ${hits} hit(s)` : ''}`);
+    return { screened, hits };
+  } catch (err) {
+    console.error('[compliance] sanctions screening failed', (err as Error).message);
+    return { screened: 0, hits: 0 };
+  }
 }

@@ -409,7 +409,20 @@ const DEFAULT_WEBHOOKS: WebhookSettings = {
   responseBodyBytes: 2048,
 };
 
+export interface SecuritySettings {
+  /** Roles that must have two-factor authentication enabled; enforced with 403 two_factor_required after the grace period. */
+  require2fa: { merchant: boolean; agent: boolean; admin: boolean };
+  /** Days from account creation during which an account of a required role may still work without 2FA. */
+  graceDays: number;
+}
+/** Production requires 2FA for every business and administrative role; development and tests stay opt-in. */
+const DEFAULT_SECURITY: SecuritySettings = {
+  require2fa: { merchant: config.isProduction, agent: config.isProduction, admin: config.isProduction },
+  graceDays: 7,
+};
+
 const DEFAULTS: Record<string, unknown> = {
+  security: DEFAULT_SECURITY,
   webhooks: DEFAULT_WEBHOOKS,
   gateway_products: DEFAULT_GATEWAY_PRODUCTS,
   assist: DEFAULT_ASSIST,
@@ -451,6 +464,10 @@ export const getAppSettings = () => getSetting<AppSettings>('app');
 export const getGatewayControls = () => getSetting<GatewayControls>('gateway');
 export const getFxSettings = () => getSetting<FxSettings>('fx');
 export const getRiskSettings = () => getSetting<RiskSettings>('risk');
+export const getSecuritySettings = (): SecuritySettings => {
+  const s = getSetting<Partial<SecuritySettings>>('security');
+  return { ...DEFAULT_SECURITY, ...s, require2fa: { ...DEFAULT_SECURITY.require2fa, ...(s.require2fa ?? {}) } };
+};
 export const getComplianceSettings = () => getSetting<ComplianceSettings>('compliance');
 export const getEmoneySettings = () => getSetting<EmoneySettings>('emoney');
 export const getSeoSettings = () => getSetting<SeoSettings>('seo');

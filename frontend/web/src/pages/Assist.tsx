@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { API_BASE, api, getToken } from '../lib/api';
 import { useStore } from '../lib/store';
+import { useT } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, PageHeader, useAsync } from '../components/ui';
 
 /**
@@ -109,6 +110,19 @@ async function streamRun(id: string, onEvent: (event: string, data: any) => void
   }
 }
 
+/** NEURAL_QUOTA_EXCEEDED from the AI gateway (HTTP 422, code lower-cased by the error middleware) or its message. */
+function quotaExceeded(e: any): boolean {
+  const code = String(e?.code ?? '').toLowerCase();
+  const message = String(e?.message ?? '');
+  return code === 'neural_quota_exceeded' || /AI paused: ACU depleted/i.test(message) || (e?.status === 'budget_exhausted' && /ACU/i.test(message));
+}
+/** The reset date when the API provides one (details.resetAt / resetsAt / periodEnd); never invented client-side. */
+function resetDateOf(e: any): string | null {
+  const d = e?.details ?? e?.billing ?? {};
+  const v = d.resetAt ?? d.resetsAt ?? d.periodEnd ?? d.period_end ?? e?.resetAt ?? e?.resetsAt ?? null;
+  return typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? v : null;
+}
+
 export function Assist() {
   const { user, toast } = useStore();
   const [params, setParams] = useSearchParams();
@@ -121,6 +135,9 @@ export function Assist() {
   const [input, setInput] = useState('');
   const [live, setLive] = useState<{ id: string; text: string; actions: Action[]; status: string } | null>(null);
   const [tab, setTab] = useState<'chat' | 'memory' | 'history'>('chat');
+  const t = useT();
+  /** Set when the API answers NEURAL_QUOTA_EXCEEDED (or a run comes back "AI paused: ACU depleted…"); cleared when the agents reload with credit left. */
+  const [paused, setPaused] = useState<{ resetAt: string | null } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const abort = useRef<AbortController | null>(null);
 
@@ -143,6 +160,7 @@ export function Assist() {
       const r = await api.post<{ run: Run }>('/api/assist/runs', { agent: agent.key, input: text, depth: deep ? 'deep' : 'standard' });
       if (['completed', 'failed', 'budget_exhausted'].includes(r.run.status)) {
         setRuns((rs) => [...rs, r.run]);
+        if (quotaExceeded({ code: (r.run as any).errorCode ?? (r.run as any).error_code, message: r.run.error, status: r.run.status })) setPaused({ resetAt: resetDateOf(r.run) });
         return;
       }
       setLive({ id: r.run.id, text: '', actions: [], status: r.run.status });
@@ -164,6 +182,7 @@ export function Assist() {
       );
     } catch (e) {
       setLive(null);
+      if (quotaExceeded(e)) setPaused({ resetAt: resetDateOf(e) });
       toast((e as Error).message, 'error');
     }
   };
@@ -179,6 +198,9 @@ export function Assist() {
       </div>
     );
   const usage = data.data.usage;
+  // the API's own usage summary says the monthly ACU allowance is gone → runs would come back budget_exhausted
+  const depleted = !!paused || (!usage.unlimited && usage.allowance > 0 && usage.remaining === 0);
+  const resetAt = paused?.resetAt ?? usage.resetsAt ?? usage.resetAt ?? null;
   const mode = data.data.runtime.mode;
   const addon = data.data.addon;
   const billing = data.data.billing;
@@ -249,6 +271,14 @@ export function Assist() {
               Flat plan {addon.prices[0].formatted}/{addon.periodDays} days
             </Link>
           )}
+        </div>
+      )}
+      {depleted && (
+        <div data-testid="assist-paused">
+          <Alert kind="warning">
+            <b>{t('assist.paused')}</b>
+            {resetAt ? ` · ${t('assist.pausedReset', { date: new Date(resetAt).toLocaleDateString() })}` : ''}
+          </Alert>
         </div>
       )}
       {billing?.degraded && <Alert kind="info">Paid answers are paused for the rest of the month while the platform stays within its budget. Free lookups still work.</Alert>}
@@ -379,7 +409,7 @@ export function Assist() {
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       placeholder={`Ask ${agent.name}…`}
-                      disabled={!agent.enabled || agent.paused || !!live}
+                      disabled={!agent.enabled || agent.paused || !!live || depleted}
                       maxLength={4000}
                     />
                     {billing?.canDeep && billing.mode === 'per_use' && (
@@ -387,7 +417,9 @@ export function Assist() {
                         <input type="checkbox" checked={deep} onChange={(e) => setDeep(e.target.checked)} /> In depth
                       </label>
                     )}
-                    <Button disabled={!input.trim() || !!live || !agent.enabled || agent.paused}>Ask{priceLabel}</Button>
+                    <Button disabled={!input.trim() || !!live || !agent.enabled || agent.paused || depleted} title={depleted ? t('assist.paused') : undefined}>
+                      Ask{priceLabel}
+                    </Button>
                   </form>
                   <div className="tiny muted mt-sm">Answers come from your own data. Money only moves when you confirm an action with your PIN or passkey. Every step is logged.</div>
                 </>

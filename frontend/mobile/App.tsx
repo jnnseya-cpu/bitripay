@@ -21,6 +21,7 @@ import { Assist } from './src/screens/Assist';
 import { Merchant, MerchantGateway, Agent } from './src/screens/Business';
 import { Offline } from './src/screens/Offline';
 import { Savings } from './src/screens/Savings';
+import { PayHub, WalletHub } from './src/screens/Hubs';
 import type { RootParams } from './src/navigation';
 
 const Stack = createNativeStackNavigator<RootParams>();
@@ -43,7 +44,9 @@ function MainTabs() {
   return (
     <Tab.Navigator screenOptions={{ headerShown: false, tabBarShowLabel: false, tabBarStyle: { backgroundColor: th.card, borderTopColor: th.border, height: 64 } }}>
       <Tab.Screen name="Home" component={Home} options={{ tabBarIcon: ({ focused }) => <TabIcon label={t('nav.dashboard')} ico="🏠" focused={focused} /> }} />
+      <Tab.Screen name="PayTab" component={PayHub} options={{ tabBarIcon: ({ focused }) => <TabIcon label="Pay" ico="💸" focused={focused} /> }} />
       <Tab.Screen name="ScanTab" component={Scan} options={{ tabBarIcon: ({ focused }) => <TabIcon label="Scan" ico="📷" focused={focused} /> }} />
+      <Tab.Screen name="WalletTab" component={WalletHub} options={{ tabBarIcon: ({ focused }) => <TabIcon label="Wallet" ico="👛" focused={focused} /> }} />
       <Tab.Screen name="ReceiveTab" component={Receive} options={{ tabBarIcon: ({ focused }) => <TabIcon label={t('nav.receive')} ico="🔳" focused={focused} /> }} />
       <Tab.Screen name="ActivityTab" component={Activity} options={{ tabBarIcon: ({ focused }) => <TabIcon label="Activity" ico="📜" focused={focused} /> }} />
       <Tab.Screen name="MoreTab" component={More} options={{ tabBarIcon: ({ focused }) => <TabIcon label="More" ico="☰" focused={focused} /> }} />

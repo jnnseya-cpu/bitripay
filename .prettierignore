@@ -12,3 +12,4 @@ frontend/*/package-lock.json
 **/*.db
 docs/**/*.html
 **/*.html
+**/*.sql

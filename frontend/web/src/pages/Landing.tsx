@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useStore } from '../lib/store';
 import { api } from '../lib/api';
 import { useMeta } from '../lib/seo';
+import { useT } from '../lib/i18n';
 import { SiteFooter } from '../components/SiteFooter';
 import '../landing.css';
 
@@ -150,6 +151,7 @@ const FAQ = [
 ];
 
 export function Landing() {
+  const t = useT();
   const { config, user, theme, toggleTheme } = useStore();
   const site = config?.site;
   const [cookie, setCookie] = useState(false);
@@ -218,6 +220,10 @@ export function Landing() {
         <div className="lp-wrap">
           <div>
             <div className="lp-eyebrow">Payments for everyone with a phone</div>
+            <p className="lp-positioning" data-testid="positioning">
+              <strong>{t('positioning.oneQr')}</strong>
+              <span>{t('positioning.payLocal')}</span>
+            </p>
             <h1>
               Get paid at the market. Send money home. <em>Hear it arrive.</em>
             </h1>

@@ -10,6 +10,7 @@ import { getCurrency } from '../services/currencies';
 import { toMinor } from '@bitripay/shared';
 import { resolveScan } from '../services/qrcodes';
 import { getClientIp } from '../lib/http';
+import { rateLimit, keyByDevice, keyByQrId } from '../middleware/rateLimit';
 
 export const qrRouter = Router();
 
@@ -43,9 +44,12 @@ qrRouter.get(
   }),
 );
 
-/** Resolve scanned QR content into a payable target. */
+/** Resolve scanned QR content into a payable target. Limited per client address, per device and per QR id. */
 qrRouter.post(
   '/resolve',
+  rateLimit({ windowMs: 60_000, max: 120, keyPrefix: 'qr_resolve' }),
+  rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'qr_resolve_device', keyBy: keyByDevice }),
+  rateLimit({ windowMs: 60_000, max: 240, keyPrefix: 'qr_resolve_qr', keyBy: keyByQrId }),
   optionalAuth,
   wrap(async (req, res) => {
     const body = validate(z.object({ data: z.string().min(1).max(2000) }), req.body);

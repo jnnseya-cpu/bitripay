@@ -7,8 +7,9 @@
 import { randomBytes } from 'node:crypto';
 import { getDb } from '../db';
 import { uuid, now, shortCode } from '../lib/ids';
-import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { config } from '../config';
+import { parseJson } from '../lib/json';
 import * as bitriqr from '@bitripay/bitriqr';
 import type { UserRow } from './users';
 import { findUserById, findUserByTag } from './users';
@@ -16,6 +17,8 @@ import { getCurrency } from './currencies';
 import { merchantSigningKey, signWithKey, verifyWithKey } from './keys';
 import { recordEvent } from './events';
 import { countryCapabilities } from './capabilities';
+import { listWallets } from './wallets';
+import { enforceTierLimits } from './risk/kycTiers';
 import { createIntent, getIntentRow, intentView, discoverMethods, merchantIdentity, setIntentAmount, type IntentRow, type CreateIntentInput } from './intents';
 import { fromMinor } from '@bitripay/shared';
 
@@ -192,6 +195,49 @@ function railsFor(input: string[] | undefined, merchant: UserRow): bitriqr.Rail[
   return wanted.filter((r) => r in bitriqr.RAILS && (r !== 'bitcoin' || caps.bitcoin) && (r !== 'wallet' || caps.wallet));
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Amount rules
+// ---------------------------------------------------------------------------------------------------------------------
+
+export interface QrAmountRules {
+  /** Currencies a code may be denominated in: the merchant's wallets plus the collection/settlement currencies of its country. */
+  currencies: string[];
+  /** Optional floor/ceiling from the merchant's settings (`qrMinAmountMinor` / `qrMaxAmountMinor`, minor units of the code's currency). */
+  minAmountMinor: number | null;
+  maxAmountMinor: number | null;
+  /** Country ceiling per transaction (minor units of the country's main currency; 0 = none). */
+  countryMaxPerTransaction: number;
+}
+/** What the merchant may put on a code: read from its wallets, its gateway settings and the country capability matrix. */
+export function qrAmountRules(merchant: UserRow): QrAmountRules {
+  const caps = countryCapabilities(merchant.country);
+  const settings = parseJson<Record<string, unknown>>(merchant.gateway_settings, {});
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : null);
+  const currencies = Array.from(new Set([...listWallets(merchant.id).map((w) => w.currency), ...caps.collectionCurrencies, ...caps.settlementCurrencies].map((c) => c.toUpperCase())));
+  return { currencies, minAmountMinor: num(settings.qrMinAmountMinor), maxAmountMinor: num(settings.qrMaxAmountMinor), countryMaxPerTransaction: caps.maxPerTransaction || 0 };
+}
+/**
+ * Dynamic codes must carry an amount > 0 in the code's currency; static codes may carry none (the payer enters it).
+ * When an amount is present it must respect the merchant's min/max settings, and the currency must be one the
+ * merchant can receive (a wallet currency or a currency its country collects/settles in).
+ */
+export function validateQrAmount(merchant: UserRow, input: { mode: 'static' | 'dynamic'; amount: number | null | undefined; currency: string; strictCurrency?: boolean }): QrAmountRules {
+  const rules = qrAmountRules(merchant);
+  const cur = input.currency.toUpperCase();
+  if (input.strictCurrency !== false && rules.currencies.length && !rules.currencies.includes(cur))
+    throw badRequest(`Codes can only be issued in a currency you can receive (${rules.currencies.join(', ')})`, 'currency_not_receivable', { allowed: rules.currencies });
+  const amount = input.amount ?? null;
+  if (input.mode === 'dynamic' && (amount == null || amount <= 0)) throw badRequest('Dynamic QR needs an amount', 'amount_required');
+  if (amount != null) {
+    if (!Number.isInteger(amount) || amount <= 0) throw badRequest('Amount must be a positive integer in minor units', 'invalid_amount');
+    if (rules.minAmountMinor && amount < rules.minAmountMinor)
+      throw badRequest(`Amount is below your minimum of ${rules.minAmountMinor} (minor units)`, 'amount_below_minimum', { min: rules.minAmountMinor });
+    if (rules.maxAmountMinor && amount > rules.maxAmountMinor)
+      throw badRequest(`Amount is above your maximum of ${rules.maxAmountMinor} (minor units)`, 'amount_above_maximum', { max: rules.maxAmountMinor });
+  }
+  return rules;
+}
+
 export function createStaticQr(
   merchant: UserRow,
   input: {
@@ -210,6 +256,7 @@ export function createStaticQr(
 ): QrView {
   const cur = getCurrency(input.currency);
   if (input.amount != null && (!Number.isInteger(input.amount) || input.amount <= 0)) throw badRequest('Amount must be a positive integer in minor units', 'invalid_amount');
+  validateQrAmount(merchant, { mode: 'static', amount: input.amount ?? null, currency: cur.code });
   const location = input.locationId ? getLocation(merchant.id, input.locationId) : null;
   const rails = railsFor(input.rails, merchant);
   const key = input.sign === false ? null : merchantSigningKey(merchant.id);
@@ -259,6 +306,8 @@ export function createStaticQr(
 export function createDynamicQr(merchant: UserRow, intent: IntentRow, ttlSeconds = 300, corridorFlag?: string | null): QrView {
   if (!intent.amount_minor) throw badRequest('Dynamic QR needs an amount', 'amount_required');
   const cur = getCurrency(intent.currency);
+  // the intent already fixed the currency; the amount still has to sit inside the merchant's limits
+  validateQrAmount(merchant, { mode: 'dynamic', amount: intent.amount_minor, currency: cur.code, strictCurrency: false });
   const location = intent.location_id ? getLocation(merchant.id, intent.location_id) : null;
   const rails = railsFor(JSON.parse(intent.rails), merchant);
   const key = merchantSigningKey(merchant.id);
@@ -367,6 +416,29 @@ export function qrAnalytics(merchantUserId: string, days = 30) {
       .prepare("SELECT COUNT(*) c FROM qr_scans s JOIN qr_codes q ON q.id = s.qr_id WHERE q.merchant_user_id = ? AND s.created_at >= ? AND s.outcome IN ('revoked', 'invalid', 'expired')")
       .get(merchantUserId, since) as any
   ).c;
+  // per-day series for the whole window (days without activity are present with zeros so charts keep their axis)
+  const scansByDay = new Map<string, number>(
+    (
+      db
+        .prepare('SELECT substr(s.created_at, 1, 10) day, COUNT(*) c FROM qr_scans s JOIN qr_codes q ON q.id = s.qr_id WHERE q.merchant_user_id = ? AND s.created_at >= ? GROUP BY day')
+        .all(merchantUserId, since) as { day: string; c: number }[]
+    ).map((r) => [r.day, r.c]),
+  );
+  const paidByDay = new Map<string, number>(
+    (
+      db
+        .prepare(
+          "SELECT substr(created_at, 1, 10) day, COUNT(*) c FROM payment_intents WHERE merchant_user_id = ? AND source = 'qr' AND status IN ('CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED') AND created_at >= ? GROUP BY day",
+        )
+        .all(merchantUserId, since) as { day: string; c: number }[]
+    ).map((r) => [r.day, r.c]),
+  );
+  const byDay: { day: string; scans: number; paid: number }[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const day = new Date(Date.now() - i * 86400_000).toISOString().slice(0, 10);
+    byDay.push({ day, scans: scansByDay.get(day) ?? 0, paid: paidByDay.get(day) ?? 0 });
+  }
+  const byOutcome = scans.map((s) => ({ outcome: String(s.outcome), count: Number(s.c) })).sort((a, b) => b.count - a.count);
   return {
     days,
     scans: Object.fromEntries(scans.map((s) => [s.outcome, s.c])),
@@ -375,6 +447,8 @@ export function qrAnalytics(merchantUserId: string, days = 30) {
     conversion: created ? Math.round((paid / created) * 1000) / 10 : null,
     byLocation,
     suspiciousScans: suspicious,
+    byDay,
+    byOutcome,
   };
 }
 
@@ -398,6 +472,41 @@ export interface Resolution {
   expiresAt: string | null;
   /** The hosted checkout for payers without the app. */
   checkoutUrl: string | null;
+  /**
+   * Set when the payer may see the target but must not pay it from this account: the payer's KYC tier limits or the
+   * country policy (payer country → merchant country) forbid it. Structured so the UI can show it, never a raw error.
+   */
+  blocked: { reason: string; code: string } | null;
+}
+
+/**
+ * Payer-side policy at resolve time (read-only): KYC tier limits for the amount, and the country capability matrix
+ * for the payer's country → the merchant's country. Returns the first block found, or null when the payer may proceed.
+ */
+export function payerPolicyBlock(
+  payer: UserRow | null | undefined,
+  merchant: UserRow,
+  amountMinor: number | null,
+  currency: string | null,
+  payerCountry: string | null | undefined,
+): { reason: string; code: string } | null {
+  const from = (payerCountry ?? payer?.country ?? '').toUpperCase();
+  const to = (merchant.country ?? '').toUpperCase();
+  if (from && to && from !== to) {
+    const merchantCaps = countryCapabilities(to);
+    const payerCaps = countryCapabilities(from);
+    if (!merchantCaps.crossBorder) return { reason: `Payments from ${from} to merchants in ${to} are not supported yet`, code: 'country_not_supported' };
+    if (!payerCaps.crossBorder) return { reason: `Cross-border payments from ${from} are not supported yet`, code: 'country_not_supported' };
+  }
+  if (payer && amountMinor && currency) {
+    try {
+      enforceTierLimits(payer, amountMinor, currency);
+    } catch (e) {
+      if (e instanceof AppError) return { reason: e.message, code: e.code };
+      throw e;
+    }
+  }
+  return null;
 }
 
 function scanLog(qrId: string | null, intentId: string | null, outcome: string, trust: string | null, ctx: { payer?: UserRow | null; ip?: string | null; channel?: string; country?: string | null }) {
@@ -424,6 +533,7 @@ export async function resolveScan(content: string, ctx: { payer?: UserRow | null
     disclosures: [],
     expiresAt: null,
     checkoutUrl: null,
+    blocked: null,
   });
   const text = content.trim();
   let intentRef: string | null = null;
@@ -506,6 +616,7 @@ export async function resolveScan(content: string, ctx: { payer?: UserRow | null
       disclosures: caps.requiredDisclosures,
       expiresAt: row.expires_at,
       checkoutUrl: view.checkoutUrl,
+      blocked: payerPolicyBlock(ctx.payer, merchant, row.amount_minor, row.currency, ctx.country),
     };
   }
   if (!merchantUser) return invalid(['unknown_merchant'], qr);
@@ -527,6 +638,7 @@ export async function resolveScan(content: string, ctx: { payer?: UserRow | null
     disclosures: caps.requiredDisclosures,
     expiresAt: null,
     checkoutUrl: null,
+    blocked: payerPolicyBlock(ctx.payer, merchantUser, qr?.amount ?? null, qr?.currency ?? decoded?.currency ?? null, ctx.country),
   };
 }
 

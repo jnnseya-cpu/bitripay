@@ -9,7 +9,20 @@ import { rateLimit } from '../middleware/rateLimit';
 import { assertPin } from '../services/auth';
 import { getCurrency } from '../services/currencies';
 import { toMinor } from '@bitripay/shared';
-import { registerOfflineDevice, listOfflineDevices, offlineQr, syncPromises, listPromises, getOfflineSettings, promiseCanonical, promiseHash, issueOfflineNonce } from '../services/offline';
+import {
+  registerOfflineDevice,
+  listOfflineDevices,
+  offlineQr,
+  syncPromises,
+  listPromises,
+  getOfflineSettings,
+  promiseCanonical,
+  promiseHash,
+  issueOfflineNonce,
+  OFFLINE_STATES,
+  PENDING_CONFIRMATION_TEXT,
+  listCounterGaps,
+} from '../services/offline';
 import {
   listRateCards,
   createQuote,
@@ -34,9 +47,20 @@ const writeLimit = rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'intel' });
 
 // ---------------------------------------------------------------- offline protocol
 r.get('/offline/settings', requireAuth, (_req, res) =>
-  res.json({ ...getOfflineSettings(), promiseVersion: 'v1', canonical: 'BITRIQR-OFFLINE|v1|merchantId|payerId|amountMinor|CURRENCY|nonce|expiresAt|counter|reference' }),
+  res.json({
+    ...getOfflineSettings(),
+    promiseVersion: 'v1',
+    canonical: 'BITRIQR-OFFLINE|v1|merchantId|payerId|amountMinor|CURRENCY|nonce|expiresAt|counter|reference',
+    lifecycle: OFFLINE_STATES,
+    pendingConfirmationText: PENDING_CONFIRMATION_TEXT,
+  }),
 );
 r.get('/offline/devices', requireAuth, (req, res) => res.json({ data: listOfflineDevices(req.user!.id) }));
+r.get('/offline/devices/:id/gaps', requireAuth, (req, res) => {
+  const device = listOfflineDevices(req.user!.id).find((d) => d.deviceId === String(req.params.id));
+  if (!device && req.user!.role !== 'admin') return res.status(404).json({ error: { code: 'device_not_found', message: 'Unknown device' } });
+  res.json({ data: listCounterGaps({ deviceId: String(req.params.id) }) });
+});
 r.post('/offline/devices', requireAuth, writeLimit, (req, res) => {
   const b = validate(z.object({ deviceId: z.string().min(6).max(80), publicKey: z.string().min(40).max(200), label: z.string().max(80).optional().nullable() }), req.body);
   res.status(201).json(registerOfflineDevice(req.user!, b));
