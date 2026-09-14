@@ -1,0 +1,128 @@
+<title>BitriPay · Déroulé de démonstration BCC</title>
+<meta name="description" content="Script scène par scène de la démonstration BitriPay devant la Direction des Agréments de la BCC : rôle, écran, clics, résultat attendu, point prouvé.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root { --ink:#14213d; --ink-2:#3d4a63; --muted:#6b7690; --line:#d8dde8; --paper:#f7f8fb; --card:#fff; --navy:#0b2a6f; --gold:#f5b31c; --gold-ink:#7a5200; --green:#0b6e4f; --red:#b42318; --soft-navy:#e8eefb; --soft-gold:#fff4d6; --soft-green:#e3f4ec; --soft-red:#fde8e6; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink:#e9edf6; --ink-2:#c3cbdc; --muted:#8e99b3; --line:#2a3350; --paper:#0d1324; --card:#141c33; --navy:#8fb0ff; --gold-ink:#ffd377; --green:#4fc39a; --red:#ff8a80; --soft-navy:#1b2748; --soft-gold:#3a2e12; --soft-green:#143126; --soft-red:#3b1a17; } }
+  :root[data-theme="dark"] { --ink:#e9edf6; --ink-2:#c3cbdc; --muted:#8e99b3; --line:#2a3350; --paper:#0d1324; --card:#141c33; --navy:#8fb0ff; --gold-ink:#ffd377; --green:#4fc39a; --red:#ff8a80; --soft-navy:#1b2748; --soft-gold:#3a2e12; --soft-green:#143126; --soft-red:#3b1a17; }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 15px; line-height: 1.5; padding-inline: 16px; padding-block: 24px 48px; }
+  main { max-width: 980px; margin: 0 auto; }
+  h1, h2 { font-family: 'IBM Plex Serif', Georgia, serif; color: var(--navy); text-wrap: balance; margin: 0 0 6px; }
+  h1 { font-size: 32px; } h2 { font-size: 22px; margin-top: 28px; }
+  .eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .lead { color: var(--ink-2); max-width: 72ch; }
+  .scene { background: var(--card); border: 1px solid var(--line); border-left: 6px solid var(--navy); border-radius: 6px; padding: 16px 18px; margin: 14px 0; }
+  .scene header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; margin-bottom: 8px; }
+  .scene header .t { font-family: 'IBM Plex Mono', monospace; color: var(--gold-ink); font-size: 13px; }
+  .scene header h3 { margin: 0; font-size: 18px; color: var(--navy); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .cell b { display: block; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; }
+  ol, ul { margin: 4px 0 4px 18px; padding: 0; } li { margin: 3px 0; }
+  .proof { background: var(--soft-gold); border-radius: 6px; padding: 8px 10px; margin-top: 10px; font-size: 14px; }
+  .proof b { color: var(--gold-ink); }
+  .tag { display: inline-block; font-size: 11.5px; padding: 1px 7px; border-radius: 999px; font-weight: 600; background: var(--soft-navy); color: var(--navy); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .table-wrap { overflow-x: auto; }
+  code { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; background: var(--soft-navy); padding: 0 4px; border-radius: 3px; }
+  .warn { background: var(--soft-red); border-left: 4px solid var(--red); padding: 8px 12px; border-radius: 4px; }
+  .ok { background: var(--soft-green); border-left: 4px solid var(--green); padding: 8px 12px; border-radius: 4px; }
+  .check { list-style: none; margin-left: 0; } .check li::before { content: '☐ '; color: var(--muted); }
+</style>
+<main>
+  <div class="eyebrow">Banque Centrale du Congo · jeudi 17 septembre 2026 · 12h10 – 13h10 · immeuble DUNGU</div>
+  <h1>Déroulé de la démonstration BitriPay</h1>
+  <p class="lead">Script à garder ouvert pendant la séance. Chaque scène indique qui manipule, sur quel écran, les clics dans l'ordre, le résultat attendu et le point que la scène prouve à la Direction des Agréments. La plateforme de production reste en mode « sandbox » : fonds de test, aucun fonds client réel, SMS et e-mails réels.</p>
+
+  <h2>Avant la séance</h2>
+  <div class="scene">
+    <div class="grid">
+      <div class="cell"><b>La veille (mercredi)</b><ul class="check"><li>Support de présentation envoyé à la Direction des Agréments (24 h avant).</li><li>Répétition complète du déroulé sur www.bitripay.com avec les vrais téléphones.</li><li>SMTP (mot de passe support@bitripay.com) et Twilio renseignés, redéploiement fait, un code de connexion reçu sur un vrai téléphone.</li><li>Second administrateur créé ; les deux administrateurs ont leur second facteur et leur PIN.</li></ul></div>
+      <div class="cell"><b>Comptes de démonstration (console → Utilisateurs → Créer)</b><ul class="check"><li>Client A « Particulier » (téléphone de la délégation), palier 1.</li><li>Client B avec dossier KYC palier 2 déjà déposé, en attente de revue.</li><li>Marchand « Boutique Kinshasa » avec QR imprimé et lien de paiement.</li><li>Agent « Point de service Gombe » avec flotte préfinancée.</li><li>Un système tiers de test qui reçoit les webhooks (endpoint de réception).</li></ul></div>
+      <div class="cell"><b>Fonds de test</b><ul class="check"><li>Client A : 200 USD crédités par un administrateur, approuvés par le second.</li><li>Agent : flotte 1 000 USD et 500 000 CDF.</li><li>Compte de versement mobile money préfinancé pour la scène 4.</li><li>Numéros de collecte Orange, M-Pesa, Airtel, Afrimoney enregistrés avec le téléphone de collecte enrôlé.</li></ul></div>
+      <div class="cell"><b>Matériel</b><ul class="check"><li>Ordinateur présentateur (console + web), projecteur, connexion 4G de secours.</li><li>Deux téléphones : client (application ou web) et marchand ; le téléphone de collecte avec l'application de dispositif de versement.</li><li>QR du marchand imprimé, 20 000 CDF en espèces pour la scène agent.</li><li>Ce déroulé et le support ouverts dans deux onglets.</li></ul></div>
+    </div>
+    <p class="warn" style="margin-top:12px"><b>Règle de la séance :</b> aucune opération n'est lancée sans annoncer d'abord ce que l'on va voir ; si une scène échoue, on l'explique, on montre l'état dans la console et on passe à la suivante. Ne jamais forcer une action depuis la base de données.</p>
+  </div>
+
+  <h2>Scènes</h2>
+
+  <div class="scene">
+    <header><span class="t">25' – 30'</span><h3>Scène 1 · Ouverture de compte et connaissance client par paliers</h3><span class="tag">Client · Administrateur</span></header>
+    <div class="grid">
+      <div class="cell"><b>Écrans</b>www.bitripay.com sur le téléphone du client · console admin.bitripay.com → KYC</div>
+      <div class="cell"><b>Clics</b><ol><li>Téléphone : Créer un compte → nom, numéro de téléphone congolais, mot de passe.</li><li>Le code SMS arrive sur le téléphone montré à la délégation ; saisie du code.</li><li>Tableau de bord : palier 1 affiché avec ses limites (50 USD par opération, 200 par mois).</li><li>Console : KYC → dossier du client B → pièce et selfie → Approuver palier 2 (PIN administrateur).</li><li>Téléphone du client B : notification « KYC approuvé », limites relevées.</li></ol></div>
+      <div class="cell"><b>Résultat attendu</b>Compte créé en moins d'une minute, code SMS réel, limites de palier affichées et relevées après approbation, notification reçue.</div>
+    </div>
+    <p class="proof"><b>Prouve :</b> KYC par paliers conforme à la grille RDC, limites appliquées par le système, décision tracée au journal d'audit.</p>
+  </div>
+
+  <div class="scene">
+    <header><span class="t">30' – 36'</span><h3>Scène 2 · Entrée de fonds mobile money sans API et paiement marchand par QR</h3><span class="tag">Client · Marchand · Téléphone de collecte</span></header>
+    <div class="grid">
+      <div class="cell"><b>Écrans</b>Téléphone client → Ajouter de l'argent · téléphone de collecte (application dispositif) · téléphone marchand → Encaisser · console → Mobile money & preuves</div>
+      <div class="cell"><b>Clics</b><ol><li>Client : Ajouter de l'argent → Mobile money → Orange Money → 20 000 CDF → la plateforme affiche le numéro de collecte, la référence et les frais (0,70 %).</li><li>Client : envoi depuis son compte Orange Money vers le numéro de collecte (ou, en salle sans réseau opérateur, injection du SMS opérateur depuis la console → Simulateur, en l'annonçant).</li><li>Téléphone de collecte : SMS reçu, signé et transmis ; console → preuve « réglée », rapprochée par référence.</li><li>Client : solde CDF crédité, reçu horodaté.</li><li>Marchand : Encaisser → 5 000 CDF → QR dynamique affiché. Client : Scanner → marchand vérifié, montant, frais → PIN → payé.</li><li>Les deux téléphones montrent le reçu ; console → Transactions : les deux écritures et leurs frais.</li></ol></div>
+      <div class="cell"><b>Résultat attendu</b>Crédit uniquement après preuve signée rapprochée ; paiement QR instantané ; frais affichés avant validation et repris sur le reçu.</div>
+    </div>
+    <p class="proof"><b>Prouve :</b> intégration mobile money sans dépendance à une API opérateur, acceptation QR multi-usages, transparence tarifaire, grand livre équilibré.</p>
+  </div>
+
+  <div class="scene">
+    <header><span class="t">36' – 42'</span><h3>Scène 3 · Réseau d'agents et sortie de fonds à quatre yeux</h3><span class="tag">Client · Agent · Deux administrateurs</span></header>
+    <div class="grid">
+      <div class="cell"><b>Écrans</b>Téléphone client → Retirer chez un agent · téléphone agent → Caisse · console → Approbations (deux administrateurs)</div>
+      <div class="cell"><b>Clics</b><ol><li>Client : Retirer → chez un agent → 10 000 CDF → code de retrait affiché.</li><li>Agent : Caisse → Retrait → saisie du code → PIN → confirmation ; l'agent remet les espèces ; sa commission (0,40 %) apparaît dans son relevé de commissions.</li><li>Client : Retirer → vers mobile money → 50 USD → demande « en attente ».</li><li>Console (administrateur 1) : Approbations → proposer l'approbation (PIN). Console (administrateur 2) : approuver (PIN). Montrer que l'administrateur 1 ne peut pas approuver sa propre proposition.</li><li>Console → Liquidité : flotte de l'agent et du compte de versement mises à jour.</li></ol></div>
+      <div class="cell"><b>Résultat attendu</b>Retrait espèces confirmé par code, commission inscrite ; retrait externe bloqué tant qu'un second administrateur n'a pas approuvé.</div>
+    </div>
+    <p class="proof"><b>Prouve :</b> agents contrôlés et rémunérés sur transactions réalisées, séparation des fonctions, suivi de liquidité.</p>
+  </div>
+
+  <div class="scene">
+    <header><span class="t">42' – 48'</span><h3>Scène 4 · Interopérabilité par API (e-commerce, facturation, institutions)</h3><span class="tag">Marchand · Système tiers</span></header>
+    <div class="grid">
+      <div class="cell"><b>Écrans</b>www.bitripay.com → Développeurs · terminal ou outil d'API · récepteur de webhooks</div>
+      <div class="cell"><b>Clics</b><ol><li>Marchand : Développeurs → Créer une clé d'API à périmètre restreint (« payment_intents:write ») → secret affiché une seule fois.</li><li>Appel <code>POST /v1/payment_intents</code> avec montant, devise, opérateurs autorisés → réponse avec l'identifiant et l'URL de la page de paiement.</li><li>Client : ouvre la page de paiement hébergée, paie depuis son portefeuille (PIN).</li><li>Récepteur : webhook <code>payment_intent.succeeded</code> reçu avec signature ; vérification de la signature montrée.</li><li>Appel <code>GET /v1/payment_intents/{id}</code> : état « réglé » ; rejouer une livraison depuis le portail.</li></ol></div>
+      <div class="cell"><b>Résultat attendu</b>Intégration complète en trois appels, événements signés reçus par un système externe, documentation OpenAPI visible.</div>
+    </div>
+    <p class="proof"><b>Prouve :</b> interopérabilité par API avec plateformes e-commerce, systèmes de facturation et services institutionnels.</p>
+  </div>
+
+  <div class="scene">
+    <header><span class="t">48' – 55'</span><h3>Scène 5 · Contrôles LCB-FT, intégrité et supervision réglementaire</h3><span class="tag">Administrateur · Officier de conformité</span></header>
+    <div class="grid">
+      <div class="cell"><b>Écrans</b>Console → Risque & conformité · Contrôles · Supervision réglementaire</div>
+      <div class="cell"><b>Clics</b><ol><li>Risque & conformité → Sanctions : sources officielles et nombre d'entrées chargées ; tentative de création d'un bénéficiaire portant un nom listé → opération bloquée, dossier ouvert.</li><li>Utilisateurs → client B → Geler le solde CDF (motif « ordonnance ») → le client voit la notification obligatoire ; un transfert est refusé avec le motif.</li><li>Contrôles → Guardian : lancer le contrôle → « aucun écart » ; expliquer la mise en pause automatique.</li><li>Supervision réglementaire → rapport du jour : volumes, canaux, KYC, LCB-FT, couverture des réserves, intégrité.</li><li>Exporter le journal (CSV) → afficher le manifeste : nombre de lignes, empreinte SHA-256, chaîne d'événements intacte ; montrer la ligne d'audit de l'export.</li></ol></div>
+      <div class="cell"><b>Résultat attendu</b>Blocage sanctions démontré, gel effectif et notifié, contrôle d'intégrité vert, rapport temps réel et export normalisé avec manifeste.</div>
+    </div>
+    <p class="proof"><b>Prouve :</b> production de rapports transactionnels en temps réel pour contrôle, conformité et audit ; centralisation normalisée des journaux pour la supervision.</p>
+  </div>
+
+  <div class="scene">
+    <header><span class="t">55' – 60'</span><h3>Clôture · Conditions de lancement et questions</h3><span class="tag">Direction</span></header>
+    <div class="grid">
+      <div class="cell"><b>Écrans</b>Console → Contrôles → Liste de mise en service</div>
+      <div class="cell"><b>À montrer</b><ol><li>Les points encore ouverts (programme de monnaie électronique, corridor, deuxième administrateur…) et le bouton « Go live » refusé par la plateforme.</li><li>Feuille de route en trois phases après agrément.</li></ol></div>
+      <div class="cell"><b>Message</b>« La plateforme est prête techniquement ; elle reste en sandbox et le passage en live est verrouillé par le système jusqu'à l'enregistrement de l'agrément. »</div>
+    </div>
+  </div>
+
+  <h2>Si quelque chose échoue</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Symptôme</th><th>Que faire en séance</th></tr>
+    <tr><td>Le code SMS n'arrive pas</td><td>Dire que le canal SMS est opéré par un fournisseur tiers ; montrer le code dans la console → Communication → Livraisons (statut de livraison) ; continuer avec le compte préparé.</td></tr>
+    <tr><td>Le SMS opérateur n'arrive pas sur le téléphone de collecte</td><td>Annoncer et injecter le SMS depuis la console → Simulateur ; expliquer que le même rapprochement s'applique.</td></tr>
+    <tr><td>Une opération est refusée</td><td>Lire le motif affiché (limite, KYC, sanctions, montant hors bornes) : c'est un contrôle qui fonctionne. Le montrer dans le journal d'audit.</td></tr>
+    <tr><td>Guardian signale un écart</td><td>Montrer la pause automatique des mouvements d'argent ; c'est le comportement attendu. Ne pas lever la pause en séance.</td></tr>
+    <tr><td>Perte de connexion</td><td>Basculer sur la 4G ; la version Lite (www.bitripay.com/lite) fonctionne sur connexion lente.</td></tr>
+  </table></div>
+
+  <h2>Trois choses à ne pas dire</h2>
+  <ul>
+    <li>Que la plateforme est « inviolable » ou « 100 % sécurisée » : dire qu'elle est testée, surveillée et corrigée en continu.</li>
+    <li>Que les fonds sont déjà cantonnés : dire que le mécanisme est en place et sera activé avec le compte de cantonnement de l'agrément.</li>
+    <li>Que les cartes virtuelles sont disponibles : elles sont prévues pour une phase ultérieure, sous réserve d'agréments complémentaires.</li>
+  </ul>
+</main>

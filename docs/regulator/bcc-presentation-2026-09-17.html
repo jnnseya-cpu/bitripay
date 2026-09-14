@@ -1,0 +1,351 @@
+<title>BitriPay · Présentation BCC</title>
+<meta name="description" content="Support de présentation de la solution digitale BitriPay à la Direction des Agréments de la Banque Centrale du Congo, séance du jeudi 17 septembre 2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ink: #14213d; --ink-2: #3d4a63; --muted: #6b7690; --line: #d8dde8; --paper: #f7f8fb; --card: #ffffff;
+    --navy: #0b2a6f; --navy-2: #12408f; --gold: #f5b31c; --gold-ink: #7a5200; --green: #0b6e4f; --red: #b42318; --amber: #b7791f;
+    --soft-navy: #e8eefb; --soft-gold: #fff4d6; --soft-green: #e3f4ec; --soft-red: #fde8e6; --soft-amber: #fbf0dc;
+    --fill: #fff2cc; --fill-ink: #7a5200;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --ink: #e9edf6; --ink-2: #c3cbdc; --muted: #8e99b3; --line: #2a3350; --paper: #0d1324; --card: #141c33;
+    --navy: #8fb0ff; --navy-2: #6f96f2; --gold: #f5b31c; --gold-ink: #ffd377; --green: #4fc39a; --red: #ff8a80; --amber: #f0b45a;
+    --soft-navy: #1b2748; --soft-gold: #3a2e12; --soft-green: #143126; --soft-red: #3b1a17; --soft-amber: #3a2c14;
+    --fill: #3a2e12; --fill-ink: #ffd377;
+  } }
+  :root[data-theme="dark"] {
+    --ink: #e9edf6; --ink-2: #c3cbdc; --muted: #8e99b3; --line: #2a3350; --paper: #0d1324; --card: #141c33;
+    --navy: #8fb0ff; --navy-2: #6f96f2; --gold: #f5b31c; --gold-ink: #ffd377; --green: #4fc39a; --red: #ff8a80; --amber: #f0b45a;
+    --soft-navy: #1b2748; --soft-gold: #3a2e12; --soft-green: #143126; --soft-red: #3b1a17; --soft-amber: #3a2c14;
+    --fill: #3a2e12; --fill-ink: #ffd377;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.5; padding-inline: 16px; padding-block: 0 48px; }
+  .deck { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; padding-top: 24px; }
+  .slide { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 32px 36px 24px; position: relative; page-break-after: always; break-after: page; }
+  .slide::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--navy); border-radius: 6px 0 0 6px; }
+  .slide h1, .slide h2 { font-family: 'IBM Plex Serif', Georgia, serif; text-wrap: balance; color: var(--navy); margin: 0 0 6px; }
+  .slide h1 { font-size: 34px; line-height: 1.15; }
+  .slide h2 { font-size: 26px; line-height: 1.2; }
+  .slide h3 { font-size: 15px; letter-spacing: .04em; text-transform: uppercase; color: var(--gold-ink); margin: 18px 0 6px; }
+  .eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+  .lead { font-size: 17px; color: var(--ink-2); max-width: 70ch; }
+  p { margin: 6px 0; }
+  ul { margin: 6px 0 6px 18px; padding: 0; } li { margin: 3px 0; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+  .box { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; background: var(--paper); }
+  .box h4 { margin: 0 0 6px; font-size: 14px; color: var(--navy); }
+  .kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 12px 0; }
+  .kpi div { border-top: 3px solid var(--gold); padding: 8px 2px 0; }
+  .kpi b { display: block; font-size: 24px; font-family: 'IBM Plex Serif', serif; color: var(--navy); font-variant-numeric: tabular-nums; }
+  .kpi span { font-size: 12.5px; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; margin: 8px 0; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .table-wrap { overflow-x: auto; }
+  .fill { background: var(--fill); color: var(--fill-ink); padding: 0 5px; border-radius: 3px; font-weight: 600; border-bottom: 1px dashed var(--gold-ink); }
+  .tag { display: inline-block; font-size: 11.5px; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
+  .tag.ok { background: var(--soft-green); color: var(--green); } .tag.warn { background: var(--soft-amber); color: var(--amber); } .tag.bad { background: var(--soft-red); color: var(--red); } .tag.navy { background: var(--soft-navy); color: var(--navy); }
+  .heat td.h1 { background: var(--soft-green); } .heat td.h2 { background: var(--soft-amber); } .heat td.h3 { background: var(--soft-red); }
+  .foot { display: flex; justify-content: space-between; margin-top: 18px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+  code, .mono { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .cover { background: linear-gradient(135deg, var(--card) 0%, var(--soft-navy) 100%); }
+  .cover .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+  .cover .mark { width: 42px; height: 42px; border-radius: 10px; background: var(--navy); display: grid; place-items: center; color: #fff; font-family: 'IBM Plex Serif', serif; font-weight: 600; font-size: 20px; }
+  .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 22px; }
+  .meta div { border-left: 3px solid var(--gold); padding-left: 10px; font-size: 13.5px; }
+  .meta b { display: block; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
+  .toc { counter-reset: toc; list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 6px 22px; }
+  .toc li { counter-increment: toc; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .toc li::before { content: counter(toc, decimal-leading-zero); font-family: 'IBM Plex Mono', monospace; color: var(--gold-ink); margin-right: 10px; font-size: 12px; }
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 0; }
+  .flow div { background: var(--soft-navy); border-radius: 6px; padding: 8px 10px; font-size: 13px; position: relative; }
+  .flow div b { display: block; color: var(--navy); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  pre.mermaid { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 10px; overflow-x: auto; }
+  .note { font-size: 12.5px; color: var(--muted); }
+  @media print { body { background: #fff; padding: 0; } .deck { gap: 0; } .slide { border: 0; border-radius: 0; min-height: 96vh; } }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="deck">
+
+<section class="slide cover">
+  <div class="brand"><div class="mark">B</div><div><div style="font-family:'IBM Plex Serif',serif;font-size:20px;font-weight:600;color:var(--navy)">BitriPay</div><div class="note">www.bitripay.com · api.bitripay.com · admin.bitripay.com</div></div></div>
+  <div class="eyebrow">Banque Centrale du Congo · Direction des Agréments</div>
+  <h1>Présentation de la solution digitale BitriPay</h1>
+  <p class="lead">Support remis au titre de la demande d'autorisation de la solution digitale BitriPay en qualité d'agrégateur de paiement. Il couvre les quatre points demandés par la Direction des Agréments : la solution, les services, la clientèle, la tarification et les modifications apportées ; le dispositif de contrôle interne et de LCB-FT avec la cartographie des risques ; les spécifications techniques et fonctionnelles ; la démonstration.</p>
+  <div class="meta">
+    <div><b>Séance</b>Jeudi 17 septembre 2026, 12h10 – 13h10</div>
+    <div><b>Lieu</b>Salle des réunions de la Direction de Suivi des Opérations de Change, 2ᵉ niveau, immeuble DUNGU, avenue Colonel Ebeya, Kinshasa</div>
+    <div><b>Société requérante</b><span class="fill">Dénomination sociale — à compléter</span> · RCCM <span class="fill">à compléter</span> · Id. Nat. <span class="fill">à compléter</span></div>
+    <div><b>Délégation (6 personnes max.)</b><span class="fill">Noms et fonctions — à compléter</span></div>
+    <div><b>Contact</b>support@bitripay.com</div>
+    <div><b>Version du support</b>Remise 24 h avant la séance · plateforme en mode « sandbox » jusqu'à l'agrément</div>
+  </div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>Confidentiel — destiné à la Direction des Agréments</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">Sommaire</div>
+  <h2>Les points demandés par la Direction des Agréments, dans l'ordre</h2>
+  <ol class="toc">
+    <li>La solution digitale en bref et le modèle d'agrégateur</li>
+    <li>Les services fournis</li>
+    <li>La typologie de la clientèle et les paliers de connaissance client</li>
+    <li>La tarification : grille des coûts, commissions agents, analyse concurrentielle</li>
+    <li>Les modifications apportées à la solution</li>
+    <li>Le dispositif de contrôle interne</li>
+    <li>Le dispositif de lutte contre le blanchiment des capitaux et le financement du terrorisme</li>
+    <li>La cartographie des risques</li>
+    <li>Les spécifications techniques (schéma d'architecture)</li>
+    <li>Les spécifications fonctionnelles (flux)</li>
+    <li>Le reporting temps réel et le journal de supervision réglementaire</li>
+    <li>La démonstration : déroulé de la séance</li>
+    <li>Conditions de lancement et feuille de route</li>
+  </ol>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>2</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">1 · La solution</div>
+  <h2>BitriPay est un agrégateur de paiement digital : un compte, tous les canaux</h2>
+  <p class="lead">BitriPay donne à un particulier, un marchand, un agent ou une institution un compte de monnaie électronique utilisable par QR code, par mobile money, par virement, par carte et par API. Le mouvement d'argent entre comptes BitriPay est entièrement digital et instantané ; l'entrée et la sortie de fonds passent par les opérateurs et banques existants, sans dépendre d'une interface technique de ces opérateurs.</p>
+  <div class="kpi">
+    <div><b>4</b><span>opérateurs mobile money RDC : M-Pesa (Vodacom), Orange Money, Airtel Money, Afrimoney (Africell)</span></div>
+    <div><b>96</b><span>points d'API partenaires documentés (OpenAPI) pour l'e-commerce, la facturation et les institutions</span></div>
+    <div><b>11</b><span>langues d'interface dont français, lingala, kikongo, tshiluba, swahili</span></div>
+    <div><b>USD · CDF</b><span>comptes multi-devises, change au taux affiché avec marge déclarée</span></div>
+  </div>
+  <div class="cols">
+    <div class="box"><h4>Ce que « agrégateur » veut dire chez BitriPay</h4><ul><li>Un seul point d'acceptation (QR multi-usages, lien de paiement, API) et plusieurs rails de règlement derrière : portefeuille BitriPay, mobile money, banque, carte, agents.</li><li>Le choix du rail se fait par un routeur (« Smart Route ») selon le pays, la devise, la santé du rail et la politique du marchand.</li><li>Chaque opération a un identifiant unique, une trace de bout en bout et un état canonique (créée, en attente, capturée, réglée, remboursée, contestée).</li></ul></div>
+    <div class="box"><h4>Sans API opérateur : le modèle « numéro de collecte + preuve signée »</h4><ul><li>Pour recharger, le client envoie le montant au numéro de collecte BitriPay de son opérateur avec la référence affichée.</li><li>Le SMS de confirmation de l'opérateur est reçu sur un téléphone de collecte enrôlé, signé cryptographiquement (Ed25519) et transmis à la plateforme, qui le rapproche de la référence attendue.</li><li>Un doute (montant, doublon, référence) va en vérification manuelle à quatre yeux ; rien n'est crédité sur une preuve incertaine.</li></ul></div>
+  </div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>3</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">2 · Les services fournis</div>
+  <h2>Un catalogue complet, activable service par service depuis la console</h2>
+  <div class="cols">
+    <div class="box"><h4>Paiements et transferts</h4><ul><li>Transfert d'argent entre comptes (par identifiant @tag, téléphone ou QR)</li><li>Paiement marchand par QR code multi-usages (statique, dynamique, hors-ligne signé, comptoir)</li><li>Demande de paiement et lien de paiement (Pay-Link) avec page de paiement hébergée</li><li>Paiements récurrents et abonnements, paiements fractionnés (« split »)</li></ul></div>
+    <div class="box"><h4>Entrée et sortie de fonds (Money In / Money Out)</h4><ul><li>Mobile money via numéros de collecte (4 opérateurs RDC)</li><li>Virement bancaire avec référence, carte bancaire (via processeur agréé)</li><li>Réseau d'agents : dépôt et retrait d'espèces avec code de confirmation, flotte d'agents suivie</li><li>Retraits vers mobile money ou banque avec validation à quatre yeux</li></ul></div>
+    <div class="box"><h4>Services du quotidien (RDC)</h4><ul><li>Paiement de factures : SNEL, REGIDESO, Canal+, DStv, StarTimes, Vodanet, Orange Internet, Liquid Home, DGI</li><li>Recharge de crédit : Vodacom, Orange, Airtel, Africell</li><li>Cartes cadeaux en CDF, épargne par objectifs, relevés de compte au format bancaire</li></ul></div>
+    <div class="box"><h4>International et institutionnel</h4><ul><li>Transferts internationaux (remittance) par corridors déclarés, réglés en mobile money ou par agent</li><li>API partenaires : intentions de paiement, sessions de paiement, liens, remboursements, versements, webhooks signés</li><li>Références citoyennes et QR pour administrations et services institutionnels, avec export d'audit</li><li>Cartes virtuelles : service prévu pour une phase ultérieure, sous réserve d'agréments complémentaires</li></ul></div>
+  </div>
+  <p class="note">Canaux d'accès : application web (PWA), applications mobiles Android et iOS, USSD et SMS pour les téléphones basiques, version « Lite » sans JavaScript pour les connexions lentes, WhatsApp pour les notifications.</p>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>4</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">3 · Typologie de la clientèle</div>
+  <h2>Quatre profils, chacun avec son palier de connaissance client et ses plafonds</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Profil</th><th>Qui</th><th>Palier requis</th><th>Justificatifs</th><th class="num">Plafonds (USD, RDC)</th></tr>
+    <tr><td><b>Particuliers</b></td><td>Utilisateurs du portefeuille, diaspora recevant des fonds</td><td>Palier 1 à l'ouverture, 2 puis 3 sur justificatifs</td><td>P1 : identité déclarée et téléphone/e-mail vérifiés · P2 : pièce d'identité + selfie · P3 : justificatif de domicile de moins de 90 jours</td><td class="num">P1 : 50 / opération, 50 / jour, 200 / mois, solde 500<br>P2 : 500 / 500 / 2 000, solde 3 000<br>P3 : 5 000 / 5 000 / 20 000, solde 20 000</td></tr>
+    <tr><td><b>Marchands</b></td><td>Commerces, e-commerce, prestataires de services</td><td>Palier 4 (KYB) au-delà d'un volume mensuel de 10 000 USD</td><td>Raison sociale, RCCM, adresse, dirigeants, activité (MCC), volume attendu, licence le cas échéant</td><td class="num">Selon dossier KYB ; sans plafond forfaitaire</td></tr>
+    <tr><td><b>Agents</b></td><td>Points de dépôt et retrait d'espèces, points de paiement des transferts</td><td>KYC vérifié + diligence agent avant toute activité de caisse</td><td>Identité, contrat d'agent, comptes de flotte déclarés, limites de caisse journalières</td><td class="num">Limites de caisse par agent, flotte suivie en temps réel</td></tr>
+    <tr><td><b>Institutions et entreprises</b></td><td>Administrations, facturiers, plateformes e-commerce, employeurs (paie en masse)</td><td>Palier 4 (KYB) + clés d'API à périmètre restreint</td><td>Dossier KYB, convention de services, clés d'API nominatives et révocables</td><td class="num">Selon convention ; versements en masse validés à quatre yeux</td></tr>
+  </table></div>
+  <p class="note">Les plafonds sont ceux paramétrés par défaut pour la RDC dans la plateforme (grille des paliers de monnaie électronique) et se modifient depuis la console sans redéploiement ; ils seront alignés sur les instructions de la BCC applicables à l'agrément délivré.</p>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>5</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">4 · Tarification</div>
+  <h2>Grille des coûts par type de transaction</h2>
+  <p class="note">Frais BitriPay en pourcentage du montant, sans frais fixe (sauf l'émission de carte virtuelle). Montants en USD ou contre-valeur. Les commissions agents sont prélevées sur les frais BitriPay, jamais en plus pour le client.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Opération</th><th class="num">Frais BitriPay</th><th class="num">Frais fixe</th><th class="num">Minimum</th><th class="num">Maximum</th><th class="num">Commission agent</th></tr>
+    <tr><td>Transfert d'argent</td><td class="num">0,75 %</td><td class="num">—</td><td class="num">1,00</td><td class="num">10 000,00</td><td class="num">0,50 %</td></tr>
+    <tr><td>Paiement de factures</td><td class="num">0,50 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">0,20 %</td></tr>
+    <tr><td>Recharge mobile</td><td class="num">0,75 %</td><td class="num">—</td><td class="num">15,00</td><td class="num">100,00</td><td class="num">0,50 %</td></tr>
+    <tr><td>Paiement marchand (QR, comptoir)</td><td class="num">0,80 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+    <tr><td>Demande de paiement</td><td class="num">0,80 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+    <tr><td>Lien de paiement (Pay-Link)</td><td class="num">0,70 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+    <tr><td>Money In (entrée de fonds)</td><td class="num">0,70 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">0,40 %</td></tr>
+    <tr><td>Money Out (sortie de fonds)</td><td class="num">0,70 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">0,40 %</td></tr>
+    <tr><td>Transfert international (remittance)</td><td class="num">1,00 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">0,40 %</td></tr>
+    <tr><td>Carte virtuelle — émission (phase ultérieure)</td><td class="num">2,00 %</td><td class="num">2,00</td><td class="num">100,00</td><td class="num">—</td><td class="num">—</td></tr>
+    <tr><td>Carte virtuelle — recharge</td><td class="num">1,00 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+    <tr><td>Cartes cadeaux</td><td class="num">1,00 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+    <tr><td>Change de devises</td><td class="num">0,80 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">0,50 %</td></tr>
+  </table></div>
+  <div class="cols" style="margin-top:10px">
+    <div class="box"><h4>Analyse concurrentielle (commission moyenne)</h4><table><tr><th>Acteur</th><th class="num">Commission</th></tr><tr><td>Mobile Money RDC</td><td class="num">2 % – 2,5 % + TVA</td></tr><tr><td>Visa / Visa Pay</td><td class="num">~1 % – 2,5 %</td></tr><tr><td><b>BitriPay</b></td><td class="num"><b>0,7 % – 1 %</b></td></tr></table></div>
+    <div class="box"><h4>Commissions agents, évolution, transparence</h4><ul><li>Commissions variables par opération, plafonnées par les frais, contractuellement définies, versées sur transactions effectivement réalisées ; chaque commission est inscrite dans un grand livre de commissions avec relevé mensuel.</li><li>BitriPay peut ajuster la grille (marché, exigences réglementaires, conditions préférentielles pour partenaires institutionnels) ; toute modification fait l'objet d'une communication préalable aux utilisateurs concernés (événement « changement de tarification » du moteur de communication).</li><li>Chaque frais est affiché avant validation, tracé sur le relevé de transactions ligne par ligne (frais, taxe sur frais, frais du rail) et consultable par le marchand sur son portail.</li></ul></div>
+  </div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>6</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">5 · Modifications apportées</div>
+  <h2>Ce qui a changé depuis le dépôt du dossier</h2>
+  <p class="note">À ajuster selon le contenu du dossier initial déposé auprès de la Direction des Agréments. Les évolutions ci-dessous sont celles livrées sur la plateforme en 2026.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Domaine</th><th>Modification</th><th>Effet pour le régulateur</th></tr>
+    <tr><td>Tarification</td><td>Grille des coûts publiée dans la plateforme (pourcentages, bornes de montant, commissions agents), appliquée par le moteur de frais et affichée avant chaque opération</td><td>Transparence tarifaire vérifiable en séance</td></tr>
+    <tr><td>Supervision réglementaire</td><td>Journal normalisé des opérations exportable (CSV/JSON) avec manifeste d'intégrité SHA-256 et rapport de supervision temps réel</td><td>Centralisation normalisée des journaux d'opérations</td></tr>
+    <tr><td>Marché RDC</td><td>Franc congolais activé par défaut ; catalogues de facturiers et opérateurs RDC ; 4 opérateurs mobile money dont Afrimoney</td><td>Solution ancrée dans l'écosystème local</td></tr>
+    <tr><td>Communication</td><td>Moteur d'événements de communication (178 événements, e-mail, in-app, SMS, push, WhatsApp) avec notices obligatoires non désactivables</td><td>Information systématique du client (frais, sécurité, conformité)</td></tr>
+    <tr><td>Mise en service</td><td>Liste de contrôle de mise en service : la plateforme refuse elle-même le passage en mode « live » tant qu'un point réglementaire est ouvert</td><td>Pas de fonds clients réels avant l'agrément</td></tr>
+    <tr><td>Hébergement</td><td>Déploiement en production sur serveur dédié, chiffrement TLS, sauvegardes quotidiennes conservées 30 jours</td><td>Continuité et récupération</td></tr>
+  </table></div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>7</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">6 · Contrôle interne</div>
+  <h2>Un dispositif de contrôle intégré à la plateforme, pas seulement à la procédure</h2>
+  <div class="cols">
+    <div class="box"><h4>Gouvernance et séparation des fonctions</h4><ul><li>Rôles et permissions nominatifs pour les administrateurs (approbations, émission, trésorerie, conformité, KYC, rapports, support).</li><li>Principe des quatre yeux (« maker-checker ») sur les crédits administratifs, l'émission de monnaie électronique, les retraits, les vérifications manuelles et la mise en service : l'auteur ne peut jamais approuver sa propre proposition.</li><li>Authentification forte des administrateurs : mot de passe, second facteur obligatoire, code PIN de « step-up » pour toute action sensible.</li></ul></div>
+    <div class="box"><h4>Intégrité comptable</h4><ul><li>Grand livre à double entrée : chaque opération débite et crédite des comptes internes, somme nulle par devise, jamais de solde négatif client.</li><li>« Guardian » : contrôle automatique des invariants (équilibre, soldes dérivés, remboursements, crédits ambigus) ; en cas d'écart la plateforme se met d'elle-même en pause des mouvements d'argent jusqu'à levée par un administrateur.</li><li>Journal d'événements chaîné par empreintes (hash) : toute altération a posteriori est détectable.</li></ul></div>
+    <div class="box"><h4>Monnaie électronique et fonds clients</h4><ul><li>Programmes de monnaie électronique par devise avec réserves cantonnées déclarées ; l'émission est refusée au-delà des réserves confirmées (règle de couverture).</li><li>Réconciliation quotidienne réserves / encours clients ; rapport de couverture disponible en temps réel.</li><li>Réconciliation à trois voies opérations / preuves de rail / grand livre ; les écarts vont dans un atelier d'exceptions.</li></ul></div>
+    <div class="box"><h4>Traçabilité et continuité</h4><ul><li>Journal d'audit de toutes les actions d'administration (qui, quoi, quand, adresse, résultat).</li><li>Relevés de compte au format bancaire, statements de règlement marchands avec empreinte.</li><li>Sauvegardes quotidiennes conservées 30 jours, procédure de restauration documentée, indicateurs de service (SLO) surveillés.</li></ul></div>
+  </div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>8</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">7 · LCB-FT</div>
+  <h2>Connaissance client, filtrage, surveillance, déclaration</h2>
+  <div class="cols">
+    <div class="box"><h4>Connaissance client (KYC / KYB)</h4><ul><li>Paliers 1 à 4 selon la grille RDC (page 5), avec limites par opération, par jour, par mois et plafond de solde appliquées automatiquement.</li><li>Vérification d'identité : pièce + selfie (palier 2), justificatif de domicile de moins de 90 jours (palier 3), dossier KYB avec dirigeants (palier 4).</li><li>Aucun retrait vers l'extérieur sans KYC vérifié ; aucun agent en activité sans diligence validée.</li></ul></div>
+    <div class="box"><h4>Filtrage des sanctions et des personnes exposées</h4><ul><li>Listes officielles chargées et rafraîchies automatiquement : OFAC (SDN et consolidée), OFSI Royaume-Uni, Conseil de sécurité des Nations unies, Union européenne — environ 74 000 entrées en production.</li><li>Filtrage à l'ouverture de compte et avant chaque mouvement (« pre-commit ») ; une correspondance bloque l'opération et ouvre un dossier.</li><li>Scoring de risque incluant les personnes politiquement exposées, les pays et contreparties à risque.</li></ul></div>
+    <div class="box"><h4>Surveillance des opérations</h4><ul><li>Moteur de règles et de vélocité : fréquence, montants, nouveaux bénéficiaires (délai de réflexion), changement de compte de règlement (protection renforcée), comportement des agents.</li><li>Seuil de déclaration de l'origine des fonds paramétrable ; les opérations financées par carte au-dessus d'un seuil vont en revue manuelle avant versement.</li><li>Gel d'un solde ou d'un compte sur décision (ordonnance), avec motif tracé et notification obligatoire.</li></ul></div>
+    <div class="box"><h4>Dossiers et déclarations</h4><ul><li>Gestion de dossiers de conformité : affectation, escalade, décision par une personne différente de l'auteur (pas d'action, levée, déclaration de soupçon transmise, compte restreint, compte clôturé).</li><li>Projet de déclaration de soupçon pré-rempli à partir des faits du dossier ; la plateforme ne dépose jamais une déclaration à la place de l'officier de conformité.</li><li>Conservation des enregistrements : opérations, preuves, décisions et journal d'audit conservés et exportables pour la CENAREF et la BCC.</li></ul></div>
+  </div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>9</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">8 · Cartographie des risques</div>
+  <h2>Risques identifiés, probabilité, impact et dispositif de maîtrise</h2>
+  <div class="table-wrap"><table class="heat">
+    <tr><th>Risque</th><th>Probabilité</th><th>Impact</th><th>Résiduel</th><th>Dispositif de maîtrise</th><th>Responsable</th></tr>
+    <tr><td>Blanchiment / financement du terrorisme</td><td class="h2">Moyenne</td><td class="h3">Élevé</td><td class="h1">Faible</td><td>KYC par paliers, filtrage sanctions pre-commit, règles de vélocité, dossiers et déclarations, seuils d'origine des fonds</td><td>Officier de conformité</td></tr>
+    <tr><td>Fraude et usurpation de compte</td><td class="h2">Moyenne</td><td class="h2">Moyen</td><td class="h1">Faible</td><td>2FA, PIN, clés d'accès (passkeys), délai de réflexion sur nouveaux bénéficiaires, scoring fraude, gel immédiat</td><td>Sécurité</td></tr>
+    <tr><td>Erreur ou fraude interne</td><td class="h1">Faible</td><td class="h3">Élevé</td><td class="h1">Faible</td><td>Quatre yeux sur tout crédit et toute émission, permissions minimales, journal d'audit, journal chaîné</td><td>Direction</td></tr>
+    <tr><td>Fonds clients non couverts</td><td class="h1">Faible</td><td class="h3">Élevé</td><td class="h1">Faible</td><td>Réserves cantonnées, règle de couverture bloquante, réconciliation quotidienne, rapport de couverture temps réel</td><td>Trésorerie</td></tr>
+    <tr><td>Liquidité des agents et des comptes de versement</td><td class="h2">Moyenne</td><td class="h2">Moyen</td><td class="h2">Moyen</td><td>Suivi de flotte, prévision, demandes de réapprovisionnement à quatre yeux, file d'attente des versements</td><td>Opérations</td></tr>
+    <tr><td>Preuve de paiement incertaine (rail sans API)</td><td class="h2">Moyenne</td><td class="h2">Moyen</td><td class="h1">Faible</td><td>Preuves signées, rapprochement par référence, doublons rejetés, vérification manuelle, suspense jamais crédité</td><td>Opérations</td></tr>
+    <tr><td>Sécurité des systèmes d'information</td><td class="h2">Moyenne</td><td class="h3">Élevé</td><td class="h2">Moyen</td><td>TLS, secrets hors code, chiffrement des données de cartes, limitation de débit, tests automatisés, revue de sécurité continue</td><td>Sécurité</td></tr>
+    <tr><td>Indisponibilité / perte de données</td><td class="h1">Faible</td><td class="h3">Élevé</td><td class="h2">Moyen</td><td>Sauvegardes quotidiennes 30 jours, restauration documentée, surveillance SLO, mode dégradé (file d'intentions)</td><td>Exploitation</td></tr>
+    <tr><td>Risque de change</td><td class="h2">Moyenne</td><td class="h2">Moyen</td><td class="h1">Faible</td><td>Taux affiché avec marge déclarée, cotations verrouillées à durée limitée, exposition des contrats à terme plafonnée</td><td>Trésorerie</td></tr>
+    <tr><td>Protection des données personnelles</td><td class="h1">Faible</td><td class="h2">Moyen</td><td class="h1">Faible</td><td>Pseudonymisation des exports, accès nominatifs, masquage des contacts, conservation encadrée</td><td>Conformité</td></tr>
+    <tr><td>Réglementaire (agrément, instructions)</td><td class="h2">Moyenne</td><td class="h3">Élevé</td><td class="h2">Moyen</td><td>Mode sandbox verrouillé tant que l'agrément n'est pas enregistré ; paramètres alignables sans redéploiement</td><td>Direction</td></tr>
+  </table></div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>10</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">9 · Spécifications techniques</div>
+  <h2>Architecture de la plateforme</h2>
+  <pre class="mermaid">
+flowchart LR
+  subgraph Clients
+    W[Application web PWA<br/>www.bitripay.com]
+    M[Applications mobiles<br/>Android / iOS]
+    U[USSD · SMS · Lite<br/>téléphones basiques]
+    P[Partenaires<br/>API v1 · webhooks signés]
+    C[Console d'administration<br/>admin.bitripay.com]
+  end
+  E[Passerelle TLS<br/>certificats automatiques] --> A
+  W --> E
+  M --> E
+  U --> E
+  P --> E
+  C --> E
+  subgraph Plateforme["Plateforme BitriPay (api.bitripay.com)"]
+    A[API et moteur de paiement<br/>intentions · routeur · ledger double entrée]
+    R[Risque et conformité<br/>KYC · sanctions · règles · dossiers]
+    G[Guardian · journal chaîné<br/>réconciliation · supervision]
+    N[Communication<br/>e-mail · SMS · push · WhatsApp]
+  end
+  A --- R
+  A --- G
+  A --- N
+  A --> D[(Base de données<br/>chiffrement des données sensibles<br/>sauvegardes quotidiennes 30 j)]
+  subgraph Rails["Rails de règlement (sans API opérateur)"]
+    T[Téléphones de collecte enrôlés<br/>SMS opérateur signés Ed25519]
+    B[Banques · virements référencés]
+    K[Processeurs carte agréés]
+    AG[Agents et dispositifs de versement]
+  end
+  T --> A
+  B --> A
+  K --> A
+  AG --> A
+  </pre>
+  <div class="cols">
+    <div class="box"><h4>Composants</h4><ul><li>API et moteur de paiement : Node.js / TypeScript, grand livre à double entrée sur base SQLite en mode WAL, migrations versionnées.</li><li>Interfaces : web (React, PWA installable), mobile (Expo/React Native), console d'administration, version Lite servie par le serveur.</li><li>Hébergement : serveur dédié (VPS) avec conteneurs isolés, passerelle TLS, sauvegardes quotidiennes ; secrets injectés par l'environnement, jamais dans le code.</li></ul></div>
+    <div class="box"><h4>Sécurité technique</h4><ul><li>TLS 1.2+ et HSTS, en-têtes de sécurité, limitation de débit par route, clés d'idempotence sur tout mouvement d'argent.</li><li>Mots de passe hachés, second facteur (TOTP) et clés d'accès (passkeys), PIN de transaction, sessions révocables.</li><li>Données de cartes chiffrées, CVV jamais stocké ; webhooks partenaires signés (HMAC et clé Ed25519 de la plateforme) avec protection anti-rejeu.</li><li>Tests automatisés : 305 tests d'intégration exécutés à chaque livraison (grand livre, conformité, corridors, API).</li></ul></div>
+  </div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>11</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">10 · Spécifications fonctionnelles</div>
+  <h2>Les flux principaux, étape par étape</h2>
+  <h3>Entrée de fonds par mobile money (sans API opérateur)</h3>
+  <div class="flow"><div><b>1</b>Le client choisit l'opérateur et le montant ; la plateforme affiche le numéro de collecte, la référence et les frais.</div><div><b>2</b>Le client envoie le montant depuis son compte mobile money avec la référence.</div><div><b>3</b>Le SMS de confirmation est reçu sur le téléphone de collecte enrôlé, signé et transmis.</div><div><b>4</b>Rapprochement automatique montant / référence / doublon ; incertitude → vérification à quatre yeux.</div><div><b>5</b>Crédit du portefeuille, notification, écriture au grand livre et au journal chaîné.</div></div>
+  <h3>Paiement marchand par QR multi-usages</h3>
+  <div class="flow"><div><b>1</b>Le marchand génère un QR (statique, dynamique avec montant, ou hors-ligne signé) conforme EMVCo avec extension signée BitriPay.</div><div><b>2</b>Le client scanne, voit le marchand vérifié, le montant et les frais, confirme par PIN ou biométrie.</div><div><b>3</b>Débit / crédit instantané au grand livre ; reçu horodaté aux deux parties.</div><div><b>4</b>Le marchand suit ses encaissements, règlements et remboursements ; API et webhooks pour ses systèmes.</div></div>
+  <h3>Sortie de fonds et versements</h3>
+  <div class="flow"><div><b>1</b>Demande de retrait vers mobile money, banque ou agent ; contrôle KYC, limites et sanctions.</div><div><b>2</b>Fonds bloqués (hold) ; validation à quatre yeux au-dessus des seuils.</div><div><b>3</b>Instruction de versement routée vers un compte de versement ou un agent avec liquidité.</div><div><b>4</b>Exécution, preuve de l'opérateur rapprochée, clôture ; en cas d'échec, libération des fonds et notification.</div></div>
+  <h3>Interopérabilité par API (e-commerce, facturation, institutions)</h3>
+  <div class="flow"><div><b>1</b>Clé d'API nominative à périmètre restreint créée depuis le portail développeur.</div><div><b>2</b>Création d'une intention de paiement (montant, devise, opérateurs autorisés, expiration).</div><div><b>3</b>Page de paiement hébergée ou intégration embarquée ; état suivi en temps réel.</div><div><b>4</b>Webhook signé à chaque changement d'état, relivraison avec rejeu contrôlé, reçus et remboursements par API.</div></div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>12</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">11 · Reporting et supervision</div>
+  <h2>Rapports transactionnels en temps réel et journal de supervision réglementaire</h2>
+  <div class="cols">
+    <div class="box"><h4>Rapport de supervision temps réel</h4><ul><li>Volumes par type, statut et devise ; taux d'exception ; activité horaire sur 24 h ; répartition par canal (portefeuille, QR, mobile money, banque, agents, remittance, change).</li><li>Comptes par rôle et statut, répartition KYC par palier, comptes ouverts sur la période.</li><li>Activité LCB-FT : dossiers ouverts, actions du moteur de risque, entrées de listes de sanctions chargées.</li><li>Programmes de monnaie électronique : réserves cantonnées, encours, taux de couverture ; liquidité des comptes de versement ; corridors et licences.</li><li>Intégrité : état du journal chaîné et du contrôle Guardian.</li></ul></div>
+    <div class="box"><h4>Journal normalisé des opérations</h4><ul><li>Une ligne par opération, format unique (22 colonnes) : horodatages, référence, type, statut, canal, opérateur, montant, devise, frais, contre-valeur, parties pseudonymisées avec rôle, palier KYC et pays, référence de preuve, clé d'idempotence.</li><li>Export CSV ou JSON sur période, devise ou type, accompagné d'un manifeste : nombre d'enregistrements, empreinte SHA-256 du fichier, état de la chaîne d'événements, mode de conformité, date de génération, méthode de pseudonymisation.</li><li>Chaque export est inscrit au journal d'audit avec son empreinte ; les parties sont ré-identifiables par BitriPay sur demande légale.</li></ul></div>
+  </div>
+  <p class="note">Ces rapports sont disponibles dans la console d'administration (page « Supervision réglementaire ») et seront démontrés en séance.</p>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>13</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">12 · Démonstration</div>
+  <h2>Déroulé de la séance (60 minutes)</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Minute</th><th>Séquence</th><th>Ce qui est montré</th><th>Ce que cela prouve</th></tr>
+    <tr><td class="num">0 – 5</td><td>Introduction</td><td>La société, l'équipe, le périmètre demandé</td><td>Identité du requérant</td></tr>
+    <tr><td class="num">5 – 12</td><td>Solution, services, clientèle, tarification</td><td>Pages 3 à 7 de ce support ; grille des coûts telle qu'affichée dans la plateforme</td><td>Transparence tarifaire</td></tr>
+    <tr><td class="num">12 – 20</td><td>Contrôle interne et LCB-FT</td><td>Pages 8 à 10 ; console : paliers KYC, listes de sanctions, dossiers de conformité</td><td>Dispositif opérationnel, pas seulement documentaire</td></tr>
+    <tr><td class="num">20 – 25</td><td>Spécifications</td><td>Schéma d'architecture et flux (pages 11 – 12)</td><td>Maîtrise technique</td></tr>
+    <tr><td class="num">25 – 30</td><td>Démo 1 · Ouverture de compte et KYC</td><td>Inscription d'un particulier sur téléphone, code reçu par SMS, palier 1 puis dossier palier 2 vérifié par un administrateur</td><td>Connaissance client par paliers</td></tr>
+    <tr><td class="num">30 – 36</td><td>Démo 2 · Entrée de fonds mobile money et paiement QR</td><td>Rechargement par numéro de collecte avec preuve SMS signée ; paiement d'un marchand par QR ; reçus des deux côtés</td><td>Acceptation QR multi-usages, intégration mobile money sans API</td></tr>
+    <tr><td class="num">36 – 42</td><td>Démo 3 · Agents et sortie de fonds</td><td>Retrait d'espèces chez un agent avec code ; retrait vers mobile money validé à quatre yeux ; suivi de flotte</td><td>Réseau d'agents contrôlé</td></tr>
+    <tr><td class="num">42 – 48</td><td>Démo 4 · Interopérabilité API</td><td>Clé d'API, création d'une intention de paiement, page de paiement, webhook signé reçu par un système tiers</td><td>Interopérabilité e-commerce, facturation, institutions</td></tr>
+    <tr><td class="num">48 – 55</td><td>Démo 5 · Contrôles et supervision</td><td>Tentative bloquée par sanctions ; gel d'un solde ; Guardian ; rapport de supervision ; export du journal normalisé avec manifeste</td><td>Reporting temps réel, centralisation normalisée des journaux</td></tr>
+    <tr><td class="num">55 – 60</td><td>Questions et conditions de lancement</td><td>Page 15</td><td>Prochaines étapes</td></tr>
+  </table></div>
+  <p class="note">Toute la démonstration s'effectue sur la plateforme de production en mode « sandbox » : fonds de test, aucun fonds client réel, notifications SMS et e-mail réelles vers les téléphones de la délégation.</p>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>14</span></div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">13 · Conditions de lancement</div>
+  <h2>Rien ne passe en « live » avant l'agrément : la plateforme l'impose elle-même</h2>
+  <div class="cols">
+    <div class="box"><h4>Liste de contrôle de mise en service (intégrée)</h4><ul><li>Programme de monnaie électronique par devise enregistré avec émetteur, régulateur, licence et compte de cantonnement, réserves confirmées.</li><li>Corridors et rails déclarés avec leurs autorisations et dates d'expiration ; suspension automatique à l'échéance.</li><li>Deux administrateurs au moins avec second facteur et PIN ; sanctions chargées ; taux de change vivants ; sauvegardes vérifiées.</li><li>Tant qu'un point est ouvert, le bouton « Go live » est refusé par l'API, pas seulement masqué.</li></ul></div>
+    <div class="box"><h4>Feuille de route après agrément</h4><ul><li>Phase 1 : portefeuille, QR marchand, mobile money par numéros de collecte, agents, factures et recharges, API partenaires.</li><li>Phase 2 : corridors internationaux avec partenaires déclarés, paie et versements en masse institutionnels.</li><li>Phase 3 : cartes virtuelles et services de crédit, sous réserve d'agréments complémentaires.</li><li>Reporting périodique à la BCC à partir du journal normalisé et du rapport de supervision, selon le format qui sera prescrit.</li></ul></div>
+  </div>
+  <h3>Éléments à compléter avant remise</h3>
+  <ul>
+    <li><span class="fill">Dénomination sociale, forme juridique, RCCM, identification nationale, siège social</span> (page de couverture).</li>
+    <li><span class="fill">Composition de la délégation (6 personnes maximum) avec fonctions</span>.</li>
+    <li><span class="fill">Liste des modifications par rapport au dossier initial déposé</span> (page 7, à confronter au dossier).</li>
+    <li><span class="fill">Partenaires bancaires de cantonnement et opérateurs avec lesquels les numéros de collecte sont ouverts</span>.</li>
+  </ul>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>15</span></div>
+</section>
+
+</div>
