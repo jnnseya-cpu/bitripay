@@ -1,0 +1,149 @@
+{
+  "$comment": "Copy to deploy/go-live.profile.json (git-ignored), replace every value with your own records, then `npm run deploy` or `npm run go-live -- deploy/go-live.profile.json`. Nothing here is a default: a placeholder left in place is a wrong record in production.",
+  "bankTransfer": {
+    "bankName": "Rawbank",
+    "accountName": "BitriPay SARL",
+    "accountNumber": "CD00 0000 0000 0000 0000 0000",
+    "swift": "RAWBCDKI",
+    "instructions": "Use the reference shown; funds are credited once the transfer is confirmed."
+  },
+  "currencies": {
+    "enable": ["USD", "GBP", "EUR", "CDF"],
+    "disable": [
+      "INR",
+      "BDT",
+      "PHP",
+      "PKR",
+      "AED",
+      "CAD",
+      "AUD",
+      "JPY",
+      "CNY",
+      "BRL",
+      "MXN",
+      "TRY",
+      "XOF",
+      "XAF",
+      "UGX",
+      "TZS",
+      "RWF",
+      "EGP",
+      "MAD",
+      "SAR",
+      "IDR",
+      "VND",
+      "CHF",
+      "NGN",
+      "KES",
+      "GHS",
+      "ZAR"
+    ]
+  },
+  "collectionNumbers": [
+    {
+      "operatorId": "orange_cd",
+      "collectionNumber": "+243890000000",
+      "collectionName": "BitriPay SARL"
+    },
+    {
+      "operatorId": "mpesa_cd",
+      "collectionNumber": "+243810000000",
+      "collectionName": "BitriPay SARL"
+    }
+  ],
+  "emoneyProgrammes": [
+    {
+      "currency": "USD",
+      "jurisdiction": "CD",
+      "issuerModel": "partner_issuer",
+      "issuerName": "Licensed issuer name",
+      "licenceRef": "BCC/EME/0000",
+      "regulator": "Banque Centrale du Congo",
+      "safeguardingBank": "Rawbank",
+      "safeguardingAccountRef": "SAFEGUARD-USD-0001"
+    },
+    {
+      "currency": "CDF",
+      "jurisdiction": "CD",
+      "issuerModel": "partner_issuer",
+      "issuerName": "Licensed issuer name",
+      "licenceRef": "BCC/EME/0000",
+      "regulator": "Banque Centrale du Congo",
+      "safeguardingBank": "Rawbank",
+      "safeguardingAccountRef": "SAFEGUARD-CDF-0001"
+    },
+    {
+      "currency": "GBP",
+      "jurisdiction": "GB",
+      "issuerModel": "partner_issuer",
+      "issuerName": "UK EMI partner name",
+      "licenceRef": "FCA FRN 000000",
+      "regulator": "Financial Conduct Authority",
+      "safeguardingBank": "Partner safeguarding bank",
+      "safeguardingAccountRef": "SAFEGUARD-GBP-0001"
+    },
+    {
+      "currency": "EUR",
+      "jurisdiction": "GB",
+      "issuerModel": "partner_issuer",
+      "issuerName": "UK EMI partner name",
+      "licenceRef": "FCA FRN 000000",
+      "regulator": "Financial Conduct Authority",
+      "safeguardingBank": "Partner safeguarding bank",
+      "safeguardingAccountRef": "SAFEGUARD-EUR-0001"
+    }
+  ],
+  "payoutAccounts": [
+    {
+      "rail": "mobile_money",
+      "operatorId": "orange_cd",
+      "country": "CD",
+      "currency": "CDF",
+      "label": "Orange Money Kinshasa SIM 1",
+      "msisdn": "+243890000000",
+      "simIccid": "8924300000000000000",
+      "dailyLimit": 500000000,
+      "perTxLimit": 50000000
+    }
+  ],
+  "corridors": [
+    {
+      "sourceCountry": "GB",
+      "sourceCurrency": "GBP",
+      "destCountry": "CD",
+      "destCurrency": "CDF",
+      "rail": "mobile_money",
+      "operatorId": "orange_cd",
+      "collectionPartner": "UK EMI partner name",
+      "payoutPartner": "BitriPay SARL (Orange Money merchant account)",
+      "licenceRef": "FCA FRN 000000 / BCC/EME/0000",
+      "licenceExpiresAt": "2027-12-31T00:00:00+00:00",
+      "compliance": {
+        "regulator": "Financial Conduct Authority; Banque Centrale du Congo",
+        "licenceType": "Payment institution (agent of EMI) / e-money establishment",
+        "licenceNumber": "000000",
+        "safeguardingAccount": "SAFEGUARD-GBP-0001",
+        "amlProgrammeRef": "AML-POL-2026-01",
+        "dataProtectionRef": "ICO ZA000000",
+        "consumerDisclosureUrl": "https://bitripay.com/legal/terms"
+      },
+      "payoutCurrencies": ["USD"],
+      "maxAmount": 100000000,
+      "estimatedPayoutMinutes": 15
+    }
+  ],
+  "administrators": [
+    {
+      "fullName": "Second Administrator",
+      "email": "approver@bitripay.com",
+      "permissions": ["approvals", "issuance", "treasury", "settings", "gateways", "kyc", "users", "transactions"]
+    }
+  ],
+  "smtp": {
+    "host": "smtp.example.com",
+    "port": 587,
+    "user": "no-reply@bitripay.com",
+    "pass": "smtp-password",
+    "from": "BitriPay <no-reply@bitripay.com>"
+  }
+}

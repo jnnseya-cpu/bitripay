@@ -28,7 +28,36 @@ pages, blog, legal pages and sitemap are served from, so it is not used. No othe
 | Shared packages (`@bitripay/shared`, BitriQR, SDKs) | `shared/*` | not deployed: built into the three layers at image / build time | same |
 | Phone apps and payout device | `frontend/mobile`, `frontend/payout-device` | built with EAS against `https://api.bitripay.com` | same |
 
-### Hostinger VPS, step by step
+### A VPS that already serves other websites (shared host)
+
+Nothing here takes ports 80 or 443 from the web server that already runs your other sites. In shared-host mode the
+three containers listen on localhost only (web 127.0.0.1:8080, admin 127.0.0.1:8081, API 127.0.0.1:4000; change
+`BITRIPAY_*_PORT` in `deploy/.env.production` if a port is taken), and the existing web server proxies the three host
+names to them. Containers, images and volumes are all prefixed `bitripay_`; no other project on the host is touched,
+and `npm run deploy` in dedicated mode refuses to start while something else listens on 80/443.
+
+```bash
+git clone https://github.com/jnnseya-cpu/bitripay.git /opt/bitripay && cd /opt/bitripay
+cp deploy/.env.production.example deploy/.env.production
+nano deploy/.env.production                 # ADMIN_EMAIL, SMTP, SMS; secrets may stay empty
+npm run deploy -- --shared-host             # builds, starts on localhost ports, runs the go-live command
+ss -ltnp | grep -E ':(80|443) '             # which web server owns 80/443: nginx, apache2 or caddy
+```
+
+Then hand the three host names to that web server (DNS records as in section 1, pointing at this VPS):
+
+| Existing web server | Do this |
+| --- | --- |
+| Nginx | `cp deploy/shared-host/nginx-bitripay.conf /etc/nginx/sites-available/bitripay.conf && ln -s /etc/nginx/sites-available/bitripay.conf /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx`, then `certbot --nginx -d bitripay.com -d www.bitripay.com -d admin.bitripay.com -d api.bitripay.com` |
+| Apache | `cp deploy/shared-host/apache-bitripay.conf /etc/apache2/sites-available/bitripay.conf && a2enmod proxy proxy_http proxy_wstunnel headers && a2ensite bitripay && apachectl configtest && systemctl reload apache2`, then `certbot --apache -d bitripay.com -d www.bitripay.com -d admin.bitripay.com -d api.bitripay.com` |
+| Caddy | append `deploy/shared-host/Caddyfile.snippet` to the host Caddyfile and `systemctl reload caddy` (certificates are automatic) |
+| hPanel / a hosting panel | add the three domains as proxied sites pointing at the localhost ports above, with SSL enabled by the panel |
+
+Install certbot once if it is missing: `apt-get install -y certbot python3-certbot-nginx` (or `python3-certbot-apache`).
+The web and admin containers route `/api`, `/v1` and the site pages to the API themselves, so the proxy only needs
+one location per host name.
+
+### Hostinger VPS dedicated to BitriPay, step by step
 
 1. hPanel → VPS → order a KVM 2 (2 vCPU, 8 GB) or larger → operating system **Ubuntu 22.04 with Docker** →
    set the root password and add your SSH key.
@@ -110,6 +139,23 @@ and the gate-to-scale metrics, and exits non-zero until every blocking item is g
 ```bash
 docker compose --env-file deploy/.env.production -f deploy/docker-compose.prod.yml exec api node backend/api/dist/goLive.js
 ```
+
+## 3b. Go-live profile: the launch records from one file
+
+Everything the checklist needs beyond the automatic items is data you hold: bank details, collection numbers,
+e-money programmes, payout accounts, corridor arrangements, a second administrator, SMTP. Write it once as JSON and
+it is applied digitally, idempotently (records are matched on their natural key and updated, never duplicated):
+
+```bash
+cp deploy/go-live.profile.example.json deploy/go-live.profile.json   # git-ignored; replace every value with yours
+npm run deploy -- --shared-host       # applies the profile before the checklist (or: npm run go-live -- deploy/go-live.profile.json)
+```
+
+The report lists what was created or updated and, under "Still yours", the steps that stay with people: each
+administrator's PIN and 2FA, clearing the reserve funding under maker-checker, pressing Go live on the corridor with a
+PIN, prefunding the float and enrolling the payout phone. The same document can be pasted in the console under
+Gateway controls & risk → Go-live checklist → Apply a go-live profile (step-up PIN required). A placeholder left in the
+file is a wrong record in production: the example values are shapes, not defaults.
 
 ## 4. Register the inbound webhooks
 

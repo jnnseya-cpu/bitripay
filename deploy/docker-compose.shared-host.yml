@@ -1,0 +1,40 @@
+# Shared-host composition: for a VPS that already serves other live websites through its own web server (Nginx,
+# Apache, Caddy, a panel). Nothing binds to 80 or 443 here: the API, web and admin containers listen on localhost
+# ports only, and the existing web server proxies bitripay.com, admin.bitripay.com and api.bitripay.com to them
+# (ready-made server blocks in deploy/shared-host/). Run from the repository root:
+#   npm run deploy -- --shared-host
+# Ports can be moved if another service already uses them: BITRIPAY_API_PORT / BITRIPAY_WEB_PORT / BITRIPAY_ADMIN_PORT
+# in deploy/.env.production. Volumes and containers are prefixed "bitripay_" and never touch other projects.
+name: bitripay
+services:
+  api:
+    extends:
+      file: docker-compose.prod.yml
+      service: api
+    ports:
+      - '127.0.0.1:${BITRIPAY_API_PORT:-4000}:4000'
+  web:
+    extends:
+      file: docker-compose.prod.yml
+      service: web
+    ports:
+      - '127.0.0.1:${BITRIPAY_WEB_PORT:-8080}:80'
+    depends_on:
+      api:
+        condition: service_healthy
+  admin:
+    extends:
+      file: docker-compose.prod.yml
+      service: admin
+    ports:
+      - '127.0.0.1:${BITRIPAY_ADMIN_PORT:-8081}:80'
+    depends_on:
+      api:
+        condition: service_healthy
+  backup:
+    extends:
+      file: docker-compose.prod.yml
+      service: backup
+volumes:
+  api-data:
+  backups:

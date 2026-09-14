@@ -27,6 +27,7 @@ import { listKyc, getKyc, reviewKyc } from '../../services/kyc';
 import { settleRemittance, toRemittance } from '../../services/remittance';
 import { getCurrency, listCurrencies, upsertCurrency, refreshRatesFromProvider, importRates, listRateSnapshots, getRateStatus, rateFreshness, RATE_PROVIDERS } from '../../services/currencies';
 import { goLiveChecklist } from '../../services/goLive';
+import { applyGoLiveProfileDocument } from '../../services/goLiveProfile';
 import { listPosts, getPost, createPost, updatePost, deletePost, renderPost } from '../../services/blog';
 import { listLinkRules, upsertLinkRule, deleteLinkRule, listBacklinks, upsertBacklink, deleteBacklink, verifyBacklinks, pingIndexNow, pageviewSummary } from '../../services/seo';
 import { agentStats, runtimeStatus, listRuns as listAgentRuns, getRun, cancelRun, startRun, listApprovals, decideApproval } from '../../services/assist/runtime';
@@ -1309,6 +1310,19 @@ adminRouter.post(
 );
 /** Everything that must be in place before live customer funds are accepted. */
 adminRouter.get('/go-live', requirePermission('settings'), (_req, res) => res.json(goLiveChecklist()));
+// Apply a go-live profile (the launch records as JSON) under step-up; the response lists what changed and what stays human.
+adminRouter.post('/go-live/profile', requirePermission('settings'), (req, res) => {
+  const body = validate(z.object({ profile: z.union([z.string().max(2_000_000), z.record(z.string(), z.unknown())]), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  let report;
+  try {
+    report = applyGoLiveProfileDocument(body.profile, req.user!);
+  } catch (err) {
+    throw badRequest((err as Error).message, 'go_live_profile_invalid');
+  }
+  audit(req.user!.id, 'go_live.profile_applied', 'settings', 'go_live', { lines: report.lines.length, remaining: report.remaining.length });
+  res.json({ ...report, checklist: goLiveChecklist() });
+});
 adminRouter.put(
   '/gateways/:id',
   requirePermission('gateways'),

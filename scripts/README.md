@@ -14,4 +14,4 @@
   mode 0600, never committed).
 - `npm run docs:http` – regenerates `docs-api.http` from the served OpenAPI table; `npm run format` / `format:check`
   run Prettier; `npm run deps:check` runs knip for unused files, exports and dependencies.
-- `deploy.sh` – `npm run deploy`: builds the production images, starts `deploy/docker-compose.prod.yml` behind Caddy and runs the go-live command in the API container (see `deploy/README.md`).
+- `deploy.sh` – `npm run deploy`: builds the production images, starts `deploy/docker-compose.prod.yml` behind Caddy (or, with `--shared-host`, `deploy/docker-compose.shared-host.yml` on localhost ports behind the VPS's own web server), applies `deploy/go-live.profile.json` when present and runs the go-live command in the API container (see `deploy/README.md`).

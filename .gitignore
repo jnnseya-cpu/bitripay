@@ -18,3 +18,4 @@ coverage/
 shots/smoke/
 deploy/.env.production
 release/
+deploy/go-live.profile.json

@@ -2,6 +2,7 @@
 # API, the web app and the admin console. Run from the repository root:
 #   docker compose --env-file deploy/.env.production -f deploy/docker-compose.prod.yml up -d --build
 # Every secret comes from deploy/.env.production (never committed); compose refuses to start without the required ones.
+name: bitripay
 services:
   caddy:
     image: caddy:2-alpine

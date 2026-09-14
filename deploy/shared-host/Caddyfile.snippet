@@ -1,0 +1,18 @@
+# BitriPay behind an existing Caddy on a shared VPS: append to the host's Caddyfile and `systemctl reload caddy`.
+# Caddy obtains the certificates itself. Ports match BITRIPAY_WEB_PORT / BITRIPAY_ADMIN_PORT / BITRIPAY_API_PORT.
+www.bitripay.com {
+	redir https://bitripay.com{uri} permanent
+}
+bitripay.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8080
+}
+admin.bitripay.com {
+	encode zstd gzip
+	header X-Robots-Tag noindex
+	reverse_proxy 127.0.0.1:8081
+}
+api.bitripay.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:4000
+}

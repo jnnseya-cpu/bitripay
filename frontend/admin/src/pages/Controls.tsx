@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Alert, Button, Chip, ConfirmButton, Field, Input, PageHeader, Select, Switch, Table, Tabs, fmtDate, useAsync } from '../components/ui';
+import { Alert, Button, Chip, ConfirmButton, Field, Input, PageHeader, Select, Switch, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
 
 const GATEWAY_FIELDS: [string, string, 'number' | 'boolean'][] = [
   ['intentExpiryHours', 'Intent expiry (hours) – unconfirmed intents expire, nothing is credited', 'number'],
@@ -159,6 +159,73 @@ function CapabilityMatrixEditor() {
   );
 }
 
+/** Go-live profile: the launch records (bank details, collection numbers, e-money programmes, payout accounts, corridor arrangements, second administrator, SMTP) applied from one JSON document under step-up. */
+function GoLiveProfileBox({ onApplied }: { onApplied: () => void }) {
+  const [text, setText] = useState('');
+  const [pin, setPin] = useState('');
+  const [report, setReport] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const apply = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.post<any>('/api/admin/go-live/profile', { profile: text, pin });
+      setReport(r);
+      onApplied();
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt">
+      <h4>Apply a go-live profile</h4>
+      <p className="tiny muted">
+        Paste the launch records as JSON (template: <code>deploy/go-live.profile.example.json</code>). Records are matched on their natural key and updated, never duplicated. PINs, 2FA, reserve
+        clearing, pressing Go live and device enrolment stay with people and are listed after applying.
+      </p>
+      <Field label="Profile (JSON)">
+        <Textarea className="mono" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder='{ "bankTransfer": { ... }, "collectionNumbers": [ ... ] }' />
+      </Field>
+      <div className="row">
+        <Input type="password" placeholder="Step-up PIN" value={pin} onChange={(e) => setPin(e.target.value)} style={{ maxWidth: 160 }} />
+        <Button onClick={apply} disabled={busy || !text.trim() || !pin}>
+          {busy ? 'Applying…' : 'Apply profile'}
+        </Button>
+      </div>
+      {error && <Alert kind="error">{error}</Alert>}
+      {report && (
+        <div className="mt">
+          <Table
+            head={['Section', 'Action', 'Record', 'Note']}
+            rows={report.lines.map((l: any) => [
+              l.section,
+              <Chip kind={l.action === 'skipped' ? 'warning' : l.action === 'unchanged' ? undefined : 'success'}>{l.action}</Chip>,
+              l.subject,
+              <span className="tiny">{l.note ?? ''}</span>,
+            ])}
+          />
+          {report.generatedPasswords?.length > 0 && (
+            <Alert kind="warning">Temporary passwords (shown once): {report.generatedPasswords.map((g: any) => `${g.email} → ${g.password}`).join(' · ')}</Alert>
+          )}
+          {report.remaining?.length > 0 && (
+            <div className="tiny mt">
+              <b>Still yours:</b>
+              <ul>
+                {report.remaining.map((r: string) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Gateway controls: lifecycle/evidence thresholds, FX disclosure policy, fraud & sanctions, reconciliation and the declared route catalogue. */
 export function Controls() {
   const { toast } = useStore();
@@ -221,6 +288,7 @@ export function Controls() {
               Re-check
             </Button>
           </div>
+          <GoLiveProfileBox onApplied={golive.reload} />
         </div>
       )}
       {tab === 'controls' && settings.data && (
