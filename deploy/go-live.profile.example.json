@@ -140,10 +140,10 @@
     }
   ],
   "smtp": {
-    "host": "smtp.example.com",
-    "port": 587,
+    "host": "smtp.hostinger.com",
+    "port": 465,
     "user": "support@bitripay.com",
-    "pass": "smtp-password",
+    "pass": "mailbox password of support@bitripay.com",
     "from": "BitriPay <support@bitripay.com>"
   }
 }
