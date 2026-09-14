@@ -60,7 +60,16 @@ jobs:
           context: .
           file: ${{ matrix.image.file }}
           push: false
+          load: true
           tags: bitripay/${{ matrix.image.name }}:ci
+      - name: Start the API image in production mode and check its health
+        if: matrix.image.name == 'api'
+        run: |
+          docker run -d --name api-ci -p 4000:4000 -e NODE_ENV=production -e WEB_URL=https://bitripay.com -e ADMIN_URL=https://admin.bitripay.com -e API_URL=https://api.bitripay.com \
+            -e JWT_SECRET=$(openssl rand -hex 32) -e APP_SECRET=$(openssl rand -hex 32) -e ADMIN_PASSWORD=$(openssl rand -hex 12) bitripay/api:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:4000/api/health && exit 0; sleep 2; done
+          docker logs api-ci
+          exit 1
   sdk-php:
     runs-on: ubuntu-latest
     steps:

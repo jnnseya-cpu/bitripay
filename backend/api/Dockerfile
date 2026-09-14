@@ -16,6 +16,9 @@ COPY shared/sdk-node shared/sdk-node
 COPY shared/sdk-js shared/sdk-js
 COPY backend/api backend/api
 RUN npm run build:shared && npm run build -w @bitripay/api
+# Workspace-local modules (a dependency npm could not hoist) live next to the package; make the directories exist so
+# the runtime stage can copy them unconditionally.
+RUN mkdir -p backend/api/node_modules shared/core/node_modules shared/bitriqr/node_modules
 
 FROM node:22-alpine
 WORKDIR /app
@@ -23,6 +26,7 @@ ENV NODE_ENV=production
 COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/shared/core shared/core
 COPY --from=build /app/shared/bitriqr shared/bitriqr
+COPY --from=build /app/backend/api/node_modules backend/api/node_modules
 COPY --from=build /app/backend/api/dist backend/api/dist
 COPY --from=build /app/backend/api/public backend/api/public
 COPY --from=build /app/backend/api/package.json backend/api/package.json
