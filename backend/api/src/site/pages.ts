@@ -6,7 +6,7 @@
  */
 import { layout, FOOTER_LINKS } from './render';
 import { escapeHtml } from '../services/markdown';
-import { absoluteUrl, breadcrumbJsonLd, pageTitle, siteUrl } from '../services/seo';
+import { absoluteUrl, breadcrumbJsonLd, pageTitle } from '../services/seo';
 import { getSeoSettings, getFees, getReferralSettings, getAppSettings } from '../services/settings';
 import { getKycTierSettings, TIER_LABELS } from '../services/risk/kycTiers';
 import { listOperators as listMomoOperators } from '../services/momo';
@@ -21,7 +21,7 @@ import { sloReport, SLO_TARGETS } from '../middleware/slo';
 import { verifyEventChain } from '../services/events';
 import { getBaseCurrency } from '../services/currencies';
 import { config } from '../config';
-import { FEE_TYPE_LABELS, FEE_TYPES, ORG_ROLES, formatMoney, type FeeType } from '@bitripay/shared';
+import { FEE_TYPE_LABELS, ORG_ROLES, formatMoney, type FeeType } from '@bitripay/shared';
 import { CSV_COLUMNS, MAX_BATCH_ROWS } from '../services/bulkPayouts';
 
 const CSS = `
