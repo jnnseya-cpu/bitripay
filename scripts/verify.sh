@@ -18,6 +18,8 @@ npm run typecheck -w @bitripay/api
 npm run build -w @bitripay/api
 step "backend: tests"
 npm run test -w @bitripay/api
+step "backend: built output boots in production mode and answers /api/health"
+bash scripts/boot-check.sh
 
 step "frontend: typecheck + build (web, admin)"
 npm run typecheck -w @bitripay/web
