@@ -111,6 +111,8 @@ export const kg: Record<string, string> = {
   'settings.security': 'Lutaninu',
   'settings.kyc': 'Kundima identité',
   'settings.language': 'Ndinga',
+  'settings.notifications': 'Nsangu',
+  'settings.notificationsHint': 'Sola mutindu BitriPay ke zabisa nge sambu na konso mutindu ya nsangu. Nsangu ya lutaninu, ya mbongo mpe ya bansiku ke tindamaka ntangu yonso.',
   'settings.theme': 'Mode ya mpimpa',
   'settings.2fa': 'Kundima na ba étapes zole',
   'settings.pin': 'Code PIN ya transaction',

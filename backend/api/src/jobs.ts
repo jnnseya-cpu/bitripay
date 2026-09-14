@@ -57,6 +57,7 @@ let lastSweep = 0;
 let lastMarginMonth = '';
 let lastBacklinkCheck = 0;
 import { getEmoneySettings } from './services/settings';
+import { pruneDeliveries } from './services/comms/engine';
 let lastReconciliationDay = '';
 
 let lastRateRefresh = 0;
@@ -159,6 +160,8 @@ export function startJobs() {
       // Risk and compliance: AML monitor, sanctions list refresh, agent float alerts and trust scores, once a day.
       if (lastRiskDay !== dayKey && new Date().getUTCHours() >= 3) {
         lastRiskDay = dayKey;
+        const prunedComms = pruneDeliveries();
+        if (prunedComms) console.log(`[comms] pruned ${prunedComms} delivery record(s) older than 90 days`);
         const aml = runAmlScan();
         if (aml.opened) console.warn(`[compliance] AML monitor opened ${aml.opened} case(s) from ${aml.scanned} active account(s)`);
         const lists = await refreshAllSources();

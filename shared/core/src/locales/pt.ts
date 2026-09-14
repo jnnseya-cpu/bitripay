@@ -95,6 +95,8 @@ export const pt: Record<string, string> = {
   'settings.security': 'Segurança',
   'settings.kyc': 'Verificação de identidade',
   'settings.language': 'Idioma',
+  'settings.notifications': 'Notificações',
+  'settings.notificationsHint': 'Escolha como a BitriPay o contacta para cada tipo de aviso. Avisos de segurança, movimentos de dinheiro e legais são sempre enviados.',
   'settings.theme': 'Modo escuro',
   'settings.2fa': 'Autenticação de dois fatores',
   'settings.pin': 'PIN de transação',

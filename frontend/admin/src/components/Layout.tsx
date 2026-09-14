@@ -55,6 +55,7 @@ const NAV: { section: string; items: { to: string; label: string; ico: string; p
       { to: '/pages', label: 'Pages & links', ico: '📄', perm: 'cms' },
       { to: '/languages', label: 'Languages', ico: '🗣️', perm: 'cms' },
       { to: '/messaging', label: 'Email, SMS & push', ico: '✉️', perm: 'settings' },
+      { to: '/comms', label: 'Communication events', ico: '📣', perm: 'settings' },
     ],
   },
   {

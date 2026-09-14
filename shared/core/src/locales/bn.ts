@@ -95,6 +95,8 @@ export const bn: Record<string, string> = {
   'settings.security': 'নিরাপত্তা',
   'settings.kyc': 'পরিচয় যাচাই',
   'settings.language': 'ভাষা',
+  'settings.notifications': 'বিজ্ঞপ্তি',
+  'settings.notificationsHint': 'প্রতিটি ধরনের নোটিশের জন্য BitriPay কীভাবে আপনার সাথে যোগাযোগ করবে তা বেছে নিন। নিরাপত্তা, অর্থ চলাচল ও আইনি নোটিশ সবসময় পাঠানো হয়।',
   'settings.theme': 'ডার্ক মোড',
   'settings.2fa': 'দুই-ধাপ যাচাইকরণ',
   'settings.pin': 'লেনদেন পিন',

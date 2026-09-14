@@ -111,6 +111,8 @@ export const lua: Record<string, string> = {
   'settings.security': 'Bukubi',
   'settings.kyc': 'Kujadika identité',
   'settings.language': 'Muakulu',
+  'settings.notifications': 'Malu',
+  'settings.notificationsHint': 'Sungula mushindu udi BitriPay umanyisha wewe bua tshiakabidi tshionso tshia malu. Malu a bukubi, a makuta ne a mikenji adi atumibua misangu yonso.',
   'settings.theme': 'Mode wa mudima',
   'settings.2fa': 'Kujadika mu ba étapes ibidi',
   'settings.pin': 'Code PIN wa transaction',

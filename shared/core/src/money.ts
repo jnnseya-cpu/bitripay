@@ -12,6 +12,7 @@ export interface CurrencyInfo {
 /** Currencies enabled by default on a fresh install (the full ISO 4217 list is in ALL_CURRENCIES; admins can enable more). */
 export const DEFAULT_CURRENCY_CODES = [
   'USD',
+  'CDF',
   'EUR',
   'GBP',
   'NGN',

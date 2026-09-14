@@ -11,6 +11,8 @@ import { poolsForOwner, listPromoCredits } from '../services/emoney';
 import { qrDataUrl } from '../services/qr';
 import { listLanguages } from '../services/cms';
 import { COUNTRY_BY_CODE } from '@bitripay/shared';
+import { COMMS_CATEGORIES, COMMS_CHANNELS, COMMS_EVENTS } from '../services/comms/catalogue';
+import { emitAsync, getCommsPrefs, setCommsPrefs } from '../services/comms/engine';
 
 export const accountRouter = Router();
 accountRouter.use(requireAuth);
@@ -64,6 +66,7 @@ accountRouter.post(
   wrap(async (req, res) => {
     const body = validate(z.object({ currentPassword: z.string().default(''), newPassword: z.string().min(8) }), req.body);
     auth.changePassword(req.user!, body.currentPassword, body.newPassword);
+    emitAsync('password.changed', { userId: req.user!.id, vars: { time: new Date().toISOString().slice(11, 16) + ' UTC' }, data: { kind: 'security' } });
     res.json({ ok: true });
   }),
 );
@@ -72,7 +75,9 @@ accountRouter.post(
   '/pin',
   wrap(async (req, res) => {
     const body = validate(z.object({ pin: z.string().regex(/^\d{4,6}$/), currentPin: z.string().optional() }), req.body);
+    const hadPin = !!req.user!.pin_hash;
     auth.setPin(req.user!, body.pin, body.currentPin);
+    emitAsync(hadPin ? 'pin.changed' : 'pin.set', { userId: req.user!.id, data: { kind: 'security' } });
     res.json({ ok: true });
   }),
 );
@@ -114,6 +119,7 @@ accountRouter.post(
   wrap(async (req, res) => {
     const body = validate(z.object({ code: z.string().min(6).max(8) }), req.body);
     const { recoveryCodes } = auth.enableTwoFactor(req.user!, body.code);
+    emitAsync('mfa.enabled', { userId: req.user!.id, data: { kind: 'security' } });
     res.json({ ok: true, recoveryCodes });
   }),
 );
@@ -134,6 +140,7 @@ accountRouter.post(
   wrap(async (req, res) => {
     const body = validate(z.object({ code: z.string().min(6).max(8) }), req.body);
     auth.disableTwoFactor(req.user!, body.code);
+    emitAsync('mfa.disabled', { userId: req.user!.id, data: { kind: 'security' } });
     res.json({ ok: true });
   }),
 );
@@ -142,6 +149,23 @@ accountRouter.post(
 accountRouter.get('/pools', (req, res) => res.json({ items: poolsForOwner(req.user!) }));
 accountRouter.get('/promo', (req, res) => res.json({ items: listPromoCredits(req.user!.id) }));
 accountRouter.get('/notifications', (req, res) => res.json({ items: listNotifications(req.user!.id), unread: unreadCount(req.user!.id) }));
+/** Notification preferences: opt out per category and channel; mandatory notices (security, money, legal) are always sent. */
+accountRouter.get('/notifications/preferences', (req, res) =>
+  res.json({
+    channels: COMMS_CHANNELS,
+    categories: COMMS_CATEGORIES.map((c) => ({
+      ...c,
+      events: COMMS_EVENTS.filter((e) => e.category === c.id).length,
+      mandatory: COMMS_EVENTS.filter((e) => e.category === c.id && e.mandatory).length,
+      channels: COMMS_CHANNELS.filter((ch) => COMMS_EVENTS.some((e) => e.category === c.id && e.channels.includes(ch))),
+    })),
+    prefs: getCommsPrefs(req.user!.id),
+  }),
+);
+accountRouter.put('/notifications/preferences', (req, res) => {
+  const body = validate(z.object({ prefs: z.record(z.string(), z.record(z.string(), z.boolean())) }), req.body);
+  res.json({ prefs: setCommsPrefs(req.user!.id, body.prefs as any) });
+});
 accountRouter.post('/notifications/read', (req, res) => {
   markRead(req.user!.id, typeof req.body?.id === 'string' ? req.body.id : undefined);
   res.json({ ok: true });

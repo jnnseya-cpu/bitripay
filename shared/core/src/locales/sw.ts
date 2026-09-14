@@ -95,6 +95,8 @@ export const sw: Record<string, string> = {
   'settings.security': 'Usalama',
   'settings.kyc': 'Uthibitisho wa utambulisho',
   'settings.language': 'Lugha',
+  'settings.notifications': 'Arifa',
+  'settings.notificationsHint': 'Chagua jinsi BitriPay inavyokufikia kwa kila aina ya taarifa. Taarifa za usalama, mwendo wa pesa na za kisheria hutumwa kila mara.',
   'settings.theme': 'Hali ya giza',
   'settings.2fa': 'Uthibitisho wa hatua mbili',
   'settings.pin': 'PIN ya muamala',

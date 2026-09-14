@@ -51,4 +51,48 @@ export function seedDefaultCatalogs() {
     for (const [brand, name, category, currency, den, color, description] of products)
       upsertGiftProduct({ brand, name, category, currency, denominations: [...den], color, enabled: true, description });
   }
+  ensureDrcCatalogs();
+}
+
+/**
+ * Home-market catalogues for the Democratic Republic of the Congo, added by name whenever missing (also on a database
+ * seeded before they existed); an administrator's edits or deletions of other entries are never touched. Amounts are
+ * CDF minor units (1 CDF = 100). Stable ids keep re-runs idempotent.
+ */
+export function ensureDrcCatalogs() {
+  const db = getDb();
+  const hasBiller = db.prepare("SELECT 1 FROM billers WHERE country = 'CD' AND name = ?");
+  const billers = [
+    ['drc_snel', 'electricity', "SNEL (Société nationale d'électricité)", 100_000, 500_000_000, 'Numéro de compteur / police', '#f59e0b'],
+    ['drc_regideso', 'water', 'REGIDESO', 100_000, 200_000_000, "Numéro d'abonné", '#0ea5e9'],
+    ['drc_canalplus', 'tv', 'Canal+ Afrique', 500_000, 100_000_000, 'Numéro de décodeur', '#111827'],
+    ['drc_dstv', 'tv', 'DStv (MultiChoice)', 500_000, 100_000_000, 'Numéro de smartcard', '#ec4899'],
+    ['drc_startimes', 'tv', 'StarTimes', 200_000, 50_000_000, 'Numéro de smartcard', '#f97316'],
+    ['drc_vodanet', 'internet', 'Vodacom Internet (Vodanet)', 200_000, 100_000_000, 'Numéro de compte', '#dc2626'],
+    ['drc_orange_internet', 'internet', 'Orange Internet', 200_000, 100_000_000, 'Numéro de compte', '#f97316'],
+    ['drc_liquid_home', 'internet', 'Liquid Home Fibre', 500_000, 200_000_000, 'Numéro de compte', '#6366f1'],
+    ['drc_dgi', 'government', 'DGI (Direction générale des impôts)', 100_000, 2_000_000_000, 'Numéro de note de perception', '#0f766e'],
+  ] as const;
+  for (const [id, category, name, min, max, label, color] of billers)
+    if (!hasBiller.get(name) && !db.prepare('SELECT 1 FROM billers WHERE id = ?').get(id))
+      upsertBiller({ id, category, name, country: 'CD', currency: 'CDF', minAmount: min, maxAmount: max, feeBps: 0, accountLabel: label, enabled: true, color });
+  const hasOperator = db.prepare("SELECT 1 FROM topup_operators WHERE country = 'CD' AND name = ?");
+  const ops = [
+    ['drc_vodacom', 'Vodacom', [50_000, 100_000, 200_000, 500_000, 1_000_000], '#dc2626'],
+    ['drc_orange', 'Orange', [50_000, 100_000, 200_000, 500_000, 1_000_000], '#f97316'],
+    ['drc_airtel', 'Airtel', [50_000, 100_000, 200_000, 500_000, 1_000_000], '#ef4444'],
+    ['drc_africell', 'Africell', [50_000, 100_000, 200_000, 500_000], '#7c3aed'],
+  ] as const;
+  for (const [id, name, den, color] of ops)
+    if (!hasOperator.get(name) && !db.prepare('SELECT 1 FROM topup_operators WHERE id = ?').get(id))
+      upsertOperator({ id, name, country: 'CD', currency: 'CDF', minAmount: 50_000, maxAmount: 5_000_000, denominations: [...den], enabled: true, color });
+  const hasProduct = db.prepare('SELECT 1 FROM gift_card_products WHERE brand = ? AND currency = ?');
+  const products = [
+    ['drc_canalplus_voucher', 'Canal+ Afrique', 'Abonnement Canal+ (code de recharge)', 'entertainment', [1_500_000, 2_500_000, 4_500_000], '#111827', "Recharge d'abonnement Canal+ Afrique en RDC"],
+    ['drc_dstv_voucher', 'DStv', 'DStv RDC (code de recharge)', 'entertainment', [1_500_000, 3_000_000, 6_000_000], '#ec4899', "Recharge d'abonnement DStv en RDC"],
+    ['drc_snel_prepaid', 'SNEL', 'SNEL prépayé (jeton CashPower)', 'utilities', [500_000, 1_000_000, 2_500_000], '#f59e0b', "Jeton d'électricité prépayée pour compteur SNEL"],
+  ] as const;
+  for (const [id, brand, name, category, den, color, description] of products)
+    if (!hasProduct.get(brand, 'CDF') && !db.prepare('SELECT 1 FROM gift_card_products WHERE id = ?').get(id))
+      upsertGiftProduct({ id, brand, name, category, currency: 'CDF', denominations: [...den], color, enabled: true, description });
 }

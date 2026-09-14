@@ -95,6 +95,8 @@ export const hi: Record<string, string> = {
   'settings.security': 'सुरक्षा',
   'settings.kyc': 'पहचान सत्यापन',
   'settings.language': 'भाषा',
+  'settings.notifications': 'सूचनाएँ',
+  'settings.notificationsHint': 'हर प्रकार की सूचना के लिए चुनें कि BitriPay आपसे कैसे संपर्क करे। सुरक्षा, धन-आवाजाही और कानूनी सूचनाएँ हमेशा भेजी जाती हैं।',
   'settings.theme': 'डार्क मोड',
   'settings.2fa': 'दो-चरणीय प्रमाणीकरण',
   'settings.pin': 'लेन-देन पिन',

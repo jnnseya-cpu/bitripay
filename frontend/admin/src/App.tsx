@@ -9,6 +9,7 @@ import { Transactions } from './pages/Transactions';
 import { Approvals, Kyc } from './pages/Approvals';
 import { Verification } from './pages/Verification';
 import { Controls } from './pages/Controls';
+import { Comms } from './pages/Comms';
 import { Corridors } from './pages/Corridors';
 import { Emoney } from './pages/Emoney';
 import { Seo } from './pages/Seo';
@@ -228,6 +229,14 @@ export function App() {
           element={
             <P>
               <Messaging />
+            </P>
+          }
+        />
+        <Route
+          path="/comms"
+          element={
+            <P>
+              <Comms />
             </P>
           }
         />

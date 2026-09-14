@@ -221,11 +221,26 @@ export function renderTemplate(key: string, channel: TemplateChannel, lang: stri
  * body from the admin-editable template in the user's language; the caller's title/body stay as the fallback.
  * The `loud` flag follows the kind (or an explicit data.loud) and the user's loud-alert preference.
  */
-export function notify(userId: string, title: string, body: string, data: Record<string, unknown> = {}) {
+/** Everything after the in-app row: the communication engine registers itself here and fans the notice out to the other channels. */
+export type TemplatedNotifyHandler = (userId: string, title: string, body: string, data: Record<string, unknown>, notificationId: string, pushed: boolean) => void;
+let templatedNotifyHandler: TemplatedNotifyHandler | null = null;
+export function registerTemplatedNotifyHandler(handler: TemplatedNotifyHandler | null) {
+  templatedNotifyHandler = handler;
+}
+
+/** The in-app notification row alone (notification centre + badge); loud alerts follow the user's preference. */
+export function insertNotification(userId: string, title: string, body: string, payload: Record<string, unknown> = {}): { id: string; loud: boolean } {
   const db = getDb();
   const id = uuid();
-  const prefs = db.prepare('SELECT loud_alerts, language FROM users WHERE id = ?').get(userId) as { loud_alerts?: number; language?: string } | undefined;
-  const loud = isLoud(data) && (prefs?.loud_alerts ?? 1) === 1;
+  const prefs = db.prepare('SELECT loud_alerts FROM users WHERE id = ?').get(userId) as { loud_alerts?: number } | undefined;
+  const loud = isLoud(payload) && (prefs?.loud_alerts ?? 1) === 1;
+  db.prepare('INSERT INTO notifications (id, user_id, title, body, data, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)').run(id, userId, title, body, JSON.stringify({ ...payload, loud }), now());
+  return { id, loud };
+}
+
+export function notify(userId: string, title: string, body: string, data: Record<string, unknown> = {}) {
+  const db = getDb();
+  const prefs = db.prepare('SELECT language FROM users WHERE id = ?').get(userId) as { language?: string } | undefined;
   const { template, vars, ...rest } = data as { template?: unknown; vars?: unknown } & Record<string, unknown>;
   if (typeof template === 'string') {
     const rendered = renderTemplate(template, 'push', prefs?.language, (vars ?? {}) as Record<string, unknown>);
@@ -234,9 +249,11 @@ export function notify(userId: string, title: string, body: string, data: Record
       body = rendered.body || body;
     }
   }
+  const { id, loud } = insertNotification(userId, title, body, rest);
   const payload = { ...rest, loud };
-  db.prepare('INSERT INTO notifications (id, user_id, title, body, data, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)').run(id, userId, title, body, JSON.stringify(payload), now());
-  void sendPush(userId, title, body, payload);
+  const pushed = (db.prepare('SELECT COUNT(*) c FROM push_tokens WHERE user_id = ?').get(userId) as { c: number }).c > 0;
+  if (pushed) void sendPush(userId, title, body, payload);
+  templatedNotifyHandler?.(userId, title, body, data, id, pushed);
   return id;
 }
 

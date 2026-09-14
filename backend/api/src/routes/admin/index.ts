@@ -45,6 +45,8 @@ import { adminGrowthRouter } from './growth';
 import { adminRiskRouter } from './risk';
 import { adminIntelligenceRouter } from './intelligence';
 import { adminMessagingRouter } from './messaging';
+import { adminCommsRouter } from './comms';
+import { emitAsync } from '../../services/comms/engine';
 import { adminInsightsRouter } from './insights';
 import { adminSystemRouter } from './system';
 import { adminWhatsAppRouter } from './whatsapp';
@@ -122,7 +124,7 @@ import {
 } from '../../services/cms';
 import { listTickets, getTicket, replyTicket, setTicketStatus, chatConversations, chatHistory, sendChat } from '../../services/support';
 import * as p2p from '../../services/p2p';
-import { broadcast, notify } from '../../services/notifications';
+import { broadcast } from '../../services/notifications';
 import { runAutoSettlements, listSettlements } from '../../services/merchant';
 import { getSmtpSettings, sendEmail, outbox } from '../../services/messaging';
 import { toMinor } from '@bitripay/shared';
@@ -179,6 +181,7 @@ adminRouter.use('/growth', adminGrowthRouter);
 adminRouter.use('/risk', adminRiskRouter);
 adminRouter.use('/intelligence', adminIntelligenceRouter);
 adminRouter.use('/messaging', adminMessagingRouter);
+adminRouter.use('/comms', adminCommsRouter);
 adminRouter.use('/insights', adminInsightsRouter);
 adminRouter.use('/system', adminSystemRouter);
 adminRouter.use('/channels/whatsapp', adminWhatsAppRouter);
@@ -268,7 +271,10 @@ adminRouter.post(
       req.body,
     );
     const user = createUser({ ...body, emailVerified: true });
-    if (body.role === 'admin') updateUser(user.id, { permissions: JSON.stringify(body.permissions ?? []) } as any);
+    if (body.role === 'admin') {
+      updateUser(user.id, { permissions: JSON.stringify(body.permissions ?? []) } as any);
+      emitAsync('admin.created', { userId: user.id, vars: { actor: req.user!.email ?? req.user!.full_name, permissions: (body.permissions ?? []).join(', ') || 'no permissions yet' } });
+    }
     audit(req.user!.id, 'user.create', 'user', user.id, { role: body.role });
     res.status(201).json({ user: toUser(getUserById(user.id)) });
   }),
@@ -335,7 +341,8 @@ adminRouter.patch(
     if (body.password) fields.password_hash = hashPassword(body.password);
     const updated = updateUser(target.id, fields as any);
     audit(req.user!.id, 'user.update', 'user', target.id, { ...body, password: body.password ? '***' : undefined });
-    if (body.status === 'suspended') notify(target.id, 'Account suspended', 'Your account has been suspended. Contact support for help.', { kind: 'account' });
+    if (body.status === 'suspended') emitAsync('account.suspended', { userId: target.id, vars: { reason: '' }, data: { kind: 'account' } });
+    if (body.status === 'active' && target.status === 'suspended') emitAsync('account.reactivated', { userId: target.id, data: { kind: 'account' } });
     res.json({ user: { ...toUser(updated), permissions: JSON.parse((updated as any).permissions || '[]') } });
   }),
 );

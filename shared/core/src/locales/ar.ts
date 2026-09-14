@@ -95,6 +95,8 @@ export const ar: Record<string, string> = {
   'settings.security': 'الأمان',
   'settings.kyc': 'التحقق من الهوية',
   'settings.language': 'اللغة',
+  'settings.notifications': 'الإشعارات',
+  'settings.notificationsHint': 'اختر كيف تصلك BitriPay لكل نوع من الإشعارات. إشعارات الأمان وحركة الأموال والإشعارات القانونية تُرسل دائمًا.',
   'settings.theme': 'الوضع الداكن',
   'settings.2fa': 'المصادقة الثنائية',
   'settings.pin': 'رمز المعاملة',

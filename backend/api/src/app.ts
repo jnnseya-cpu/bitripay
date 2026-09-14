@@ -63,6 +63,8 @@ import { ensureDefaultGateways, provisionRailsFromEnvironment } from './payments
 import { getSystemUser } from './services/users';
 import { seedDefaultCatalogs } from './seedDefaults';
 import { ensureOfficialSanctionsSources, refreshAllSources } from './services/risk/compliance';
+// Loading the communication engine registers it with notify(), so every notice fans out across channels from the first request.
+import './services/comms/engine';
 
 export function bootstrap() {
   getDb();

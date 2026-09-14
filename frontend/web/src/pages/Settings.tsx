@@ -18,6 +18,7 @@ export function Settings() {
     { id: 'security', label: t('settings.security') },
     ...(config?.modules.kyc !== false ? [{ id: 'kyc', label: t('settings.kyc') }] : []),
     { id: 'preferences', label: t('settings.language') },
+    { id: 'notifications', label: t('settings.notifications') },
   ];
   return (
     <div style={{ maxWidth: 760 }}>
@@ -27,6 +28,7 @@ export function Settings() {
       {tab === 'security' && <Security />}
       {tab === 'kyc' && <Kyc />}
       {tab === 'preferences' && <Preferences />}
+      {tab === 'notifications' && <NotificationPreferences />}
     </div>
   );
 }
@@ -533,6 +535,80 @@ function Preferences() {
       <div className="divider" />
       <KV k="Account created" v={user ? new Date(user.createdAt).toLocaleDateString() : ''} />
       <KV k="User ID" v={<span className="mono tiny">{user?.id}</span>} />
+    </div>
+  );
+}
+
+const CHANNEL_LABELS: Record<string, string> = { email: 'Email', inapp: 'In app', sms: 'SMS', push: 'Push', whatsapp: 'WhatsApp' };
+
+/** Opt out per kind of notice and channel; mandatory notices (security, money movement, legal) are always delivered. */
+function NotificationPreferences() {
+  const t = useT();
+  const data = useAsync(
+    () =>
+      api.get<{
+        channels: string[];
+        categories: { id: string; label: string; description: string; events: number; mandatory: number; channels: string[] }[];
+        prefs: Record<string, Record<string, boolean>>;
+      }>('/api/account/notifications/preferences'),
+    [],
+  );
+  const [prefs, setPrefs] = useState<Record<string, Record<string, boolean>> | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const current = prefs ?? data.data?.prefs ?? {};
+  const isOn = (cat: string, ch: string) => current[cat]?.[ch] !== false;
+  const toggle = async (cat: string, ch: string) => {
+    const next = { ...current, [cat]: { ...(current[cat] ?? {}), [ch]: !isOn(cat, ch) } };
+    setPrefs(next);
+    try {
+      const r = await api.put<{ prefs: Record<string, Record<string, boolean>> }>('/api/account/notifications/preferences', { prefs: next });
+      setPrefs(r.prefs);
+      setSaved(new Date().toLocaleTimeString());
+    } catch {
+      setPrefs(current);
+    }
+  };
+  if (!data.data) return <div className="card">…</div>;
+  return (
+    <div className="card">
+      <p className="muted">{t('settings.notificationsHint')}</p>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t('settings.notifications')}</th>
+              {data.data.channels.map((ch) => (
+                <th key={ch} style={{ textAlign: 'center' }}>
+                  {CHANNEL_LABELS[ch] ?? ch}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.data.categories.map((c) => (
+              <tr key={c.id}>
+                <td>
+                  <b>{c.label}</b>
+                  <div className="tiny muted">
+                    {c.description}
+                    {c.mandatory > 0 && ` · ${c.mandatory} always sent`}
+                  </div>
+                </td>
+                {data.data!.channels.map((ch) => (
+                  <td key={ch} style={{ textAlign: 'center' }}>
+                    {c.channels.includes(ch) ? (
+                      <button type="button" className={`switch ${isOn(c.id, ch) ? 'on' : ''}`} onClick={() => toggle(c.id, ch)} aria-label={`${c.label} via ${CHANNEL_LABELS[ch] ?? ch}`} />
+                    ) : (
+                      <span className="tiny muted">—</span>
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {saved && <div className="tiny muted mt-sm">Saved {saved}</div>}
     </div>
   );
 }

@@ -111,6 +111,8 @@ export const ln: Record<string, string> = {
   'settings.security': 'Bokengi',
   'settings.kyc': 'Bondimi ya identité',
   'settings.language': 'Monoko',
+  'settings.notifications': 'Bansango',
+  'settings.notificationsHint': 'Pona ndenge BitriPay ekoyebisa yo mpo na lolenge nyonso ya nsango. Bansango ya bokengi, ya mbongo mpe ya mibeko etindamaka ntango nyonso.',
   'settings.theme': 'Mode ya molili',
   'settings.2fa': 'Bondimi na ba étapes mibale',
   'settings.pin': 'Code PIN ya transaction',
