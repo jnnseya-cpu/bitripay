@@ -801,3 +801,354 @@ The data layer is plain SQL through a thin adapter, so migrating to PostgreSQL i
   development sandboxes); without it the platform labels rates as bundled test rates or
   administrator-imported, disables guaranteed quotes and keeps the go-live checklist blocking rather
   than presenting them as live.
+
+### WhatsApp channel and WhatsApp checkout (Meta Cloud API)
+
+The WhatsApp channel runs the same command grammar as SMS (`BAL <PIN>`, `SEND`, `PAY`, `CASH`, `STMT`,
+`CODE`, `REG`, `HELP`) over the Meta Cloud API, and adds **WhatsApp checkout**: a message that
+contains a BitriPay payment link (`…/pay/<code>[?cs=cs_…]`, `…/checkout/<code>`, `…/q/<code>`), a bare
+`cs_…` checkout-session id or a `bp_<code>` link code is answered with an interactive `cta_url`
+**pay card** — the merchant as header, the amount and description in the body, a single "Pay" button
+to the hosted checkout. Closed or unknown links get a plain text explanation.
+
+- `GET /api/whatsapp` — Meta's verification handshake: `hub.mode=subscribe` with the configured
+  `hub.verify_token` echoes `hub.challenge` (text/plain); anything else is 403 `whatsapp_verify_failed`.
+- `POST /api/whatsapp` — inbound webhook. `X-Hub-Signature-256: sha256=<hex>` is verified over the
+  raw request bytes (`req.rawBody`, captured by the JSON parser in `app.ts`) with the app secret; a
+  missing, malformed or wrong signature is 403 `whatsapp_signature` and nothing is processed. Message
+  ids are de-duplicated (Meta redelivers until it sees a 200). A disabled channel answers 200
+  `{ enabled: false }` without processing. The response lists what was handled
+  (`{ from, kind: 'text' | 'pay_card', replyType, replyId, via }`).
+- Outbound: `sendWhatsApp(to, text)`, `sendWhatsAppTemplate(to, templateName, lang, components)` and
+  `sendWhatsAppInteractive(to, card)` post to `{graphUrl}/{apiVersion}/{phoneNumberId}/messages` with
+  the access token. When no token/phone-number id is configured (and always under test) the payload
+  is recorded instead; every message, delivered or not, lands in the in-memory outbox
+  (`recentWhatsAppOutbox(limit)`) and in `channel_messages` (`recentWhatsApp(limit)`, both directions).
+- Admin (`requirePermission('settings')`, audited as `channels.whatsapp.settings.update`):
+  `GET /api/admin/channels/whatsapp` → `{ settings, readiness, webhookUrl, messages, outbox }` with
+  `appSecret` and `accessToken` masked (`••••••••`); `PUT /api/admin/channels/whatsapp` accepts
+  `enabled, verifyToken, appSecret, accessToken, phoneNumberId, apiVersion, graphUrl, payButtonText,
+  footer` — sending the mask (or omitting a secret) keeps the stored value, new secrets are AES-GCM
+  encrypted at rest; `POST /api/admin/channels/whatsapp/simulate` `{ phone, text }` drives the real
+  handler and returns the reply payload. Settings live under the `whatsapp` settings key.
+
+Meta setup: create a WhatsApp Business app, set the webhook URL to `https://api.yourbrand/api/whatsapp`
+with the verify token from the admin page, subscribe to the `messages` field, and paste the app secret,
+the system-user access token and the phone number id into the admin settings.
+
+### Shopify via link redirect
+
+Shopify stores integrate without an app-store listing: the store's server (a Shopify app, a Function or
+a manual payment method that links to your site) starts a BitriPay checkout with its merchant API key
+and sends the shopper to the hosted checkout; BitriPay sends them back with the outcome.
+
+- `POST /api/shopify/start` — `Authorization: Bearer sk_…` (or `rk_…` with `checkout_sessions:write`;
+  `pk_…` keys are refused with 403 `scope_denied`, a wrong key with 401 `invalid_api_key`). Body
+  `{ shop, order_id, amount_minor, currency, return_url, order_name?, description?, customer?,
+  expires_in_minutes?, allowed_methods? }`. Creates a payment intent + hosted checkout session through
+  the gateway services (identical to `POST /v1/checkout_sessions`) with
+  `metadata.shopify = { shop, orderId, orderName, ref, returnUrl }`, `reference = shopify:<order_id>`
+  and success/cancel URLs pointing at the return endpoint. Answers 201
+  `{ redirect_url, return_url, session }`. Rate-limited; honours `Idempotency-Key`.
+- `GET /api/shopify/return?session=cs_…` (or `?ref=shp_…`, the reference carried by the checkout's
+  success URL) — 302 to the store's `return_url` with `bitripay_status=paid|pending|failed`,
+  `session=cs_…` and `order_id=…` appended (`paid` = session complete, `failed` = expired/cancelled/
+  failed intent, otherwise `pending`). Sessions that did not start from Shopify are 404.
+- `GET /api/shopify/status?session=cs_…` (merchant key) — the same outcome as JSON for stores that
+  confirm from their server. For anything that matters, confirm with `GET /v1/checkout_sessions/:id`
+  or the `checkout.session.completed` webhook rather than the redirect alone.
+
+### Embedded checkout SDK (`@bitripay/checkout-js`)
+
+`shared/sdk-js` is a dependency-free browser package (ES2019 + DOM, CommonJS + `.d.ts`, also assigns
+`window.BitriPay`). `BitriPay.checkout({ url | sessionId + apiBase, mode: 'redirect' | 'embed',
+container?, height?, origin?, locale?, onSuccess?, onFailure?, onClose?, onMessage? })` either navigates
+to the hosted checkout or mounts it in an iframe on `<url>?embed=1&origin=<window.location.origin>`
+(`sessionId` resolves to `<apiBase>/checkout/<sessionId>`). `mountPayButton(el, options)` wires a
+click on any element to `checkout(options)`. `buildCheckoutUrl(options)` and
+`parseCheckoutMessage(event, expectedOrigin)` are pure, exported and unit-tested with `node:test`.
+
+**postMessage contract** (the hosted checkout page → `window.parent`, `targetOrigin` = the `origin`
+query parameter it was opened with):
+
+```json
+{ "type": "bitripay:checkout", "status": "succeeded" | "failed" | "closed", "sessionId": "cs_…" | null, "paymentIntentId": "pi_…" | null }
+```
+
+`succeeded` = the intent was captured and the session is complete; `failed` = the payment failed, was
+cancelled or the session expired; `closed` = the shopper dismissed the checkout (the SDK removes the
+iframe and calls `onClose`). The SDK only accepts events whose `event.origin` equals the checkout
+origin derived from the URL it opened and whose data matches this shape (JSON strings accepted); every
+other message on the page is ignored. Merchants must still confirm orders server-side
+(`GET /v1/checkout_sessions/:id` or the `checkout.session.completed` webhook).
+
+### Organisations, merchant RBAC and business units (§43, §44)
+
+Every merchant-class account (`merchant`, `corporate`, `ngo`, `government`, `developer` — the account types offered
+at registration, all merchant-class for `requireRole` / `isMerchantRole`) owns an **organisation**, the legal entity
+behind it. Registration and `POST /api/merchant/apply` create it with the account as `owner` member; accounts that
+predate organisations get one on first use (`ensureOrganisation`) and migration `032_organisations_rbac.sql`
+backfills existing merchants, their intents and locations. Every payment intent is stamped with `organisation_id`
+at creation and its view carries `organisationId` and `businessUnitId` (the unit of its location, read-only join).
+
+**Members** are existing BitriPay accounts invited by email, phone or `@tag`. They sign in with their own credentials
+and act for the organisation on the merchant surfaces (`/api/v1`, `/v1`, `/api/organisations`): the request runs as
+the owner account (every merchant table is keyed on it) while `req.actor` keeps the person for audit and step-up
+(a member confirms live keys or high-value refunds with **their own** PIN or passkey). Elsewhere (wallet, profile,
+security) members stay themselves; the legacy `/api/merchant/*` surface is owner-only. `X-Organisation-Id` selects
+the organisation when a person belongs to several.
+
+| Role | Permissions (`ORG_PERMISSIONS` in `@bitripay/shared`) |
+| --- | --- |
+| owner | everything (`*`); immutable — cannot be demoted, removed or assigned |
+| administrator | every permission key, including member and unit management |
+| finance_manager | payments:view, refunds:issue, refunds:unrestricted, settlement:view, settlement:change, payouts:create, statements:view, customers:export, disputes:respond |
+| operations_manager | org:manage_units, payments:create, payments:view, refunds:issue, settlement:view, statements:view, disputes:respond |
+| developer | api_keys:view, api_keys:manage, webhooks:manage, payments:create, payments:view |
+| analyst | payments:view, settlement:view, statements:view |
+| cashier | payments:create, payments:view, refunds:issue (only up to the cashier refund limit) |
+| support | payments:view, refunds:issue, disputes:respond |
+| compliance_reviewer | payments:view, statements:view, compliance:review, disputes:respond |
+| read_only | payments:view, settlement:view, statements:view |
+
+`requireOrgPermission(...)` guards the sensitive v1 routes: intent / checkout / link / money-request creation
+(`payments:create`), refunds (`refunds:issue`; a member without `refunds:unrestricted` may refund at most the
+organisation's **cashier refund limit** — `settings.cashierRefundLimitMinor`, default 5 000 minor units or the
+platform setting `organisations.cashierRefundLimitMinor`, set with `PATCH /api/organisations/me`; a full refund
+without `amount_minor` counts as unlimited), API keys (`api_keys:view` / `api_keys:manage`), webhook endpoints
+(`webhooks:manage`), payouts and payout batches (`payouts:create`), settlement profiles, cycles and pay-outs
+(`settlement:change`), cycle statements (`statements:view`), dispute responses (`disputes:respond`) and the customer
+export (`customers:export`). Refusals are `403 org_permission_denied` naming the role and the permission (or
+`refund_limit_exceeded` with the limit). Owners, administrators (platform) and API keys hold every permission; a key
+still can never manage keys (`session_required`).
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/organisations/me` | organisation, the caller's membership (role, permissions), members, business units, the role list and the matrix |
+| `PATCH /api/organisations/me` | `name`, `cashierRefundLimitMinor` (`org:settings`) |
+| `GET /api/organisations/roles` | roles and permission keys |
+| `GET/POST /api/organisations/members`, `PATCH/DELETE …/members/:userId` | invite (`identifier`, `role`, optional per-member `permissions`), change role, remove (`org:manage_members`) |
+| `GET/POST /api/organisations/business-units`, `GET/PATCH/DELETE …/business-units/:id` | units (`name`, `code` derived when empty, optional `settlementProfileId`); a unit with locations attached cannot be deleted (`org:manage_units`) |
+| `PATCH /api/organisations/locations/:id` | `{ businessUnitId }` attaches a location (its terminals and QR codes follow) or `null` detaches it |
+| `GET /api/organisations/customers/export[?format=csv]` | customers seen on the organisation's intents (`customers:export`) |
+
+Tables: `organisations`, `organisation_members` (+ `invited_by`, `updated_at`), `business_units(id, organisation_id,
+name, code, settlement_profile_id, created_at, updated_at)`, `merchant_locations.business_unit_id`. Contract tests:
+`backend/api/src/tests/contract_organisations.test.ts`.
+
+## Operations: SLOs, SLA register, gate to scale
+
+Everything in this section is measured on real traffic and real rows; nothing is assumed. Without traffic a target is
+reported as "no traffic", never as met.
+
+### Service-level objectives (`backend/api/src/middleware/slo.ts`, migration `031_slo_sla.sql`)
+
+`sloMiddleware` is mounted right after the correlation id, so every response is timed (`process.hrtime`) and
+classified into a route class:
+
+| Class           | Routes                                                                          | Target                                 |
+| --------------- | ------------------------------------------------------------------------------- | -------------------------------------- |
+| `intent_create` | `POST /v1/payment_intents`, `POST /v1/qr-intents`, `POST /v1/qr/:id/intent`     | p99 < 300 ms                           |
+| `qr_resolve`    | `GET /v1/resolve[/:ref]`, `GET /v1/payment_resolution`, `/api/qr/*`             | scan-to-confirmation p95 < 2 s         |
+| `koda_verify`   | `POST /v1/verifications`                                                        | p95 < 5 s                              |
+| `money_post`    | `POST /api/money/*`                                                             | ledger write p99 < 50 ms               |
+| `switch`        | `/v1/payments*`, `/v1/consents*`, `/v1/participants*`                           | availability ≥ 99.95 % (5xx-free share)|
+| `other`         | everything else                                                                 | —                                      |
+
+Each class keeps a ring buffer of the last 10 000 samples (latency + timestamp) and a per-minute accumulator that is
+rolled up into `slo_samples(class, minute, count, p50_ms, p95_ms, p99_ms, errors, client_errors, rate_limited)` when
+the minute changes, on an unref'd 15 s timer, and on `flushSlo()`. Requests authenticated with an API key are counted
+per key and minute in `slo_api_usage`; the `error.code` of every non-2xx JSON response is counted in
+`slo_error_codes`. `measure(className, fn)` times an in-process span (sync or async) under any class name — spans
+without a configured target are reported without a verdict.
+
+`sloReport()` returns, per class, p50/p95/p99, error rate, availability, the target and `met` (true / false / null =
+no traffic) for the last hour and the last 24 hours, plus national switch availability against 99.95 %.
+
+- `GET /api/admin/system/slo` (permission `reports`) — the report with the configured targets.
+- `GET /api/admin/system/api-ops?hours=24` — usage per API key (prefix, label, mode, requests, errors, rate-limited),
+  top error codes, totals including the rate-limited (429) count.
+
+### System health
+
+`GET /api/admin/system/health` (permission `reports`): process uptime and memory, database size and WAL state
+(`PRAGMA journal_mode`, `page_count`, `freelist_count`, `wal_checkpoint(PASSIVE)`), migration count and last name,
+scheduler (`jobs.ts` keeps its last-run timestamps private, so the field reads `not exposed`), webhook backlog
+(pending / retrying / dead), switch outbox backlog, rail health summary (`listRails()` grouped by state with the
+unusable rails listed), Guardian operating mode and open violations, open incidents and the SLO summary.
+
+### SLA register (`backend/api/src/services/sla.ts`)
+
+`sla_register(id, counterparty, kind processor|operator|switch|bank|vendor, service, rail_id, availability_target,
+latency_target_ms, support_contact, escalation_contact, maintenance_window, incident_contact, review_date,
+document_ref, created_by, created_at, updated_at)` with audited CRUD:
+
+- `GET /api/admin/system/sla[?kind=&rail=]`, `GET /api/admin/system/sla/:id` (permission `reports`)
+- `POST /api/admin/system/sla`, `PUT /api/admin/system/sla/:id`, `DELETE /api/admin/system/sla/:id`
+  (permission `settings`; audit actions `sla.create`, `sla.update`, `sla.delete`; an unknown `railId` is refused)
+- `GET /api/admin/system/sla/breaches` — every entry with its measurement: a rail-bound entry is measured against
+  the rail's health state and 24 h routing statistics (success rate, p95 latency); a `switch` entry without a rail is
+  measured against the switch SLO availability; other entries are reported as unmeasured. `breached` is true only
+  when a measurement exists and misses the commitment; `reviewOverdue` flags a past review date. A breach is an
+  observation to raise with the counterparty, never an automatic action.
+
+### Gate to scale (`gateToScale()` in `backend/api/src/services/goLive.ts`)
+
+Marketing spend waits for four thresholds over 30 days of real data, returned as `gateToScale: { ready, items }` in
+`GET /api/admin/go-live` and on its own at `GET /api/admin/system/gate-to-scale?days=30`:
+
+1. **Auto-reconciliation ≥ 95 %** — `SUM(matched) / (SUM(matched) + SUM(cases_opened))` over `reconciliation_runs`
+   (processor, bank and switch runs alike); no run in the window → not met.
+2. **Exception rate < 2 %** — reconciliation cases + disputes + chargebacks opened, over payment intents that reached
+   a paid state plus completed switch payments; no paid payment → not met.
+3. **Zero Guardian halts** — `guardian_checks.halted` and `guardian.findings` events with `halted: true`; Guardian
+   must have run in the window and the platform must not be halted now.
+4. **Fraud loss < 25 bps** — disputes decided LOST and chargebacks lost, over captured volume, both in base-currency
+   minor units; no captured volume → not met.
+
+Each item carries `ok`, `detail` (the numbers it was computed from) and `fix`.
+
+### Rail maintenance and capability matrix (`backend/api/src/routes/admin/switch.ts`)
+
+- `POST /api/admin/switch/rails/:id/maintenance { on, reason? }` (permission `gateways`) — opens or clears an
+  administrator maintenance window through `setRailMaintenance`; the rail reports `MAINTENANCE`, Smart Route stops
+  choosing it, and the event journal and audit log record `rail.maintenance.on|off`.
+- `GET /api/admin/switch/capability-matrix[?country=CD,KE]` (permission `settings`) — country × method × rail: a cell
+  is enabled when the country allows the method (`services/capabilities.ts`) and a rail serving it in that country is
+  enabled and usable.
+- `PUT /api/admin/switch/capability-matrix/:country { methods: { mobile_money: false, … }, maxPerTransaction }` —
+  writes through to the enforced country capabilities (audit `capabilities.matrix.update`).
+
+### Admin console
+
+- **System health & SLOs** (`/system`): health cards, SLO table with met / missed verdicts, API operations, SLA
+  register CRUD with measured breaches, gate-to-scale panel.
+- **National switch** gains **National view** (per-connection 24 h picture, participants, pairs, capability matrix),
+  **Configuration** (connections, certificates with an expiry check, routing policies, rail maintenance windows) and
+  **PRA** (incidents, continuity runbook with its checklist and exercises, reconciliation coverage check and runs).
+- **Gateway controls & risk → Capability matrix**: the country × method × rail editor.
+
+Tests: `backend/api/src/tests/contract_operations.test.ts`.
+
+### Bitcoin rail: Lightning and on-chain behind the same intent and QR (§55, §56)
+
+Bitcoin is a **payment rail**, never a second checkout: the same payment intent, the same BitriQR and the same
+attempt / event / ledger machinery, with `bitcoin` as one more `PaymentMethod` served by the `bitcoin` gateway
+provider (`backend/api/src/payments/bitcoin.ts`). It ships registered but **disabled** (`ensureDefaultGateways`
+seeds the `bitcoin` gateway with `enabled: false`) and is offered only where jurisdiction and merchant policy allow.
+
+- **Eligibility** – `bitcoinEligible({ country, merchantPolicy })` (services/capabilities.ts): the country must be in
+  the administrator-editable list of the capability matrix (`PUT /api/admin/capabilities/:country { bitcoin: true }`;
+  `bitcoinCountries()` is empty by default, and aggregator-phase countries stay off because Bitcoin is a full-licence
+  service) **and**, for a merchant payment, the merchant must have opted in (`bitcoin: true` in the merchant gateway
+  settings JSON, `merchantBitcoinPolicy()` / `setMerchantBitcoinPolicy()`). A wallet top-up needs the jurisdiction only.
+  `intentRailsFor()` adds the `bitcoin` rail to checkout sessions and payment links of eligible merchants (so the
+  intent's `/methods` lists *Bitcoin / Lightning* without any change to the QR) and strips it otherwise;
+  `paymentOptions()` lists the method with its rate disclosure; `initiatePayment` refuses an ineligible payment with
+  `bitcoin_not_eligible` (422).
+- **Adapter** – credentials `mode` (`sandbox` | `btcpay`), `serverUrl`, `storeId`, `apiKey`, `webhookSecret`,
+  `network` (mainnet = live keys; testnet / signet / regtest = test), `confirmations` (on-chain, default 1),
+  `invoiceExpiryMinutes` (default 15). `initiate` returns `next.type = 'bitcoin_invoice'` with a BOLT11 Lightning
+  invoice **and** an on-chain address for the same amount in sats, the disclosed fiat → BTC rate (mid rate, margin in
+  bps, source, `sandbox` flag and label), the expiry and the confirmation policy (Lightning settles on payment,
+  on-chain after *n* confirmations). Sandbox invoices are deterministic from the connector idempotency key (a retried
+  initiate returns the same invoice); BTCPay mode calls the Greenfield API (`POST /api/v1/stores/{storeId}/invoices`,
+  `GET …/invoices/{id}` and `…/payment-methods`, `DELETE …/invoices/{id}` to archive on cancel, `GET /api/v1/server/info`
+  for the health check) with `Authorization: token <apiKey>`. `verify` maps `New` / `Processing` → pending,
+  `Settled` → succeeded, `Expired` / `Invalid` → failed, and an expired invoice that received money (`PaidPartial`,
+  `PaidLate`) → unknown (parked in `MANUAL_REVIEW`). Webhooks arrive on the generic `POST /api/webhooks/bitcoin` and are
+  accepted only with a valid `BTCPay-Sig: sha256=<HMAC-SHA256(raw body, webhook secret)>`. `refund` always returns
+  `manual` (no automatic refund on chain); `capabilities` declares no refunds, T+0 settlement and webhooks.
+- **Rates** – the `BTC` currency row (8 decimals) is seeded **disabled** with the sandbox rate `sandbox_btc_rate_v1`
+  (1 BTC = 65 000 USD, labelled *NOT a live market rate*). Live rates arrive through the existing refresh
+  (`POST /api/admin/currencies/refresh`, providers that quote BTC) or the versioned import
+  (`POST /api/admin/currencies/import { BTC: <BTC per base unit> }`); the disclosure then names the source and drops the
+  sandbox label. The platform exchange margin (`exchangeMarginBps`) is applied against the payer (more sats due) and
+  disclosed on every invoice and quote.
+- **Settlement** – merchant policy `bitcoinSettlement: 'fiat'` (default) converts to the intent currency at capture
+  through the existing `merchant_payment` posting; `'btc'` credits the merchant's BTC wallet in sats through the ledger's
+  conversion legs (`receiveCurrency: 'BTC'`), which requires the BTC currency to be enabled by an administrator –
+  otherwise the payment settles in fiat and the reason is recorded (`metadata.bitcoinSettlement`). The transaction
+  metadata carries `bitcoin: { requested, applied, invoiceId, amountSats, receiveSats, rate }`.
+- **Sandbox** – invoices are paid (or marked invalid) through `POST /api/deposits/:id/bitcoin/simulate
+  { outcome: 'paid' | 'invalid' }` (the payer, the merchant of the request or an administrator) or, for an intent with
+  an open Bitcoin attempt, through the existing `POST /v1/sandbox/simulate { payment_intent, outcome: 'succeed' | 'fail' }`;
+  both refuse BTCPay-mode gateways (`sandbox_only`). A sandbox-mode Bitcoin gateway is never offered in production
+  unless `config.allowInProduction` is set, exactly like the sandbox processor.
+- **Admin** – *Gateways* shows the Bitcoin adapter (mode / network selectors, Greenfield credentials, webhook URL and
+  scopes) and, for **every** gateway, the provider operations fields persisted in the gateway config JSON through
+  `PUT /api/admin/gateways/:id`: `settlementT` (T+n days), `supportContact`, `incidentContact`, `maintenanceWindow`,
+  `minMinor`, `maxMinor`, `refunds`, `webhooks` – the keys the rail registry's `gatewayCapabilities` already reads.
+- Tests: `backend/api/src/tests/contract_bitcoin.test.ts`.
+
+## Intelligence layer: acceptance score, payment graph, float outlook, restricted wallets, government QR (§27, §58, §59, §61, §105, §106)
+
+Migration `030_intelligence_layer.sql`; tests in `backend/api/src/tests/contract_intelligence_layer.test.ts`.
+
+### Merchant acceptance score (`backend/api/src/services/acceptanceScore.ts`)
+
+`GET /api/insights/acceptance-score?days=30` (merchant session, or an API key holding `payment_intents:read`) returns a
+0–100 score with seven components computed over the window from the merchant's own intents, attempts, refunds,
+disputes and settlement cycles. Weights (sum 100): checkout conversion 20 (intents from checkout, links, API and
+invoices captured ÷ decided), QR conversion 15 (QR, POS and USSD), provider failure exposure 15 (attempts that failed or
+hung on the connector ÷ attempts), refund rate 15 (five points lost per percentage point of captured volume refunded),
+dispute rate 15 (twenty points lost per dispute per hundred captured payments), settlement stability 10 (cycles paid by
+their due date ÷ cycles due), customer return rate 10 (half of identified customers returning earns full marks). A
+component without a sample in the window is reported with `sample: 0` and left out of the weighted average; the
+`recommendations` are deterministic sentences built from the weakest components (score below 70, at most three, no
+model call). `snapshotAcceptanceScores()` writes one row per merchant and day into `merchant_acceptance_scores`
+(`POST /api/admin/insights/acceptance/snapshot`; `jobs.ts` should schedule it daily); the endpoint returns the last 30
+snapshots as `history`.
+
+### Payment graph (`backend/api/src/services/paymentGraph.ts`)
+
+`graph_nodes` (user, merchant, agent, device, beneficiary, hashed payment_method, provider, location) and dated
+`graph_edges` (paid, received, cashed_in, cashed_out, used_device, used_method, routed_via, shares_beneficiary,
+located_at) are projected from every completed or settled transaction through the domain bus (inside the posting's own
+database transaction) and can be rebuilt from the ledger with `rebuildGraph()`. Queries: `neighbours(node, depth ≤ 3)`,
+`sharedDevices(a, b)`, `ringCandidates()` (3–5 node payment cycles closed within 24 h), `muleCandidates()` (three or
+more payers in, more than 80 % forwarded within an hour), `duplicateIdentityCandidates()` (shared device, shared payment
+method, same name). Identities are only served under `/api/admin/insights/graph/...` with the `compliance` permission;
+merchants get counts only from `GET /api/insights/graph/summary`.
+
+### Float intelligence (`backend/api/src/services/risk/agentIntel.ts`)
+
+`floatOutlook(agentId)` returns, per currency, `cashFloatMinor` (declared through `POST /api/insights/float-outlook/cash`
+plus ledger movements since, otherwise estimated), `digitalFloatMinor`, `predicted4hDigitalMinor`,
+`predicted4hCashMinor`, `depletionProbability`, `risk` (LOW / MEDIUM / HIGH) and `recommendedAction` (hold, rebalance,
+collect_cash, deposit_cash) with the amount. Demand for the coming hours is the sum of the agent's eight-week
+weekday × hour bucket means (variance summed, normal approximation), corrected by pending cash-out requests, the
+agent's share of cash pickups waiting in the currency and what the same country's agents are doing right now.
+`GET /api/insights/float-outlook` (agent role). HIGH risk only recommends and notifies: `runFloatOutlookAlerts()` (to be
+scheduled hourly by `jobs.ts`) records the event, publishes `agent.float_low` and notifies the agent once per hour.
+`agentLimitsFor(agent)` scales the base per-transaction and daily cash-operation ceilings (`agentIntel.limitBaseMinor`,
+base currency) by trust band (`limitMultiplierByBand`: new 0.5, bronze 1, silver 1.5, gold 2, platinum 3);
+`agentCashIn` and `confirmCashOut` enforce them (`422 agent_limit_exceeded`) on top of the existing checks.
+
+### Smart restricted wallets (`backend/api/src/services/restrictedWallets.ts`)
+
+`restricted_programmes` (purpose code, eligible MCCs, eligible merchant ids, per-transaction ceiling, currency,
+countries, expiry, cash-out flag) and `restricted_wallets` – real ledger wallets carried by a holder account opened per
+beneficiary and programme (the ledger keeps one wallet per account and currency). Administrators create programmes
+(`POST /api/admin/insights/restricted/programmes`), open wallets and fund them through the ledger (`.../wallets`,
+`.../wallets/:id/fund`: a distribution from the sponsor's wallet when it has balance, otherwise a `programme` issuance
+from the treasury). `merchant_purpose_codes` (`PUT /api/admin/insights/merchants/:id/purpose-codes`, compliance) names
+what a merchant may be paid for; a verified institution registration or an eligible MCC on a location also qualifies.
+`registerPostingPolicy(fn)` in `ledger.ts` runs registered policies inside `postTransaction` before any write; the
+restricted-wallet policy refuses ineligible merchants, payments above the ceiling, expired or suspended programmes and
+any withdrawal, cash-out or transfer unless the programme allows cash-out, with `403 restricted_wallet_policy`.
+Beneficiaries use `GET /api/restricted/wallets`, `GET /api/restricted/wallets/:id/eligibility?merchant=` and
+`POST /api/restricted/wallets/:id/pay` (a merchant, or one of its payment intents).
+
+### Government QR infrastructure (`backend/api/src/services/government.ts`)
+
+`gov_agencies` (collecting into a merchant account registered and verified as a government institution),
+`gov_services` (revenue code, GOVERNMENT_FEE or TAX, currency, optional fixed amount; reusable fixed-amount services get
+a signed institution QR), `gov_references` (citizen reference, amount, expiry, reconciliation code, OPEN | PAID |
+EXPIRED | REFUNDED, intent, transaction, payer, issuing agent) and `gov_agency_operators`. Every reference is a payment
+intent with the purpose code and `metadata.gov`; the bus marks it PAID from the transaction that captured the intent
+and REFUNDED from `refund.succeeded`; `syncGovReferences()` expires open references. Administrators create agencies
+and operators under `/api/admin/insights/government/...`; operators (and, at the counter, agents) use
+`/api/government/agencies/:id/services`, `/api/government/services/:id/references`, `/api/government/references/:code`,
+`GET /api/government/dashboard` (collections, revenue by service and region, settlement cycles, unmatched credits,
+refunds, agent collections) and `GET /api/government/audit-export.csv`.

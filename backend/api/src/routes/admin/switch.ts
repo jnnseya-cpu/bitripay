@@ -84,6 +84,8 @@ import {
 } from '../../services/switch/reconciliation';
 import { readEvidence, listEvidence, verifyVault } from '../../services/switch/vault';
 import { listRails, getRail, pauseConnector, resumeConnector, probeConnectors, connectorSeries, scoreConnectors } from '../../services/rails';
+import { setRailMaintenance } from '../../services/rails';
+import { countryCapabilities, listCountryCapabilities, setCountryCapabilities, type CountryCapabilities } from '../../services/capabilities';
 
 export const adminSwitchRouter = Router();
 const r = adminSwitchRouter;
@@ -622,4 +624,89 @@ r.post('/rails/score', requirePermission('gateways'), (req, res) => {
       b.policy,
     ),
   });
+});
+
+// ---------------------------------------------------------------- rail maintenance window (administrator-set; Smart Route stops choosing the rail until cleared)
+r.post('/rails/:id/maintenance', requirePermission('gateways'), (req, res) => {
+  const b = validate(z.object({ on: z.boolean(), reason: z.string().min(3).max(300).optional().nullable() }), req.body);
+  getRail(String(req.params.id));
+  const h = setRailMaintenance(String(req.params.id), b.on, b.on ? (b.reason ?? 'scheduled by operations') : null, req.user!.id);
+  audit(req.user!.id, b.on ? 'rail.maintenance.on' : 'rail.maintenance.off', 'rail', String(req.params.id), { reason: b.reason ?? null });
+  res.json({ health: h });
+});
+
+// ---------------------------------------------------------------- capability matrix: country × method × rail
+/** Method columns of the matrix and the country capability flag that enables each one. */
+export const CAPABILITY_MATRIX_METHODS: { method: string; flag: keyof CountryCapabilities; label: string }[] = [
+  { method: 'wallet', flag: 'wallet', label: 'Wallet balance' },
+  { method: 'card', flag: 'cardCollection', label: 'Card collection' },
+  { method: 'mobile_money', flag: 'mobileMoney', label: 'Mobile money' },
+  { method: 'bank', flag: 'bankPayout', label: 'Bank payout' },
+  { method: 'national_switch', flag: 'nationalSwitch', label: 'National switch' },
+  { method: 'bitcoin', flag: 'bitcoin', label: 'Bitcoin' },
+];
+const methodEnabled = (caps: CountryCapabilities, m: (typeof CAPABILITY_MATRIX_METHODS)[number]) => (m.flag === 'nationalSwitch' ? !!caps.nationalSwitch.connector : caps[m.flag] === true);
+/**
+ * The matrix as enforced today: a cell is enabled when the country allows the method (services/capabilities.ts) and
+ * the rail serving that method in that country is enabled and usable (not paused, no open circuit, no maintenance).
+ * Limits are the country's per-transaction ceiling in its main currency minor units (0 = policy limits only).
+ */
+export function capabilityMatrix(countries?: string[] | null) {
+  const rails = listRails();
+  const list = countries?.length ? countries.map((c) => countryCapabilities(c)) : listCountryCapabilities();
+  return list.map((caps) => ({
+    country: caps.country,
+    licencePhase: caps.licencePhase,
+    maxPerTransaction: caps.maxPerTransaction,
+    methods: CAPABILITY_MATRIX_METHODS.map((m) => {
+      const allowed = methodEnabled(caps, m);
+      const serving = rails.filter((e) => e.methods.includes(m.method) && (!e.countries.length || e.countries.includes(caps.country)));
+      return {
+        method: m.method,
+        label: m.label,
+        allowed,
+        rails: serving.map((e) => ({
+          id: e.id,
+          name: e.name,
+          kind: e.kind,
+          enabled: allowed && e.enabled && e.health.usable,
+          railEnabled: e.enabled,
+          state: e.health.state,
+          usable: e.health.usable,
+          maintenance: e.health.maintenance,
+          reason: !allowed ? `method disabled for ${caps.country}` : !e.enabled ? 'rail disabled' : (e.health.reason ?? null),
+        })),
+      };
+    }),
+  }));
+}
+r.get('/capability-matrix', requirePermission('settings'), (req, res) =>
+  res.json({
+    items: capabilityMatrix(req.query.country ? String(req.query.country).split(',') : null),
+    methods: CAPABILITY_MATRIX_METHODS.map((m) => ({ method: m.method, label: m.label, flag: m.flag })),
+  }),
+);
+/** Editor: flip method columns and the per-transaction ceiling for a country; writes through to the enforced country capabilities. */
+r.put('/capability-matrix/:country', requirePermission('settings'), (req, res) => {
+  const b = validate(
+    z.object({
+      methods: z.record(z.enum(CAPABILITY_MATRIX_METHODS.map((m) => m.method) as [string, ...string[]]), z.boolean()).optional(),
+      maxPerTransaction: z.number().int().min(0).optional(),
+      nationalSwitchConnector: z.string().max(80).optional().nullable(),
+    }),
+    req.body,
+  );
+  const country = String(req.params.country).toUpperCase();
+  const current = countryCapabilities(country);
+  const patch: Partial<CountryCapabilities> = {};
+  for (const [method, on] of Object.entries(b.methods ?? {})) {
+    const m = CAPABILITY_MATRIX_METHODS.find((x) => x.method === method)!;
+    if (m.flag === 'nationalSwitch')
+      patch.nationalSwitch = { required: on ? current.nationalSwitch.required : false, connector: on ? (b.nationalSwitchConnector ?? current.nationalSwitch.connector ?? 'NATIONAL_SWITCH_CD') : null };
+    else (patch as Record<string, unknown>)[m.flag] = on;
+  }
+  if (b.maxPerTransaction !== undefined) patch.maxPerTransaction = b.maxPerTransaction;
+  const caps = setCountryCapabilities(country, patch);
+  audit(req.user!.id, 'capabilities.matrix.update', 'country', caps.country, { methods: b.methods ?? {}, maxPerTransaction: b.maxPerTransaction ?? null });
+  res.json({ capabilities: caps, matrix: capabilityMatrix([country])[0] });
 });

@@ -1,19 +1,26 @@
 import type { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../lib/jwt';
 import { forbidden, unauthorized } from '../lib/errors';
-import { findUserById, type UserRow } from '../services/users';
+import { findUserById, isMerchantRole, MERCHANT_ROLES, type UserRow } from '../services/users';
 import { getDb } from '../db';
 import { sha256 } from '../lib/crypto';
 import { now } from '../lib/ids';
 import { getAppSettings, getSecuritySettings } from '../services/settings';
-import type { Role } from '@bitripay/shared';
+import type { Role, OrgPermission, OrgRole } from '@bitripay/shared';
 import type { ApiKeyScope } from '../services/merchant';
+import { findOrganisationForOwner, hasOrgPermission, resolveMembership, type OrganisationRow } from '../services/organisations';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user?: UserRow;
+      /** The signed-in person when the request acts for an organisation (req.user is then the organisation's owner account). */
+      actor?: UserRow;
+      /** The organisation the request acts for: the caller's own (merchant-class accounts, API keys) or the one they are a member of. */
+      organisation?: OrganisationRow;
+      organisationRole?: OrgRole;
+      organisationPermissions?: string[];
       apiKeyId?: string;
       apiKeyKind?: 'secret' | 'publishable' | 'restricted';
       apiKeyScopes?: string[];
@@ -21,6 +28,41 @@ declare global {
       authVia?: 'jwt' | 'api_key';
     }
   }
+}
+
+/** Surfaces where an organisation member acts for the organisation with their own session (§44). */
+const ORGANISATION_SURFACES = ['/api/v1', '/v1', '/api/organisations'];
+
+/**
+ * Resolve the organisation context. Merchant-class accounts and API keys act for the organisation they own with
+ * every permission. A personal account that is a member of an organisation acts for it on the merchant surfaces:
+ * the request runs as the owner account (every merchant table is keyed on it) while `req.actor` keeps the human
+ * for audit and step-up, and `req.organisationRole` / `req.organisationPermissions` drive `requireOrgPermission`.
+ * Elsewhere (their wallet, profile, security settings) members stay themselves.
+ */
+export function resolveOrganisationContext(req: Request, user: UserRow): UserRow {
+  if (user.role === 'admin') return user;
+  if (req.authVia === 'api_key' || isMerchantRole(user.role)) {
+    const own = findOrganisationForOwner(user.id);
+    if (own) {
+      req.organisation = own;
+      req.organisationRole = 'owner';
+      req.organisationPermissions = ['*'];
+    }
+    return user;
+  }
+  const path = (req.originalUrl || req.url || '').split('?')[0];
+  if (!ORGANISATION_SURFACES.some((p) => path === p || path.startsWith(`${p}/`))) return user;
+  const header = req.headers['x-organisation-id'];
+  const membership = resolveMembership(user, typeof header === 'string' && header ? header : null);
+  if (!membership) return user;
+  const principal = findUserById(membership.organisation.owner_user_id);
+  if (!principal || principal.status !== 'active') return user;
+  req.actor = user;
+  req.organisation = membership.organisation;
+  req.organisationRole = membership.role;
+  req.organisationPermissions = membership.permissions;
+  return principal;
 }
 
 function resolveBearer(req: Request): UserRow | null {
@@ -63,7 +105,7 @@ function resolveBearer(req: Request): UserRow | null {
 export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
   try {
     const user = resolveBearer(req);
-    if (user && user.status === 'active') req.user = user;
+    if (user && user.status === 'active') req.user = resolveOrganisationContext(req, user);
     next();
   } catch (err) {
     next(err);
@@ -80,7 +122,7 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
     if (app.maintenanceMode && user.role !== 'admin' && req.method !== 'GET') {
       throw forbidden('The platform is under maintenance. Please try again later.', 'maintenance');
     }
-    req.user = user;
+    req.user = resolveOrganisationContext(req, user);
     next();
   } catch (err) {
     next(err);
@@ -102,7 +144,7 @@ const TWO_FACTOR_EXEMPT: { method?: string; test: (path: string) => boolean }[] 
 /** Whether an account of a required role is past its grace period without 2FA (null when the policy does not apply). */
 export function twoFactorDeadline(user: Pick<UserRow, 'role' | 'two_factor_enabled' | 'created_at'>): { required: boolean; deadline: string | null; overdue: boolean } {
   const s = getSecuritySettings();
-  const required = user.role === 'merchant' ? s.require2fa.merchant : user.role === 'agent' ? s.require2fa.agent : user.role === 'admin' ? s.require2fa.admin : false;
+  const required = isMerchantRole(user.role) ? s.require2fa.merchant : user.role === 'agent' ? s.require2fa.agent : user.role === 'admin' ? s.require2fa.admin : false;
   if (!required || user.two_factor_enabled) return { required, deadline: null, overdue: false };
   const deadline = new Date(Date.parse(user.created_at) + Math.max(0, s.graceDays) * 86_400_000).toISOString();
   return { required, deadline, overdue: Date.now() >= Date.parse(deadline) };
@@ -154,6 +196,22 @@ export function requireRole(...roles: Role[]) {
   };
 }
 
+/**
+ * Organisation permission check (§44). Passes when the caller holds any of the permissions: owners, merchant-class
+ * accounts acting for themselves, administrators and API keys hold everything; members are checked against the
+ * `ORG_PERMISSIONS` matrix for their role plus per-member grants. The refusal names the role and the permission so
+ * the dashboard can show it.
+ */
+export function requireOrgPermission(...permissions: OrgPermission[]) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user) return next(unauthorized());
+    if (req.user.role === 'admin' || req.authVia === 'api_key' || !req.organisationRole) return next();
+    const ctx = { role: req.organisationRole, permissions: req.organisationPermissions ?? [] };
+    if (permissions.some((p) => hasOrgPermission(ctx, p))) return next();
+    next(forbidden(`Your organisation role (${req.organisationRole.replace(/_/g, ' ')}) does not allow this: it needs ${permissions.join(' or ')}`, 'org_permission_denied'));
+  };
+}
+
 export const requireAdmin = [requireAuth, requireRole('admin')];
-export const requireMerchant = [requireAuth, requireRole('merchant', 'admin')];
+export const requireMerchant = [requireAuth, requireRole(...MERCHANT_ROLES, 'admin')];
 export const requireAgent = [requireAuth, requireRole('agent', 'admin')];

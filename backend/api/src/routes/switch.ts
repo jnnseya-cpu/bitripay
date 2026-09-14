@@ -31,9 +31,10 @@ import { createEndpoint } from '../services/webhooks';
 import { createIntent, intentView, getIntentRow } from '../services/intents';
 import { createDynamicQr } from '../services/qrcodes';
 import { PURPOSE_CODES } from '../services/capabilities';
+import { MERCHANT_ROLES } from '../services/users';
 
 export const switchRouter = Router();
-const merchantOnly = [requireAuth, requireRole('merchant', 'admin')];
+const merchantOnly = [requireAuth, requireRole(...MERCHANT_ROLES, 'admin')];
 const writeLimit = rateLimit({ windowMs: 60_000, max: 240, keyPrefix: 'sw' });
 
 const amountSchema = z.object({ currency: z.string().length(3), value_minor: z.union([z.string().regex(/^\d+$/), z.number().int().nonnegative()]) });

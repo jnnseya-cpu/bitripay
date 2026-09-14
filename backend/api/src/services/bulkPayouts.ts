@@ -22,6 +22,7 @@ import { emitEvent } from './webhooks';
 import { recordEvent, type Actor } from './events';
 import { notify } from './notifications';
 import { formatMoney, COUNTRIES } from '@bitripay/shared';
+import { isMerchantRole } from './users';
 
 export type BatchStatus = 'PENDING_APPROVAL' | 'EXECUTING' | 'EXECUTED' | 'PARTIAL' | 'FAILED' | 'CANCELLED';
 export type RowStatus = 'VALID' | 'INVALID' | 'PAID' | 'FAILED' | 'SKIPPED';
@@ -163,7 +164,7 @@ function validateRow(
       if (!r || r.is_system) return { ok: false, error: `no BitriPay account for "${d.to}"`, method };
       if (r.id === user.id) return { ok: false, error: 'cannot pay yourself', method };
       if (r.status !== 'active') return { ok: false, error: 'recipient account is not active', method };
-      const type = r.role === 'merchant' ? 'merchant_payment' : 'transfer';
+      const type = isMerchantRole(r.role) ? 'merchant_payment' : 'transfer';
       return {
         ok: true,
         destination: { method: 'wallet', to: d.to },

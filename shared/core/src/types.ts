@@ -1,4 +1,4 @@
-import type { KycStatus, Role, TransactionStatus, TransactionType, PaymentRequestStatus } from './constants';
+import type { KycStatus, Role, TransactionStatus, TransactionType, PaymentRequestStatus, OrgRole, OrgPermission } from './constants';
 import type { CurrencyInfo } from './money';
 
 export interface PublicUser {
@@ -78,6 +78,8 @@ export interface Transaction {
 export interface PaymentRequest {
   id: string;
   code: string;
+  /** Payment intent behind the request when it was created through the gateway (checkout sessions, links). */
+  intentId?: string | null;
   kind: 'qr' | 'link' | 'request' | 'api';
   requesterUserId: string;
   payerUserId: string | null;
@@ -180,4 +182,40 @@ export interface Paginated<T> {
   page: number;
   pageSize: number;
   total: number;
+}
+
+/** A legal entity that accepts payments: the merchant-class account that registered it is its owner. */
+export interface Organisation {
+  id: string;
+  name: string;
+  kind: string;
+  ownerUserId: string;
+  country: string | null;
+  status: string;
+  kybStatus: string;
+  settings: { cashierRefundLimitMinor: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrganisationMember {
+  organisationId: string;
+  userId: string;
+  role: OrgRole;
+  permissions: (OrgPermission | '*')[];
+  user: PublicUser | null;
+  invitedBy: string | null;
+  createdAt: string;
+}
+
+/** A department, branch or programme inside an organisation; locations, terminals and QRs may belong to one. */
+export interface BusinessUnit {
+  id: string;
+  organisationId: string;
+  name: string;
+  code: string;
+  settlementProfileId: string | null;
+  locations: number;
+  createdAt: string;
+  updatedAt: string;
 }

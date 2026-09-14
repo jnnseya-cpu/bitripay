@@ -33,6 +33,7 @@ import { SwitchConsole } from './pages/Switch';
 import { Finops } from './pages/Finops';
 import { Risk } from './pages/Risk';
 import { Intelligence } from './pages/Intelligence';
+import { System } from './pages/System';
 
 function P({ children }: { children: React.ReactElement }) {
   const { user, loading } = useStore();
@@ -307,6 +308,14 @@ export function App() {
           element={
             <P>
               <Intelligence />
+            </P>
+          }
+        />
+        <Route
+          path="/system"
+          element={
+            <P>
+              <System />
             </P>
           }
         />

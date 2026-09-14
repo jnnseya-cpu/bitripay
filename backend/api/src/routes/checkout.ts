@@ -18,6 +18,7 @@ import { fxDisclosure } from '../services/fx';
 import { getGatewaySettings } from '../services/users';
 import { getCurrency } from '../services/currencies';
 import { POSITIONING } from '../content/positioning';
+import { isMerchantRole } from '../services/users';
 
 /** Hosted checkout – used by the web checkout page, mobile apps and the WooCommerce plugin. Guest-friendly. */
 export const checkoutRouter = Router();
@@ -53,10 +54,10 @@ export function checkoutDisclosure(code: string, methods: string[]): CheckoutDis
   const requester = findUserById(row.requester_user_id)!;
   const source = getCurrency(row.currency, false);
   const settings = getGatewaySettings(requester);
-  const receiverCurrency = (requester.role === 'merchant' && settings.settlementCurrency) || source.code;
+  const receiverCurrency = (isMerchantRole(requester.role) && settings.settlementCurrency) || source.code;
   const target = getCurrency(receiverCurrency, false);
   const fx = fxDisclosure(source.code, target.code, null, false);
-  const feeType = requester.role === 'merchant' ? 'merchant_payment' : row.kind === 'request' ? 'transfer' : 'qr_payment';
+  const feeType = isMerchantRole(requester.role) ? 'merchant_payment' : row.kind === 'request' ? 'transfer' : 'qr_payment';
   const feeFrom: 'receiver' | 'sender' = feeType === 'merchant_payment' ? 'receiver' : 'sender';
   const amount = row.amount ?? null;
   const feeMinor = amount ? calculateFee(feeType, amount, source.code, null, { userId: requester.id }) : null;
@@ -118,7 +119,7 @@ checkoutRouter.post(
   wrap(async (req, res) => {
     const body = validate(
       z.object({
-        method: z.enum(['card', 'mobile_money', 'bank', 'virtual_card']),
+        method: z.enum(['card', 'mobile_money', 'bank', 'virtual_card', 'bitcoin']),
         gateway: z.string().optional().nullable(),
         card: cardSchema.optional(),
         savedCardId: z.string().optional().nullable(),

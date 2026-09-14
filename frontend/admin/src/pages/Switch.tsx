@@ -10,7 +10,7 @@ import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader
  */
 export function SwitchConsole() {
   const { toast, money } = useStore();
-  const [tab, setTab] = useState<'connections' | 'participants' | 'policies' | 'payments' | 'messages' | 'recon' | 'rails' | 'incidents'>('connections');
+  const [tab, setTab] = useState<'national' | 'config' | 'pra' | 'connections' | 'participants' | 'policies' | 'payments' | 'messages' | 'recon' | 'rails' | 'incidents'>('national');
   const err = (e: any) => toast(e.message, 'error');
   const ok = (m: string) => toast(m, 'success');
   return (
@@ -21,6 +21,9 @@ export function SwitchConsole() {
       />
       <Tabs
         tabs={[
+          { id: 'national', label: 'National view' },
+          { id: 'config', label: 'Configuration' },
+          { id: 'pra', label: 'PRA' },
           { id: 'connections', label: 'Connections' },
           { id: 'participants', label: 'Participants' },
           { id: 'policies', label: 'Routing policies' },
@@ -33,6 +36,9 @@ export function SwitchConsole() {
         value={tab}
         onChange={(v) => setTab(v as any)}
       />
+      {tab === 'national' && <NationalView ok={ok} err={err} />}
+      {tab === 'config' && <Configuration ok={ok} err={err} />}
+      {tab === 'pra' && <Pra ok={ok} err={err} money={money} />}
       {tab === 'connections' && <Connections ok={ok} err={err} />}
       {tab === 'participants' && <Participants ok={ok} err={err} />}
       {tab === 'policies' && <Policies ok={ok} err={err} />}
@@ -705,6 +711,306 @@ function Incidents({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
         ])}
         empty="No incidents"
       />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// National view: participants and pairs (reused), per-connection 24 h picture, capability matrix (country × method × rail)
+// ---------------------------------------------------------------------------------------------------------------------
+function NationalView({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
+  const connections = useAsync(() => api.get<any>('/api/admin/switch/connections'), []);
+  const [conn, setConn] = useState<string>('');
+  const selected = conn || connections.data?.items?.[0]?.id || '';
+  const view = useAsync(() => (selected ? api.get<any>(`/api/admin/switch/connections/${selected}/national-view`) : Promise.resolve(null)), [selected]);
+  const matrix = useAsync(() => api.get<any>('/api/admin/switch/capability-matrix'), []);
+  const v = view.data;
+  const sum = (rows: any[] | undefined, pick: (r: any) => number) => (rows ?? []).reduce((a, r) => a + pick(r), 0);
+  return (
+    <div>
+      <div className="card mb">
+        <div className="row">
+          <h4 style={{ margin: 0 }}>Connection · last 24 hours</h4>
+          <Select value={selected} onChange={(e) => setConn(e.target.value)} style={{ width: 260, marginLeft: 'auto' }}>
+            {(connections.data?.items ?? []).map((c: any) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.country})
+              </option>
+            ))}
+          </Select>
+        </div>
+        {v && (
+          <div className="grid cols-4 mt">
+            <div className="stat">
+              <span className="label">Payments</span>
+              <span className="value">{sum(v.byStatus, (r) => r.n)}</span>
+              <span className="small muted">{(v.byStatus ?? []).map((r: any) => `${r.status} ${r.n}`).join(' · ') || 'none'}</span>
+            </div>
+            <div className="stat">
+              <span className="label">Uncertain / review</span>
+              <span className="value">{v.uncertain ?? 0}</span>
+              <span className="small muted">UNKNOWN or REVIEW_REQUIRED — inquiries only, never a resend</span>
+            </div>
+            <div className="stat">
+              <span className="label">Switch latency</span>
+              <span className="value">{v.latency?.avg != null ? `${Math.round(v.latency.avg)} ms` : '—'}</span>
+              <span className="small muted">{v.latency?.n ? `${v.latency.n} answered attempt(s), max ${Math.round(v.latency.max)} ms` : 'no answered attempt'}</span>
+            </div>
+            <div className="stat">
+              <span className="label">Emission gate</span>
+              <span className="value">{v.gate?.allowed ? <Chip kind="success">open</Chip> : <Chip kind="danger">closed</Chip>}</span>
+              <span className="small muted">
+                {(v.openCases ?? []).map((c: any) => `${c.class} ${c.n}`).join(' · ') || 'no open reconciliation case'} · outbox{' '}
+                {(v.outbox ?? []).map((o: any) => `${o.kind} ${o.n}`).join(' · ') || 'empty'}
+              </span>
+            </div>
+          </div>
+        )}
+        {v?.participants && (
+          <Table
+            head={['Participant', 'Kind', 'Status', 'Currencies', 'Payments 24h', 'Open pairs']}
+            rows={v.participants.map((p: any) => [<b>{p.name}</b>, p.kind, <StatusBadge status={p.status} />, (p.currencies ?? []).join(', '), p.volume24h, p.pairsOpen])}
+            empty="No participant registered for this connection's country"
+          />
+        )}
+      </div>
+      <Participants ok={ok} err={err} />
+      <div className="card mt">
+        <h4>Capability matrix (country × method × rail)</h4>
+        <p className="small muted">
+          A cell is enabled when the country allows the method and a rail serving it is enabled and usable (not paused, no open circuit, no maintenance). Edit country columns in Gateway controls →
+          Capability matrix; open a rail maintenance window in the Configuration tab.
+        </p>
+        <Table
+          head={['Country', 'Phase', 'Ceiling / tx', ...(matrix.data?.methods ?? []).map((m: any) => m.label)]}
+          rows={(matrix.data?.items ?? []).map((c: any) => [
+            <b>{c.country}</b>,
+            <Chip kind={c.licencePhase === 'full' ? 'success' : 'warning'}>{c.licencePhase}</Chip>,
+            c.maxPerTransaction || 'policy',
+            ...c.methods.map((m: any) => (
+              <span className="tiny" key={m.method}>
+                {m.allowed ? <Chip kind="success">allowed</Chip> : <Chip kind="danger">off</Chip>}
+                <br />
+                {m.rails.length
+                  ? m.rails.map((r: any) => (
+                      <span key={r.id} title={r.reason ?? r.state}>
+                        {r.enabled ? '●' : '○'} {r.name}
+                        <br />
+                      </span>
+                    ))
+                  : 'no rail'}
+              </span>
+            )),
+          ])}
+          empty="No country configured"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Configuration: connections and certificates (reused), routing policies (reused), rail maintenance windows
+// ---------------------------------------------------------------------------------------------------------------------
+function Configuration({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
+  const connections = useAsync(() => api.get<any>('/api/admin/switch/connections'), []);
+  const [certCheck, setCertCheck] = useState<any>(null);
+  return (
+    <div>
+      <Connections ok={ok} err={err} />
+      <div className="card mb">
+        <div className="row">
+          <h4 style={{ margin: 0 }}>Certificates</h4>
+          <Button
+            size="sm"
+            variant="secondary"
+            style={{ marginLeft: 'auto' }}
+            onClick={() =>
+              api
+                .post<any>('/api/admin/switch/certificates/check', {})
+                .then((r) => {
+                  setCertCheck(r);
+                  ok(`Checked: ${r.alerted?.length ?? 0} alert(s), ${r.expired?.length ?? 0} expired`);
+                  connections.reload();
+                })
+                .catch(err)
+            }
+          >
+            Check expiry now
+          </Button>
+        </div>
+        {certCheck && (
+          <Alert kind={certCheck.expired?.length ? 'error' : certCheck.alerted?.length ? 'warning' : 'success'}>
+            alerted: {certCheck.alerted?.join(', ') || 'none'} · expired: {certCheck.expired?.join(', ') || 'none'}
+          </Alert>
+        )}
+        <Table
+          head={['Connection', 'Environment', 'Certificate', 'Valid until', 'Certification', 'Profile']}
+          rows={(connections.data?.items ?? []).map((c: any) => [
+            <b>{c.name}</b>,
+            c.environment,
+            <StatusBadge status={c.certificate?.status ?? 'none'} />,
+            <span className="tiny">{c.certificate?.notAfter ? fmtDate(c.certificate.notAfter) : '—'}</span>,
+            <StatusBadge status={c.certification?.status ?? 'NOT_STARTED'} />,
+            <span className="tiny">{c.profileVersion ?? c.certification?.profileVersion ?? '—'}</span>,
+          ])}
+          empty="No connection"
+        />
+      </div>
+      <Policies ok={ok} err={err} />
+      <div className="card mt">
+        <h4>Rail maintenance windows</h4>
+        <p className="small muted">
+          A maintenance window makes the rail report MAINTENANCE and Smart Route stops choosing it until the window is cleared. Pausing a rail is the incident control; maintenance is the planned one.
+        </p>
+        <RailMaintenance ok={ok} err={err} />
+      </div>
+    </div>
+  );
+}
+
+function RailMaintenance({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
+  const rails = useAsync(() => api.get<any>('/api/admin/switch/rails'), []);
+  const toggle = (r: any, reason?: string) =>
+    api
+      .post(`/api/admin/switch/rails/${r.id}/maintenance`, r.health?.maintenance ? { on: false } : { on: true, reason: reason || 'scheduled by operations' })
+      .then(() => {
+        ok(r.health?.maintenance ? 'Maintenance cleared' : 'Maintenance window opened');
+        rails.reload();
+      })
+      .catch(err);
+  return (
+    <Table
+      head={['Rail', 'Kind', 'State', 'Maintenance', '']}
+      rows={(rails.data?.items ?? []).map((r: any) => [
+        <b>
+          {r.name}
+          <br />
+          <span className="mono tiny">{r.id}</span>
+        </b>,
+        r.kind,
+        <Chip kind={r.health?.state === 'HEALTHY' ? 'success' : r.health?.state === 'DEGRADED' ? 'warning' : 'danger'}>{r.health?.state}</Chip>,
+        r.health?.maintenance ? (
+          <span className="tiny">
+            {r.health.maintenance.reason ?? '—'}
+            <br />
+            since {fmtDate(r.health.maintenance.setAt)}
+          </span>
+        ) : (
+          '—'
+        ),
+        r.health?.maintenance ? (
+          <ConfirmButton size="sm" variant="success" onConfirm={() => toggle(r)}>
+            Clear maintenance
+          </ConfirmButton>
+        ) : (
+          <ConfirmButton size="sm" variant="secondary" prompt="Reason" onConfirm={(reason) => toggle(r, reason)}>
+            Open maintenance window
+          </ConfirmButton>
+        ),
+      ])}
+      empty="No rails"
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// PRA (plan de reprise d'activité): incidents (reused), continuity procedures, reconciliation coverage
+// ---------------------------------------------------------------------------------------------------------------------
+function Pra({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => void; money: (m: number, c: string) => string }) {
+  const recovery = useAsync(() => api.get<any>('/api/admin/switch/recovery'), []);
+  const workbench = useAsync(() => api.get<any>('/api/admin/finops/reconciliation/workbench'), []);
+  const [coverage, setCoverage] = useState<any>(null);
+  const r = recovery.data;
+  const toggleStep = (step: number) => {
+    const done = new Set<number>((r?.runbook ?? []).filter((s: any) => s.done).map((s: any) => s.step));
+    if (done.has(step)) done.delete(step);
+    else done.add(step);
+    api
+      .post('/api/admin/switch/recovery/checklist', { done: [...done] })
+      .then(() => recovery.reload())
+      .catch(err);
+  };
+  return (
+    <div>
+      <Incidents ok={ok} err={err} />
+      <div className="grid cols-2 mt">
+        <div className="card">
+          <h4>Continuity procedures (recovery runbook)</h4>
+          {r && (
+            <p className="small muted">
+              Database {r.database?.journalMode} · {r.database?.path} · {r.replication?.emissionJournal?.uncertainPayments ?? 0} uncertain payment(s),{' '}
+              {r.replication?.emissionJournal?.attemptsSentWithoutResponse ?? 0} attempt(s) sent without response · checklist updated {r.checklistUpdatedAt ? fmtDate(r.checklistUpdatedAt) : 'never'}
+            </p>
+          )}
+          <ol className="small">
+            {(r?.runbook ?? []).map((s: any) => (
+              <li key={s.step}>
+                <label className="checkbox">
+                  <input type="checkbox" checked={!!s.done} onChange={() => toggleStep(s.step)} /> {s.text}
+                </label>
+              </li>
+            ))}
+          </ol>
+          <h4 className="mt">Exercises</h4>
+          <Table
+            head={['When', 'Kind', 'Outcome', 'RTO', 'RPO']}
+            rows={(r?.exercises ?? []).map((e: any) => [
+              <span className="tiny">{fmtDate(e.created_at)}</span>,
+              e.kind,
+              <StatusBadge status={e.outcome} />,
+              e.rto_minutes != null ? `${e.rto_minutes} min` : '—',
+              e.rpo_seconds != null ? `${e.rpo_seconds} s` : '—',
+            ])}
+            empty="No recovery exercise recorded yet"
+          />
+        </div>
+        <div className="card">
+          <div className="row">
+            <h4 style={{ margin: 0 }}>Reconciliation coverage</h4>
+            <Button
+              size="sm"
+              variant="secondary"
+              style={{ marginLeft: 'auto' }}
+              onClick={() =>
+                api
+                  .post<any>('/api/admin/switch/reconciliation/coverage-check', {})
+                  .then((c) => {
+                    setCoverage(c);
+                    ok(`Coverage checked: ${c.checked?.length ?? 0} connection(s), ${c.missing?.length ?? 0} missing report(s)`);
+                    workbench.reload();
+                  })
+                  .catch(err)
+              }
+            >
+              Check yesterday's reports
+            </Button>
+          </div>
+          {coverage && (
+            <Alert kind={coverage.missing?.length ? 'warning' : 'success'}>
+              checked: {coverage.checked?.join(', ') || 'no connection with traffic'} · missing: {coverage.missing?.join(', ') || 'none'}
+            </Alert>
+          )}
+          <Table
+            head={['Connection', 'Cycle', 'Matched', 'Cases', 'Complete', 'When']}
+            rows={(workbench.data?.recentRuns ?? []).map((run: any) => [
+              run.connectionId,
+              run.cycleRef,
+              run.matched,
+              run.casesOpened,
+              run.complete ? <Chip kind="success">complete</Chip> : <Chip kind="warning">partial</Chip>,
+              <span className="tiny">{fmtDate(run.createdAt)}</span>,
+            ])}
+            empty="No reconciliation run yet"
+          />
+          <h4 className="mt">Open exceptions</h4>
+          <Table
+            head={['Connection', 'Class', 'Count', 'Exposure', 'Oldest']}
+            rows={(workbench.data?.exceptions ?? []).map((e: any) => [e.connectionId, e.class, e.count, e.currency ? money(e.exposureMinor, e.currency) : e.exposureMinor, `${e.oldestAgeHours}h`])}
+            empty="No open exception"
+          />
+        </div>
+      </div>
     </div>
   );
 }

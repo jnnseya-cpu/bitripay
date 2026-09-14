@@ -32,6 +32,20 @@ export function Checkout() {
   const [declaration, setDeclaration] = useState<any>(null);
   const [pinFor, setPinFor] = useState<'wallet' | 'external' | 'authenticate'>('wallet');
 
+  /**
+   * Embedded checkout (@bitripay/checkout-js): when opened in an iframe with `?embed=1&origin=<parent origin>` the page
+   * reports its outcome to the parent with `{ type: 'bitripay:checkout', status, sessionId, paymentIntentId }`. The
+   * parent origin comes from the query string and is used as the postMessage target, never '*'.
+   */
+  const embedded = params.get('embed') === '1' && !!params.get('origin') && window.parent !== window;
+  const notifyParent = (status: 'succeeded' | 'failed' | 'closed', paymentIntentId?: string | null) => {
+    if (!embedded) return;
+    try {
+      window.parent.postMessage({ type: 'bitripay:checkout', status, sessionId: code, paymentIntentId: paymentIntentId ?? info?.paymentRequest?.intentId ?? null }, params.get('origin')!);
+    } catch {
+      /* the parent origin refused the message: nothing else to do */
+    }
+  };
   const load = () =>
     api
       .get<any>(`/api/checkout/${code}`)
@@ -51,6 +65,10 @@ export function Checkout() {
         .then((r) => setPayment(r.payment))
         .catch(() => {});
   }, [params, code]);
+  useEffect(() => {
+    if (done || info?.paymentRequest?.status === 'paid') notifyParent('succeeded', info?.paymentRequest?.intentId);
+    else if (payment?.status === 'failed') notifyParent('failed', info?.paymentRequest?.intentId);
+  }, [done, payment?.status, info?.paymentRequest?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!payment || !['pending', 'initiated'].includes(payment.status) || payment.stage === 'AUTHENTICATION_REQUIRED') return;
     const t = setInterval(
@@ -212,7 +230,12 @@ export function Checkout() {
   );
 
   return (
-    <div className="auth-page" style={{ alignItems: 'flex-start', paddingTop: 40 }}>
+    <div className="auth-page" style={{ alignItems: 'flex-start', paddingTop: embedded ? 12 : 40 }}>
+      {embedded && (
+        <button type="button" className="btn ghost sm" style={{ position: 'absolute', top: 8, right: 8 }} onClick={() => notifyParent('closed')} aria-label="Close checkout">
+          ✕
+        </button>
+      )}
       <div style={{ width: '100%', maxWidth: 900 }}>
         <div className="grid cols-2">
           <div className="card" style={{ borderTop: `6px solid ${merchant.brandColor}` }}>

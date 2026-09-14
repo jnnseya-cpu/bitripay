@@ -78,6 +78,7 @@ const NAV: { section: string; items: { to: string; label: string; ico: string; p
     section: 'System',
     items: [
       { to: '/agents', label: 'Agents & command centres', ico: '🧭', perm: 'agents' },
+      { to: '/system', label: 'System health & SLOs', ico: '🩺', perm: 'reports' },
       { to: '/audit', label: 'Audit logs', ico: '🔍', perm: 'admins' },
       { to: '/profile', label: 'My profile & 2FA', ico: '⚙️', perm: '' },
     ],

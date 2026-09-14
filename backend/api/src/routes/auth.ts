@@ -7,7 +7,9 @@ import * as auth from '../services/auth';
 import { toUser } from '../services/users';
 import { verifyOtp } from '../services/otp';
 import { issueOtp } from '../services/otp';
-import { normalizeEmail, normalizePhone, findUserByEmail, findUserByPhone } from '../services/users';
+import { normalizeEmail, normalizePhone, findUserByEmail, findUserByPhone, isMerchantRole } from '../services/users';
+import { onMerchantClassRegistered } from '../services/organisations';
+import { signToken } from '../lib/jwt';
 import { badRequest, conflict } from '../lib/errors';
 
 export const authRouter = Router();
@@ -18,7 +20,8 @@ const registerSchema = z.object({
   email: z.string().email().optional().nullable(),
   phone: z.string().min(7).max(20).optional().nullable(),
   password: z.string().min(8).max(200),
-  role: z.enum(['user', 'merchant', 'agent']).optional(),
+  /** Personal, agent or one of the merchant-class account types (merchant, corporate, ngo, government, developer); merchant-class sign-ups own an organisation. */
+  role: z.enum(['user', 'merchant', 'agent', 'corporate', 'ngo', 'government', 'developer']).optional(),
   tag: z.string().min(3).max(20).optional(),
   country: z.string().length(2).optional().nullable(),
   businessName: z.string().max(120).optional().nullable(),
@@ -42,7 +45,13 @@ authRouter.post(
       if (body.phone) phoneVerified = true;
       else emailVerified = true;
     }
-    const result = auth.register({ ...body, emailVerified, phoneVerified });
+    // merchant-class account types register as merchants, then take their class and organisation (§43)
+    const result = auth.register({ ...body, role: body.role && isMerchantRole(body.role) ? 'merchant' : body.role, emailVerified, phoneVerified });
+    if (body.role && isMerchantRole(body.role)) {
+      const user = onMerchantClassRegistered(result.user.id, body.role);
+      res.status(201).json({ ...result, token: signToken({ sub: user.id, role: user.role }), user: toUser(user) });
+      return;
+    }
     res.status(201).json(result);
   }),
 );

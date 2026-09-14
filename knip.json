@@ -26,6 +26,10 @@
     "shared/sdk-node": {
       "entry": ["src/*.test.ts"],
       "project": ["src/**/*.ts"]
+    },
+    "shared/sdk-js": {
+      "entry": ["src/*.test.ts"],
+      "project": ["src/**/*.ts"]
     }
   },
   "ignoreDependencies": [],

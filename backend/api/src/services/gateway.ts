@@ -12,12 +12,13 @@ import { parseJson } from '../lib/json';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { config } from '../config';
 import { getCurrency } from './currencies';
-import { findUserById, type UserRow } from './users';
-import { createIntent, getIntentRow, intentView, cancelIntent, transitionIntent, appendPaymentEvent, listAttempts, type IntentRow, type IntentView } from './intents';
+import { findUserById, updateUser, type UserRow } from './users';
+import { createIntent, getIntentRow, intentView, cancelIntent, transitionIntent, appendPaymentEvent, listAttempts, DEFAULT_RAILS, type IntentRow, type IntentView } from './intents';
 import { createStaticQr, getQr, revokeQr, listQrs, type QrView } from './qrcodes';
 import { postTransaction, getTransaction, toTransaction, transactionStatusHooks, type TransactionRow } from './ledger';
 import { ensureWallet } from './wallets';
-import { getPayment, providerRefund, initiatePayment, verifyPayment } from './payments';
+import { getPayment, providerRefund, initiatePayment, verifyPayment, settleSandboxBitcoinInvoice } from './payments';
+import { bitcoinEligible, merchantBitcoinPolicy, type MerchantBitcoinPolicy } from './capabilities';
 import { requestWithdrawal, type WithdrawalDestination } from './withdrawals';
 import { getPayoutByTransaction } from './payouts';
 import { emitEvent, emitSettlementEvent } from './webhooks';
@@ -36,6 +37,37 @@ import { listApiKeys, createApiKey, revokeApiKey, type ApiKeyKind } from './merc
 import { sha256 } from '../lib/crypto';
 
 const paymentRequired = (message: string, code = 'payment_required') => new AppError(402, code, message);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Bitcoin rail: merchant policy and intent rails
+// ---------------------------------------------------------------------------------------------------------------------
+/**
+ * Merchant Bitcoin policy (`bitcoin` opt-in, `bitcoinSettlement: 'btc' | 'fiat'`), stored in the merchant's gateway
+ * settings JSON next to the accepted methods. Other keys of the settings are left untouched.
+ */
+export function setMerchantBitcoinPolicy(merchant: UserRow, patch: Partial<MerchantBitcoinPolicy>): MerchantBitcoinPolicy {
+  if (patch.bitcoinSettlement !== undefined && patch.bitcoinSettlement !== 'btc' && patch.bitcoinSettlement !== 'fiat')
+    throw badRequest("bitcoinSettlement must be 'btc' or 'fiat'", 'validation_error');
+  if (patch.bitcoin !== undefined && typeof patch.bitcoin !== 'boolean') throw badRequest('bitcoin must be a boolean', 'validation_error');
+  const current = parseJson<Record<string, unknown>>(merchant.gateway_settings, {});
+  const next = { ...current, ...(patch.bitcoin !== undefined ? { bitcoin: patch.bitcoin } : {}), ...(patch.bitcoinSettlement !== undefined ? { bitcoinSettlement: patch.bitcoinSettlement } : {}) };
+  const updated = updateUser(merchant.id, { gateway_settings: JSON.stringify(next) });
+  recordEvent('admin', merchant.id, 'merchant.bitcoin_policy_updated', { type: 'merchant', id: merchant.id }, { ...patch });
+  return merchantBitcoinPolicy(updated);
+}
+
+/**
+ * Rails an intent is created with: the merchant's list (or the defaults) plus `bitcoin` when jurisdiction and merchant
+ * policy allow it – so the same intent / QR lists Bitcoin without any change to the QR – and minus `bitcoin` when they
+ * do not, whatever the caller asked for.
+ */
+export function intentRailsFor(merchant: UserRow, rails?: string[] | null): string[] | undefined {
+  const base = (rails?.length ? rails : DEFAULT_RAILS).map((r) => r.toLowerCase());
+  const eligible = bitcoinEligible({ country: merchant.country, merchantPolicy: merchantBitcoinPolicy(merchant) }).eligible;
+  if (eligible) return base.includes('bitcoin') ? base : [...base, 'bitcoin'];
+  const without = base.filter((r) => r !== 'bitcoin');
+  return rails?.length ? without : undefined;
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Checkout sessions
@@ -124,7 +156,7 @@ export function createCheckoutSession(merchant: UserRow, input: CreateCheckoutSe
     const { row } = createIntent(merchant, {
       amountMinor: amount,
       currency: input.currency,
-      rails: input.rails,
+      rails: intentRailsFor(merchant, input.rails),
       reference: input.reference ?? null,
       description:
         input.description ??
@@ -337,7 +369,7 @@ export function createPaymentLink(merchant: UserRow, input: CreatePaymentLinkInp
   const { row } = createIntent(merchant, {
     amountMinor: input.amountMinor,
     currency: input.currency,
-    rails: input.rails,
+    rails: intentRailsFor(merchant, input.rails),
     reference: input.title ?? null,
     description: input.description ?? input.title ?? null,
     purposeCode: input.purposeCode ?? null,
@@ -1584,6 +1616,17 @@ export async function simulateOutcome(merchant: UserRow, intentId: string, outco
   if (intent.merchant_user_id !== merchant.id) throw notFound('Payment intent not found', 'intent_not_found');
   if (!intent.payment_request_id) throw conflict('Intent has no checkout request', 'not_simulatable');
   const request = getDb().prepare('SELECT code FROM payment_requests WHERE id = ?').get(intent.payment_request_id) as { code: string };
+  // An open Bitcoin attempt on the intent is driven through the sandbox invoice instead of a magic MSISDN:
+  // `succeed` pays the invoice, `fail` marks it invalid; the outcome flows through the same verification and settlement.
+  const openBitcoin = getDb()
+    .prepare(
+      "SELECT gateway_payment_id FROM payment_attempts WHERE intent_id = ? AND method_class = 'bitcoin' AND status IN ('CREATED', 'PROCESSING') AND gateway_payment_id IS NOT NULL ORDER BY seq DESC LIMIT 1",
+    )
+    .get(intentId) as { gateway_payment_id: string } | undefined;
+  if (openBitcoin && (outcome === 'succeed' || outcome === 'fail')) {
+    const verified = await settleSandboxBitcoinInvoice(openBitcoin.gateway_payment_id, outcome === 'succeed' ? 'paid' : 'invalid', { type: 'merchant', id: merchant.id });
+    return { simulation: true, outcome, rail: 'bitcoin', msisdn: null, payment: verified, paymentIntent: intentView(getIntentRow(intentId)), attempts: listAttempts(intentId) };
+  }
   const phone = MAGIC[outcome];
   const payment = await initiatePayment(null, {
     purpose: 'checkout',

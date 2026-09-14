@@ -9,6 +9,7 @@ import { getAppSettings } from './settings';
 import { listWallets } from './wallets';
 import { getModules } from './modules';
 import { publish } from './bus';
+import { ensureOrganisation } from './organisations';
 
 export function toApiKey(r: any): ApiKey & { mode: string; kind: string; scopes: string[] } {
   let scopes: string[] = ['*'];
@@ -169,7 +170,7 @@ export function runAutoSettlements(): { settled: number; skipped: number } {
   const app = getAppSettings();
   if (!app.autoSettlement.enabled) return { settled: 0, skipped: 0 };
   const db = getDb();
-  const merchants = db.prepare("SELECT * FROM users WHERE role = 'merchant' AND status = 'active'").all() as UserRow[];
+  const merchants = db.prepare("SELECT * FROM users WHERE role IN ('merchant', 'corporate', 'ngo', 'government', 'developer') AND status = 'active'").all() as UserRow[];
   let settled = 0;
   let skipped = 0;
   for (const m of merchants) {
@@ -227,6 +228,8 @@ export function upgradeToMerchant(user: UserRow, businessName: string) {
   if (user.role === 'admin') throw badRequest('Admins cannot become merchants');
   if (!businessName.trim()) throw badRequest('Business name is required');
   const upgraded = updateUser(user.id, { role: 'merchant', business_name: businessName.trim(), gateway_settings: JSON.stringify(DEFAULT_GATEWAY_SETTINGS) });
+  // the legal entity behind the account (§43): the merchant is its owner member
+  ensureOrganisation(upgraded);
   publish('merchant.created', { merchantId: user.id, businessName: businessName.trim(), country: user.country ?? null }, { aggregateId: user.id, tenantId: user.id });
   return upgraded;
 }

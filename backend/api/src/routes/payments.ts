@@ -2,7 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate, wrap, parsePagination } from '../lib/http';
 import { requireAuth } from '../middleware/auth';
-import { initiatePayment, verifyPayment, paymentOptions, listPayments, markPaymentSent, getPayment, toPaymentView, authenticatePayment } from '../services/payments';
+import { initiatePayment, verifyPayment, paymentOptions, listPayments, markPaymentSent, getPayment, toPaymentView, authenticatePayment, settleSandboxBitcoinInvoice } from '../services/payments';
+import { getGatewayCredentials } from '../payments';
+import { bitcoinFundingDeclaration } from '../payments/bitcoin';
+import { findUserById } from '../services/users';
+import { getDb } from '../db';
+import { forbidden } from '../lib/errors';
 import { listEvents } from '../services/events';
 import { describeFunding } from '../services/railCatalog';
 import { getCurrency } from '../services/currencies';
@@ -31,7 +36,7 @@ depositsRouter.post(
   wrap(async (req, res) => {
     const body = validate(
       z.object({
-        method: z.enum(['card', 'mobile_money', 'bank']),
+        method: z.enum(['card', 'mobile_money', 'bank', 'bitcoin']),
         gateway: z.string().optional().nullable(),
         amount: z.string(),
         currency: z.string().length(3),
@@ -49,7 +54,11 @@ depositsRouter.post(
     const cur = getCurrency(body.currency);
     const { pin, ...rest } = body;
     const payment = await initiatePayment(req.user!, { purpose: 'deposit', ...rest, amount: toMinor(body.amount, cur.decimals), currency: cur.code }, { pin, req });
-    res.status(201).json({ payment, declaration: describeFunding(body.method, { currency: cur.code, country: req.user!.country, operatorId: body.operatorId, gateway: body.gateway }) });
+    const declaration =
+      body.method === 'bitcoin'
+        ? bitcoinFundingDeclaration(getGatewayCredentials(payment.gateway))
+        : describeFunding(body.method, { currency: cur.code, country: req.user!.country, operatorId: body.operatorId, gateway: body.gateway });
+    res.status(201).json({ payment, declaration });
   }),
 );
 
@@ -98,6 +107,28 @@ depositsRouter.post(
   wrap(async (req, res) => {
     const body = validate(z.object({ reference: z.string().max(100).optional(), note: z.string().max(500).optional(), image: z.string().max(2_000_000).optional() }), req.body);
     res.json({ payment: markPaymentSent(req.user!, String(req.params.id), body) });
+  }),
+);
+
+/**
+ * Sandbox Bitcoin rail: "pay" (or invalidate) a locally generated invoice. Allowed to the payer who owns the payment,
+ * the merchant the payment is for, or an administrator; refused for BTCPay-mode gateways (real invoices are settled by
+ * the BTCPay webhook / status query only). The outcome runs through the ordinary verification → settlement path.
+ */
+depositsRouter.post(
+  '/:id/bitcoin/simulate',
+  wrap(async (req, res) => {
+    const body = validate(z.object({ outcome: z.enum(['paid', 'invalid']).default('paid') }), req.body ?? {});
+    const payment = getPayment(String(req.params.id));
+    const user = req.user!;
+    const request = payment.payment_request_id
+      ? (getDb().prepare('SELECT requester_user_id FROM payment_requests WHERE id = ?').get(payment.payment_request_id) as { requester_user_id: string } | undefined)
+      : null;
+    const merchant = request ? findUserById(request.requester_user_id) : null;
+    const allowed = user.role === 'admin' || payment.user_id === user.id || (!!merchant && merchant.id === user.id);
+    if (!allowed) throw forbidden('Only the payer, the merchant or an administrator can simulate this invoice', 'forbidden');
+    const actor = { type: user.role === 'admin' ? ('admin' as const) : merchant?.id === user.id ? ('merchant' as const) : ('user' as const), id: user.id };
+    res.json({ simulation: true, outcome: body.outcome, payment: await settleSandboxBitcoinInvoice(payment.id, body.outcome, actor) });
   }),
 );
 

@@ -7,7 +7,9 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { validate, wrap, getClientIp } from '../lib/http';
-import { requireAuth, optionalAuth, requireRole, requireScope } from '../middleware/auth';
+import { requireAuth, optionalAuth, requireRole, requireScope, requireOrgPermission } from '../middleware/auth';
+import { MERCHANT_ROLES } from '../services/users';
+import { assertRefundWithinMemberLimit } from '../services/organisations';
 import { rateLimit } from '../middleware/rateLimit';
 import { badRequest, forbidden } from '../lib/errors';
 import { getCurrency } from '../services/currencies';
@@ -108,7 +110,30 @@ import { validateSplits } from '../services/finops/splits';
 import { v1ExtRouter } from './v1ext';
 
 export const v1Router = Router();
-const merchantOnly = [requireAuth, requireRole('merchant', 'admin')];
+const merchantOnly = [requireAuth, requireRole(...MERCHANT_ROLES, 'admin')];
+/** The organisation member behind the request (the owner account when the merchant acts for itself). */
+const memberCtx = (req: import('express').Request) => (req.organisationRole ? { organisation: req.organisation!, role: req.organisationRole, permissions: req.organisationPermissions ?? [] } : null);
+/** Step-up is answered by the signed-in person: a member confirms with their own PIN or passkey, never the owner's. */
+const stepUpUser = (req: import('express').Request) => req.actor ?? req.user!;
+/**
+ * Organisation RBAC (§44) for routes served by the other v1 routers mounted after this one (financial operations,
+ * bulk payouts): the guard runs here and falls through to the real handler, so a member without the permission is
+ * refused before the settlement instruction, statement or payout batch is touched.
+ */
+const passThrough = (_req: import('express').Request, _res: import('express').Response, next: import('express').NextFunction) => next();
+for (const [method, path, permission] of [
+  ['post', '/settlement_profiles', 'settlement:change'],
+  ['post', '/settlement_cycles', 'settlement:change'],
+  ['post', '/settlement_cycles/:id/pay', 'settlement:change'],
+  ['get', '/settlement_cycles/:id/statement', 'statements:view'],
+  ['post', '/disputes/:id/respond', 'disputes:respond'],
+  ['post', '/disputes/:id/evidence', 'disputes:respond'],
+  ['post', '/disputes/:id/withdraw', 'disputes:respond'],
+  ['post', '/payouts/batches', 'payouts:create'],
+  ['post', '/payouts/batches/:id/approve', 'payouts:create'],
+] as const) {
+  v1Router[method](path, requireAuth, requireOrgPermission(permission), passThrough);
+}
 const writeLimit = rateLimit({ windowMs: 60_000, max: 120, keyPrefix: 'v1w' });
 const publicLimit = rateLimit({ windowMs: 60_000, max: 300, keyPrefix: 'v1p' });
 
@@ -187,6 +212,7 @@ v1Router.post(
   '/payment_intents',
   ...merchantOnly,
   requireScope('payment_intents:write'),
+  requireOrgPermission('payments:create'),
   writeLimit,
   wrap(async (req, res) => {
     const body = validate(intentSchema, req.body);
@@ -513,7 +539,7 @@ const checkoutSchema = z.object({
   allowed_methods: z.array(z.string()).optional(),
   rails: z.array(z.string()).optional(),
 });
-v1Router.post('/checkout_sessions', ...merchantOnly, requireScope('checkout_sessions:write', 'payment_intents:write'), writeLimit, (req, res) => {
+v1Router.post('/checkout_sessions', ...merchantOnly, requireScope('checkout_sessions:write', 'payment_intents:write'), requireOrgPermission('payments:create'), writeLimit, (req, res) => {
   const b = validate(checkoutSchema, req.body);
   const session = createCheckoutSession(req.user!, {
     amountMinor: b.amount_minor ?? null,
@@ -563,7 +589,7 @@ const linkSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   rails: z.array(z.string()).optional(),
 });
-v1Router.post('/payment_links', ...merchantOnly, requireScope('payment_links:write', 'payment_intents:write'), writeLimit, (req, res) => {
+v1Router.post('/payment_links', ...merchantOnly, requireScope('payment_links:write', 'payment_intents:write'), requireOrgPermission('payments:create'), writeLimit, (req, res) => {
   const b = validate(linkSchema, req.body);
   res.status(201).json(
     createPaymentLink(req.user!, {
@@ -602,6 +628,7 @@ v1Router.post(
   '/refunds',
   ...merchantOnly,
   requireScope('refunds:write'),
+  requireOrgPermission('refunds:issue', 'refunds:unrestricted'),
   writeLimit,
   wrap(async (req, res) => {
     const b = validate(refundSchema, req.body);
@@ -613,8 +640,10 @@ v1Router.post(
       metadata: b.metadata,
       idemKey: (req.headers['idempotency-key'] as string | undefined) ?? null,
     };
+    // a cashier (refunds:issue without refunds:unrestricted) stays within the organisation's cashier refund limit
+    assertRefundWithinMemberLimit(req.organisation, memberCtx(req), input.amountMinor);
     // dashboards (sessions) confirm high-value refunds with PIN / passkey; API keys are pre-authorised credentials
-    assertRefundStepUp(req.user!, input, req);
+    assertRefundStepUp(stepUpUser(req), input, req);
     const refund = await createRefund(req.user!, input, { type: req.user!.role === 'admin' ? 'admin' : 'merchant', id: req.user!.id });
     res.status(refund.status === 'FAILED' ? 402 : 201).json(refund);
   }),
@@ -632,7 +661,7 @@ v1Router.get('/refunds', ...merchantOnly, requireScope('refunds:read', 'refunds:
 );
 v1Router.get('/refunds/:id', ...merchantOnly, requireScope('refunds:read', 'refunds:write'), (req, res) => res.json(getRefund(req.user!.id, String(req.params.id))));
 /** Reject a refund awaiting manual execution: the reservation is released and the intent keeps its prior state. */
-v1Router.post('/refunds/:id/reject', ...merchantOnly, requireScope('refunds:write'), writeLimit, (req, res) => {
+v1Router.post('/refunds/:id/reject', ...merchantOnly, requireScope('refunds:write'), requireOrgPermission('refunds:issue', 'refunds:unrestricted'), writeLimit, (req, res) => {
   const b = validate(z.object({ reason: z.string().min(3).max(200) }), req.body ?? {});
   res.json(rejectRefund(req.user!, String(req.params.id), b.reason, { type: req.user!.role === 'admin' ? 'admin' : 'merchant', id: req.user!.id }));
 });
@@ -709,7 +738,7 @@ v1Router.get('/fx/quotes/:id', ...merchantOnly, requireScope('routes:read', 'tra
 // ---------------------------------------------------------------------------------------------------------------------
 // Money requests (request a payment from a named payer: @tag, phone or email)
 // ---------------------------------------------------------------------------------------------------------------------
-v1Router.post('/money_requests', ...merchantOnly, requireScope('payment_intents:write'), writeLimit, (req, res) => {
+v1Router.post('/money_requests', ...merchantOnly, requireScope('payment_intents:write'), requireOrgPermission('payments:create'), writeLimit, (req, res) => {
   const b = validate(
     z.object({
       payer: z.string().min(2).max(120),
@@ -770,7 +799,7 @@ const payoutSchema = z.object({
 // Contract §14 endpoints (wallets, transfers, remittances, payout batches, agents) mount before /payouts/:id so
 // /payouts/batches resolves to the batch resource.
 v1Router.use(v1ExtRouter);
-v1Router.post('/payouts', ...merchantOnly, requireScope('payouts:write'), writeLimit, (req, res) => {
+v1Router.post('/payouts', ...merchantOnly, requireScope('payouts:write'), requireOrgPermission('payouts:create'), writeLimit, (req, res) => {
   const b = validate(payoutSchema, req.body);
   const d = b.destination;
   const destination =
@@ -806,6 +835,7 @@ v1Router.post(
   '/webhook_endpoints',
   ...merchantOnly,
   requireScope('webhooks:manage'),
+  requireOrgPermission('webhooks:manage'),
   writeLimit,
   wrap(async (req, res) => {
     const b = validate(endpointSchema, req.body);
@@ -818,6 +848,7 @@ v1Router.patch(
   '/webhook_endpoints/:id',
   ...merchantOnly,
   requireScope('webhooks:manage'),
+  requireOrgPermission('webhooks:manage'),
   writeLimit,
   wrap(async (req, res) => {
     const b = validate(
@@ -827,11 +858,13 @@ v1Router.patch(
     res.json(await updateEndpoint(req.user!.id, String(req.params.id), b));
   }),
 );
-v1Router.delete('/webhook_endpoints/:id', ...merchantOnly, requireScope('webhooks:manage'), writeLimit, (req, res) => {
+v1Router.delete('/webhook_endpoints/:id', ...merchantOnly, requireScope('webhooks:manage'), requireOrgPermission('webhooks:manage'), writeLimit, (req, res) => {
   deleteEndpoint(req.user!.id, String(req.params.id));
   res.json({ deleted: true, id: String(req.params.id) });
 });
-v1Router.post('/webhook_endpoints/:id/rotate', ...merchantOnly, requireScope('webhooks:manage'), writeLimit, (req, res) => res.json(rotateEndpointSecret(req.user!.id, String(req.params.id))));
+v1Router.post('/webhook_endpoints/:id/rotate', ...merchantOnly, requireScope('webhooks:manage'), requireOrgPermission('webhooks:manage'), writeLimit, (req, res) =>
+  res.json(rotateEndpointSecret(req.user!.id, String(req.params.id))),
+);
 v1Router.post('/webhook_endpoints/:id/ping', ...merchantOnly, requireScope('webhooks:manage'), writeLimit, (req, res) => res.json(pingEndpoint(req.user!.id, String(req.params.id))));
 v1Router.get('/webhook_endpoints/:id/deliveries', ...merchantOnly, requireScope('webhooks:manage'), (req, res) =>
   res.json({ data: listDeliveries(req.user!.id, { endpointId: String(req.params.id), status: (req.query.status as any) ?? null, limit: Number(req.query.limit) || 50 }) }),
@@ -861,8 +894,8 @@ v1Router.post('/webhook_deliveries/:id/replay', ...merchantOnly, requireScope('w
 const sessionOnly = (req: import('express').Request, _res: import('express').Response, next: import('express').NextFunction) =>
   req.authVia === 'api_key' ? next(forbidden('API keys cannot manage API keys; sign in to the dashboard', 'session_required')) : next();
 v1Router.get('/api_keys/scopes', publicLimit, (_req, res) => res.json({ data: API_KEY_SCOPES }));
-v1Router.get('/api_keys', ...merchantOnly, sessionOnly, (req, res) => res.json({ data: listApiKeys(req.user!.id) }));
-v1Router.post('/api_keys', ...merchantOnly, sessionOnly, writeLimit, (req, res) => {
+v1Router.get('/api_keys', ...merchantOnly, sessionOnly, requireOrgPermission('api_keys:view', 'api_keys:manage'), (req, res) => res.json({ data: listApiKeys(req.user!.id) }));
+v1Router.post('/api_keys', ...merchantOnly, sessionOnly, requireOrgPermission('api_keys:manage'), writeLimit, (req, res) => {
   const b = validate(
     z.object({
       label: z.string().max(60).default('API key'),
@@ -876,16 +909,16 @@ v1Router.post('/api_keys', ...merchantOnly, sessionOnly, writeLimit, (req, res) 
     req.body,
   );
   // a live key can move real money: minting one needs the session's PIN or a passkey step-up; test keys do not
-  if (b.mode === 'live') assertSessionStepUp(req.user!, b.pin, req, 'Creating a live API key');
+  if (b.mode === 'live') assertSessionStepUp(stepUpUser(req), b.pin, req, 'Creating a live API key');
   res.status(201).json(createApiKey(req.user!, b.label, b.mode, { kind: b.kind, scopes: b.scopes, ipAllowlist: b.ip_allowlist ?? null }));
 });
 /** Rotate a key: same label, kind, scopes and allowlist under a new secret; the old secret stops working at once. */
-v1Router.post('/api_keys/:id/rotate', ...merchantOnly, sessionOnly, writeLimit, (req, res) => {
+v1Router.post('/api_keys/:id/rotate', ...merchantOnly, sessionOnly, requireOrgPermission('api_keys:manage'), writeLimit, (req, res) => {
   const b = validate(z.object({ pin: z.string().optional() }), req.body ?? {});
-  if (apiKeyMode(req.user!.id, String(req.params.id)).mode === 'live') assertSessionStepUp(req.user!, b.pin, req, 'Rotating a live API key');
+  if (apiKeyMode(req.user!.id, String(req.params.id)).mode === 'live') assertSessionStepUp(stepUpUser(req), b.pin, req, 'Rotating a live API key');
   res.status(201).json(rotateApiKey(req.user!, String(req.params.id)));
 });
-v1Router.delete('/api_keys/:id', ...merchantOnly, sessionOnly, writeLimit, (req, res) => {
+v1Router.delete('/api_keys/:id', ...merchantOnly, sessionOnly, requireOrgPermission('api_keys:manage'), writeLimit, (req, res) => {
   revokeApiKey(req.user!.id, String(req.params.id));
   res.json({ revoked: true, id: String(req.params.id) });
 });

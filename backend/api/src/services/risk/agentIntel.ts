@@ -10,9 +10,9 @@ import { getDb } from '../../db';
 import { config } from '../../config';
 import { now, shortCode, uuid } from '../../lib/ids';
 import { parseJson } from '../../lib/json';
-import { badRequest, conflict, forbidden, notFound } from '../../lib/errors';
+import { badRequest, conflict, forbidden, notFound, unprocessable } from '../../lib/errors';
 import { getSetting, getAppSettings } from '../settings';
-import { getCurrency } from '../currencies';
+import { getBaseCurrency, getCurrency, toBase } from '../currencies';
 import { formatMoney } from '@bitripay/shared';
 import { recordEvent } from '../events';
 import { findUserById, createUser, updateUser, toPublicUser, type UserRow } from '../users';
@@ -35,6 +35,13 @@ export interface AgentIntelSettings {
   /** Minimum tenure (days) before bonuses apply. */
   minTenureDays: number;
   onboardingCommissionMinor: number;
+  /** §59 float intelligence: base cash-operation ceilings (base currency, minor units) scaled by trust band. */
+  limitBaseMinor: { perTransaction: number; daily: number };
+  limitMultiplierByBand: Record<'new' | 'bronze' | 'silver' | 'gold' | 'platinum', number>;
+  /** Hours the float outlook looks ahead and the depletion probabilities that make the risk MEDIUM / HIGH. */
+  outlookHours: number;
+  depletionMediumProbability: number;
+  depletionHighProbability: number;
 }
 const DEFAULT: AgentIntelSettings = {
   targetDays: 3,
@@ -43,10 +50,21 @@ const DEFAULT: AgentIntelSettings = {
   liquidityBonusBps: 10,
   minTenureDays: 30,
   onboardingCommissionMinor: 200,
+  limitBaseMinor: { perTransaction: 200_000, daily: 2_000_000 },
+  limitMultiplierByBand: { new: 0.5, bronze: 1, silver: 1.5, gold: 2, platinum: 3 },
+  outlookHours: 4,
+  depletionMediumProbability: 0.2,
+  depletionHighProbability: 0.5,
 };
 export const getAgentIntelSettings = (): AgentIntelSettings => {
   const s = getSetting<Partial<AgentIntelSettings>>('agentIntel', {});
-  return { ...DEFAULT, ...s, bonusByBand: { ...DEFAULT.bonusByBand, ...(s.bonusByBand ?? {}) } };
+  return {
+    ...DEFAULT,
+    ...s,
+    bonusByBand: { ...DEFAULT.bonusByBand, ...(s.bonusByBand ?? {}) },
+    limitBaseMinor: { ...DEFAULT.limitBaseMinor, ...(s.limitBaseMinor ?? {}) },
+    limitMultiplierByBand: { ...DEFAULT.limitMultiplierByBand, ...(s.limitMultiplierByBand ?? {}) },
+  };
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -422,4 +440,317 @@ if (!(globalThis as any)[HOOK]) {
   verificationOutcomeHooks.push((id, subjectType, outcome) => {
     if (subjectType === 'issuance') onIssuanceVerification(id, outcome);
   });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Float intelligence (specification §59): what the next hours will ask of the agent's digital and cash floats, how
+// likely either runs dry, and what to do about it. The model is the agent's own eight weeks of cash-in / cash-out
+// bucketed by weekday and hour: the expected demand for the coming hours is the sum of the bucket means, its spread
+// the sum of the bucket variances (normal approximation), corrected by pending cash-out requests, cash pickups waiting
+// in the agent's currency and what the other agents of the same country are doing right now. HIGH risk never moves
+// money on its own: it recommends a rebalance and notifies.
+// ---------------------------------------------------------------------------------------------------------------------
+export type FloatRisk = 'LOW' | 'MEDIUM' | 'HIGH';
+export type FloatAction = 'hold' | 'rebalance' | 'deposit_cash' | 'collect_cash';
+export interface FloatOutlook {
+  agentId: string;
+  currency: string;
+  /** Physical cash on hand (declared + movements since the declaration; estimated from the ledger when never declared). */
+  cashFloatMinor: number;
+  cashFloatSource: 'declared' | 'estimated';
+  /** E-money in the agent wallet. */
+  digitalFloatMinor: number;
+  predicted4hDigitalMinor: number;
+  predicted4hCashMinor: number;
+  /** Probability that the digital float is exhausted within the outlook window. */
+  depletionProbability: number;
+  cashDepletionProbability: number;
+  risk: FloatRisk;
+  recommendedAction: FloatAction;
+  recommendedAmountMinor: number;
+  demand: {
+    hours: number;
+    expectedCashInMinor: number;
+    expectedCashOutMinor: number;
+    stdCashInMinor: number;
+    stdCashOutMinor: number;
+    pendingCashOutRequestsMinor: number;
+    pendingPickupsShareMinor: number;
+    sameCountryDemandFactor: number;
+    historyWeeks: number;
+    samples: number;
+  };
+  computedAt: string;
+}
+const HISTORY_WEEKS = 8;
+const bucketOf = (d: Date) => d.getUTCDay() * 24 + d.getUTCHours();
+/** Standard normal CDF (Abramowitz–Stegun 7.1.26, error < 1.5e-7). */
+export function normalCdf(z: number): number {
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  const erf = 1 - poly * Math.exp(-x * x);
+  return 0.5 * (1 + (z >= 0 ? erf : -erf));
+}
+/** Per-bucket mean and variance across the history weeks (weeks without activity in the bucket count as zero). */
+function bucketStats(rows: { amount: number; created_at: string }[], weeks: number): Map<number, { mean: number; variance: number }> {
+  const perBucketWeek = new Map<number, Map<number, number>>();
+  for (const r of rows) {
+    const d = new Date(r.created_at);
+    const b = bucketOf(d);
+    const week = Math.floor((Date.now() - d.getTime()) / (7 * 86_400_000));
+    const byWeek = perBucketWeek.get(b) ?? perBucketWeek.set(b, new Map()).get(b)!;
+    byWeek.set(week, (byWeek.get(week) ?? 0) + r.amount);
+  }
+  const stats = new Map<number, { mean: number; variance: number }>();
+  for (const [b, byWeek] of perBucketWeek) {
+    const samples = Array.from({ length: weeks }, (_, w) => byWeek.get(w) ?? 0);
+    const mean = samples.reduce((a, x) => a + x, 0) / weeks;
+    const variance = samples.reduce((a, x) => a + (x - mean) ** 2, 0) / Math.max(1, weeks - 1);
+    stats.set(b, { mean, variance });
+  }
+  return stats;
+}
+function windowDemand(stats: Map<number, { mean: number; variance: number }>, hours: number): { mean: number; variance: number } {
+  let mean = 0;
+  let variance = 0;
+  for (let h = 0; h < hours; h += 1) {
+    const s = stats.get(bucketOf(new Date(Date.now() + h * 3_600_000)));
+    if (!s) continue;
+    mean += s.mean;
+    variance += s.variance;
+  }
+  return { mean, variance };
+}
+/** The agent counted the cash in the drawer: from here on the cash float is declared + ledger movements. */
+export function declareCash(agent: UserRow, input: { currency: string; amountMinor: number }): { currency: string; amountMinor: number; declaredAt: string } {
+  if (agent.role !== 'agent') throw forbidden('Only agents declare cash', 'role_required');
+  const cur = getCurrency(input.currency);
+  if (!Number.isInteger(input.amountMinor) || input.amountMinor < 0) throw badRequest('Cash amount must be a non-negative integer in minor units', 'invalid_amount');
+  const declaredAt = now();
+  getDb()
+    .prepare('INSERT INTO agent_cash_declarations (id, agent_user_id, currency, amount_minor, declared_at) VALUES (?, ?, ?, ?, ?)')
+    .run(`acd_${shortCode(12).toLowerCase()}`, agent.id, cur.code, input.amountMinor, declaredAt);
+  recordEvent('liquidity', agent.id, 'agent.cash_declared', { type: 'agent', id: agent.id }, { currency: cur.code, amount: input.amountMinor });
+  return { currency: cur.code, amountMinor: input.amountMinor, declaredAt };
+}
+function cashFloat(db: ReturnType<typeof getDb>, agentId: string, currency: string, historySince: string): { amount: number; source: 'declared' | 'estimated' } {
+  const decl = db.prepare('SELECT amount_minor, declared_at FROM agent_cash_declarations WHERE agent_user_id = ? AND currency = ? ORDER BY declared_at DESC LIMIT 1').get(agentId, currency) as
+    { amount_minor: number; declared_at: string } | undefined;
+  const since = decl?.declared_at ?? historySince;
+  const inn = (
+    db
+      .prepare("SELECT COALESCE(SUM(amount), 0) s FROM transactions WHERE sender_user_id = ? AND currency = ? AND type = 'agent_cash_in' AND status = 'completed' AND created_at >= ?")
+      .get(agentId, currency, since) as any
+  ).s as number;
+  const out = (
+    db
+      .prepare("SELECT COALESCE(SUM(amount), 0) s FROM transactions WHERE receiver_user_id = ? AND currency = ? AND type = 'agent_cash_out' AND status = 'completed' AND created_at >= ?")
+      .get(agentId, currency, since) as any
+  ).s as number;
+  const pickups = (
+    db
+      .prepare("SELECT COALESCE(SUM(target_amount), 0) s FROM remittances WHERE pickup_agent_id = ? AND target_currency = ? AND status = 'completed' AND completed_at >= ?")
+      .get(agentId, currency, since) as any
+  ).s as number;
+  const amount = (decl?.amount_minor ?? 0) + inn - out - pickups;
+  return { amount: decl ? amount : Math.max(0, amount), source: decl ? 'declared' : 'estimated' };
+}
+export function floatOutlook(agentId: string, currency?: string | null): FloatOutlook[] {
+  const db = getDb();
+  const s = getAgentIntelSettings();
+  const agent = findUserById(agentId);
+  if (!agent || agent.role !== 'agent') throw notFound('Agent not found', 'agent_not_found');
+  const hours = Math.max(1, Math.min(24, s.outlookHours));
+  const historySince = new Date(Date.now() - HISTORY_WEEKS * 7 * 86_400_000).toISOString();
+  const wallets = listWallets(agentId).filter((w) => !currency || w.currency === currency.toUpperCase());
+  const activeAgentsHere = Math.max(1, (db.prepare("SELECT COUNT(*) c FROM users WHERE role = 'agent' AND status = 'active' AND country IS ?").get(agent.country ?? null) as any).c as number);
+  return wallets.map((w) => {
+    const cashIns = db
+      .prepare("SELECT amount, created_at FROM transactions WHERE sender_user_id = ? AND currency = ? AND type = 'agent_cash_in' AND status = 'completed' AND created_at >= ?")
+      .all(agentId, w.currency, historySince) as {
+      amount: number;
+      created_at: string;
+    }[];
+    const cashOuts = db
+      .prepare("SELECT amount, created_at FROM transactions WHERE receiver_user_id = ? AND currency = ? AND type = 'agent_cash_out' AND status = 'completed' AND created_at >= ?")
+      .all(agentId, w.currency, historySince) as {
+      amount: number;
+      created_at: string;
+    }[];
+    const inDemand = windowDemand(bucketStats(cashIns, HISTORY_WEEKS), hours);
+    const outDemand = windowDemand(bucketStats(cashOuts, HISTORY_WEEKS), hours);
+    // What the same country's agents did in the last `hours` against what their history says for those buckets: a
+    // busy market day lifts every agent's expected cash-in (bounded to 0.5×–2×).
+    const peerRows = db
+      .prepare(
+        "SELECT t.amount, t.created_at FROM transactions t JOIN users u ON u.id = t.sender_user_id WHERE u.role = 'agent' AND u.country IS ? AND t.currency = ? AND t.type = 'agent_cash_in' AND t.status = 'completed' AND t.created_at >= ?",
+      )
+      .all(agent.country ?? null, w.currency, historySince) as { amount: number; created_at: string }[];
+    const recentSince = Date.now() - hours * 3_600_000;
+    const peerRecent = peerRows.filter((r) => Date.parse(r.created_at) >= recentSince).reduce((a, r) => a + r.amount, 0);
+    let peerExpected = 0;
+    const peerStats = bucketStats(peerRows, HISTORY_WEEKS);
+    for (let h = 1; h <= hours; h += 1) peerExpected += peerStats.get(bucketOf(new Date(Date.now() - h * 3_600_000)))?.mean ?? 0;
+    const demandFactor = peerExpected > 0 ? Math.max(0.5, Math.min(2, peerRecent / peerExpected)) : 1;
+    const pendingCashOut = (
+      db
+        .prepare("SELECT COALESCE(SUM(amount), 0) s FROM cash_requests WHERE agent_id = ? AND currency = ? AND kind = 'cash_out' AND status = 'pending' AND expires_at > ?")
+        .get(agentId, w.currency, now()) as any
+    ).s as number;
+    const pendingPickups = (
+      db.prepare("SELECT COALESCE(SUM(target_amount), 0) s FROM remittances WHERE target_currency = ? AND status = 'ready_for_pickup' AND payout_method = 'cash_pickup'").get(w.currency) as any
+    ).s as number;
+    const pickupShare = Math.round(pendingPickups / activeAgentsHere);
+    const expectedIn = Math.round(inDemand.mean * demandFactor);
+    const expectedOut = Math.round(outDemand.mean) + pendingCashOut;
+    const stdIn = Math.sqrt(inDemand.variance) * demandFactor;
+    const stdOut = Math.sqrt(outDemand.variance);
+    const cash = cashFloat(db, agentId, w.currency, historySince);
+    // digital: cash-in debits it, cash-out and pickups (paid from the treasury after the handover) credit it
+    const digitalNet = expectedIn - expectedOut - pickupShare;
+    const digitalStd = Math.sqrt(stdIn ** 2 + stdOut ** 2);
+    const depletion = digitalStd > 0 ? 1 - normalCdf((w.balance - digitalNet) / digitalStd) : digitalNet > w.balance ? 1 : 0;
+    // cash: cash-in fills the drawer, cash-out and pickups empty it
+    const cashNet = expectedOut + pickupShare - expectedIn;
+    const cashDepletion = digitalStd > 0 ? 1 - normalCdf((cash.amount - cashNet) / digitalStd) : cashNet > cash.amount ? 1 : 0;
+    const p = Math.round(depletion * 1000) / 1000;
+    const pc = Math.round(cashDepletion * 1000) / 1000;
+    const worst = Math.max(p, pc);
+    const risk: FloatRisk = worst >= s.depletionHighProbability ? 'HIGH' : worst >= s.depletionMediumProbability ? 'MEDIUM' : 'LOW';
+    // enough to cover demand at the 90th percentile of the window
+    const digitalNeed = Math.max(0, Math.round(digitalNet + 1.2816 * digitalStd - w.balance));
+    const cashNeed = Math.max(0, Math.round(cashNet + 1.2816 * digitalStd - cash.amount));
+    let action: FloatAction = 'hold';
+    let amount = 0;
+    if (risk !== 'LOW') {
+      if (p >= pc) {
+        action = 'rebalance';
+        amount = digitalNeed;
+      } else {
+        action = 'collect_cash';
+        amount = cashNeed;
+      }
+    } else if (cash.amount > 0 && cash.amount > 3 * Math.max(expectedOut + pickupShare, 1) && cash.amount > w.balance) {
+      action = 'deposit_cash';
+      amount = cash.amount - Math.round(expectedOut + pickupShare + 1.2816 * digitalStd);
+    }
+    return {
+      agentId,
+      currency: w.currency,
+      cashFloatMinor: cash.amount,
+      cashFloatSource: cash.source,
+      digitalFloatMinor: w.balance,
+      predicted4hDigitalMinor: Math.round(w.balance - digitalNet),
+      predicted4hCashMinor: Math.round(cash.amount - cashNet),
+      depletionProbability: p,
+      cashDepletionProbability: pc,
+      risk,
+      recommendedAction: action,
+      recommendedAmountMinor: Math.max(0, amount),
+      demand: {
+        hours,
+        expectedCashInMinor: expectedIn,
+        expectedCashOutMinor: expectedOut,
+        stdCashInMinor: Math.round(stdIn),
+        stdCashOutMinor: Math.round(stdOut),
+        pendingCashOutRequestsMinor: pendingCashOut,
+        pendingPickupsShareMinor: pickupShare,
+        sameCountryDemandFactor: Math.round(demandFactor * 100) / 100,
+        historyWeeks: HISTORY_WEEKS,
+        samples: cashIns.length + cashOuts.length,
+      },
+      computedAt: now(),
+    };
+  });
+}
+/** Hourly: agents whose outlook is HIGH are told what to do (once per agent, currency and hour); nothing moves by itself. */
+export function runFloatOutlookAlerts(): { alerted: number } {
+  const db = getDb();
+  let alerted = 0;
+  for (const a of db.prepare("SELECT id FROM users WHERE role = 'agent' AND status = 'active'").all() as { id: string }[]) {
+    for (const o of floatOutlook(a.id)) {
+      if (o.risk !== 'HIGH') continue;
+      const cur = getCurrency(o.currency, false);
+      const key = `outlook:${a.id}:${o.currency}:${now().slice(0, 13)}`;
+      if (db.prepare("SELECT 1 FROM event_log WHERE stream = 'liquidity' AND subject_id = ? LIMIT 1").get(key)) continue;
+      const details = {
+        agentId: a.id,
+        currency: o.currency,
+        balance: o.digitalFloatMinor,
+        cash: o.cashFloatMinor,
+        depletionProbability: o.depletionProbability,
+        action: o.recommendedAction,
+        amount: o.recommendedAmountMinor,
+        status: 'outlook_high',
+      };
+      recordEvent('liquidity', key, 'agent.float_outlook_high', { type: 'system' }, details);
+      publish('agent.float_low', details, { aggregateId: a.id });
+      notify(
+        a.id,
+        'Float depletion likely',
+        o.recommendedAction === 'rebalance'
+          ? `Your ${o.currency} float of ${formatMoney(o.digitalFloatMinor, cur)} is likely to run out within ${o.demand.hours} hours (${Math.round(o.depletionProbability * 100)}%). Request ${formatMoney(o.recommendedAmountMinor, cur)} of float now.`
+          : `Your ${o.currency} cash of ${formatMoney(o.cashFloatMinor, cur)} is likely to run out within ${o.demand.hours} hours (${Math.round(o.cashDepletionProbability * 100)}%). Collect about ${formatMoney(o.recommendedAmountMinor, cur)} in cash.`,
+        { kind: 'wallet', loud: true, action: o.recommendedAction },
+      );
+      alerted += 1;
+    }
+  }
+  return { alerted };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Trust-scaled cash-operation limits: per-transaction and daily ceilings (base currency) = base × band multiplier.
+// ---------------------------------------------------------------------------------------------------------------------
+export interface AgentLimits {
+  agentId: string;
+  band: TrustBand;
+  multiplier: number;
+  currency: string;
+  perTransactionMinor: number;
+  dailyMinor: number;
+  usedTodayMinor: number;
+}
+export function agentLimitsFor(agent: UserRow): AgentLimits {
+  const s = getAgentIntelSettings();
+  const band: TrustBand = latestTrustScore(agent.id)?.band ?? (agent.role === 'agent' ? computeTrustScore(agent.id, false).band : 'new');
+  const multiplier = s.limitMultiplierByBand[band] ?? 1;
+  const since = new Date(Date.now() - 86_400_000).toISOString();
+  const rows = getDb()
+    .prepare(
+      "SELECT amount, currency FROM transactions WHERE ((sender_user_id = ? AND type = 'agent_cash_in') OR (receiver_user_id = ? AND type = 'agent_cash_out')) AND status IN ('pending', 'completed') AND created_at >= ?",
+    )
+    .all(agent.id, agent.id, since) as { amount: number; currency: string }[];
+  const used = rows.reduce((a, r) => a + toBase(r.amount, r.currency), 0);
+  return {
+    agentId: agent.id,
+    band,
+    multiplier,
+    currency: getBaseCurrency().code,
+    perTransactionMinor: Math.round(s.limitBaseMinor.perTransaction * multiplier),
+    dailyMinor: Math.round(s.limitBaseMinor.daily * multiplier),
+    usedTodayMinor: used,
+  };
+}
+/** Refuse a cash operation above the agent's trust-scaled ceilings (called by agentCashIn and confirmCashOut). */
+export function enforceAgentLimits(agent: UserRow, amountMinor: number, currency: string): AgentLimits {
+  const limits = agentLimitsFor(agent);
+  const base = toBase(amountMinor, currency);
+  if (base > limits.perTransactionMinor)
+    throw unprocessable(`This cash operation exceeds your per-transaction ceiling for the ${limits.band} trust band`, 'agent_limit_exceeded', {
+      limit: limits.perTransactionMinor,
+      amount: base,
+      band: limits.band,
+      scope: 'per_transaction',
+    });
+  if (limits.usedTodayMinor + base > limits.dailyMinor)
+    throw unprocessable(`This cash operation would exceed your daily ceiling for the ${limits.band} trust band`, 'agent_limit_exceeded', {
+      limit: limits.dailyMinor,
+      used: limits.usedTodayMinor,
+      amount: base,
+      band: limits.band,
+      scope: 'daily',
+    });
+  return limits;
 }

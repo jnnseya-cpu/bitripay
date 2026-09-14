@@ -32,7 +32,7 @@ import { getWebhookSettings } from './settings';
 import { notify } from './notifications';
 import { platformSigningKey, signWithKey } from './keys';
 import { parseJson } from '../lib/json';
-import { subscribe } from './bus';
+import { subscribe, type SettlementEventPayload } from './bus';
 
 export const WEBHOOK_API_VERSION = '2026-09-01';
 export const WEBHOOK_SCHEMA_VERSION = 1;
@@ -406,8 +406,9 @@ export function emitSettlementEvent(userId: string, phase: 'created' | 'complete
 // `settlement.cycle_closed` / `settlement.closed` are the closing moment (finops/settlement.ts publishes both with the
 // same cycle), `settlement.paid` is the payout of the cycle; the payload names the merchant as `merchantId` or `userId`.
 subscribe('webhooks.settlement', ['settlement.cycle_closed', 'settlement.closed', 'settlement.paid'], (ev) => {
-  const merchantId = (ev.payload.merchantId as string | undefined) ?? (ev.payload.userId as string | undefined) ?? (ev.tenantId !== 'platform' ? ev.tenantId : null);
-  const cycleId = (ev.payload.cycleId as string | undefined) ?? ev.aggregateId;
+  const payload = ev.payload as Partial<SettlementEventPayload> & { merchantId?: string };
+  const merchantId = payload.merchantId ?? payload.userId ?? (ev.tenantId !== 'platform' ? ev.tenantId : null);
+  const cycleId = payload.cycleId ?? ev.aggregateId;
   if (!merchantId || !cycleId) return;
   emitSettlementEvent(merchantId, ev.type === 'settlement.paid' ? 'completed' : 'created', { ...ev.payload, id: cycleId });
 });

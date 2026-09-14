@@ -13,6 +13,20 @@ function heldOnWallet(walletId: string): number {
 export const preCommitHooks: ((ctx: { input: PostTransactionInput; fromUser: UserRow | null; toUser: UserRow | null }) => void)[] = [];
 /** Listeners notified after a pending transaction settles or reverses (payout webhooks register here; avoids import cycles). */
 export const transactionStatusHooks: ((tx: TransactionRow, outcome: 'completed' | 'rejected' | 'cancelled' | 'failed') => void)[] = [];
+/**
+ * Posting policies (specification §61): pure guards consulted inside every posting before any ledger write, with the
+ * resolved source and destination wallets. A policy refuses a movement by throwing an AppError (the smart restricted
+ * wallet policy registers here; it must never write). Registered once per process by the owning module.
+ */
+export type PostingPolicy = (ctx: { input: PostTransactionInput; fromWallet: WalletRow; toWallet: WalletRow; isSenderSystem: boolean; status: TransactionStatus }) => void;
+const postingPolicies: PostingPolicy[] = [];
+export function registerPostingPolicy(fn: PostingPolicy): () => void {
+  postingPolicies.push(fn);
+  return () => {
+    const i = postingPolicies.indexOf(fn);
+    if (i >= 0) postingPolicies.splice(i, 1);
+  };
+}
 import { getEmoneySettings } from './settings';
 
 /** Internal transaction types whose platform fee may be covered by promotional credit. */
@@ -293,6 +307,7 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     const creates = isSenderSystem && !!input.toWalletId && toWallet.user_id !== treasury.id;
     const issuance = creates ? assertIssuanceAuthorised(input.issuance, input.type) : null;
     if (!isSenderSystem && fromWallet.frozen_at) throw forbidden(`This ${fromWallet.currency} balance is frozen: ${fromWallet.frozen_reason ?? 'contact support'}`, 'wallet_frozen');
+    for (const policy of postingPolicies) policy({ input, fromWallet, toWallet, isSenderSystem, status });
     if (preCommitHooks.length) {
       const fromUser = isSenderSystem ? null : (findUserById(fromWallet.user_id) ?? null);
       const toUser = toWallet.user_id === treasury.id ? null : (findUserById(toWallet.user_id) ?? null);

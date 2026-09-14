@@ -10,7 +10,7 @@ import { notify } from './notifications';
 import { onDepositCompleted } from './referrals';
 import { getModules } from './modules';
 import { recordCommission } from './finops/commissions';
-import { dynamicCommissionBps } from './risk/agentIntel';
+import { dynamicCommissionBps, enforceAgentLimits } from './risk/agentIntel';
 
 /** Base commission plus the trust-band bonus and the liquidity bonus where float is short (see risk/agentIntel). */
 function agentCommissionBps(agent: UserRow, kind: 'cash_in' | 'cash_out' | 'other' = 'other') {
@@ -42,6 +42,8 @@ export function agentCashIn(agent: UserRow, input: { customer: string; amount: n
   if (!customer || customer.is_system) throw notFound('Customer not found', 'recipient_not_found');
   if (customer.id === agent.id) throw badRequest('You cannot cash in to yourself');
   const cur = getCurrency(input.currency);
+  // §59: the agent's cash-operation ceilings scale with the trust band (on top of the customer's own limits).
+  enforceAgentLimits(agent, input.amount, cur.code);
   const fee = calculateFee('agent_cash_in', input.amount, cur.code, null, { userId: agent.id });
   const commission = Math.min(fee, applyBps(input.amount, agentCommissionBps(agent, 'cash_in')));
   const agentWallet = getUserWallet(agent.id, cur.code);
@@ -120,6 +122,7 @@ export function confirmCashOut(agent: UserRow, code: string): TransactionRow {
     }
     const customer = findUserById(req.user_id)!;
     const cur = getCurrency(req.currency);
+    enforceAgentLimits(agent, req.amount, cur.code);
     const fee = calculateFee('agent_cash_out', req.amount, cur.code, null, { userId: agent.id });
     const commission = Math.min(fee, applyBps(req.amount, agentCommissionBps(agent, 'cash_out')));
     const customerWallet = getUserWallet(customer.id, cur.code);

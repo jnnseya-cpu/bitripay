@@ -6,7 +6,7 @@ import { parseJson } from '../lib/json';
 import { config } from '../config';
 import { formatMoney } from '@bitripay/shared';
 import { PROVIDERS, availableGateways, getGateway, getGatewayCredentials, listGateways } from '../payments';
-import type { CardInput, GatewayPaymentRow, InitiateResult, NextAction, PaymentMethod, VerifyResult } from '../payments/types';
+import type { BitcoinRateDisclosure, CardInput, GatewayPaymentRow, InitiateResult, NextAction, PaymentMethod, VerifyResult } from '../payments/types';
 import { getCurrency } from './currencies';
 import { calculateFee, postTransaction } from './ledger';
 import { ensureWallet } from './wallets';
@@ -32,6 +32,9 @@ import { tryTransitionRoute } from './routeLifecycle';
 import { cancelPayout } from './payouts';
 import { openDispute } from './finops/disputes';
 import { assertBalanceCap } from './risk/kycTiers';
+import { bitcoinEligible, merchantBitcoinPolicy } from './capabilities';
+import { bitcoinMode, bitcoinRate, bitcoinCurrencyEnabled, invoiceOf, markSandboxInvoice, BTC_CURRENCY } from '../payments/bitcoin';
+import { isMerchantRole } from './users';
 
 export interface InitiatePaymentInput {
   purpose: 'deposit' | 'checkout';
@@ -147,9 +150,15 @@ function mergeMeta(id: string, patch: Record<string, unknown>) {
   updatePayment(id, { metadata: JSON.stringify({ ...current, ...patch }) });
 }
 
-/** Public list of deposit methods available for the payer's currency/country – used by the "Add money" screen and checkout. */
-export function paymentOptions(currency: string, country?: string | null, purpose: 'deposit' | 'checkout' = 'deposit') {
+/**
+ * Public list of deposit methods available for the payer's currency/country – used by the "Add money" screen and checkout.
+ * The Bitcoin rail is listed only where jurisdiction allows it (capability matrix) and, for a merchant checkout, when the
+ * merchant opted in (`opts.merchant`); a checkout without a known merchant policy never lists it.
+ */
+export function paymentOptions(currency: string, country?: string | null, purpose: 'deposit' | 'checkout' = 'deposit', opts: { merchant?: UserRow | null } = {}) {
   const methods: PaymentMethod[] = ['card', 'mobile_money', 'bank'];
+  const bitcoin = bitcoinEligible({ country, merchantPolicy: purpose === 'checkout' ? merchantBitcoinPolicy(opts.merchant) : undefined });
+  if (bitcoin.eligible && (purpose === 'deposit' || opts.merchant)) methods.push('bitcoin');
   return methods
     .map((method) => ({
       method,
@@ -160,6 +169,8 @@ export function paymentOptions(currency: string, country?: string | null, purpos
         publishableKey: g.provider === 'stripe' ? getGatewayCredentials(g.id).publishableKey || null : null,
       })),
       fee: calculateFee(method === 'card' ? 'card_deposit' : method === 'mobile_money' ? 'mobile_money_deposit' : 'bank_deposit', 10000, currency),
+      /** Bitcoin rail: the disclosed fiat → BTC rate (source, margin, sandbox flag) the invoice will be priced at. */
+      bitcoin: method === 'bitcoin' ? { rate: bitcoinRate(currency), eligibility: bitcoin } : undefined,
       /** Mobile money operators the payer can choose (world directory filtered by country when known). */
       operators:
         method === 'mobile_money'
@@ -208,7 +219,7 @@ function smartPick(candidates: ReturnType<typeof availableGateways>, method: Pay
 
 function actorFor(user: UserRow | null | undefined): Actor {
   if (!user) return { type: 'guest' };
-  return { type: user.role === 'admin' ? 'admin' : user.role === 'agent' ? 'agent' : user.role === 'merchant' ? 'merchant' : 'user', id: user.id };
+  return { type: user.role === 'admin' ? 'admin' : user.role === 'agent' ? 'agent' : isMerchantRole(user.role) ? 'merchant' : 'user', id: user.id };
 }
 
 /** Which authentication the intent carries: passkey step-up, PIN, or the external rail's own authentication (guests). */
@@ -269,9 +280,15 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
     merchant = findUserById(request.requester_user_id)!;
     if (merchant.role !== 'merchant') throw badRequest('Only merchant payment requests accept external payment methods');
     const settings = getGatewaySettings(merchant);
-    if (!settings.methods.includes(input.method)) throw badRequest('This merchant does not accept that payment method', 'method_not_accepted');
+    // Bitcoin is governed by the merchant's Bitcoin policy (opt-in flag), not by the hosted-checkout method list.
+    if (input.method !== 'bitcoin' && !settings.methods.includes(input.method)) throw badRequest('This merchant does not accept that payment method', 'method_not_accepted');
     currency = request.currency;
     amount = request.amount ?? amount;
+  }
+  if (input.method === 'bitcoin') {
+    // Jurisdiction (capability matrix) AND merchant policy decide; a top-up of one's own balance needs the jurisdiction only.
+    const eligibility = bitcoinEligible({ country: merchant ? merchant.country : user?.country, merchantPolicy: merchant ? merchantBitcoinPolicy(merchant) : undefined });
+    if (!eligibility.eligible) throw unprocessable(`Bitcoin is not available for this payment: ${eligibility.reason}`, 'bitcoin_not_eligible');
   }
   const cur = getCurrency(currency);
   if (!Number.isInteger(amount) || amount <= 0) throw badRequest('Amount must be greater than zero', 'invalid_amount');
@@ -635,13 +652,17 @@ export function settlePayment(payment: GatewayPaymentRow, actor: Actor = { type:
       const request = db.prepare('SELECT * FROM payment_requests WHERE id = ?').get(fresh.payment_request_id) as PaymentRequestRow;
       const merchant = findUserById(request.requester_user_id)!;
       const wallet = ensureWallet(merchant.id, cur.code);
+      // Bitcoin rail: the merchant settles in fiat at the disclosed rate (default, existing conversion legs) or keeps BTC.
+      const btc = fresh.method === 'bitcoin' ? bitcoinSettlementPlan(fresh, merchant) : null;
+      const settleWallet = btc?.applied === 'btc' ? ensureWallet(merchant.id, BTC_CURRENCY.code) : wallet;
       const tx = postTransaction({
         type: 'merchant_payment',
         amount: fresh.amount,
         fee: fresh.fee,
         currency: cur.code,
-        toWalletId: wallet.id,
-        receiveAmount: fresh.amount - fresh.fee,
+        toWalletId: settleWallet.id,
+        receiveAmount: btc?.applied === 'btc' ? btc.receiveSats : fresh.amount - fresh.fee,
+        receiveCurrency: btc?.applied === 'btc' ? BTC_CURRENCY.code : null,
         feeFrom: 'receiver',
         senderUserId: fresh.user_id ?? null,
         receiverUserId: merchant.id,
@@ -657,11 +678,13 @@ export function settlePayment(payment: GatewayPaymentRow, actor: Actor = { type:
           payerPhone: fresh.payer_phone,
           payerName: fresh.payer_name,
           ...parseJson(request.metadata, {}),
+          ...(btc ? { bitcoin: btc } : {}),
         },
         issuance: { authority: 'external_funding', paymentId: fresh.id, reference: fresh.provider_ref },
       });
       updatePayment(fresh.id, { transaction_id: tx.id });
-      transitionStage(fresh.id, 'SETTLED', actor, { transactionId: tx.id });
+      if (btc) mergeMeta(fresh.id, { bitcoinSettlement: btc });
+      transitionStage(fresh.id, 'SETTLED', actor, { transactionId: tx.id, ...(btc ? { settlement: btc.applied, receiveSats: btc.receiveSats } : {}) });
       if (request.status === 'open') markPaidByGateway(request.code, tx.id, fresh.user_id);
       void dispatchWebhook(merchant.id, 'payment.completed', {
         paymentRequest: toPaymentRequest(getPaymentRequestByCode(request.code)),
@@ -670,6 +693,51 @@ export function settlePayment(payment: GatewayPaymentRow, actor: Actor = { type:
     }
     return getPayment(fresh.id);
   })();
+}
+
+/** How a Bitcoin-paid merchant payment settles: what the merchant policy asked for, what was applied and why, with the FX disclosure. */
+export interface BitcoinSettlement {
+  requested: 'btc' | 'fiat';
+  applied: 'btc' | 'fiat';
+  reason: string | null;
+  invoiceId: string | null;
+  amountSats: number | null;
+  /** Satoshis credited to the merchant BTC wallet when settling in BTC (the fee share stays with the platform in fiat terms). */
+  receiveSats: number | null;
+  rate: BitcoinRateDisclosure | null;
+}
+export function bitcoinSettlementPlan(payment: GatewayPaymentRow, merchant: UserRow): BitcoinSettlement {
+  const policy = merchantBitcoinPolicy(merchant);
+  const invoice = invoiceOf(payment);
+  const base: BitcoinSettlement = {
+    requested: policy.bitcoinSettlement,
+    applied: 'fiat',
+    reason: null,
+    invoiceId: invoice?.invoiceId ?? null,
+    amountSats: invoice?.amountSats ?? null,
+    receiveSats: null,
+    rate: invoice?.rate ?? null,
+  };
+  if (policy.bitcoinSettlement !== 'btc') return { ...base, reason: 'merchant policy: convert to the intent currency at capture' };
+  if (!invoice) return { ...base, reason: 'no invoice recorded on the payment; settled in fiat' };
+  if (!bitcoinCurrencyEnabled()) return { ...base, reason: 'BTC currency is not enabled by the administrator; settled in fiat' };
+  const receiveSats = Math.max(0, Math.round((invoice.amountSats * (payment.amount - payment.fee)) / payment.amount));
+  return { ...base, applied: 'btc', receiveSats, reason: 'merchant policy: keep BTC' };
+}
+
+/**
+ * Sandbox Bitcoin invoices are "paid" (or marked invalid) here – never by anything external. Only sandbox-mode Bitcoin
+ * gateways accept it; the outcome then flows through the ordinary verification → confirmation → settlement path.
+ */
+export async function settleSandboxBitcoinInvoice(paymentId: string, outcome: 'paid' | 'invalid', actor: Actor): Promise<PaymentView> {
+  const payment = getPayment(paymentId);
+  const gateway = getGateway(payment.gateway);
+  if (!gateway || gateway.provider !== 'bitcoin' || payment.method !== 'bitcoin') throw badRequest('Not a Bitcoin payment', 'not_bitcoin_payment');
+  if (bitcoinMode(getGatewayCredentials(gateway.id)) !== 'sandbox') throw new AppError(403, 'sandbox_only', 'Only sandbox-mode Bitcoin invoices can be paid through the simulator');
+  if (!['INSTRUCTION_ISSUED', 'PAYMENT_SENT'].includes(payment.stage)) throw conflict(`Payment is ${STAGE_LABELS[payment.stage as PaymentStage].label.toLowerCase()}`, 'invalid_stage_transition');
+  mergeMeta(paymentId, markSandboxInvoice(payment.metadata, outcome, actor));
+  recordEvent('evidence', paymentId, `bitcoin.sandbox_invoice_${outcome}`, actor, { invoiceId: payment.provider_ref, sandbox: true });
+  return verifyPayment(paymentId);
 }
 
 /** Reject an open intent (verifier decision or processor failure). Nothing was credited. */

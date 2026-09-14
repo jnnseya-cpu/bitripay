@@ -29,6 +29,7 @@ import { notify } from './notifications';
 import { emitEvent } from './webhooks';
 import { publish } from './bus';
 import { merchantCode } from './qrcodes';
+import { isMerchantRole } from './users';
 
 export interface OfflineSettings {
   enabled: boolean;
@@ -152,7 +153,7 @@ export function registerOfflineDevice(user: UserRow, input: { deviceId: string; 
     'auth',
     user.id,
     'offline.device_registered',
-    { type: user.role === 'merchant' ? 'merchant' : 'user', id: user.id },
+    { type: isMerchantRole(user.role) ? 'merchant' : 'user', id: user.id },
     { deviceId: input.deviceId, keyId: key.keyId, notAfter: key.notAfter },
   );
   return toDevice(db.prepare('SELECT * FROM offline_devices WHERE device_id = ?').get(input.deviceId));

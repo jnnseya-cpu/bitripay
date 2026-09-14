@@ -6,6 +6,7 @@ import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, Field, Input, KV, Modal, PageHeader, QrImage, Select, StatusBadge, Tabs, useAsync } from '../components/ui';
 import { offlineDevice } from '../lib/offline';
+import { isMerchantClass } from '@bitripay/shared';
 
 /** The scannable content of a code, whichever view produced it (static code, dynamic intent, offline promise). */
 const payloadOf = (q: any): string => String(q.payload ?? q.qrPayload ?? q.uri ?? '');
@@ -91,7 +92,7 @@ export function QrCentre() {
     return map[e?.code] ?? e?.message ?? String(e);
   };
   const err = (e: any) => toast(localised(e), 'error');
-  if (user?.role !== 'merchant' && user?.role !== 'admin')
+  if (!isMerchantClass(user?.role) && user?.role !== 'admin')
     return (
       <Alert kind="info">
         The QR centre is for merchant accounts. <Link to="/app/merchant">Upgrade</Link> or use <Link to="/app/receive">Receive</Link> for personal codes.

@@ -5,6 +5,7 @@ import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, AmountInput, Avatar, Button, Field, Input, KV, PageHeader, PinModal, useDebounce } from '../components/ui';
 import { toMinor, type PublicUser, type Transaction } from '@bitripay/shared';
+import { isMerchantClass } from '@bitripay/shared';
 
 export function Send() {
   const t = useT();
@@ -33,7 +34,7 @@ export function Send() {
 
   useEffect(() => {
     if (!debouncedAmount || !cur) return setFee(null);
-    const type = recipient?.role === 'merchant' ? 'merchant_payment' : 'transfer';
+    const type = isMerchantClass(recipient?.role) ? 'merchant_payment' : 'transfer';
     api
       .get<{ fee: number; total: number }>(`/api/transfers/fee?amount=${debouncedAmount}&currency=${cur}&type=${type}`)
       .then(setFee)
@@ -47,7 +48,7 @@ export function Send() {
   } catch {
     minor = -1;
   }
-  const feeOnSender = recipient?.role !== 'merchant';
+  const feeOnSender = !isMerchantClass(recipient?.role);
   const total = minor + (feeOnSender ? (fee?.fee ?? 0) : 0);
   const canSubmit = !!recipient && minor > 0 && !!wallet && wallet.balance >= total;
 

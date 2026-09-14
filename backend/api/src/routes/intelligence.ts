@@ -38,6 +38,7 @@ import {
 } from '../services/diaspora';
 import { riskContext } from '../services/risk';
 import { openApiDocument } from '../docs/openapi';
+import { MERCHANT_ROLES } from '../services/users';
 
 export const intelligenceRouter = Router();
 /** Machine-readable description of the whole v1 surface (cached for an hour). */
@@ -65,11 +66,11 @@ r.post('/offline/devices', requireAuth, writeLimit, (req, res) => {
   const b = validate(z.object({ deviceId: z.string().min(6).max(80), publicKey: z.string().min(40).max(200), label: z.string().max(80).optional().nullable() }), req.body);
   res.status(201).json(registerOfflineDevice(req.user!, b));
 });
-r.post('/offline/nonces', requireAuth, requireRole('merchant', 'admin'), writeLimit, (req, res) => {
+r.post('/offline/nonces', requireAuth, requireRole(...MERCHANT_ROLES, 'admin'), writeLimit, (req, res) => {
   const b = validate(z.object({ count: z.number().int().min(1).max(50).default(10) }), req.body ?? {});
   res.status(201).json({ data: Array.from({ length: b.count }, () => issueOfflineNonce(req.user!.id)) });
 });
-r.post('/offline/qr', requireAuth, requireRole('merchant', 'admin'), requireScope('qr_codes:write', 'qr:create'), writeLimit, (req, res) => {
+r.post('/offline/qr', requireAuth, requireRole(...MERCHANT_ROLES, 'admin'), requireScope('qr_codes:write', 'qr:create'), writeLimit, (req, res) => {
   const b = validate(
     z.object({
       amount: z.string().optional(),
@@ -146,7 +147,7 @@ r.get('/institutions', (req, res) =>
     }).map((i) => ({ userId: i.userId, kind: i.kind, name: i.name, purposeCodes: i.purposeCodes, country: i.country, tag: i.user?.tag ?? null })),
   }),
 );
-r.post('/institutions', requireAuth, requireRole('merchant', 'admin'), writeLimit, (req, res) => {
+r.post('/institutions', requireAuth, requireRole(...MERCHANT_ROLES, 'admin'), writeLimit, (req, res) => {
   const b = validate(
     z.object({
       kind: z.string(),
@@ -160,7 +161,7 @@ r.post('/institutions', requireAuth, requireRole('merchant', 'admin'), writeLimi
   res.status(201).json(registerInstitution(req.user!, b));
 });
 r.get('/institutions/me', requireAuth, (req, res) => res.json(getInstitution(req.user!.id)));
-r.post('/institutions/me/qr', requireAuth, requireRole('merchant', 'admin'), writeLimit, (req, res) => {
+r.post('/institutions/me/qr', requireAuth, requireRole(...MERCHANT_ROLES, 'admin'), writeLimit, (req, res) => {
   const b = validate(
     z.object({ purposeCode: z.string(), currency: z.string().length(3), reference: z.string().max(40).optional().nullable(), amount_minor: z.number().int().positive().optional().nullable() }),
     req.body,

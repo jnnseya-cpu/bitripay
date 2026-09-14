@@ -44,6 +44,9 @@ import { adminGrowthRouter } from './growth';
 import { adminRiskRouter } from './risk';
 import { adminIntelligenceRouter } from './intelligence';
 import { adminMessagingRouter } from './messaging';
+import { adminInsightsRouter } from './insights';
+import { adminSystemRouter } from './system';
+import { adminWhatsAppRouter } from './whatsapp';
 import { assertPricingAboveFloor } from '../../services/assist/gateway';
 import { toBase as toBaseMinor } from '../../services/currencies';
 /** Price-currency minor units → US dollars (the base currency is USD-denominated; other bases convert at the platform rate). */
@@ -175,6 +178,9 @@ adminRouter.use('/growth', adminGrowthRouter);
 adminRouter.use('/risk', adminRiskRouter);
 adminRouter.use('/intelligence', adminIntelligenceRouter);
 adminRouter.use('/messaging', adminMessagingRouter);
+adminRouter.use('/insights', adminInsightsRouter);
+adminRouter.use('/system', adminSystemRouter);
+adminRouter.use('/channels/whatsapp', adminWhatsAppRouter);
 
 // ---------------- Dashboard ----------------
 adminRouter.get('/stats', requirePermission('reports'), (_req, res) => {
@@ -1254,7 +1260,7 @@ adminRouter.put(
       z.object({
         name: z.string().min(1),
         symbol: z.string().min(1).max(6),
-        decimals: z.number().int().min(0).max(4),
+        decimals: z.number().int().min(0).max(8),
         rateToBase: z.number().positive(),
         enabled: z.boolean(),
         sortOrder: z.number().int().optional(),
@@ -1310,9 +1316,9 @@ adminRouter.put(
     const body = validate(
       z.object({
         name: z.string().min(1),
-        provider: z.enum(['sandbox', 'stripe', 'paystack', 'flutterwave', 'mtn_momo', 'mpesa', 'manual_bank', 'manual_momo']),
+        provider: z.enum(['sandbox', 'stripe', 'paystack', 'flutterwave', 'mtn_momo', 'mpesa', 'manual_bank', 'manual_momo', 'open_banking', 'bitcoin']),
         enabled: z.boolean(),
-        methods: z.array(z.enum(['card', 'mobile_money', 'bank'])),
+        methods: z.array(z.enum(['card', 'mobile_money', 'bank', 'bitcoin'])),
         currencies: z.array(z.string().length(3)),
         countries: z.array(z.string().length(2)).optional(),
         credentials: z.record(z.string()).optional(),

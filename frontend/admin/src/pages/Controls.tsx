@@ -72,10 +72,96 @@ function SettingsForm({ title, keyName, fields, initial, onSaved }: { title: str
   );
 }
 
+/**
+ * Capability matrix editor (country × method × rail). Method columns and the per-transaction ceiling write through to
+ * the enforced country capabilities; rail cells show whether a rail serving the method in that country is enabled and
+ * usable (rail-level controls live in the switch console: pause / resume / maintenance).
+ */
+function CapabilityMatrixEditor() {
+  const { toast } = useStore();
+  const matrix = useAsync(() => api.get<any>('/api/admin/switch/capability-matrix'), []);
+  const [ceilings, setCeilings] = useState<Record<string, string>>({});
+  const [newCountry, setNewCountry] = useState('');
+  const [extra, setExtra] = useState<string[]>([]);
+  const extraRows = useAsync(() => (extra.length ? api.get<any>(`/api/admin/switch/capability-matrix?country=${extra.join(',')}`) : Promise.resolve(null)), [extra]);
+  const rows = [...(matrix.data?.items ?? []), ...(extraRows.data?.items ?? []).filter((e: any) => !(matrix.data?.items ?? []).some((m: any) => m.country === e.country))];
+  const save = (country: string, body: Record<string, unknown>) =>
+    api
+      .put(`/api/admin/switch/capability-matrix/${country}`, body)
+      .then(() => {
+        toast(`${country} updated`, 'success');
+        matrix.reload();
+        if (extra.length) extraRows.reload();
+      })
+      .catch((e) => toast(e.message, 'error'));
+  return (
+    <div className="card">
+      <p className="small muted">
+        Never assume a capability from one country applies elsewhere. Toggling a method here changes what the policy and routing layers allow for that country immediately; the ceiling is the country's
+        per-transaction maximum in its main currency's minor units (0 = policy limits only). ● rail enabled and usable · ○ rail disabled, paused, open circuit or in maintenance.
+      </p>
+      <div className="row mb">
+        <Input placeholder="Add country (ISO-2)" value={newCountry} onChange={(e) => setNewCountry(e.target.value.toUpperCase().slice(0, 2))} style={{ width: 180 }} />
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={newCountry.length !== 2}
+          onClick={() => {
+            setExtra([...new Set([...extra, newCountry])]);
+            setNewCountry('');
+          }}
+        >
+          Show
+        </Button>
+      </div>
+      <Table
+        head={['Country', 'Phase', ...(matrix.data?.methods ?? []).map((m: any) => m.label), 'Ceiling / tx (minor)']}
+        rows={rows.map((c: any) => [
+          <b>{c.country}</b>,
+          <Chip kind={c.licencePhase === 'full' ? 'success' : 'warning'}>{c.licencePhase}</Chip>,
+          ...c.methods.map((m: any) => (
+            <div key={m.method}>
+              <Switch on={m.allowed} onChange={(on) => save(c.country, { methods: { [m.method]: on } })} />
+              <div className="tiny">
+                {m.rails.length
+                  ? m.rails.map((r: any) => (
+                      <span key={r.id} title={r.reason ?? r.state}>
+                        {r.enabled ? '●' : '○'} {r.name}
+                        <br />
+                      </span>
+                    ))
+                  : 'no rail'}
+              </div>
+            </div>
+          )),
+          <div className="row">
+            <Input
+              type="number"
+              min={0}
+              value={ceilings[c.country] ?? String(c.maxPerTransaction)}
+              onChange={(e) => setCeilings({ ...ceilings, [c.country]: e.target.value })}
+              style={{ width: 120 }}
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={ceilings[c.country] == null || ceilings[c.country] === String(c.maxPerTransaction)}
+              onClick={() => save(c.country, { maxPerTransaction: Number(ceilings[c.country]) })}
+            >
+              Save
+            </Button>
+          </div>,
+        ])}
+        empty="No country configured"
+      />
+    </div>
+  );
+}
+
 /** Gateway controls: lifecycle/evidence thresholds, FX disclosure policy, fraud & sanctions, reconciliation and the declared route catalogue. */
 export function Controls() {
   const { toast } = useStore();
-  const [tab, setTab] = useState<'golive' | 'controls' | 'sanctions' | 'reconcile' | 'catalog' | 'events' | 'emoney'>('golive');
+  const [tab, setTab] = useState<'golive' | 'controls' | 'capabilities' | 'sanctions' | 'reconcile' | 'catalog' | 'events' | 'emoney'>('golive');
   const golive = useAsync(() => (tab === 'golive' ? api.get<any>('/api/admin/go-live') : Promise.resolve(null)), [tab]);
   const emoney = useAsync(() => (tab === 'emoney' ? api.get<any>('/api/admin/emoney?pageSize=100') : Promise.resolve(null)), [tab]);
   const settings = useAsync(() => api.get<any>('/api/admin/settings'), []);
@@ -93,6 +179,7 @@ export function Controls() {
         tabs={[
           { id: 'golive', label: 'Go-live checklist' },
           { id: 'controls', label: 'Controls' },
+          { id: 'capabilities', label: 'Capability matrix' },
           { id: 'sanctions', label: 'Sanctions & risk events' },
           { id: 'reconcile', label: 'Reconciliation' },
           { id: 'catalog', label: 'Route catalogue' },
@@ -136,6 +223,7 @@ export function Controls() {
           <SettingsForm title="Compliance & payout exposure" keyName="compliance" fields={COMPLIANCE_FIELDS} initial={settings.data.compliance} onSaved={settings.reload} />
         </div>
       )}
+      {tab === 'capabilities' && <CapabilityMatrixEditor />}
       {tab === 'sanctions' && (
         <div className="grid cols-2">
           <div className="card">

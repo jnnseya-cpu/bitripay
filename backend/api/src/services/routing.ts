@@ -38,6 +38,7 @@ import { randomBytes } from 'node:crypto';
 import { availableGateways, getGateway } from '../payments';
 import { assessRisk } from './risk';
 import { getPayout, cancelPayout, requeuePayout, type PayoutView } from './payouts';
+import { isMerchantRole } from './users';
 
 export type RouteDestination =
   | { method: 'wallet'; to: string; note?: string | null }
@@ -216,7 +217,7 @@ function payoutFeeType(dest: RouteDestination, targetUser?: UserRow | null): str
   switch (dest.method) {
     case 'wallet':
     case 'qr':
-      return targetUser?.role === 'merchant' ? null : 'transfer';
+      return isMerchantRole(targetUser?.role) ? null : 'transfer';
     case 'bank':
     case 'mobile_money':
       return 'withdrawal';
@@ -513,7 +514,7 @@ export function quoteRoute(
   if (dest?.method === 'wallet') targetUser = findUserByIdentifier(dest.to) ?? null;
   const feeType = dest ? payoutFeeType(dest, targetUser) : null;
   const delivered = feeType ? maxSendable(feeType, converted, t.code) : converted;
-  const destKind = dest?.method === 'wallet' && targetUser?.role === 'merchant' ? 'merchant' : (dest?.method ?? 'keep');
+  const destKind = dest?.method === 'wallet' && isMerchantRole(targetUser?.role) ? 'merchant' : (dest?.method ?? 'keep');
   const corridor = destCorridor(dest, c.code, t.code, false);
   const declaration = describeRoute(sourceMethod, destKind as any, {
     currency: c.code,

@@ -369,7 +369,7 @@ const DEFAULT_ASSIST: AssistSettings = {
     dailyCapPerUser: 20,
     platformCapPctOfFees: 15,
     platformCapFloorMinor: 5_000,
-    deepRoles: ['merchant', 'agent', 'admin'],
+    deepRoles: ['merchant', 'corporate', 'ngo', 'government', 'developer', 'agent', 'admin'],
     disclosureVersion: 1,
     simulateLive: false,
   },

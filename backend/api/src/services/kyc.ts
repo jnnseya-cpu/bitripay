@@ -7,7 +7,7 @@ import { updateUser, type UserRow, toPublicUser, findUserById } from './users';
 import { notify } from './notifications';
 
 /** Document images are encrypted at rest (AES-256-GCM); rows written before migration 027 are plaintext and flagged 0. */
-export const DOCUMENT_FIELDS = ['doc_front', 'doc_back', 'selfie', 'proof_of_address'] as const;
+const DOCUMENT_FIELDS = ['doc_front', 'doc_back', 'selfie', 'proof_of_address'] as const;
 const sealDocument = (value?: string | null) => (value ? encrypt(value) : null);
 /** Decrypts one document column of a row for the admin review view; plaintext legacy rows pass through unchanged. */
 export function openDocument(r: { documents_encrypted?: number }, value: string | null | undefined): string | null {
@@ -36,6 +36,8 @@ export function toKyc(r: any, includeDocs = false) {
     ...(includeDocs
       ? { docFront: openDocument(r, r.doc_front), docBack: openDocument(r, r.doc_back), selfie: openDocument(r, r.selfie), proofOfAddress: openDocument(r, r.proof_of_address) }
       : { hasDocFront: !!r.doc_front, hasDocBack: !!r.doc_back, hasSelfie: !!r.selfie }),
+    /** Which of the document columns this submission carries (all of them encrypted at rest for rows written after migration 027). */
+    documents: DOCUMENT_FIELDS.filter((f) => !!r[f]),
     user: findUserById(r.user_id) ? toPublicUser(findUserById(r.user_id)!) : null,
   };
 }

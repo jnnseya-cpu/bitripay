@@ -28,7 +28,9 @@ import { runSettlementSchedules } from './services/finops/settlement';
 import { sweepDisputeDeadlines } from './services/finops/disputes';
 import { expireHolds } from './services/finops/holds';
 import { runAmlScan, refreshAllSources } from './services/risk/compliance';
-import { runFloatAlerts, runTrustScores } from './services/risk/agentIntel';
+import { runFloatAlerts, runTrustScores, runFloatOutlookAlerts } from './services/risk/agentIntel';
+import { snapshotAcceptanceScores } from './services/acceptanceScore';
+import { syncGovReferences } from './services/government';
 import { refreshRateCards } from './services/diaspora';
 import { checkFxAlerts, runSweepRules, runForwards } from './services/fxTools';
 import { runBilling } from './services/billing';
@@ -49,6 +51,7 @@ let lastGuardian = 0;
 let lastAgentDay = '';
 let lastContentDay = '';
 let lastRiskDay = '';
+let lastFloatOutlookHour = '';
 let lastRateCardRefresh = 0;
 let lastSweep = 0;
 let lastMarginMonth = '';
@@ -164,6 +167,8 @@ export function startJobs() {
         if (floats.alerted) console.log(`[agents] float alerts sent: ${floats.alerted}`);
         const trust = runTrustScores();
         if (trust.scored) console.log(`[agents] trust scores computed for ${trust.scored} agent(s)`);
+        const scores = snapshotAcceptanceScores();
+        if (scores.snapped) console.log(`[insights] acceptance scores snapshotted for ${scores.snapped} merchant(s)`);
         const fwd = runForwards();
         if (fwd.settled || fwd.expired) console.log(`[fx] forwards settled ${fwd.settled}, expired ${fwd.expired}`);
         if (new Date().getUTCDay() === 0) {
@@ -242,6 +247,17 @@ export function startJobs() {
   };
   setInterval(tick, 60_000).unref();
   void tick();
+  // Float outlook (4-hour horizon) every hour; government references aligned with their intents every minute.
+  setInterval(() => {
+    const hourKey = new Date().toISOString().slice(0, 13);
+    if (lastFloatOutlookHour !== hourKey) {
+      lastFloatOutlookHour = hourKey;
+      const outlook = runFloatOutlookAlerts();
+      if (outlook.alerted) console.log(`[agents] float outlook alerts sent: ${outlook.alerted}`);
+    }
+    const gov = syncGovReferences();
+    if (gov.expired || gov.paid || gov.refunded) console.log(`[government] references expired ${gov.expired}, paid ${gov.paid}, refunded ${gov.refunded}`);
+  }, 60_000).unref();
   // Domestic sanctions screening runs asynchronously every 60 seconds so intents never wait on the list refresh.
   setInterval(() => void screenSanctionsTick(), 60_000).unref();
   void screenSanctionsTick();

@@ -24,6 +24,8 @@ import { forbidden, notFound } from '../lib/errors';
 import { qrDataUrl } from '../services/qr';
 import { assertPin } from '../services/auth';
 import { verifyPayment, getPayment, toPaymentView } from '../services/payments';
+import { setMerchantBitcoinPolicy } from '../services/gateway';
+import { merchantBitcoinPolicy } from '../services/capabilities';
 
 /** Merchant dashboard endpoints (JWT). */
 export const merchantRouter = Router();
@@ -44,6 +46,8 @@ merchantRouter.put(
     const body = validate(
       z.object({
         methods: z.array(z.enum(['wallet', 'card', 'mobile_money', 'bank', 'virtual_card'])).optional(),
+        bitcoin: z.boolean().optional(),
+        bitcoinSettlement: z.enum(['btc', 'fiat']).optional(),
         settlementCurrency: z.string().length(3).optional().nullable(),
         autoSettle: z.boolean().optional(),
         successUrl: z.string().url().optional().nullable(),
@@ -57,7 +61,9 @@ merchantRouter.put(
       }),
       req.body,
     );
-    res.json({ settings: updateGatewaySettings(req.user!, body) });
+    const { bitcoin, bitcoinSettlement, ...gatewayPatch } = body;
+    if (bitcoin !== undefined || bitcoinSettlement !== undefined) setMerchantBitcoinPolicy(req.user!, { bitcoin, bitcoinSettlement });
+    res.json({ settings: { ...updateGatewaySettings(req.user!, gatewayPatch), ...merchantBitcoinPolicy(req.user!) } });
   }),
 );
 merchantRouter.get('/api-keys', (req, res) => res.json({ items: listApiKeys(req.user!.id) }));

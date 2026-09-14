@@ -9,6 +9,7 @@ import { findUserByIdentifier, type UserRow } from './users';
 import { notify } from './notifications';
 import { getModules } from './modules';
 import { getDb } from '../db';
+import { isMerchantRole } from './users';
 
 export interface TransferInput {
   to: string;
@@ -29,7 +30,7 @@ export function sendMoney(sender: UserRow, input: TransferInput): TransactionRow
   if (recipient.id === sender.id) throw badRequest('You cannot send money to yourself', 'self_transfer');
   if (recipient.status !== 'active') throw unprocessable('Recipient account is not active', 'recipient_inactive');
   const currency = getCurrency(input.currency);
-  const type = input.type ?? (recipient.role === 'merchant' ? 'merchant_payment' : 'transfer');
+  const type = input.type ?? (isMerchantRole(recipient.role) ? 'merchant_payment' : 'transfer');
   const modules = getModules();
   if (type === 'transfer' && !modules.transfers) throw unprocessable('Transfers are currently disabled', 'module_disabled');
   const fee = calculateFee(type, input.amount, currency.code, null, { userId: sender.id });

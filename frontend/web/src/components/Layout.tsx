@@ -5,6 +5,7 @@ import { useT } from '../lib/i18n';
 import { Avatar } from './ui';
 import { api } from '../lib/api';
 import { onPwaChange, pwaState } from '../lib/pwa';
+import { isMerchantClass } from '@bitripay/shared';
 
 interface NavItem {
   to: string;
@@ -88,7 +89,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <img className="brand-img swap" src="/brand/logo.svg" alt="BitriPay" width={140} height={34} />
         </Link>
         {renderItems(main)}
-        {(user?.role === 'merchant' || user?.role === 'admin') && has('merchantGateway') && (
+        {(isMerchantClass(user?.role) || user?.role === 'admin') && has('merchantGateway') && (
           <>
             <div className="nav-section">{t('nav.merchant')}</div>
             {renderItems([

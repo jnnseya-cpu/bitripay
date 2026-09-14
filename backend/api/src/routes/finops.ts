@@ -30,9 +30,10 @@ import { listSplitPayouts, retrySplits, listSplitRefundAllocations, retrySplitRe
 import { listHolds } from '../services/finops/holds';
 import { getDb } from '../db';
 import { forbidden } from '../lib/errors';
+import { MERCHANT_ROLES } from '../services/users';
 
 export const finopsRouter = Router();
-const merchantOnly = [requireAuth, requireRole('merchant', 'admin')];
+const merchantOnly = [requireAuth, requireRole(...MERCHANT_ROLES, 'admin')];
 const writeLimit = rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'finops' });
 
 // ---------------------------------------------------------------- settlement profiles

@@ -3,7 +3,7 @@ import { uuid, now, shortCode } from '../lib/ids';
 import { hashPassword } from '../lib/password';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { parseJson } from '../lib/json';
-import type { PublicUser, Role, User } from '@bitripay/shared';
+import { MERCHANT_CLASS_ROLES, type PublicUser, type Role, type User } from '@bitripay/shared';
 import { ensureWallet } from './wallets';
 import { getBaseCurrency } from './currencies';
 
@@ -38,6 +38,12 @@ export interface UserRow {
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Merchant-class account types (merchant, corporate, ngo, government, developer): every one of them gets an organisation and the merchant surfaces. */
+export const MERCHANT_ROLES: readonly Role[] = MERCHANT_CLASS_ROLES;
+export function isMerchantRole(role: Role | string | null | undefined): boolean {
+  return !!role && (MERCHANT_CLASS_ROLES as readonly string[]).includes(role);
 }
 
 export function toPublicUser(row: UserRow): PublicUser {

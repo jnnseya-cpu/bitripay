@@ -12,6 +12,7 @@ import { mpesaProvider } from './mpesa';
 import { manualBankProvider } from './manualBank';
 import { manualMomoProvider } from './manualMomo';
 import { openBankingProvider } from './openBanking';
+import { bitcoinProvider, bitcoinMode, ensureBitcoinCurrency } from './bitcoin';
 import type { GatewayProvider, GatewayProviderId, PaymentMethod, GatewayMode, HealthResult } from './types';
 import { getSetting } from '../services/settings';
 
@@ -25,6 +26,7 @@ export const PROVIDERS: Record<GatewayProviderId, GatewayProvider> = {
   manual_bank: manualBankProvider,
   manual_momo: manualMomoProvider,
   open_banking: openBankingProvider,
+  bitcoin: bitcoinProvider,
 };
 
 export interface GatewayConfig {
@@ -126,6 +128,11 @@ export function isGatewayReady(g: GatewayConfig): boolean {
   if (!provider) return false;
   if (g.provider === 'manual_momo' || g.provider === 'manual_bank' || g.provider === 'sandbox') return true;
   if (g.provider === 'open_banking') return true; // the sandbox bank needs no credentials; live providers are keyed per link
+  if (g.provider === 'bitcoin') {
+    // Sandbox invoices need no credentials; BTCPay mode needs the Greenfield server, store and API key.
+    const creds = getGatewayCredentials(g.id);
+    return bitcoinMode(creds) === 'sandbox' || !!(creds.serverUrl && creds.storeId && creds.apiKey);
+  }
   const required = provider.credentialFields.filter((f) => f.secret || ['secretKey', 'consumerKey', 'apiUser', 'subscriptionKey'].includes(f.key));
   const creds = getGatewayCredentials(g.id);
   return required.every((f) => !!creds[f.key]);
@@ -139,6 +146,8 @@ export function availableGateways(method: PaymentMethod, currency: string, count
     if (g.currencies.length && !g.currencies.includes(currency)) return false;
     if (country && g.countries.length && !g.countries.includes(country.toUpperCase())) return false;
     if (g.provider === 'sandbox' && config.isProduction && !g.config.allowInProduction) return false;
+    // A sandbox-mode Bitcoin rail is a simulator too: never offered to real payers in production unless explicitly allowed.
+    if (g.provider === 'bitcoin' && config.isProduction && !g.config.allowInProduction && bitcoinMode(getGatewayCredentials(g.id)) === 'sandbox') return false;
     // Compliance gate: live processor keys are never usable while the platform is in sandbox mode.
     if (g.mode === 'live' && getSetting<{ mode: string }>('compliance').mode !== 'live') return false;
     return true;
@@ -210,10 +219,15 @@ export function deleteGateway(id: string) {
   getDb().prepare('DELETE FROM gateways WHERE id = ?').run(id);
 }
 
+/** The Bitcoin rail ships registered but disabled: an administrator enables it per country (capability matrix) and per merchant policy. */
+const BITCOIN_GATEWAY = { id: 'bitcoin', name: 'Bitcoin / Lightning', provider: 'bitcoin' as const, enabled: false, methods: ['bitcoin'] as PaymentMethod[], currencies: [], sortOrder: 9 };
+
 /** Seed the default aggregator entries so admins can just toggle + add keys. */
 export function ensureDefaultGateways() {
+  ensureBitcoinCurrency();
   const count = (getDb().prepare('SELECT COUNT(*) c FROM gateways').get() as any).c;
   if (count > 0) {
+    if (!getGateway('bitcoin')) upsertGateway(BITCOIN_GATEWAY);
     if (!getGateway('manual_momo'))
       upsertGateway({ id: 'manual_momo', name: 'Mobile money (direct, all operators)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], sortOrder: 7 });
     if (!getGateway('open_banking'))
@@ -245,4 +259,5 @@ export function ensureDefaultGateways() {
   upsertGateway({ id: 'manual_bank', name: 'Bank transfer', provider: 'manual_bank', enabled: true, methods: ['bank'], currencies: [], sortOrder: 6 });
   upsertGateway({ id: 'manual_momo', name: 'Mobile money (direct, all operators)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], sortOrder: 7 });
   upsertGateway({ id: 'open_banking', name: 'Pay by bank (open banking)', provider: 'open_banking', enabled: true, methods: ['bank'], currencies: [], sortOrder: 8 });
+  upsertGateway(BITCOIN_GATEWAY);
 }

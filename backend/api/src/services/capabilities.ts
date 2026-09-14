@@ -131,3 +131,56 @@ export function serviceAllowed(country: string | null | undefined, service: (typ
   if (c.licencePhase === 'aggregator' && (FULL_LICENCE_SERVICES as readonly string[]).includes(service)) return false;
   return (c as any)[service] !== false;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Bitcoin rail eligibility: jurisdiction (the capability matrix) AND merchant policy
+// ---------------------------------------------------------------------------------------------------------------------
+/**
+ * Merchant-level Bitcoin policy, kept in the merchant's gateway settings JSON next to the accepted methods:
+ *   bitcoin            – the merchant opted in to receive Bitcoin / Lightning (default false)
+ *   bitcoinSettlement  – 'fiat': convert to the intent currency at capture (default); 'btc': keep a BTC wallet balance
+ */
+export interface MerchantBitcoinPolicy {
+  bitcoin: boolean;
+  bitcoinSettlement: 'btc' | 'fiat';
+}
+export const DEFAULT_BITCOIN_POLICY: MerchantBitcoinPolicy = { bitcoin: false, bitcoinSettlement: 'fiat' };
+export function merchantBitcoinPolicy(row: { gateway_settings?: string | null } | null | undefined): MerchantBitcoinPolicy {
+  const stored = parseJson<Partial<MerchantBitcoinPolicy>>(row?.gateway_settings ?? '{}', {});
+  return { ...DEFAULT_BITCOIN_POLICY, ...(stored.bitcoin === true ? { bitcoin: true } : {}), ...(stored.bitcoinSettlement === 'btc' ? { bitcoinSettlement: 'btc' as const } : {}) };
+}
+
+/**
+ * Countries where the Bitcoin rail may be offered: the administrator-editable `bitcoin` flag of the capability matrix
+ * (`PUT /api/admin/capabilities/:country { bitcoin: true }`). Nothing is enabled by default, and aggregator-phase
+ * countries stay off whatever the flag says (Bitcoin is a full-licence service).
+ */
+export function bitcoinCountries(): string[] {
+  return listCountryCapabilities()
+    .filter((c) => c.bitcoin && c.licencePhase !== 'aggregator')
+    .map((c) => c.country);
+}
+
+export interface BitcoinEligibility {
+  eligible: boolean;
+  country: string | null;
+  countryAllowed: boolean;
+  /** null when no merchant policy applies (a customer topping up their own balance). */
+  merchantOptedIn: boolean | null;
+  reason: string | null;
+}
+/**
+ * The Bitcoin rail is available only where jurisdiction AND merchant policy allow: the country must be in the
+ * capability list and, for a merchant payment, the merchant must have opted in. Without a merchant policy (a wallet
+ * top-up) the jurisdiction check alone decides.
+ */
+export function bitcoinEligible(input: { country: string | null | undefined; merchantPolicy?: Partial<MerchantBitcoinPolicy> | null }): BitcoinEligibility {
+  const country = input.country ? input.country.toUpperCase() : null;
+  const countryAllowed = !!country && serviceAllowed(country, 'bitcoin');
+  const merchantOptedIn = input.merchantPolicy === undefined || input.merchantPolicy === null ? null : input.merchantPolicy.bitcoin === true;
+  let reason: string | null = null;
+  if (!country) reason = 'country unknown';
+  else if (!countryAllowed) reason = `Bitcoin is not enabled in ${country}`;
+  else if (merchantOptedIn === false) reason = 'the merchant has not opted in to Bitcoin';
+  return { eligible: countryAllowed && merchantOptedIn !== false, country, countryAllowed, merchantOptedIn, reason };
+}

@@ -1,5 +1,61 @@
-export const ROLES = ['user', 'merchant', 'agent', 'admin'] as const;
+export const ROLES = ['user', 'merchant', 'agent', 'admin', 'corporate', 'ngo', 'government', 'developer'] as const;
 export type Role = (typeof ROLES)[number];
+
+/** Merchant-class account types: each runs an organisation (legal entity), accepts payments and uses the merchant surfaces. */
+export const MERCHANT_CLASS_ROLES = ['merchant', 'corporate', 'ngo', 'government', 'developer'] as const;
+export type MerchantClassRole = (typeof MERCHANT_CLASS_ROLES)[number];
+/** True for every account type that accepts payments as a business (merchant, corporate, NGO, government, developer). */
+export const isMerchantClass = (role: string | null | undefined): boolean => (MERCHANT_CLASS_ROLES as readonly string[]).includes(role ?? '');
+
+/** Roles a person can hold inside an organisation (specification §44). The owner is the account that registered the organisation. */
+export const ORG_ROLES = ['owner', 'administrator', 'finance_manager', 'operations_manager', 'developer', 'analyst', 'cashier', 'support', 'compliance_reviewer', 'read_only'] as const;
+export type OrgRole = (typeof ORG_ROLES)[number];
+
+/** Everything an organisation member can be allowed to do; `requireOrgPermission` on the API checks these. */
+export const ORG_PERMISSION_KEYS = [
+  'org:manage_members',
+  'org:manage_units',
+  'org:settings',
+  'payments:create',
+  'payments:view',
+  'refunds:issue',
+  'refunds:unrestricted',
+  'settlement:view',
+  'settlement:change',
+  'api_keys:view',
+  'api_keys:manage',
+  'webhooks:manage',
+  'payouts:create',
+  'statements:view',
+  'customers:export',
+  'disputes:respond',
+  'compliance:review',
+] as const;
+export type OrgPermission = (typeof ORG_PERMISSION_KEYS)[number];
+
+/**
+ * Permission matrix per organisation role. `*` is every permission. A cashier issues refunds only up to the
+ * organisation's cashier limit (`refunds:issue` without `refunds:unrestricted`), never touches settlement
+ * instructions, API secrets or customer exports. API keys act with the organisation's full permissions.
+ */
+export const ORG_PERMISSIONS: Record<OrgRole, readonly (OrgPermission | '*')[]> = {
+  owner: ['*'],
+  administrator: [...ORG_PERMISSION_KEYS],
+  finance_manager: ['payments:view', 'refunds:issue', 'refunds:unrestricted', 'settlement:view', 'settlement:change', 'payouts:create', 'statements:view', 'customers:export', 'disputes:respond'],
+  operations_manager: ['org:manage_units', 'payments:create', 'payments:view', 'refunds:issue', 'settlement:view', 'statements:view', 'disputes:respond'],
+  developer: ['api_keys:view', 'api_keys:manage', 'webhooks:manage', 'payments:create', 'payments:view'],
+  analyst: ['payments:view', 'settlement:view', 'statements:view'],
+  cashier: ['payments:create', 'payments:view', 'refunds:issue'],
+  support: ['payments:view', 'refunds:issue', 'disputes:respond'],
+  compliance_reviewer: ['payments:view', 'statements:view', 'compliance:review', 'disputes:respond'],
+  read_only: ['payments:view', 'settlement:view', 'statements:view'],
+};
+
+/** Whether a role (plus any extra per-member grants) holds a permission. */
+export function orgRoleHasPermission(role: OrgRole, permission: OrgPermission, extra: readonly string[] = []): boolean {
+  const held = ORG_PERMISSIONS[role] ?? [];
+  return held.includes('*') || held.includes(permission) || extra.includes('*') || extra.includes(permission);
+}
 
 export const TRANSACTION_TYPES = [
   'transfer',

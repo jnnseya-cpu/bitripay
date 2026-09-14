@@ -7,7 +7,8 @@ import { Scanner } from '../components/Scanner';
 import { Alert, AmountInput, Avatar, Button, Field, Input, KV, Loading, PageHeader, PinModal, StatusBadge } from '../components/ui';
 import { decodeQr, toMinor, type PaymentRequest, type PublicUser, type Transaction } from '@bitripay/shared';
 import * as bitriqr from '@bitripay/bitriqr';
-import { offlineQueue } from '../lib/offline';
+import { offlineQueue, PENDING_CONFIRMATION_TEXT } from '../lib/offline';
+import { isMerchantClass } from '@bitripay/shared';
 
 type Trust = 'verified' | 'basic';
 type Resolved =
@@ -38,7 +39,7 @@ export function Scan() {
   const [error, setError] = useState<string | null>(null);
   const [manual, setManual] = useState('');
   const { user, toast } = useStore();
-  const [queued, setQueued] = useState<{ amountMinor: number; currency: string; merchantName: string; hash: string } | null>(null);
+  const [queued, setQueued] = useState<{ amountMinor: number; currency: string; merchantName: string; hash: string; state: string } | null>(null);
   /** Offline: a signed offline BitriQR becomes a locally signed promise, queued until the network returns (never final before the platform confirms). */
   const queueOffline = useCallback(
     async (data: string) => {
@@ -46,7 +47,7 @@ export function Scan() {
       const d = bitriqr.decode(data);
       if (!d.offlineNonce) return false;
       const item = await offlineQueue.promiseFor(data, user.id, d.merchantId);
-      setQueued({ amountMinor: item.amountMinor, currency: item.currency, merchantName: item.merchantName, hash: item.hash });
+      setQueued({ amountMinor: item.amountMinor, currency: item.currency, merchantName: item.merchantName, hash: item.hash, state: item.state });
       return true;
     },
     [user],
@@ -71,7 +72,8 @@ export function Scan() {
   const syncNow = async () => {
     try {
       const r = await offlineQueue.sync();
-      toast(`Synced: ${r.settled} confirmed, ${r.rejected} rejected`, r.rejected ? 'error' : 'success');
+      const gaps = r.results.filter((x) => x.counterGap).length;
+      toast(`Synced: ${r.settled} CONFIRMED, ${r.rejected} REJECTED${gaps ? `, ${gaps} counter gap(s) reported` : ''}`, r.rejected ? 'error' : 'success');
       setQueued(null);
     } catch (e) {
       toast((e as Error).message, 'error');
@@ -84,7 +86,8 @@ export function Scan() {
       {error && <Alert kind="error">{error}</Alert>}
       {queued && (
         <Alert kind="warning">
-          <b>Offline payment queued</b> · {queued.amountMinor / 100} {queued.currency} to {queued.merchantName}. It is not final yet: it will be confirmed the moment you are back online.{' '}
+          <b>Offline payment queued</b> · {queued.amountMinor / 100} {queued.currency} to {queued.merchantName} · <span className="mono tiny">{queued.state}</span>
+          <div className="tiny muted">{PENDING_CONFIRMATION_TEXT}</div>{' '}
           <Button size="sm" variant="secondary" onClick={syncNow} disabled={!navigator.onLine}>
             Sync now
           </Button>
@@ -138,13 +141,13 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
   }
   useEffect(() => {
     if (minor <= 0) return setFee(0);
-    const type = target.role === 'merchant' ? 'merchant_payment' : isPr ? 'transfer' : 'qr_payment';
+    const type = isMerchantClass(target.role) ? 'merchant_payment' : isPr ? 'transfer' : 'qr_payment';
     api
       .get<{ fee: number }>(`/api/transfers/fee?amount=${amount}&currency=${cur}&type=${type}`)
       .then((r) => setFee(r.fee))
       .catch(() => setFee(0));
   }, [amount, cur, minor, target.role, isPr]);
-  const feeOnMe = target.role !== 'merchant';
+  const feeOnMe = !isMerchantClass(target.role);
   const total = minor + (feeOnMe ? fee : 0);
 
   if (resolved.kind === 'agent') {

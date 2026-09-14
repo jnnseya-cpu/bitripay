@@ -25,6 +25,7 @@ import { decide, usableTools, effectivePolicy } from './policy';
 import { addonStatus } from './addon';
 import { planRun, settleRun, type BillingPlan } from './billing';
 import { routeModels, projectEconomics, type TaskType } from './gateway';
+import { isMerchantRole } from '../users';
 
 export type RunStatus = 'queued' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'cancelled' | 'budget_exhausted';
 /** Every artefact an agent produces is machine-generated and says so. */
@@ -861,7 +862,7 @@ function offlinePlan(state: RunState, input: string, context: Record<string, unk
     if (/open a ticket|create a ticket|raise/.test(t) && has('support.create_ticket')) return { plan: [{ tool: 'support.create_ticket', input: { subject: input.slice(0, 100), body: input } }] };
     return { plan: [{ tool: 'support.tickets', input: {} }] };
   }
-  if (user.role === 'merchant' || user.role === 'admin') {
+  if (isMerchantRole(user.role) || user.role === 'admin') {
     if (/sales|customers|sold|revenue|shop|business|week|method/.test(t) && has('merchant.stats')) return { plan: [{ tool: 'merchant.stats', input: {} }] };
     if (/settle/.test(t) && has('merchant.settlements')) return { plan: [{ tool: 'merchant.settlements', input: {} }] };
     if (/link|request/.test(t) && has('merchant.payment_requests')) return { plan: [{ tool: 'merchant.payment_requests', input: {} }] };
@@ -877,7 +878,7 @@ function offlinePlan(state: RunState, input: string, context: Record<string, unk
     if (has('wallets.balances')) plan.push({ tool: 'wallets.balances', input: {} });
     if (has('routes.list')) plan.push({ tool: 'routes.list', input: { openOnly: true } });
     if (has('notifications.recent')) plan.push({ tool: 'notifications.recent', input: { limit: 5 } });
-    if (user.role === 'merchant' && has('merchant.stats')) plan.push({ tool: 'merchant.stats', input: {} });
+    if (isMerchantRole(user.role) && has('merchant.stats')) plan.push({ tool: 'merchant.stats', input: {} });
     if (user.role === 'agent' && has('agent.queue')) plan.push({ tool: 'agent.queue', input: {} });
     if (plan.length) return { plan };
   }

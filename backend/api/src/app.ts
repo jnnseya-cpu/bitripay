@@ -37,6 +37,11 @@ import { intelligenceRouter } from './routes/intelligence';
 import { savingsRouter } from './routes/savings';
 import { fxToolsRouter, creditRouter, billingRouter } from './routes/growth';
 import { openBankingRouter } from './routes/openBanking';
+import { organisationsRouter } from './routes/organisations';
+import { shopifyRouter } from './routes/shopify';
+import { insightsRouter } from './routes/insights';
+import { governmentRouter } from './routes/government';
+import { restrictedRouter } from './routes/restricted';
 import { ensureDefaultBindings } from './services/assist/bindings';
 import './services/assist/meshTools';
 import { ensureDefaultConnections } from './services/switch/connections';
@@ -49,6 +54,7 @@ import { evidenceRouter } from './routes/evidence';
 import { payoutsRouter } from './routes/payouts';
 import { idempotency } from './middleware/idempotency';
 import { correlation } from './middleware/correlation';
+import { sloMiddleware } from './middleware/slo';
 import { ensureParseTemplates } from './services/evidence';
 import { ensureMomoOperators } from './services/momo';
 import { ensureDefaultCurrencies } from './services/currencies';
@@ -84,6 +90,7 @@ export function createApp() {
   // Correlation id first: every response (including parse errors and 404s) echoes X-Correlation-Id and every
   // service down the chain can read it from the request context.
   app.use(correlation);
+  app.use(sloMiddleware);
   app.use(
     cors({
       origin: (origin, cb) => cb(null, true),
@@ -135,9 +142,14 @@ export function createApp() {
   app.use('/api/credit', creditRouter);
   app.use('/api/billing', billingRouter);
   app.use('/api/open-banking', openBankingRouter);
+  app.use('/api/insights', insightsRouter);
+  app.use('/api/government', governmentRouter);
+  app.use('/api/restricted', restrictedRouter);
+  app.use('/api/shopify', shopifyRouter);
   app.use('/api/support', supportRouter);
   app.use('/api/p2p', p2pRouter);
   app.use('/api/merchant', merchantRouter);
+  app.use('/api/organisations', organisationsRouter);
   app.use('/api/assist', assistRouter);
   app.use('/api', channelsRouter);
   // One partner API, served identically at /api/v1 and /v1: gateway (intents, QR, resolver, keys, balance), switch,

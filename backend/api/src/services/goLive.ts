@@ -16,6 +16,8 @@ import { listProgrammes } from './emoney';
 import { listCurrencies } from './currencies';
 import { getSmtpSettings } from './messaging';
 import { hasPermission } from '../middleware/permissions';
+import { toBase } from './currencies';
+import { getOperatingState } from './guardian';
 
 export interface ChecklistItem {
   id: string;
@@ -26,7 +28,7 @@ export interface ChecklistItem {
   fix?: string;
 }
 
-export function goLiveChecklist(): { mode: string; readyForLive: boolean; items: ChecklistItem[] } {
+export function goLiveChecklist(): { mode: string; readyForLive: boolean; items: ChecklistItem[]; gateToScale: GateToScale } {
   const db = getDb();
   const items: ChecklistItem[] = [];
   const compliance = getComplianceSettings();
@@ -190,5 +192,122 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
     fix: 'Set APP_SECRET and JWT_SECRET in the API environment',
   });
   const readyForLive = items.filter((i) => i.blocking).every((i) => i.ok);
-  return { mode: compliance.mode, readyForLive, items };
+  return { mode: compliance.mode, readyForLive, items, gateToScale: gateToScale() };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Gate to scale: 95 % auto-reconciliation · < 2 % exception rate · zero Guardian halts in 30 days · fraud loss < 25 bps.
+// Computed from 30 days of real platform data; an empty platform is honestly "not ready", never assumed ready.
+// ---------------------------------------------------------------------------------------------------------------------
+export interface GateToScale {
+  ready: boolean;
+  windowDays: number;
+  since: string;
+  items: ChecklistItem[];
+}
+export const GATE_TO_SCALE_THRESHOLDS = { autoReconciliation: 0.95, exceptionRate: 0.02, guardianHalts: 0, fraudLossBps: 25 } as const;
+
+/** Amount in base-currency minor units; unknown currencies count at face value rather than being dropped. */
+function baseMinor(amountMinor: number, currency: string): number {
+  try {
+    return toBase(amountMinor, currency);
+  } catch {
+    return amountMinor;
+  }
+}
+const pct = (n: number) => `${(n * 100).toFixed(2)} %`;
+
+export function gateToScale(days = 30): GateToScale {
+  const db = getDb();
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const items: ChecklistItem[] = [];
+  const T = GATE_TO_SCALE_THRESHOLDS;
+
+  // 1. Auto-reconciliation: matched lines vs. exceptions opened across every reconciliation run (processors, banks, switch).
+  const runs = db
+    .prepare('SELECT COUNT(*) n, COALESCE(SUM(matched), 0) matched, COALESCE(SUM(cases_opened), 0) cases, MAX(created_at) last FROM reconciliation_runs WHERE created_at >= ?')
+    .get(since) as { n: number; matched: number; cases: number; last: string | null };
+  const reconTotal = runs.matched + runs.cases;
+  const autoRate = reconTotal ? runs.matched / reconTotal : null;
+  items.push({
+    id: 'auto_reconciliation',
+    label: `Auto-reconciliation ≥ ${pct(T.autoReconciliation)} over ${days} days`,
+    ok: autoRate != null && autoRate >= T.autoReconciliation,
+    blocking: true,
+    detail: runs.n
+      ? `${runs.n} run(s), ${runs.matched} matched automatically, ${runs.cases} exception(s) opened → ${autoRate == null ? 'no lines' : pct(autoRate)}; last run ${runs.last}`
+      : `No reconciliation run in the last ${days} days`,
+    fix: 'Finance operations → Reconciliation: import every processor / switch statement and run reconciliation daily; work exceptions to closure',
+  });
+
+  // 2. Exception rate: reconciliation cases + disputes + chargebacks opened vs. payments that reached a paid state.
+  const casesOpened = (db.prepare('SELECT COUNT(*) c FROM reconciliation_cases WHERE created_at >= ?').get(since) as { c: number }).c;
+  const disputesOpened = (db.prepare('SELECT COUNT(*) c FROM disputes WHERE created_at >= ?').get(since) as { c: number }).c;
+  const chargebacksOpened = (db.prepare('SELECT COUNT(*) c FROM chargebacks WHERE opened_at >= ?').get(since) as { c: number }).c;
+  const paidIntents = (
+    db.prepare("SELECT COUNT(*) c FROM payment_intents WHERE created_at >= ? AND status IN ('CAPTURED','SETTLEMENT_PENDING','SETTLED','PARTIALLY_REFUNDED','REFUNDED','DISPUTED')").get(since) as {
+      c: number;
+    }
+  ).c;
+  const completedSwitch = (db.prepare("SELECT COUNT(*) c FROM switch_payments WHERE created_at >= ? AND status = 'COMPLETED'").get(since) as { c: number }).c;
+  const exceptions = casesOpened + disputesOpened + chargebacksOpened;
+  const payments = paidIntents + completedSwitch;
+  const exceptionRate = payments ? exceptions / payments : null;
+  items.push({
+    id: 'exception_rate',
+    label: `Exception rate < ${pct(T.exceptionRate)} over ${days} days`,
+    ok: exceptionRate != null && exceptionRate < T.exceptionRate,
+    blocking: true,
+    detail: payments
+      ? `${exceptions} exception(s) (${casesOpened} reconciliation, ${disputesOpened} dispute(s), ${chargebacksOpened} chargeback(s)) on ${payments} paid payment(s) (${paidIntents} intents, ${completedSwitch} switch) → ${pct(exceptionRate!)}`
+      : `No paid payment in the last ${days} days (${exceptions} exception(s) opened)`,
+    fix: 'Reduce unmatched statements and disputes: evidence devices on every payout account, processor webhooks, daily reconciliation',
+  });
+
+  // 3. Guardian halts: every Guardian run in the window, none of which halted the platform; the platform is not halted now.
+  const guardian = db.prepare('SELECT COUNT(*) n, COALESCE(SUM(halted), 0) halted, MAX(created_at) last FROM guardian_checks WHERE created_at >= ?').get(since) as {
+    n: number;
+    halted: number;
+    last: string | null;
+  };
+  const haltEvents = (
+    db.prepare("SELECT COUNT(*) c FROM event_log WHERE stream = 'ledger' AND event = 'guardian.findings' AND created_at >= ? AND details LIKE '%\"halted\":true%'").get(since) as { c: number }
+  ).c;
+  const operating = getOperatingState();
+  const halts = Math.max(guardian.halted, haltEvents);
+  items.push({
+    id: 'guardian_halts',
+    label: `Zero Guardian halts in ${days} days`,
+    ok: guardian.n > 0 && halts === T.guardianHalts && operating.mode !== 'halted',
+    blocking: true,
+    detail: guardian.n
+      ? `${guardian.n} Guardian run(s), ${halts} halt(s); last run ${guardian.last}; platform ${operating.mode}`
+      : `Guardian has not run in the last ${days} days; platform ${operating.mode}`,
+    fix: 'Keep the scheduler running (Guardian runs every few minutes) and resolve every ledger finding before it halts the platform',
+  });
+
+  // 4. Fraud loss: disputes and chargebacks lost vs. captured volume, in base-currency minor units.
+  const lostDisputes = db.prepare("SELECT amount_minor, currency FROM disputes WHERE decision = 'LOST' AND decided_at >= ?").all(since) as { amount_minor: number; currency: string }[];
+  const lostChargebacks = db.prepare("SELECT amount, currency FROM chargebacks WHERE status = 'lost' AND COALESCE(resolved_at, opened_at) >= ?").all(since) as { amount: number; currency: string }[];
+  const capturedIntents = db
+    .prepare(
+      "SELECT COALESCE(amount_minor, 0) amount_minor, currency FROM payment_intents WHERE created_at >= ? AND status IN ('CAPTURED','SETTLEMENT_PENDING','SETTLED','PARTIALLY_REFUNDED','REFUNDED','DISPUTED')",
+    )
+    .all(since) as { amount_minor: number; currency: string }[];
+  const capturedSwitch = db.prepare("SELECT amount_minor, currency FROM switch_payments WHERE created_at >= ? AND status = 'COMPLETED'").all(since) as { amount_minor: number; currency: string }[];
+  const lost = lostDisputes.reduce((s, d) => s + baseMinor(d.amount_minor, d.currency), 0) + lostChargebacks.reduce((s, c) => s + baseMinor(c.amount, c.currency), 0);
+  const captured = capturedIntents.reduce((s, i) => s + baseMinor(i.amount_minor, i.currency), 0) + capturedSwitch.reduce((s, p) => s + baseMinor(p.amount_minor, p.currency), 0);
+  const bps = captured ? (lost / captured) * 10_000 : null;
+  items.push({
+    id: 'fraud_loss',
+    label: `Fraud loss < ${T.fraudLossBps} bps of captured volume over ${days} days`,
+    ok: bps != null && bps < T.fraudLossBps,
+    blocking: true,
+    detail: captured
+      ? `${lostDisputes.length} dispute(s) and ${lostChargebacks.length} chargeback(s) lost = ${lost} base minor units on ${captured} captured → ${bps!.toFixed(2)} bps`
+      : `No captured volume in the last ${days} days (${lostDisputes.length + lostChargebacks.length} loss event(s))`,
+    fix: 'Risk & compliance: tighten velocity and cooling-off rules, respond to disputes with evidence before the deadline',
+  });
+
+  return { ready: items.every((i) => i.ok), windowDays: days, since, items };
 }

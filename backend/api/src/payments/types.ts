@@ -1,7 +1,8 @@
 import type { Request } from 'express';
 
-export type PaymentMethod = 'card' | 'mobile_money' | 'bank' | 'wallet' | 'virtual_card';
-export type GatewayProviderId = 'sandbox' | 'stripe' | 'paystack' | 'flutterwave' | 'mtn_momo' | 'mpesa' | 'manual_bank' | 'manual_momo' | 'open_banking';
+/** `bitcoin`: a payment rail behind the same intent and QR (Lightning or on-chain), never a second checkout system. */
+export type PaymentMethod = 'card' | 'mobile_money' | 'bank' | 'wallet' | 'virtual_card' | 'bitcoin';
+export type GatewayProviderId = 'sandbox' | 'stripe' | 'paystack' | 'flutterwave' | 'mtn_momo' | 'mpesa' | 'manual_bank' | 'manual_momo' | 'open_banking' | 'bitcoin';
 
 export interface GatewayPaymentRow {
   id: string;
@@ -66,13 +67,55 @@ export interface InitiateContext {
   idempotencyKey?: string;
 }
 
+/** Disclosed fiat → BTC rate an invoice was priced at (margin and source are always shown; sandbox rates are labelled). */
+export interface BitcoinRateDisclosure {
+  fiatCurrency: string;
+  /** Mid rate: 1 fiat unit = midRate BTC. */
+  midRate: number;
+  /** Effective rate the payer gets after the platform margin (1 fiat unit = rate BTC; the margin raises the sats due). */
+  rate: number;
+  marginBps: number;
+  /** Satoshis due per one fiat unit at the effective rate. */
+  satsPerUnit: number;
+  /** Where the rate came from (`sandbox_btc_rate_v1`, `import_v<n>`, a live provider id). */
+  rateSource: string;
+  rateUpdatedAt: string | null;
+  /** True when the rate is a sandbox / test rate – never presented as a live market rate. */
+  sandbox: boolean;
+  label: string;
+}
+
+/** A Bitcoin invoice issued for a payment: Lightning (BOLT11) and/or an on-chain address for the same amount. */
+export interface BitcoinInvoiceView {
+  invoiceId: string;
+  mode: 'sandbox' | 'btcpay';
+  network: string;
+  fiat: { amountMinor: number; currency: string };
+  amountSats: number;
+  amountBtc: string;
+  /** BOLT11 Lightning invoice, settled the moment it is paid. */
+  lightning: string | null;
+  /** On-chain address, settled after `confirmations.onChain` confirmations. */
+  address: string | null;
+  /** BIP21 URI combining the on-chain address, the amount and (when present) the Lightning invoice. */
+  bip21: string | null;
+  /** Hosted BTCPay checkout page (btcpay mode). */
+  checkoutUrl: string | null;
+  rate: BitcoinRateDisclosure;
+  expiresAt: string;
+  confirmations: { lightning: 'settled_on_payment'; onChain: number };
+  sandbox: boolean;
+}
+
 export interface NextAction {
-  type: 'none' | 'redirect' | 'stripe_payment_intent' | 'prompt' | 'bank_instructions';
+  type: 'none' | 'redirect' | 'stripe_payment_intent' | 'prompt' | 'bank_instructions' | 'bitcoin_invoice';
   url?: string;
   clientSecret?: string;
   publishableKey?: string;
   message?: string;
   instructions?: Record<string, string>;
+  /** Present when `type` is `bitcoin_invoice`. */
+  invoice?: BitcoinInvoiceView;
 }
 
 export interface InitiateResult {
@@ -95,7 +138,8 @@ export interface VerifyResult {
 
 export interface WebhookEvent {
   providerRef: string;
-  status: 'succeeded' | 'failed' | 'pending' | 'disputed' | 'refunded';
+  /** `unknown`: the provider reports money moved without a final outcome (e.g. a partially paid, expired invoice) – parked for review. */
+  status: 'succeeded' | 'failed' | 'pending' | 'disputed' | 'refunded' | 'unknown';
   reason?: string | null;
   raw?: unknown;
 }
@@ -144,6 +188,8 @@ export interface QuoteResult {
   /** Estimated time to a final status. */
   etaSeconds: number;
   expiresAt: string | null;
+  /** Rate disclosure when the quote converts into a crypto asset (Bitcoin rail). */
+  disclosure?: BitcoinRateDisclosure;
 }
 
 /** One line of a provider statement, normalised for the processor reconciliation (services/finops/processorRecon). */

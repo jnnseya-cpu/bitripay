@@ -26,9 +26,10 @@ import { settlementCalendar } from '../finops/settlement';
 import { tierStatus } from '../risk/kycTiers';
 import { notify } from '../notifications';
 import { findUserById } from '../users';
+import { MERCHANT_CLASS_ROLES } from '@bitripay/shared';
 
 const ADMIN: Role[] = ['admin'];
-const MERCHANT: Role[] = ['merchant', 'admin'];
+const MERCHANT: Role[] = [...MERCHANT_CLASS_ROLES, 'admin'];
 const t = <S extends z.ZodTypeAny>(d: ToolDef<S>) => d;
 
 export const MESH_TOOLS: ToolDef<any>[] = [
@@ -286,7 +287,7 @@ export const MESH_TOOLS: ToolDef<any>[] = [
   t({
     name: 'onboarding.status',
     description: 'Verification level, limits and the next step for an account.',
-    roles: ['user', 'merchant', 'agent', 'admin'],
+    roles: ['user', ...MERCHANT_CLASS_ROLES, 'agent', 'admin'],
     sideEffect: false,
     schema: z.object({ userId: z.string().optional() }),
     run: (c, i) => {

@@ -2,6 +2,9 @@
  * Offline protocol on the web: an Ed25519 device subkey in WebCrypto (private half never leaves the browser; it is
  * stored non-extractable in IndexedDB), prefetched merchant nonces, locally signed offline QR codes, a signed
  * promise queue that syncs in order when the network returns, and a "last synced" marker for the shell.
+ *
+ * The queue is encrypted at rest (AES-GCM with a non-extractable key kept in IndexedDB) and every item carries its
+ * specification §28 lifecycle state; the local receipt reads "Pending confirmation" until the platform confirms.
  */
 import * as bitriqr from '@bitripay/bitriqr';
 import { api } from './api';
@@ -32,6 +35,48 @@ async function kvSet(key: string, value: unknown): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = d.transaction('kv', 'readwrite');
     tx.objectStore('kv').put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+export const OFFLINE_STATES = ['OFFLINE_CREATED', 'OFFLINE_ACCEPTED_LOCALLY', 'SYNC_PENDING', 'ONLINE_VALIDATING', 'CONFIRMED', 'REJECTED'] as const;
+export type OfflineState = (typeof OFFLINE_STATES)[number];
+export const PENDING_CONFIRMATION_TEXT = 'Pending confirmation — this payment is final only once BitriPay confirms it online.';
+
+/** AES-GCM key for the queue: generated once, non-extractable, stored as a CryptoKey object in IndexedDB. */
+async function queueKey(): Promise<CryptoKey> {
+  const existing = await kvGet<CryptoKey>('queueKey');
+  if (existing) return existing;
+  const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  await kvSet('queueKey', key);
+  return key;
+}
+interface StoredQueueItem {
+  hash: string;
+  iv?: ArrayBuffer;
+  enc?: ArrayBuffer;
+  /** Items written before encryption existed are read once and re-encrypted on the next write. */
+  legacy?: QueuedPromise;
+}
+async function sealItem(item: QueuedPromise): Promise<StoredQueueItem> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await queueKey(), new TextEncoder().encode(JSON.stringify(item)));
+  return { hash: item.hash, iv: iv.buffer, enc };
+}
+async function openItem(row: StoredQueueItem & Partial<QueuedPromise>): Promise<QueuedPromise> {
+  if (row.enc && row.iv) {
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(row.iv) }, await queueKey(), row.enc);
+    return withState(JSON.parse(new TextDecoder().decode(plain)) as QueuedPromise);
+  }
+  return withState(row as unknown as QueuedPromise); // legacy plaintext row
+}
+const withState = (q: QueuedPromise): QueuedPromise => ({ ...q, state: q.state ?? 'SYNC_PENDING', receiptText: q.receiptText ?? PENDING_CONFIRMATION_TEXT });
+async function writeItems(items: QueuedPromise[]): Promise<void> {
+  const db = await idb();
+  const sealed = await Promise.all(items.map(sealItem));
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('queue', 'readwrite');
+    for (const s of sealed) tx.objectStore('queue').put(s);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -148,6 +193,18 @@ export interface QueuedPromise {
   currency: string;
   merchantName: string;
   queuedAt: string;
+  /** §28 lifecycle: OFFLINE_ACCEPTED_LOCALLY when signed here, SYNC_PENDING while waiting, ONLINE_VALIDATING during a sync. */
+  state: OfflineState;
+  receiptText: string;
+}
+export interface SyncResultItem {
+  hash: string;
+  state: 'SETTLED' | 'REJECTED' | 'DUPLICATE';
+  lifecycle: OfflineState;
+  reason?: string | null;
+  transactionId?: string | null;
+  restoreMinor?: number;
+  counterGap?: { expected: number; received: number } | null;
 }
 export const offlineQueue = {
   async count(): Promise<number> {
@@ -162,9 +219,17 @@ export const offlineQueue = {
     const d = await idb();
     return new Promise((resolve, reject) => {
       const r = d.transaction('queue').objectStore('queue').getAll();
-      r.onsuccess = () => resolve((r.result as QueuedPromise[]).sort((a, b) => a.queuedAt.localeCompare(b.queuedAt)));
+      r.onsuccess = () => {
+        Promise.all((r.result as StoredQueueItem[]).map(openItem))
+          .then((items) => resolve(items.sort((a, b) => a.queuedAt.localeCompare(b.queuedAt))))
+          .catch(reject);
+      };
       r.onerror = () => reject(r.error);
     });
+  },
+  /** The receipt a payer can show before the sync: explicit about not being final. */
+  localReceipt(q: QueuedPromise): { title: string; status: OfflineState; text: string } {
+    return { title: `${q.merchantName} · ${q.currency} ${(q.amountMinor / 100).toFixed(2)}`, status: q.state, text: q.receiptText };
   },
   /** Payer side: decode the merchant's offline QR, sign the promise with this device's key and queue it. */
   async promiseFor(qrPayload: string, payerId: string, merchantId: string): Promise<QueuedPromise> {
@@ -198,20 +263,30 @@ export const offlineQueue = {
       promisedAt: new Date().toISOString(),
       qrPayload,
     };
-    const item: QueuedPromise = { hash, body, amountMinor, currency: d.currency.toUpperCase(), merchantName: d.merchantName, queuedAt: new Date().toISOString() };
-    const db = await idb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction('queue', 'readwrite');
-      tx.objectStore('queue').put(item);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    const item: QueuedPromise = {
+      hash,
+      body,
+      amountMinor,
+      currency: d.currency.toUpperCase(),
+      merchantName: d.merchantName,
+      queuedAt: new Date().toISOString(),
+      state: 'OFFLINE_ACCEPTED_LOCALLY',
+      receiptText: PENDING_CONFIRMATION_TEXT,
+    };
+    await writeItems([{ ...item, state: 'SYNC_PENDING' }]);
     return item;
   },
-  async sync(): Promise<{ settled: number; rejected: number; duplicates: number; results: any[] }> {
+  async sync(): Promise<{ settled: number; rejected: number; duplicates: number; results: SyncResultItem[] }> {
     const items = await this.list();
     if (!items.length) return { settled: 0, rejected: 0, duplicates: 0, results: [] };
-    const r = await api.post<{ settled: number; rejected: number; duplicates: number; results: any[] }>('/api/v1/offline/sync', { promises: items.map((i) => i.body) });
+    await writeItems(items.map((q) => ({ ...q, state: 'ONLINE_VALIDATING' })));
+    let r: { settled: number; rejected: number; duplicates: number; results: SyncResultItem[] };
+    try {
+      r = await api.post('/api/v1/offline/sync', { promises: items.map((i) => i.body) });
+    } catch (e) {
+      await writeItems(items.map((q) => ({ ...q, state: 'SYNC_PENDING' }))); // nothing was confirmed: still pending
+      throw e;
+    }
     const db = await idb();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction('queue', 'readwrite');

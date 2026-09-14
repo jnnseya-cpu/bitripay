@@ -3,6 +3,7 @@
  * can run it and its budget. Agents are configuration over the tool gateway; adding one never adds a new way to move money.
  */
 import type { Role } from '@bitripay/shared';
+import { MERCHANT_CLASS_ROLES } from '@bitripay/shared';
 
 export interface AgentDef {
   key: string;
@@ -63,7 +64,7 @@ const ADMIN_READ = [
 ];
 const ADMIN_ACT = ['admin.freeze_wallet', 'admin.reconcile_reserves', 'admin.notify_admins'];
 
-const EVERYONE: Role[] = ['user', 'merchant', 'agent', 'admin'];
+const EVERYONE: Role[] = ['user', ...MERCHANT_CLASS_ROLES, 'agent', 'admin'];
 
 const ctxStr = (c: Record<string, unknown> | null, k: string) => (c && typeof c[k] === 'string' ? (c[k] as string) : null);
 const payload = (c: Record<string, unknown> | null) => (c && typeof c.payload === 'object' && c.payload ? (c.payload as Record<string, unknown>) : {});
@@ -142,7 +143,7 @@ export const MESH_AGENTS: AgentDef[] = [
     aliases: ['RecipientValidator', 'KODA'],
     name: 'KODA Core',
     icon: '✅',
-    roles: ['merchant', 'admin'],
+    roles: [...MERCHANT_CLASS_ROLES, 'admin'],
     tagline: 'Scan-to-Verify in seconds across the three doors',
     charter: `You are KODA Core (PR-A02). A merchant asks whether a payment really arrived; you run the verification (reference, or MSISDN plus amount) across the wallet ledger, the processors and the national switch — the three doors — and answer VERIFIED, PENDING, NOT_FOUND, AMBIGUOUS or MISMATCH with the evidence. You never mark anything paid.`,
     tools: ['verification.koda', 'merchant.growth', 'transactions.list'],
@@ -244,7 +245,7 @@ export const MESH_AGENTS: AgentDef[] = [
     aliases: ['OnboardingGuide', 'MerchantGrowth'],
     name: 'Onboarding',
     icon: '🚀',
-    roles: ['merchant', 'admin'],
+    roles: [...MERCHANT_CLASS_ROLES, 'admin'],
     tagline: 'Tiered KYC guidance and the merchant growth picture',
     charter: `You are the Onboarding agent (PR-A01). For a new merchant you explain the verification levels, what unlocks what, and the next step; for an active one you summarise growth (sales, settlement, disputes). Conversational, four languages, never approves KYC.`,
     tools: ['onboarding.status', 'merchant.growth', 'merchant.stats', 'knowledge.search'],
@@ -334,7 +335,7 @@ export const AGENTS: AgentDef[] = [
     key: 'growth',
     name: 'Growth',
     icon: '📈',
-    roles: ['merchant', 'agent', 'admin'],
+    roles: [...MERCHANT_CLASS_ROLES, 'agent', 'admin'],
     tagline: 'Finds ways to sell more and get paid faster',
     charter: `You are the Growth agent for a merchant or cash agent. You read sales, methods, settlement timing and open payment links, then recommend two or three concrete, low-cost actions (a QR at the counter, a payment link for deliveries, a settlement threshold, opening hours by demand). Ground every recommendation in a figure from the tools.`,
     tools: [...READ_TOOLS, ...MERCHANT_TOOLS, ...CASH_AGENT_TOOLS, 'actions.propose', 'memory.remember'],
@@ -372,7 +373,7 @@ export const AGENTS: AgentDef[] = [
     aliases: ['RouteOptimiser'],
     name: 'Smart Route',
     icon: '🧭',
-    roles: ['merchant', 'admin'],
+    roles: [...MERCHANT_CLASS_ROLES, 'admin'],
     tagline: 'Explains how rails are ranked and why a payment took the route it did',
     charter: `You are the Smart Route agent (route optimisation). You explain the rail ranking: for a payment method and currency you read the routing report (success rate, p95 latency, cost, health state, merchant preference, settlement speed, FX cost, fraud risk, liquidity, concentration) and say which connector wins, why, and what would change the choice. For merchants you use their route quotes and money routes; administrators also see every connector's health. You never change a route, pause a connector or move money; propose a pause to the Connector Medic when a rail is failing.`,
     tools: ['rails.health', 'routes.quote', 'routes.list', 'routes.get', 'fees.quote', 'rates.list', 'knowledge.search', 'memory.remember'],
@@ -398,7 +399,7 @@ export const AGENTS: AgentDef[] = [
     aliases: ['ContentEngine'],
     name: 'Content Engine',
     icon: '✍️',
-    roles: ['merchant', 'admin'],
+    roles: [...MERCHANT_CLASS_ROLES, 'admin'],
     tagline: 'Drafts and audits articles from BitriPay knowledge, clearly marked machine-generated',
     charter: `You are the Content Engine (SEO content). You draft and audit articles, guides and product pages about BitriPay: search the knowledge base for the facts (fees, limits, corridors, safeguarding, KYC, mobile money), propose an outline, a draft and a short audit (accuracy against the sources, readability, keywords, internal links to the pages you cite). Everything you produce is machine-generated and says so; a human editor publishes. You never invent figures, rates or policies: when the knowledge base does not cover a claim, mark it as needing a source.`,
     tools: ['knowledge.search', 'profile.summary', 'memory.remember'],

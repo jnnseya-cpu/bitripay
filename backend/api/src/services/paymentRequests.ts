@@ -13,6 +13,7 @@ import { onRequestPaid } from './intents';
 import { qrContent } from './qr';
 import { getModules } from './modules';
 import { config } from '../config';
+import { isMerchantRole } from './users';
 
 export interface PaymentRequestRow {
   intent_id?: string | null;
@@ -40,6 +41,7 @@ export function toPaymentRequest(row: PaymentRequestRow, users?: Map<string, Ret
   const qr = qrContent({ type: 'pr', id: row.code });
   return {
     id: row.id,
+    intentId: row.intent_id ?? null,
     code: row.code,
     kind: row.kind,
     requesterUserId: row.requester_user_id,
@@ -167,7 +169,7 @@ export function payWithWallet(payer: UserRow, code: string, amount?: number | nu
     if (!Number.isInteger(finalAmount) || finalAmount <= 0) throw badRequest('Enter an amount to pay', 'amount_required');
     const currency = getCurrency(row.currency);
     const requester = findUserById(row.requester_user_id)!;
-    const type = requester.role === 'merchant' ? 'merchant_payment' : row.kind === 'request' ? 'money_request' : 'qr_payment';
+    const type = isMerchantRole(requester.role) ? 'merchant_payment' : row.kind === 'request' ? 'money_request' : 'qr_payment';
     const fee =
       type === 'money_request' ? calculateFee('transfer', finalAmount, currency.code, null, { userId: payer.id }) : calculateFee(type, finalAmount, currency.code, null, { userId: requester.id });
     enforceLimits(payer, finalAmount, currency.code);
@@ -250,7 +252,7 @@ export function checkoutInfo(code: string) {
   const requester = findUserById(row.requester_user_id)!;
   const gateway = getGatewaySettings(requester);
   const allowed = parseJson<string[]>(row.allowed_methods, []);
-  const methods = requester.role === 'merchant' ? gateway.methods.filter((m) => allowed.length === 0 || allowed.includes(m)) : ['wallet'];
+  const methods = isMerchantRole(requester.role) ? gateway.methods.filter((m) => allowed.length === 0 || allowed.includes(m)) : ['wallet'];
   return {
     paymentRequest: toPaymentRequest(row),
     currency: getCurrency(row.currency, false),

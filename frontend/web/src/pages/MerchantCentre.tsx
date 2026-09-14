@@ -4,6 +4,7 @@ import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
 import { offlineDevice, offlineQueue } from '../lib/offline';
+import { MERCHANT_CLASS_ROLES, ORG_PERMISSIONS, type OrgRole } from '@bitripay/shared';
 
 /**
  * Merchant command centre: balance classes, settlement calendar / cycles / statements, disputes with evidence,
@@ -12,14 +13,18 @@ import { offlineDevice, offlineQueue } from '../lib/offline';
  */
 export function MerchantCentre() {
   const { user, money, toast, config } = useStore();
-  const [tab, setTab] = useState<'overview' | 'settlement' | 'disputes' | 'fees' | 'payouts' | 'plans' | 'offline'>('overview');
+  const [tab, setTab] = useState<'overview' | 'settlement' | 'disputes' | 'fees' | 'payouts' | 'plans' | 'offline' | 'team'>('overview');
   const balance = useAsync(() => api.get<any>('/api/v1/balance'), [tab]);
   const calendar = useAsync(() => api.get<any>('/api/v1/settlement_calendar'), [tab]);
   const disputes = useAsync(() => api.get<any>('/api/v1/disputes'), [tab]);
   const verification = useAsync(() => api.get<any>('/api/risk/verification'), [tab]);
   const fees = useAsync(() => (tab === 'fees' ? api.get<any>('/api/v1/fee_schedule') : Promise.resolve(null)), [tab]);
+  /** The organisation this session acts for (§43): merchant-class owners, administrators and invited members. */
+  const org = useAsync(() => api.get<any>('/api/organisations/me').catch(() => null), [tab]);
   const err = (e: any) => toast(e.message, 'error');
-  if (user?.role !== 'merchant' && user?.role !== 'admin')
+  const merchantClass = (MERCHANT_CLASS_ROLES as readonly string[]).includes(user?.role ?? '');
+  if (org.loading && !merchantClass && user?.role !== 'admin') return null;
+  if (!merchantClass && user?.role !== 'admin' && !org.data?.membership)
     return (
       <Alert kind="info">
         Upgrade to a merchant account under <Link to="/app/merchant">Merchant</Link> to use the command centre.
@@ -51,6 +56,7 @@ export function MerchantCentre() {
           { id: 'payouts', label: 'Bulk payouts' },
           { id: 'plans', label: 'Plans & billing' },
           { id: 'offline', label: 'Offline kit' },
+          { id: 'team', label: 'Team & business units' },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -172,6 +178,7 @@ export function MerchantCentre() {
       {tab === 'payouts' && <BulkPayouts money={money} toast={toast} err={err} currencies={(config?.currencies ?? []).map((c) => c.code)} />}
       {tab === 'plans' && <Plans money={money} toast={toast} err={err} currencies={(config?.currencies ?? []).map((c) => c.code)} />}
       {tab === 'offline' && <OfflineKit toast={toast} err={err} />}
+      {tab === 'team' && <Team org={org} toast={toast} err={err} />}
     </div>
   );
 }
@@ -1048,6 +1055,192 @@ function Plans({
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Team & business units (§43, §44): who acts for the organisation and with which role, and the departments, branches
+ * or programmes that locations, terminals and QR codes belong to. Every refusal from the API (a cashier trying to
+ * invite someone, a read-only member creating a unit) is shown as the API's own message.
+ */
+function Team({ org, toast, err }: { org: { data: any; loading: boolean; reload: () => void }; toast: any; err: (e: any) => void }) {
+  const [invite, setInvite] = useState<{ identifier: string; role: OrgRole }>({ identifier: '', role: 'cashier' });
+  const [unit, setUnit] = useState({ name: '', code: '' });
+  const [limit, setLimit] = useState<string>('');
+  const [busy, setBusy] = useState(false);
+  const data = org.data;
+  if (!data) return org.loading ? null : <Empty text="No organisation on this account yet." />;
+  const roles: OrgRole[] = data.roles ?? Object.keys(ORG_PERMISSIONS);
+  const matrix: Record<string, string[]> = data.permissions ?? ORG_PERMISSIONS;
+  const mine: string[] = data.membership?.permissions ?? [];
+  const can = (p: string) => mine.includes('*') || mine.includes(p);
+  const label = (r: string) => r.replace(/_/g, ' ');
+  const run = (p: Promise<unknown>, ok: string) => {
+    setBusy(true);
+    return p
+      .then(() => {
+        toast(ok, 'success');
+        org.reload();
+      })
+      .catch(err)
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="grid cols-2">
+      <div className="card">
+        <h3>{data.organisation.name}</h3>
+        <p className="small muted">
+          {label(data.organisation.kind)} · {data.organisation.country ?? '—'} · KYB {data.organisation.kybStatus} · you act as <b>{label(data.membership.role)}</b>
+        </p>
+        <KV k="Cashier refund limit" v={`${data.organisation.settings.cashierRefundLimitMinor} minor units per refund`} />
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(api.patch('/api/organisations/me', { cashierRefundLimitMinor: Number(limit) }), 'Cashier refund limit updated');
+          }}
+        >
+          <Field label="New cashier limit (minor units)">
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              value={limit}
+              onChange={(e) => setLimit(e.target.value)}
+              placeholder={String(data.organisation.settings.cashierRefundLimitMinor)}
+              disabled={!can('org:settings')}
+            />
+          </Field>
+          <Button type="submit" size="sm" variant="secondary" disabled={busy || !limit || !can('org:settings')}>
+            Save
+          </Button>
+        </form>
+        <h3>Members</h3>
+        <div className="list">
+          {(data.members ?? []).map((m: any) => (
+            <div key={m.userId} className="list-item">
+              <div className="flex1">
+                <div className="main-text">
+                  {m.user?.fullName ?? m.userId} {m.user?.tag ? <span className="muted">@{m.user.tag}</span> : null}
+                </div>
+                <div className="sub-text">{m.permissions.includes('*') ? 'every permission' : m.permissions.map(label).join(', ')}</div>
+              </div>
+              {m.role === 'owner' ? (
+                <Chip kind="primary">owner</Chip>
+              ) : (
+                <>
+                  <Select
+                    value={m.role}
+                    disabled={busy || !can('org:manage_members')}
+                    onChange={(e) => run(api.patch(`/api/organisations/members/${m.userId}`, { role: e.target.value }), `${m.user?.fullName ?? 'Member'} is now ${label(e.target.value)}`)}
+                  >
+                    {roles
+                      .filter((r) => r !== 'owner')
+                      .map((r) => (
+                        <option key={r} value={r}>
+                          {label(r)}
+                        </option>
+                      ))}
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={busy || !can('org:manage_members')}
+                    onClick={() => run(api.del(`/api/organisations/members/${m.userId}`), `${m.user?.fullName ?? 'Member'} removed`)}
+                  >
+                    Remove
+                  </Button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(api.post('/api/organisations/members', invite), `${invite.identifier} invited as ${label(invite.role)}`).then(() => setInvite({ ...invite, identifier: '' }));
+          }}
+        >
+          <h3>Invite a member</h3>
+          <p className="small muted">
+            They need a BitriPay account already: enter their email, phone or @tag. They sign in with their own credentials and act for {data.organisation.name} with the role you choose.
+          </p>
+          <div className="grid cols-2">
+            <Field label="Email, phone or @tag">
+              <Input value={invite.identifier} onChange={(e) => setInvite({ ...invite, identifier: e.target.value })} placeholder="ana@example.com or @ana" required />
+            </Field>
+            <Field label="Role" hint={(matrix[invite.role] ?? []).map(label).join(', ')}>
+              <Select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value as OrgRole })}>
+                {roles
+                  .filter((r) => r !== 'owner')
+                  .map((r) => (
+                    <option key={r} value={r}>
+                      {label(r)}
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+          </div>
+          <Button type="submit" loading={busy} disabled={!invite.identifier}>
+            Invite
+          </Button>
+          {!can('org:manage_members') && <p className="small muted">Your role ({label(data.membership.role)}) cannot manage members; the API will refuse and say so.</p>}
+        </form>
+      </div>
+      <div className="card">
+        <h3>Business units</h3>
+        <p className="small muted">Departments, branches or programmes. Attach locations to a unit from the QR centre; every payment taken at that location then carries the unit.</p>
+        {(data.businessUnits ?? []).length === 0 && <Empty text="No business units yet." />}
+        <div className="list">
+          {(data.businessUnits ?? []).map((u: any) => (
+            <div key={u.id} className="list-item">
+              <div className="flex1">
+                <div className="main-text">
+                  {u.name} <Chip>{u.code}</Chip>
+                </div>
+                <div className="sub-text">
+                  {u.locations} location{u.locations === 1 ? '' : 's'}
+                  {u.settlementProfileId ? ` · settlement profile ${u.settlementProfileId}` : ' · settles with the organisation'}
+                </div>
+              </div>
+              <Button size="sm" variant="ghost" disabled={busy || !can('org:manage_units')} onClick={() => run(api.del(`/api/organisations/business-units/${u.id}`), `${u.name} deleted`)}>
+                Delete
+              </Button>
+            </div>
+          ))}
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(api.post('/api/organisations/business-units', { name: unit.name, code: unit.code || null }), `${unit.name} created`).then(() => setUnit({ name: '', code: '' }));
+          }}
+        >
+          <h3>New business unit</h3>
+          <div className="grid cols-2">
+            <Field label="Name">
+              <Input value={unit.name} onChange={(e) => setUnit({ ...unit, name: e.target.value })} placeholder="Gombe branch" required />
+            </Field>
+            <Field label="Code (optional)" hint="Letters and digits; derived from the name when empty">
+              <Input value={unit.code} onChange={(e) => setUnit({ ...unit, code: e.target.value })} placeholder="GOMBE" maxLength={16} />
+            </Field>
+          </div>
+          <Button type="submit" loading={busy} disabled={unit.name.trim().length < 2}>
+            Create unit
+          </Button>
+        </form>
+        <h3>Permission matrix</h3>
+        <div className="list">
+          {roles.map((r) => (
+            <div key={r} className="list-item">
+              <div className="flex1">
+                <div className="main-text">{label(r)}</div>
+                <div className="sub-text">{(matrix[r] ?? []).includes('*') ? 'every permission' : (matrix[r] ?? []).map(label).join(', ')}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

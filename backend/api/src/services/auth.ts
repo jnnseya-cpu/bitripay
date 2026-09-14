@@ -12,6 +12,7 @@ import { getAppSettings, getSetting } from './settings';
 import { notify } from './notifications';
 import { onUserRegistered } from './referrals';
 import { verifyStepUpToken } from './webauthn';
+import { MERCHANT_ROLES } from './users';
 
 export interface AuthResult {
   token: string;
@@ -34,7 +35,7 @@ function assertCountryAllowed(country?: string | null) {
 export function register(input: CreateUserInput & { password: string }): AuthResult {
   const app = getAppSettings();
   if (!app.registrationOpen) throw forbidden('Registration is currently closed', 'registration_closed');
-  if (input.role && !['user', 'merchant', 'agent'].includes(input.role)) throw badRequest('Invalid role');
+  if (input.role && !['user', 'agent', ...MERCHANT_ROLES].includes(input.role)) throw badRequest('Invalid role');
   if (input.password.length < 8) throw badRequest('Password must be at least 8 characters');
   assertCountryAllowed(input.country);
   const user = createUser(input);

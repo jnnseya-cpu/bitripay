@@ -499,6 +499,7 @@ export function recordProbe(connector: string, ok: boolean, message: string, det
 // Capabilities
 // ---------------------------------------------------------------------------------------------------------------------
 function kindOfGateway(g: GatewayConfig): RailKind {
+  if (g.methods.includes('bitcoin')) return 'bitcoin';
   if (g.methods.includes('mobile_money') && g.methods.length === 1) return 'mobile_money';
   if (g.provider === 'manual_bank') return 'bank';
   if (g.methods.includes('card')) return 'card';
@@ -915,6 +916,8 @@ export interface RoutingReport {
   weights: RoutingWeights;
   scores: RouteScore[];
   uplift: RoutingUplift;
+  /** Amount bands the statistics are keyed on (base-currency units). */
+  amountBands: AmountBand[];
   generatedAt: string;
 }
 
@@ -944,6 +947,7 @@ export function routingReport(candidates: RouteCandidate[], policy: RoutePolicy 
     window: { hours, bucketMinutes: settings.stats.bucketMinutes, retentionHours: settings.stats.retentionHours },
     weights: settings.weights,
     scores,
+    amountBands: AMOUNT_BANDS,
     uplift: {
       smartRail: smart?.id ?? null,
       defaultRail: dflt?.id ?? null,

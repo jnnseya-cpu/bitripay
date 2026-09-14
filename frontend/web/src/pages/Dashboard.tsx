@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { PageHeader, TxRow, Empty, useAsync, QrImage } from '../components/ui';
 import type { Transaction } from '@bitripay/shared';
 import { convertMinor } from '@bitripay/shared';
+import { isMerchantClass } from '@bitripay/shared';
 
 export function Dashboard() {
   const { user, wallets, config, money, currency } = useStore();
@@ -66,7 +67,7 @@ export function Dashboard() {
           )}
         </div>
         <div className="card center">
-          <QrImage value={`${config?.webUrl ?? ''}/q?v=1&t=${user?.role === 'merchant' ? 'm' : user?.role === 'agent' ? 'ag' : 'u'}&id=${user?.tag}`} size={140} />
+          <QrImage value={`${config?.webUrl ?? ''}/q?v=1&t=${isMerchantClass(user?.role) ? 'm' : user?.role === 'agent' ? 'ag' : 'u'}&id=${user?.tag}`} size={140} />
           <div className="small muted mt-sm">
             Your receive code · <Link to="/app/receive">enlarge</Link>
           </div>

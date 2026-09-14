@@ -38,9 +38,10 @@ import { agentForAlias } from '../services/assist/registry';
 import { getDb } from '../db';
 import { createPlan, listPlans, getPlan, archivePlan, listSubscriptions, getSubscription, recordUsage, cancelSubscription, listInvoices, billingOverview } from '../services/billing';
 import { readinessForLender } from '../services/creditReadiness';
+import { MERCHANT_ROLES } from '../services/users';
 
 export const v1ExtRouter = Router();
-const merchantOnly = [requireAuth, requireRole('merchant', 'admin')];
+const merchantOnly = [requireAuth, requireRole(...MERCHANT_ROLES, 'admin')];
 const writeLimit = rateLimit({ windowMs: 60_000, max: 120, keyPrefix: 'v1x' });
 const idem = (req: { headers: Record<string, unknown> }) => (req.headers['idempotency-key'] as string | undefined) ?? null;
 const actorOf = (req: any) => ({ type: req.user!.role === 'admin' ? 'admin' : 'merchant', id: req.user!.id }) as const;

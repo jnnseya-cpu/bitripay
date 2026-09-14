@@ -33,6 +33,7 @@ import { goLiveChecklist } from '../goLive';
 import { verifyEventChain } from '../events';
 import { notify } from '../notifications';
 import { ROUTE_STAGES } from '../routeLifecycle';
+import { MERCHANT_CLASS_ROLES } from '@bitripay/shared';
 
 export interface ToolContext {
   /** The account holder the agent works for. */
@@ -57,7 +58,7 @@ export interface ToolDef<S extends z.ZodTypeAny = z.ZodTypeAny> {
   run: (ctx: ToolContext, input: z.output<S>) => unknown | Promise<unknown>;
 }
 
-const EVERYONE: Role[] = ['user', 'merchant', 'agent', 'admin'];
+const EVERYONE: Role[] = ['user', ...MERCHANT_CLASS_ROLES, 'agent', 'admin'];
 const ADMIN: Role[] = ['admin'];
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
 const monthStart = () => `${new Date().toISOString().slice(0, 7)}-01`;
@@ -354,7 +355,7 @@ export const TOOLS: ToolDef<any>[] = [
   tool({
     name: 'merchant.stats',
     description: 'Merchant sales for the last 30 days by currency, method and day, plus open payment links.',
-    roles: ['merchant', 'admin'],
+    roles: [...MERCHANT_CLASS_ROLES, 'admin'],
     sideEffect: false,
     schema: z.object({}),
     run: (ctx) => {
@@ -365,7 +366,7 @@ export const TOOLS: ToolDef<any>[] = [
   tool({
     name: 'merchant.settlements',
     description: 'Settlement batches paid to the merchant bank account.',
-    roles: ['merchant', 'admin'],
+    roles: [...MERCHANT_CLASS_ROLES, 'admin'],
     sideEffect: false,
     schema: z.object({ limit: z.number().int().min(1).max(20).default(10) }),
     run: (ctx, i) => ({ items: (listSettlements(ctx.user.id) as any[]).slice(0, i.limit) }),
@@ -373,7 +374,7 @@ export const TOOLS: ToolDef<any>[] = [
   tool({
     name: 'merchant.payment_requests',
     description: 'Open payment links and QR requests of the merchant.',
-    roles: ['merchant', 'agent', 'user', 'admin'],
+    roles: [...MERCHANT_CLASS_ROLES, 'agent', 'user', 'admin'],
     sideEffect: false,
     schema: z.object({ status: z.enum(['open', 'paid', 'expired', 'cancelled']).default('open'), limit: z.number().int().min(1).max(30).default(10) }),
     run: (ctx, i) => ({
@@ -385,7 +386,7 @@ export const TOOLS: ToolDef<any>[] = [
   tool({
     name: 'merchant.webhooks',
     description: 'Recent webhook deliveries to the merchant endpoint and how many failed.',
-    roles: ['merchant', 'admin'],
+    roles: [...MERCHANT_CLASS_ROLES, 'admin'],
     sideEffect: false,
     schema: z.object({ limit: z.number().int().min(1).max(30).default(15) }),
     run: (ctx, i) => {

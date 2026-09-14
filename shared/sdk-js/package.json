@@ -1,0 +1,17 @@
+{
+  "name": "@bitripay/checkout-js",
+  "version": "1.0.0",
+  "description": "BitriPay embedded checkout for the browser: redirect to, or embed, the hosted checkout and receive the outcome by postMessage. Zero dependencies.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-strip-types src/*.test.ts"
+  },
+  "license": "MIT",
+  "sideEffects": false
+}

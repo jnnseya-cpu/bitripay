@@ -26,6 +26,7 @@ import { ensureWallet, getUserWallet, getWallet, type WalletRow } from './wallet
 import { postTransaction, type TransactionRow } from './ledger';
 import { notify } from './notifications';
 import { formatMoney } from '@bitripay/shared';
+import { isMerchantRole } from './users';
 
 export type IssuerModel = 'own_authorisation' | 'partner_issuer' | 'sandbox';
 export type ProgrammeStatus = 'sandbox' | 'live' | 'suspended';
@@ -951,7 +952,7 @@ export function classifyBalance(user: { role: string }, currency: string, part: 
   const issuer = p.issuer_model === 'partner_issuer' ? `${p.issuer_name} (BitriPay as distributor)` : (p.issuer_name ?? 'BitriPay');
   if (user.role === 'agent')
     return { class: 'agent_float', label: 'Agent float', redeemable: true, transferable: false, backing: 'Reconciled prefunded liquidity, 1:1 safeguarded', issuer, programmeStatus: p.status };
-  if (user.role === 'merchant')
+  if (isMerchantRole(user.role))
     return { class: 'merchant', label: 'Merchant balance', redeemable: true, transferable: true, backing: 'Regulated e-money, subject to settlement rules', issuer, programmeStatus: p.status };
   return { class: 'emoney', label: 'BitriPay e-money', redeemable: true, transferable: true, backing: '1:1 cleared safeguarded funds', issuer, programmeStatus: p.status };
 }

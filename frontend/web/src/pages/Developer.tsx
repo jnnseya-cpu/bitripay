@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, CopyButton, Empty, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Tabs, useAsync } from '../components/ui';
+import { isMerchantClass } from '@bitripay/shared';
 
 /**
  * Developer portal: scoped API keys (secret / restricted / publishable), webhook endpoints with dual signatures,
@@ -24,7 +25,7 @@ export function Developer() {
   const [ep, setEp] = useState<any>({ url: '', events: ['payment_intent.succeeded', 'refund.succeeded'] });
   const [epSecret, setEpSecret] = useState<any>(null);
   const err = (e: any) => toast(e.message, 'error');
-  if (user?.role !== 'merchant' && user?.role !== 'admin')
+  if (!isMerchantClass(user?.role) && user?.role !== 'admin')
     return (
       <Alert kind="info">
         The developer portal is for merchant accounts. <Link to="/app/merchant">Upgrade</Link> first.

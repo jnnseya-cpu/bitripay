@@ -225,6 +225,10 @@ export function Register() {
             <option value="user">{t('auth.role.user')}</option>
             <option value="merchant">{t('auth.role.merchant')}</option>
             <option value="agent">{t('auth.role.agent')}</option>
+            <option value="corporate">{t('auth.role.corporate')}</option>
+            <option value="ngo">{t('auth.role.ngo')}</option>
+            <option value="government">{t('auth.role.government')}</option>
+            <option value="developer">{t('auth.role.developer')}</option>
           </Select>
         </Field>
         <Field label={t('auth.fullName')}>

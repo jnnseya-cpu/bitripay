@@ -11,6 +11,7 @@ import { toMinor } from '@bitripay/shared';
 import { resolveScan } from '../services/qrcodes';
 import { getClientIp } from '../lib/http';
 import { rateLimit, keyByDevice, keyByQrId } from '../middleware/rateLimit';
+import { isMerchantRole } from '../services/users';
 
 export const qrRouter = Router();
 
@@ -20,7 +21,7 @@ qrRouter.get(
   requireAuth,
   wrap(async (req, res) => {
     const user = req.user!;
-    const type = user.role === 'merchant' ? 'm' : user.role === 'agent' ? 'ag' : 'u';
+    const type = isMerchantRole(user.role) ? 'm' : user.role === 'agent' ? 'ag' : 'u';
     const payload: any = { type, id: user.tag };
     if (req.query.amount && req.query.currency) {
       const cur = getCurrency(String(req.query.currency));

@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, AmountInput, Button, Chip, CopyButton, Empty, Field, Input, KV, Modal, PageHeader, QrImage, Select, StatusBadge, Tabs, TxRow, useAsync } from '../components/ui';
 import type { ApiKey, PaymentRequest, Transaction } from '@bitripay/shared';
+import { isMerchantClass } from '@bitripay/shared';
 
 export function MerchantDashboard() {
   const { user, money } = useStore();
@@ -11,7 +12,7 @@ export function MerchantDashboard() {
   const tx = useAsync(() => api.get<{ items: Transaction[] }>('/api/wallets/transactions?direction=in&pageSize=10'), []);
   const [apply, setApply] = useState('');
   const { refresh } = useStore();
-  if (user?.role !== 'merchant' && user?.role !== 'admin') {
+  if (!isMerchantClass(user?.role) && user?.role !== 'admin') {
     return (
       <div style={{ maxWidth: 520 }}>
         <PageHeader title="Become a merchant" subtitle="Accept QR, card, mobile money and virtual card payments" />

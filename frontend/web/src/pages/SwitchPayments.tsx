@@ -6,6 +6,7 @@ import { useT } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, KV, Modal, PageHeader, Select, StatusBadge, useAsync } from '../components/ui';
 import { SwitchMessage } from '../components/SwitchMessage';
 import { formatMoney } from '@bitripay/shared';
+import { isMerchantClass } from '@bitripay/shared';
 
 /** Payment states of the national switch (dossier §7): before emission, in flight, uncertain, terminal. */
 const STATES = ['RECEIVED', 'REQUIRES_ACTION', 'READY', 'DISPATCHING', 'PENDING', 'AUTHORIZED', 'UNKNOWN', 'COMPLETED', 'REJECTED', 'EXPIRED', 'CANCELLED'];
@@ -31,7 +32,7 @@ export function SwitchPayments() {
   const [selected, setSelected] = useState<any>(null);
   const list = useAsync(() => load<{ data: any[] }>(`/api/v1/payments${qs({ status: status || null, limit: 100 })}`), [status]);
   const timeline = useAsync(() => (selected ? load<any>(`/api/v1/payments/${selected.payment_id}/timeline`) : Promise.resolve(null)), [selected?.payment_id]);
-  if (user?.role !== 'merchant' && user?.role !== 'admin')
+  if (!isMerchantClass(user?.role) && user?.role !== 'admin')
     return (
       <Alert kind="info">
         National switch payments are created by merchant accounts through the partner API. <Link to="/app/merchant">Upgrade</Link> to accept them.

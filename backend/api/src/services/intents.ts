@@ -18,7 +18,7 @@ import { findUserById, toPublicUser } from './users';
 import { getCurrency } from './currencies';
 import { createPaymentRequest, type PaymentRequestRow } from './paymentRequests';
 import { recordEvent, type Actor } from './events';
-import { countryCapabilities } from './capabilities';
+import { countryCapabilities, bitcoinEligible, merchantBitcoinPolicy } from './capabilities';
 import { paymentOptions } from './payments';
 import { assertMoneyMovementAllowed } from './guardian';
 import { dispatchWebhook } from './webhooks';
@@ -31,6 +31,7 @@ import { publish } from './bus';
 import { screenSanctions } from './risk';
 import { createHold, releaseHoldsFor } from './finops/holds';
 import { ensureWallet } from './wallets';
+import { businessUnitIdForLocation, organisationIdFor } from './organisations';
 
 export const INTENT_STATES = [
   'CREATED',
@@ -156,6 +157,9 @@ export interface IntentView {
   paymentRequestCode: string | null;
   locationId: string | null;
   terminalId: string | null;
+  /** The legal entity the intent belongs to (§43) and the business unit of its location when it has one (read-only join). */
+  organisationId: string | null;
+  businessUnitId: string | null;
   customer: { userId: string | null; msisdn: string | null; country: string | null };
   routeConnector: string | null;
   transactionId: string | null;
@@ -217,6 +221,8 @@ export function intentView(r: IntentRow): IntentView {
     paymentRequestCode: request?.code ?? null,
     locationId: r.location_id,
     terminalId: r.terminal_id,
+    organisationId: r.organisation_id,
+    businessUnitId: businessUnitIdForLocation(r.location_id),
     customer: { userId: r.customer_user_id, msisdn: r.customer_msisdn, country: r.customer_country },
     routeConnector: r.route_connector,
     transactionId: r.transaction_id,
@@ -463,7 +469,7 @@ export function createIntent(merchant: UserRow, input: CreateIntentInput): { row
       'INSERT INTO payment_intents (id, organisation_id, merchant_user_id, amount_minor, currency, capture_method, method_policy, rails, reference, description, purpose_code, status, source, qr_id, payment_request_id, location_id, terminal_id, customer_user_id, customer_msisdn, customer_country, settlement_profile_id, client_secret_hash, idem_key, metadata, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ).run(
       id,
-      null,
+      organisationIdFor(merchant),
       merchant.id,
       input.amountMinor ?? null,
       cur.code,
@@ -909,7 +915,10 @@ export function discoverMethods(r: IntentRow, payer: UserRow | null, payerCountr
       available: caps.crossBorder && rails.includes('diaspora') && countryCapabilities(payerCountry).crossBorder,
       crossBorder: true,
     });
-  if (rails.includes('bitcoin')) list.push({ methodClass: 'bitcoin', label: 'Bitcoin / Lightning', available: caps.bitcoin, reason: caps.bitcoin ? undefined : 'not enabled in this country' });
+  if (rails.includes('bitcoin')) {
+    const btc = bitcoinEligible({ country: merchant?.country ?? null, merchantPolicy: merchantBitcoinPolicy(merchant) });
+    list.push({ methodClass: 'bitcoin', label: 'Bitcoin / Lightning', available: btc.eligible, reason: btc.eligible ? undefined : (btc.reason ?? 'not eligible') });
+  }
   return list;
 }
 
