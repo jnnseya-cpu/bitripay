@@ -14,6 +14,9 @@ import { COUNTRY_BY_CODE } from '@bitripay/shared';
 import { COMMS_CATEGORIES, COMMS_CHANNELS, COMMS_EVENTS } from '../services/comms/catalogue';
 import { emitAsync, getCommsPrefs, setCommsPrefs } from '../services/comms/engine';
 import { accountAnalytics } from '../services/analytics';
+import { closeAccount, closureBlockers } from '../services/accountClosure';
+import { verifyPassword } from '../lib/password';
+import { updateUser as updateUserRow } from '../services/users';
 
 export const accountRouter = Router();
 accountRouter.use(requireAuth);
@@ -151,6 +154,31 @@ accountRouter.get('/pools', (req, res) => res.json({ items: poolsForOwner(req.us
 accountRouter.get('/promo', (req, res) => res.json({ items: listPromoCredits(req.user!.id) }));
 accountRouter.get('/notifications', (req, res) => res.json({ items: listNotifications(req.user!.id), unread: unreadCount(req.user!.id) }));
 /** Notification preferences: opt out per category and channel; mandatory notices (security, money, legal) are always sent. */
+/** Sign out everywhere: every token issued before now is refused, including the one making this call. */
+accountRouter.post('/sessions/revoke', (req, res) => {
+  updateUserRow(req.user!.id, { sessions_invalidated_at: new Date().toISOString() } as any);
+  res.json({ ok: true });
+});
+
+/** What stands between this account and closure (zero balances, no holds, nothing pending). */
+accountRouter.get('/closure', (req, res) => res.json({ blockers: closureBlockers(req.user!) }));
+
+/**
+ * Close the account (right to erasure): password + PIN + the word CLOSE. Personal data is anonymised, sessions and
+ * keys revoked; ledger history stays under a pseudonym for the legal retention period.
+ */
+accountRouter.delete(
+  '/',
+  wrap(async (req, res) => {
+    const body = validate(z.object({ password: z.string().min(1), pin: z.string().optional(), confirm: z.literal('CLOSE'), reason: z.string().max(300).optional() }), req.body);
+    const user = req.actor ?? req.user!;
+    if (user.password_hash && !verifyPassword(body.password, user.password_hash)) throw badRequest('Password is incorrect', 'invalid_password');
+    auth.assertPin(user, body.pin, req);
+    const closed = closeAccount(user, { type: 'user', id: user.id }, body.reason ?? 'account holder request');
+    res.json({ ok: true, closedAt: closed.closed_at });
+  }),
+);
+
 /** Chart series for the signed-in account (customer, merchant or agent), last `days` days (7–365). */
 accountRouter.get('/analytics', (req, res) => {
   const days = Math.min(365, Math.max(7, Number(req.query.days ?? 30) || 30));

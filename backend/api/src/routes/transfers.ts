@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { validate, wrap } from '../lib/http';
+import { cleanText, validate, wrap } from '../lib/http';
 import { requireAuth } from '../middleware/auth';
 import { sendMoney } from '../services/transfers';
 import { toTransaction, calculateFee } from '../services/ledger';
@@ -17,7 +17,7 @@ const schema = z.object({
   to: z.string().min(2),
   amount: z.string(),
   currency: z.string().length(3),
-  note: z.string().max(200).optional().nullable(),
+  note: cleanText(200).optional().nullable(),
   pin: z.string().optional(),
   idempotencyKey: z.string().max(100).optional().nullable(),
 });

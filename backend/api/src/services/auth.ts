@@ -57,6 +57,7 @@ export function login(identifier: string, password: string): AuthResult {
 
 export function finishLogin(row: UserRow): AuthResult {
   if (row.status === 'suspended') throw forbidden('Your account has been suspended. Contact support.', 'account_suspended');
+  if (row.status === 'closed') throw forbidden('This account has been closed', 'account_closed');
   if (row.two_factor_enabled) {
     return { token: signToken({ sub: row.id, role: row.role, mfa: true }, '10m'), user: toUser(row), requiresTwoFactor: true };
   }
@@ -182,7 +183,8 @@ export function resetPassword(identifier: string, code: string, newPassword: str
 export function changePassword(row: UserRow, current: string, next: string) {
   if (row.password_hash && !verifyPassword(current, row.password_hash)) throw badRequest('Current password is incorrect', 'invalid_password');
   if (next.length < 8) throw badRequest('Password must be at least 8 characters');
-  updateUser(row.id, { password_hash: hashPassword(next), password_changed_at: new Date().toISOString() } as any);
+  // Every other session signed in with the old password ends here; the caller signs in again with the new one.
+  updateUser(row.id, { password_hash: hashPassword(next), password_changed_at: new Date().toISOString(), sessions_invalidated_at: new Date().toISOString() } as any);
 }
 
 export function setPin(row: UserRow, pin: string, currentPin?: string) {
@@ -195,11 +197,24 @@ export function setPin(row: UserRow, pin: string, currentPin?: string) {
  * Authorize a money movement: a fresh biometric step-up token (passkey / device biometrics) or the
  * transaction PIN. The token may arrive in the X-Step-Up-Token header or as `stepUpToken` in the body.
  */
+/**
+ * Successful PIN checks are remembered for five minutes per (account, PIN hash, PIN): a burst of confirmed operations
+ * (bulk payouts, a busy counter) does not pay the bcrypt cost on every call, while a wrong PIN is always hashed and
+ * always refused, so guessing is no cheaper.
+ */
+const PIN_MEMO = new Map<string, number>();
+const PIN_MEMO_MS = 5 * 60_000;
 export function assertPin(row: UserRow, pin?: string, req?: { headers?: Record<string, unknown>; body?: any }) {
   const token = (req?.headers?.['x-step-up-token'] as string | undefined) || req?.body?.stepUpToken;
   if (token && verifyStepUpToken(row, token)) return;
   if (!row.pin_hash) throw badRequest('Set a transaction PIN in security settings before sending money', 'pin_required');
-  if (!pin || !verifyPassword(pin, row.pin_hash)) throw forbidden('Incorrect transaction PIN', 'invalid_pin');
+  if (!pin) throw forbidden('Incorrect transaction PIN', 'invalid_pin');
+  const memoKey = `${row.id}:${sha256(`${row.pin_hash}:${pin}`)}`;
+  const remembered = PIN_MEMO.get(memoKey);
+  if (remembered && remembered > Date.now()) return;
+  if (!verifyPassword(pin, row.pin_hash)) throw forbidden('Incorrect transaction PIN', 'invalid_pin');
+  if (PIN_MEMO.size > 10_000) PIN_MEMO.clear();
+  PIN_MEMO.set(memoKey, Date.now() + PIN_MEMO_MS);
 }
 
 export function beginTwoFactorSetup(row: UserRow) {

@@ -6,6 +6,8 @@ export interface TokenPayload {
   role: string;
   /** Partial token: user still needs to complete 2FA. */
   mfa?: boolean;
+  /** Issued-at (seconds), set by jsonwebtoken; sessions issued before `users.sessions_invalidated_at` are refused. */
+  iat?: number;
 }
 
 export function signToken(payload: TokenPayload, expiresIn: string = '7d'): string {

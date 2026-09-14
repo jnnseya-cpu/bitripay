@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { validate, wrap, getClientIp } from '../lib/http';
+import { validate, wrap, getClientIp, redirectUrl, cleanText } from '../lib/http';
 import { requireAuth, optionalAuth, requireRole, requireScope, requireOrgPermission } from '../middleware/auth';
 import { MERCHANT_ROLES } from '../services/users';
 import { assertRefundWithinMemberLimit } from '../services/organisations';
@@ -145,7 +145,7 @@ const intentSchema = z.object({
   capture_method: z.enum(['automatic', 'manual']).optional(),
   payment_method_policy: z.enum(['smart', 'cheapest', 'fastest', 'most_reliable']).optional(),
   reference: z.string().max(64).optional().nullable(),
-  description: z.string().max(200).optional().nullable(),
+  description: cleanText(200).optional().nullable(),
   purpose_code: z.enum(PURPOSE_CODES).optional().nullable(),
   expires_in_minutes: z
     .number()
@@ -159,8 +159,8 @@ const intentSchema = z.object({
   customer_country: z.string().length(2).optional().nullable(),
   location_id: z.string().optional().nullable(),
   terminal_id: z.string().optional().nullable(),
-  success_url: z.string().url().optional().nullable(),
-  cancel_url: z.string().url().optional().nullable(),
+  success_url: redirectUrl.optional().nullable(),
+  cancel_url: redirectUrl.optional().nullable(),
   qr: z.boolean().optional(),
   qr_ttl_seconds: z.number().int().min(30).max(3600).optional(),
   /** Marketplace / cooperative splits: paid from the merchant wallet when the intent is captured. */
@@ -525,14 +525,14 @@ const checkoutSchema = z.object({
   amount_minor: z.number().int().positive().optional().nullable(),
   currency: z.string().length(3),
   line_items: z.array(lineItemSchema).max(100).optional(),
-  success_url: z.string().url().optional().nullable(),
-  cancel_url: z.string().url().optional().nullable(),
+  success_url: redirectUrl.optional().nullable(),
+  cancel_url: redirectUrl.optional().nullable(),
   customer: z
     .object({ email: z.string().email().optional().nullable(), phone: z.string().max(20).optional().nullable(), name: z.string().max(120).optional().nullable() })
     .optional()
     .nullable(),
   reference: z.string().max(64).optional().nullable(),
-  description: z.string().max(200).optional().nullable(),
+  description: cleanText(200).optional().nullable(),
   purpose_code: z.enum(PURPOSE_CODES).optional().nullable(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   expires_in_minutes: z.number().int().min(5).max(1440).optional().nullable(),
@@ -574,7 +574,7 @@ const linkSchema = z.object({
   amount_minor: z.number().int().positive().optional().nullable(),
   currency: z.string().length(3),
   title: z.string().max(80).optional().nullable(),
-  description: z.string().max(200).optional().nullable(),
+  description: cleanText(200).optional().nullable(),
   reusable: z.boolean().optional(),
   expires_in_minutes: z
     .number()
@@ -584,8 +584,8 @@ const linkSchema = z.object({
     .optional()
     .nullable(),
   purpose_code: z.enum(PURPOSE_CODES).optional().nullable(),
-  success_url: z.string().url().optional().nullable(),
-  cancel_url: z.string().url().optional().nullable(),
+  success_url: redirectUrl.optional().nullable(),
+  cancel_url: redirectUrl.optional().nullable(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   rails: z.array(z.string()).optional(),
 });
@@ -744,7 +744,7 @@ v1Router.post('/money_requests', ...merchantOnly, requireScope('payment_intents:
       payer: z.string().min(2).max(120),
       amount_minor: z.number().int().positive(),
       currency: z.string().length(3),
-      description: z.string().max(200).optional().nullable(),
+      description: cleanText(200).optional().nullable(),
       expires_in_minutes: z
         .number()
         .int()
@@ -794,7 +794,7 @@ const payoutSchema = z.object({
     }),
     z.object({ method: z.literal('mobile_money'), operator_id: z.string(), phone: z.string().min(6), name: z.string().optional().nullable() }),
   ]),
-  description: z.string().max(200).optional().nullable(),
+  description: cleanText(200).optional().nullable(),
 });
 // Contract §14 endpoints (wallets, transfers, remittances, payout batches, agents) mount before /payouts/:id so
 // /payouts/batches resolves to the batch resource.
@@ -827,7 +827,7 @@ v1Router.get('/payouts/:id', ...merchantOnly, requireScope('payouts:read', 'payo
 const endpointSchema = z.object({
   url: z.string().url(),
   events: z.array(z.string().max(60)).max(50).optional(),
-  description: z.string().max(200).optional().nullable(),
+  description: cleanText(200).optional().nullable(),
   api_version: z.string().max(20).optional().nullable(),
 });
 v1Router.get('/webhook_events/types', publicLimit, (_req, res) => res.json(webhookCatalogue()));
@@ -852,7 +852,7 @@ v1Router.patch(
   writeLimit,
   wrap(async (req, res) => {
     const b = validate(
-      z.object({ url: z.string().url().optional(), events: z.array(z.string().max(60)).max(50).optional(), description: z.string().max(200).optional().nullable(), active: z.boolean().optional() }),
+      z.object({ url: z.string().url().optional(), events: z.array(z.string().max(60)).max(50).optional(), description: cleanText(200).optional().nullable(), active: z.boolean().optional() }),
       req.body,
     );
     res.json(await updateEndpoint(req.user!.id, String(req.params.id), b));

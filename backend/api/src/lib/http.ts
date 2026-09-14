@@ -2,6 +2,32 @@ import type { Request, Response, NextFunction } from 'express';
 import { z, ZodError } from 'zod';
 import { badRequest } from './errors';
 
+/** Free text typed by a person (notes, descriptions): control characters and bidirectional overrides are stripped, length capped. */
+export const cleanText = (max: number) =>
+  z
+    .string()
+    .max(max)
+    // eslint-disable-next-line no-control-regex
+    .transform((s) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim());
+
+/**
+ * A merchant redirect target (success / cancel URL): http(s) only — never javascript:, data: or a custom scheme — and
+ * plain http only for local development hosts.
+ */
+export const redirectUrl = z
+  .string()
+  .url()
+  .max(2048)
+  .refine((u) => {
+    try {
+      const url = new URL(u);
+      if (url.protocol === 'https:') return true;
+      return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    } catch {
+      return false;
+    }
+  }, 'Redirect URLs must use https (http only for localhost)');
+
 export function validate<S extends z.ZodTypeAny>(schema: S, data: unknown): z.output<S> {
   try {
     return schema.parse(data);

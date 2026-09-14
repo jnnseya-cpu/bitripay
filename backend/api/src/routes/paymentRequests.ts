@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { validate, wrap, parsePagination } from '../lib/http';
+import { validate, wrap, parsePagination, redirectUrl, cleanText } from '../lib/http';
 import { requireAuth } from '../middleware/auth';
 import { createPaymentRequest, listPaymentRequests, getPaymentRequestByCode, toPaymentRequest, payWithWallet, cancelPaymentRequest, declinePaymentRequest } from '../services/paymentRequests';
 import { getCurrency } from '../services/currencies';
@@ -17,7 +17,7 @@ const createSchema = z.object({
   kind: z.enum(['qr', 'link', 'request']).default('link'),
   amount: z.string().optional().nullable(),
   currency: z.string().length(3),
-  description: z.string().max(300).optional().nullable(),
+  description: cleanText(300).optional().nullable(),
   payer: z.string().optional().nullable(),
   expiresInMinutes: z
     .number()
@@ -26,8 +26,8 @@ const createSchema = z.object({
     .max(60 * 24 * 90)
     .optional()
     .nullable(),
-  successUrl: z.string().url().optional().nullable(),
-  cancelUrl: z.string().url().optional().nullable(),
+  successUrl: redirectUrl.optional().nullable(),
+  cancelUrl: redirectUrl.optional().nullable(),
   metadata: z.record(z.unknown()).optional(),
   allowedMethods: z.array(z.enum(['wallet', 'card', 'mobile_money', 'bank', 'virtual_card'])).optional(),
 });
@@ -69,7 +69,7 @@ paymentRequestsRouter.get(
 paymentRequestsRouter.post(
   '/:code/pay',
   wrap(async (req, res) => {
-    const body = validate(z.object({ amount: z.string().optional().nullable(), note: z.string().max(200).optional().nullable(), pin: z.string().optional() }), req.body);
+    const body = validate(z.object({ amount: z.string().optional().nullable(), note: cleanText(200).optional().nullable(), pin: z.string().optional() }), req.body);
     assertPin(req.user!, body.pin, req);
     const row = getPaymentRequestByCode(String(req.params.code));
     const cur = getCurrency(row.currency);

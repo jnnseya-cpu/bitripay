@@ -99,7 +99,13 @@ function resolveBearer(req: Request): UserRow | null {
   if (!payload) throw unauthorized('Session expired. Please sign in again.', 'invalid_token');
   if (payload.mfa) throw unauthorized('Two-factor authentication required', 'mfa_required');
   req.authVia = 'jwt';
-  return findUserById(payload.sub) ?? null;
+  const user = findUserById(payload.sub) ?? null;
+  // Password change, sign-out everywhere and closure invalidate every token issued before that moment.
+  if (user?.status === 'closed') throw forbidden('This account has been closed', 'account_closed');
+  // Second resolution (JWT iat): a token issued in a second strictly before the invalidation is refused.
+  if (user?.sessions_invalidated_at && payload.iat !== undefined && payload.iat < Math.floor(Date.parse(user.sessions_invalidated_at) / 1000))
+    throw unauthorized('Session expired. Please sign in again.', 'invalid_token');
+  return user;
 }
 
 export function optionalAuth(req: Request, _res: Response, next: NextFunction) {

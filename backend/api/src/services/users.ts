@@ -22,7 +22,10 @@ export interface UserRow {
   business_name: string | null;
   pin_hash: string | null;
   kyc_status: User['kycStatus'];
-  status: 'active' | 'suspended';
+  status: 'active' | 'suspended' | 'closed';
+  /** Tokens issued before this instant are refused (password change, sign-out everywhere, closure). */
+  sessions_invalidated_at?: string | null;
+  closed_at?: string | null;
   email_verified: number;
   phone_verified: number;
   two_factor_secret: string | null;

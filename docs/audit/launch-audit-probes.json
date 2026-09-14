@@ -1,0 +1,223 @@
+{
+  "api": "http://127.0.0.1:4321",
+  "ranAt": "2026-09-14T21:49:07.073Z",
+  "counts": {
+    "PASS": 34
+  },
+  "results": [
+    {
+      "id": "health",
+      "area": "build",
+      "status": "PASS",
+      "evidence": "GET /api/health → 200 {\"ok\":true,\"app\":\"BitriPay\",\"time\":\"2026-09-14T21:49:00.842Z\"}"
+    },
+    {
+      "id": "headers.api",
+      "area": "security",
+      "status": "PASS",
+      "evidence": "x-content-type-options=nosniff x-frame-options=DENY referrer-policy=strict-origin-when-cross-origin x-powered-by=absent (HSTS is set at the TLS edge)"
+    },
+    {
+      "id": "error.schema.404",
+      "area": "api",
+      "status": "PASS",
+      "evidence": "→ 404 {\"error\":{\"code\":\"not_found\",\"message\":\"Route not found\"}}"
+    },
+    {
+      "id": "error.schema.malformed-json",
+      "area": "api",
+      "status": "PASS",
+      "evidence": "→ 400 {\"error\":{\"code\":\"invalid_json\",\"bp\":\"BP-2004\",\"message\":\"Malformed JSON body\"}}"
+    },
+    {
+      "id": "body.oversized",
+      "area": "api",
+      "status": "PASS",
+      "evidence": "13 MB body → 413"
+    },
+    {
+      "id": "auth.admin-login",
+      "area": "auth",
+      "status": "PASS",
+      "evidence": "admin login → 200"
+    },
+    {
+      "id": "auth.wrong-password",
+      "area": "auth",
+      "status": "PASS",
+      "evidence": "→ 401 invalid_credentials"
+    },
+    {
+      "id": "auth.enumeration",
+      "area": "auth",
+      "status": "PASS",
+      "evidence": "unknown user → 401 invalid_credentials; known user → 401 invalid_credentials"
+    },
+    {
+      "id": "auth.tampered-token",
+      "area": "auth",
+      "status": "PASS",
+      "evidence": "forged signature → 401 invalid_token"
+    },
+    {
+      "id": "auth.password-policy",
+      "area": "auth",
+      "status": "PASS",
+      "evidence": "5-char password → 400"
+    },
+    {
+      "id": "auth.session-invalidated-on-password-change",
+      "area": "auth",
+      "status": "PASS",
+      "evidence": "password change → 200; old token → 401"
+    },
+    {
+      "id": "authz.admin-routes",
+      "area": "authz",
+      "status": "PASS",
+      "evidence": "no token → 401; customer token → 403/403"
+    },
+    {
+      "id": "authz.idor.payment-request",
+      "area": "authz",
+      "status": "PASS",
+      "evidence": "create → 201; cancel by other party → 403; cancel by owner → 200"
+    },
+    {
+      "id": "authz.idor.transaction",
+      "area": "authz",
+      "status": "PASS",
+      "evidence": "fund → true (adjust→201 create-checker→201 checker-login→200 pin→200 approve→200 ); transfer → 201 ; read by stranger → 404; read by counterparty → 200"
+    },
+    {
+      "id": "authz.maker-checker",
+      "area": "financial",
+      "status": "PASS",
+      "evidence": "proposal → 201; author approving own proposal → 403"
+    },
+    {
+      "id": "money.invalid-amounts",
+      "area": "financial",
+      "status": "PASS",
+      "evidence": "-5.00→400 0→422 abc→400 1e12→400 0.001→400 99999999999999→400"
+    },
+    {
+      "id": "money.band-minimum",
+      "area": "financial",
+      "status": "PASS",
+      "evidence": "0.50 transfer → 422 amount_below_minimum"
+    },
+    {
+      "id": "money.insufficient-funds",
+      "area": "financial",
+      "status": "PASS",
+      "evidence": "→ 422 insufficient_funds"
+    },
+    {
+      "id": "money.wrong-pin",
+      "area": "financial",
+      "status": "PASS",
+      "evidence": "wrong PIN → 403 invalid_pin"
+    },
+    {
+      "id": "money.idempotency",
+      "area": "financial",
+      "status": "PASS",
+      "evidence": "first → 201; replay → same id true; reuse with other body → 409"
+    },
+    {
+      "id": "money.concurrent-double-spend",
+      "area": "financial",
+      "status": "PASS",
+      "evidence": "balance 2596 → 854; 2/20 parallel transfers of 865 accepted (max 3 could fit)"
+    },
+    {
+      "id": "money.unicode-note",
+      "area": "api",
+      "status": "PASS",
+      "evidence": "→ 201; stored note \"Mbote 🇨🇩 <script>alert(1)</script>\""
+    },
+    {
+      "id": "cors.no-credentials",
+      "area": "security",
+      "status": "PASS",
+      "evidence": "ACAO=https://evil.example ACAC=absent"
+    },
+    {
+      "id": "webhook.forged-processor-callback",
+      "area": "security",
+      "status": "PASS",
+      "evidence": "unsigned Stripe event → 400"
+    },
+    {
+      "id": "ssrf.webhook-endpoint",
+      "area": "security",
+      "status": "PASS",
+      "evidence": "http://127.0.0.1:4321/api/health→400 https://169.254.169.254/latest/meta-data→400 https://localhost/x→400"
+    },
+    {
+      "id": "redirect.javascript-url",
+      "area": "security",
+      "status": "PASS",
+      "evidence": "javascript: success_url → 400"
+    },
+    {
+      "id": "xss.blog-markdown",
+      "area": "security",
+      "status": "PASS",
+      "evidence": "post → 201; page → 200; raw script/onerror/javascript: leaked → false"
+    },
+    {
+      "id": "path.traversal",
+      "area": "security",
+      "status": "PASS",
+      "evidence": "/legal/..%2F..%2Fetc%2Fpasswd→404 /legal/../../etc/passwd→404 /brand/../../package.json→404 /lite/..%2F..%2F→404"
+    },
+    {
+      "id": "rate-limit.public-site",
+      "area": "security",
+      "status": "PASS",
+      "evidence": "429 within 260 requests (limit 240/min per client)"
+    },
+    {
+      "id": "privacy.account-closure",
+      "area": "privacy",
+      "status": "PASS",
+      "evidence": "wrong password → 400; close → 200; token after → 403; login after → 401"
+    },
+    {
+      "id": "ledger.reconcile-after-probes",
+      "area": "financial",
+      "status": "PASS",
+      "evidence": "ledger ok=true (6 tx) chain ok=true guardian=normal"
+    },
+    {
+      "id": "perf.config-read",
+      "area": "performance",
+      "status": "PASS",
+      "evidence": "300 concurrent GET /api/config in 567 ms: p50 281 ms, p95 520 ms, p99 541 ms, errors 0",
+      "p50": 281,
+      "p95": 520,
+      "p99": 541,
+      "errors": 0,
+      "wallMs": 567
+    },
+    {
+      "id": "perf.transfers",
+      "area": "performance",
+      "status": "PASS",
+      "evidence": "40 concurrent transfers in 199 ms: 20 posted, refused {\"insufficient_funds\":20} (controls, not faults), p50 195 ms, p95 197 ms, p99 197 ms; ledger ok=true",
+      "p50": 195,
+      "p95": 197,
+      "p99": 197,
+      "posted": 20,
+      "wallMs": 199
+    },
+    {
+      "id": "auth.brute-force-limit",
+      "area": "auth",
+      "status": "PASS",
+      "evidence": "429 after 15 attempts (limit 30 per 15 min per client)"
+    }
+  ]
+}

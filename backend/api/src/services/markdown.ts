@@ -3,6 +3,13 @@
  * unordered lists, blockquotes, fenced code, tables, images, links, bold / italic / inline code, horizontal rules.
  * Output is escaped first, so authored content cannot inject scripts. Heading ids are generated for the table of contents.
  */
+/** Only http(s), mailto, tel and relative targets survive into href/src; anything else (javascript:, data:, vbscript:) becomes '#'. */
+export function safeUrl(url: string): string {
+  const u = url.trim();
+  if (/^(https?:\/\/|mailto:|tel:|\/|#|\.\/|\.\.\/)/i.test(u) && !/[\s"'<>]/.test(u)) return u;
+  return '#';
+}
+
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -19,10 +26,10 @@ export function slugify(s: string): string {
 function inline(text: string): string {
   let t = escapeHtml(text);
   t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
-  t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_m, alt, src, title) => `<img src="${src}" alt="${alt}"${title ? ` title="${title}"` : ''} loading="lazy">`);
+  t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_m, alt, src, title) => `<img src="${safeUrl(src)}" alt="${alt}"${title ? ` title="${title}"` : ''} loading="lazy">`);
   t = t.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (_m, label, href, title) => {
     const external = /^https?:\/\//i.test(href) && !/bitripay/i.test(href);
-    return `<a href="${href}"${title ? ` title="${title}"` : ''}${external ? ' rel="noopener" target="_blank"' : ''}>${label}</a>`;
+    return `<a href="${safeUrl(href)}"${title ? ` title="${title}"` : ''}${external ? ' rel="noopener" target="_blank"' : ''}>${label}</a>`;
   });
   t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   t = t.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');

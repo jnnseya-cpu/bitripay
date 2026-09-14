@@ -17,6 +17,11 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     res.status(413).json({ error: { code: 'payload_too_large', bp: 'BP-2000', message: 'Request body too large' } });
     return;
   }
+  // Money parsing (shared `toMinor`) rejects malformed amounts with a plain Error: that is the caller's input, never a fault.
+  if (typeof anyErr?.message === 'string' && /^(Invalid amount|Amount supports at most \d+ decimal places|Amount too large)$/.test(anyErr.message)) {
+    res.status(400).json({ error: { code: 'invalid_amount', bp: bpCode('invalid_amount', 400), message: anyErr.message } });
+    return;
+  }
   if (anyErr?.type === 'entity.parse.failed') {
     res.status(400).json({ error: { code: 'invalid_json', bp: 'BP-2004', message: 'Malformed JSON body' } });
     return;

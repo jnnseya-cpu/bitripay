@@ -108,11 +108,22 @@ export function createApp() {
   // Correlation id first: every response (including parse errors and 404s) echoes X-Correlation-Id and every
   // service down the chain can read it from the request context.
   app.use(correlation);
+  // Baseline security headers on every response, whatever proxy sits in front (the TLS edge adds HSTS on top).
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self), payment=(self)');
+    // JSON and feeds are never framed; server-rendered pages (checkout, Lite, site) may be framed only by the web app.
+    res.setHeader('X-Frame-Options', req.path.startsWith('/api/') || req.path.startsWith('/v1/') ? 'DENY' : 'SAMEORIGIN');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    next();
+  });
   app.use(sloMiddleware);
   app.use(
     cors({
+      // Sessions are bearer tokens in the Authorization header, never cookies: any origin may call, none may send credentials.
       origin: (origin, cb) => cb(null, true),
-      credentials: true,
+      credentials: false,
     }),
   );
   app.use(

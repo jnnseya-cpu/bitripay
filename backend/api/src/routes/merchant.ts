@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { validate, wrap, parsePagination } from '../lib/http';
+import { validate, wrap, parsePagination, redirectUrl } from '../lib/http';
 import { requireAuth, requireMerchant } from '../middleware/auth';
 import {
   listApiKeys,
@@ -50,8 +50,8 @@ merchantRouter.put(
         bitcoinSettlement: z.enum(['btc', 'fiat']).optional(),
         settlementCurrency: z.string().length(3).optional().nullable(),
         autoSettle: z.boolean().optional(),
-        successUrl: z.string().url().optional().nullable(),
-        cancelUrl: z.string().url().optional().nullable(),
+        successUrl: redirectUrl.optional().nullable(),
+        cancelUrl: redirectUrl.optional().nullable(),
         brandColor: z
           .string()
           .regex(/^#[0-9a-fA-F]{6}$/)
@@ -126,8 +126,8 @@ v1Router.post(
         amount: z.string(),
         currency: z.string().length(3),
         description: z.string().max(300).optional().nullable(),
-        successUrl: z.string().url().optional().nullable(),
-        cancelUrl: z.string().url().optional().nullable(),
+        successUrl: redirectUrl.optional().nullable(),
+        cancelUrl: redirectUrl.optional().nullable(),
         customerEmail: z.string().email().optional().nullable(),
         metadata: z.record(z.unknown()).optional(),
         expiresInMinutes: z.number().int().positive().optional().nullable(),

@@ -17,7 +17,7 @@ export interface User extends PublicUser {
   emailVerified: boolean;
   phoneVerified: boolean;
   kycStatus: KycStatus;
-  status: 'active' | 'suspended';
+  status: 'active' | 'suspended' | 'closed';
   hasPin: boolean;
   twoFactorEnabled: boolean;
   /** Loud sound + vibration for money events (default on). */

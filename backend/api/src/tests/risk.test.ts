@@ -310,6 +310,11 @@ describe('settlement-account change protection', () => {
     // after a password change no destination can be added for a day
     const pw = await request(app).post('/api/account/password').set(u.auth).send({ currentPassword: 'Password123!', newPassword: 'NewPassword456!' });
     expect(pw.status, JSON.stringify(pw.body)).toBe(200);
+    // the password change ended every earlier session: sign in again with the new password
+    await new Promise((r) => setTimeout(r, 1100));
+    const relogin = await request(app).post('/api/auth/login').send({ identifier: u.user.email, password: 'NewPassword456!' });
+    expect(relogin.status, JSON.stringify(relogin.body)).toBe(200);
+    u.auth = { Authorization: `Bearer ${relogin.body.token}` };
     const blocked = await request(app).post('/api/bank-accounts').set(u.auth).send({ bankName: 'Third Bank', accountName: 'Third Holder', accountNumber: '33334444', currency: 'USD', pin: '1234' });
     expect(blocked.status, JSON.stringify(blocked.body)).toBe(403);
     expect(blocked.body.error.code).toBe('destination_locked');

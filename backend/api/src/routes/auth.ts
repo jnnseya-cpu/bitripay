@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { AppError } from '../lib/errors';
 import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
 import { rateLimit } from '../middleware/rateLimit';
@@ -14,6 +15,33 @@ import { badRequest, conflict } from '../lib/errors';
 
 export const authRouter = Router();
 const authLimit = rateLimit({ windowMs: 15 * 60_000, max: 30, keyPrefix: 'auth' });
+/**
+ * Per-account throttle on sign-in failures: credential stuffing spread across many addresses still meets a wall per
+ * identifier (10 failures in 15 minutes); a successful sign-in clears the count. In memory, like the client limiter.
+ */
+const LOGIN_FAILURES = new Map<string, number[]>();
+const LOGIN_FAIL_MAX = 10;
+const LOGIN_FAIL_WINDOW_MS = 15 * 60_000;
+function loginFailureKey(identifier: string) {
+  return identifier.trim().toLowerCase();
+}
+function assertAccountNotThrottled(identifier: string) {
+  const since = Date.now() - LOGIN_FAIL_WINDOW_MS;
+  const stamps = (LOGIN_FAILURES.get(loginFailureKey(identifier)) ?? []).filter((t) => t > since);
+  if (stamps.length >= LOGIN_FAIL_MAX)
+    throw new AppError(429, 'rate_limited', 'Too many failed sign-in attempts for this account. Try again later or reset your password.', {
+      retryAfterSeconds: Math.ceil((stamps[0] + LOGIN_FAIL_WINDOW_MS - Date.now()) / 1000),
+      scope: 'auth_account',
+    });
+}
+function recordLoginFailure(identifier: string) {
+  const key = loginFailureKey(identifier);
+  const since = Date.now() - LOGIN_FAIL_WINDOW_MS;
+  const stamps = (LOGIN_FAILURES.get(key) ?? []).filter((t) => t > since);
+  stamps.push(Date.now());
+  LOGIN_FAILURES.set(key, stamps);
+  if (LOGIN_FAILURES.size > 50_000) LOGIN_FAILURES.clear();
+}
 
 const registerSchema = z.object({
   fullName: z.string().min(2).max(120),
@@ -89,7 +117,14 @@ authRouter.post(
   authLimit,
   wrap(async (req, res) => {
     const body = validate(z.object({ identifier: z.string().min(3), password: z.string().min(1) }), req.body);
-    res.json(auth.login(body.identifier, body.password));
+    assertAccountNotThrottled(body.identifier);
+    try {
+      res.json(auth.login(body.identifier, body.password));
+    } catch (err) {
+      if (err instanceof AppError && err.status === 401) recordLoginFailure(body.identifier);
+      throw err;
+    }
+    LOGIN_FAILURES.delete(loginFailureKey(body.identifier));
   }),
 );
 

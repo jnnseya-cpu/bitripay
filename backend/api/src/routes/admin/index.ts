@@ -51,6 +51,7 @@ import { adminInsightsRouter } from './insights';
 import { adminSystemRouter } from './system';
 import { adminWhatsAppRouter } from './whatsapp';
 import { adminSupervisionRouter } from './supervision';
+import { closeAccount, closureBlockers } from '../../services/accountClosure';
 import { assertPricingAboveFloor } from '../../services/assist/gateway';
 import { toBase as toBaseMinor } from '../../services/currencies';
 /** Price-currency minor units → US dollars (the base currency is USD-denominated; other bases convert at the platform rate). */
@@ -527,6 +528,17 @@ adminRouter.post('/emoney/reconcile', requirePermission('treasury'), (req, res) 
 });
 adminRouter.get('/emoney/reconciliations', requirePermission('reports'), (req, res) => res.json({ items: listReconciliations(req.query.programmeId ? String(req.query.programmeId) : null) }));
 /** Freeze / release a holder's balance where legally permitted (attributable, step-up protected). */
+/** Administrative closure on a lawful erasure request: same blockers as self-closure, step-up PIN, audited. */
+adminRouter.get('/users/:id/closure', requirePermission('users'), (req, res) => res.json({ blockers: closureBlockers(getUserById(String(req.params.id))) }));
+adminRouter.post('/users/:id/close', requirePermission('users'), (req, res) => {
+  const body = validate(z.object({ reason: z.string().min(4).max(300), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  const target = getUserById(String(req.params.id));
+  if (target.role === 'admin') throw badRequest('Administrator accounts are removed under Administrators, not closed here');
+  const closed = closeAccount(target, { type: 'admin', id: req.user!.id }, body.reason);
+  audit(req.user!.id, 'user.closed', 'user', target.id, { reason: body.reason });
+  res.json({ user: toUser(closed) });
+});
 adminRouter.post('/users/:id/wallets/:currency/freeze', requirePermission('treasury'), (req, res) => {
   const body = validate(z.object({ freeze: z.boolean().default(true), reason: z.string().min(4).max(300), pin: z.string().optional() }), req.body);
   assertAdminStepUp(req.user!, body.pin, req);

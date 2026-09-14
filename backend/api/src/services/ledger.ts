@@ -312,7 +312,12 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
   return db.transaction(() => {
     if (input.idempotencyKey && input.senderUserId) {
       const existing = db.prepare('SELECT * FROM transactions WHERE sender_user_id = ? AND idempotency_key = ?').get(input.senderUserId, input.idempotencyKey) as TransactionRow | undefined;
-      if (existing) return existing;
+      if (existing) {
+        // A replay returns the original posting; the same key with a different body is a conflict, never a silent success (IDM-001).
+        const same = existing.type === input.type && existing.amount === input.amount && existing.currency === input.currency && (existing.receiver_user_id ?? null) === (input.receiverUserId ?? null);
+        if (!same) throw conflict(`This idempotency key was already used with a different request (${existing.reference})`, 'idempotency_key_reused');
+        return existing;
+      }
     }
     const treasury = getSystemUser('treasury');
     const revenue = getSystemUser('fees');
