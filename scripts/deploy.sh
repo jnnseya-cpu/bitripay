@@ -13,8 +13,15 @@ ENV_FILE=deploy/.env.production
 MODE="${DEPLOY_MODE:-dedicated}"
 for arg in "$@"; do case "$arg" in --shared-host) MODE=shared-host ;; --dedicated) MODE=dedicated ;; esac; done
 [ -f "$ENV_FILE" ] || { echo "Missing $ENV_FILE (copy deploy/.env.production.example and fill it)"; exit 1; }
+EXTRA_FILES=()
 if [ "$MODE" = shared-host ]; then
   COMPOSE_FILE=deploy/docker-compose.shared-host.yml
+  # A proxy that is itself a container reaches BitriPay over its own network (BITRIPAY_EDGE_NETWORK, e.g. app_default).
+  EDGE_NETWORK=$(grep -E '^BITRIPAY_EDGE_NETWORK=.+' "$ENV_FILE" | cut -d= -f2 || true)
+  if [ -n "$EDGE_NETWORK" ]; then
+    docker network inspect "$EDGE_NETWORK" >/dev/null 2>&1 || { echo "BITRIPAY_EDGE_NETWORK=$EDGE_NETWORK is not an existing Docker network (docker network ls)"; exit 1; }
+    EXTRA_FILES=(-f deploy/docker-compose.edge.yml)
+  fi
 else
   COMPOSE_FILE=deploy/docker-compose.prod.yml
   # Refuse to take 80/443 from a web server that is already serving other sites on this host.
@@ -43,7 +50,7 @@ fi
 if [ "$MODE" = dedicated ]; then
   grep -Eq "^ACME_EMAIL=.+" "$ENV_FILE" || { echo "ACME_EMAIL is empty in $ENV_FILE (the address that receives TLS certificate notices)"; exit 1; }
 fi
-compose() { docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; }
+compose() { docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "${EXTRA_FILES[@]}" "$@"; }
 compose build
 compose up -d
 echo "Waiting for the API health check…"
@@ -62,7 +69,11 @@ echo
 if [ "$MODE" = shared-host ]; then
   API_PORT=$(grep -E '^BITRIPAY_API_PORT=' "$ENV_FILE" | cut -d= -f2); WEB_PORT=$(grep -E '^BITRIPAY_WEB_PORT=' "$ENV_FILE" | cut -d= -f2); ADMIN_PORT=$(grep -E '^BITRIPAY_ADMIN_PORT=' "$ENV_FILE" | cut -d= -f2)
   echo "Containers are up on localhost only: web 127.0.0.1:${WEB_PORT:-8080}, admin 127.0.0.1:${ADMIN_PORT:-8081}, API 127.0.0.1:${API_PORT:-4000}."
-  echo "Point your existing web server at them: deploy/shared-host/nginx-bitripay.conf (or apache-bitripay.conf, Caddyfile.snippet), then certbot."
+  if [ -n "${EDGE_NETWORK:-}" ]; then
+    echo "They also joined the Docker network $EDGE_NETWORK as bitripay-web, bitripay-admin and bitripay-api: append deploy/shared-host/Caddyfile.container.snippet (or the equivalent for your proxy container) and reload it."
+  else
+    echo "Point your existing web server at them: deploy/shared-host/nginx-bitripay.conf (or apache-bitripay.conf, Caddyfile.snippet), then certbot."
+  fi
 else
   echo "Stack is up. Web https://${DOMAIN_VALUE}, admin https://admin.${DOMAIN_VALUE}, API https://api.${DOMAIN_VALUE}"
 fi

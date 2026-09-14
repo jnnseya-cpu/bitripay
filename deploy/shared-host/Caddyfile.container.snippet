@@ -1,0 +1,34 @@
+# BitriPay behind a Caddy that runs as a Docker container on the same VPS (the BitriPay containers joined its network
+# through deploy/docker-compose.edge.yml). Append to the Caddyfile that container mounts, then reload without downtime:
+#   docker exec <caddy container> caddy reload --config /etc/caddy/Caddyfile
+# Caddy obtains the certificates itself once DNS points at this VPS.
+www.bitripay.com {
+	redir https://bitripay.com{uri} permanent
+}
+bitripay.com {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	reverse_proxy bitripay-web:80
+}
+admin.bitripay.com {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		X-Robots-Tag noindex
+	}
+	reverse_proxy bitripay-admin:80
+}
+api.bitripay.com {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+	}
+	reverse_proxy bitripay-api:4000
+}

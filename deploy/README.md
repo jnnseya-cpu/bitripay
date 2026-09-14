@@ -50,7 +50,8 @@ Then hand the three host names to that web server (DNS records as in section 1, 
 | --- | --- |
 | Nginx | `cp deploy/shared-host/nginx-bitripay.conf /etc/nginx/sites-available/bitripay.conf && ln -s /etc/nginx/sites-available/bitripay.conf /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx`, then `certbot --nginx -d bitripay.com -d www.bitripay.com -d admin.bitripay.com -d api.bitripay.com` |
 | Apache | `cp deploy/shared-host/apache-bitripay.conf /etc/apache2/sites-available/bitripay.conf && a2enmod proxy proxy_http proxy_wstunnel headers && a2ensite bitripay && apachectl configtest && systemctl reload apache2`, then `certbot --apache -d bitripay.com -d www.bitripay.com -d admin.bitripay.com -d api.bitripay.com` |
-| Caddy | append `deploy/shared-host/Caddyfile.snippet` to the host Caddyfile and `systemctl reload caddy` (certificates are automatic) |
+| Caddy on the host | append `deploy/shared-host/Caddyfile.snippet` to the host Caddyfile and `systemctl reload caddy` (certificates are automatic) |
+| A proxy that is itself a container (Caddy, Traefik, Nginx Proxy Manager) | set `BITRIPAY_EDGE_NETWORK` in the env file to the network that container is attached to (`docker inspect <proxy> --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'`); the deploy then joins the BitriPay containers to it. For Caddy: append `deploy/shared-host/Caddyfile.container.snippet` to the Caddyfile that container mounts and `docker exec <proxy> caddy reload --config /etc/caddy/Caddyfile`; for Traefik add router labels for `bitripay-web:80`, `bitripay-admin:80`, `bitripay-api:4000`; for Nginx Proxy Manager add three proxy hosts to those names |
 | hPanel / a hosting panel | add the three domains as proxied sites pointing at the localhost ports above, with SSL enabled by the panel |
 
 Install certbot once if it is missing: `apt-get install -y certbot python3-certbot-nginx` (or `python3-certbot-apache`).

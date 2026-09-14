@@ -11,12 +11,14 @@ services:
     extends:
       file: docker-compose.prod.yml
       service: api
+    container_name: bitripay-api
     ports:
       - '127.0.0.1:${BITRIPAY_API_PORT:-4000}:4000'
   web:
     extends:
       file: docker-compose.prod.yml
       service: web
+    container_name: bitripay-web
     ports:
       - '127.0.0.1:${BITRIPAY_WEB_PORT:-8080}:80'
     depends_on:
@@ -26,6 +28,7 @@ services:
     extends:
       file: docker-compose.prod.yml
       service: admin
+    container_name: bitripay-admin
     ports:
       - '127.0.0.1:${BITRIPAY_ADMIN_PORT:-8081}:80'
     depends_on:
@@ -35,6 +38,7 @@ services:
     extends:
       file: docker-compose.prod.yml
       service: backup
+    container_name: bitripay-backup
 volumes:
   api-data:
   backups:

@@ -1,0 +1,22 @@
+# Add-on for a shared host whose reverse proxy is itself a Docker container (Caddy, Traefik, Nginx Proxy Manager, an
+# nginx container): the BitriPay containers also join that proxy's network so it can reach them by name
+# (bitripay-web:80, bitripay-admin:80, bitripay-api:4000). The network is named by BITRIPAY_EDGE_NETWORK in
+# deploy/.env.production (`docker network ls` shows it; the proxy container's network from `docker inspect`).
+# deploy.sh adds this file automatically when BITRIPAY_EDGE_NETWORK is set. Nothing else on that network is changed.
+services:
+  api:
+    networks:
+      - default
+      - edge
+  web:
+    networks:
+      - default
+      - edge
+  admin:
+    networks:
+      - default
+      - edge
+networks:
+  edge:
+    external: true
+    name: ${BITRIPAY_EDGE_NETWORK}
