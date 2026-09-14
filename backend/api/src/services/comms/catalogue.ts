@@ -345,7 +345,7 @@ export const COMMS_EVENTS: CommsEvent[] = [
   }),
   ev('wallet', 'statement.ready', 'Statement ready', 'Your {{period}} statement is ready', 'Download your {{period}} statement from the app or the link below. {{link}}', {
     channels: ['email', 'inapp'],
-    sample: { period: 'August 2026', link: 'https://bitripay.com/statements' },
+    sample: { period: 'August 2026', link: 'https://www.bitripay.com/statements' },
   }),
   ev('wallet', 'savings.goal.reached', 'Savings goal reached', 'You reached your goal: {{goal}}', 'Congratulations, {{amount}} saved.', {
     severity: 'success',
@@ -973,7 +973,7 @@ export const COMMS_EVENTS: CommsEvent[] = [
   ev('support', 'support.ticket.resolved', 'Ticket resolved', 'Ticket {{number}} resolved', 'Tell us how we did: {{link}}', {
     severity: 'success',
     channels: ['email', 'inapp'],
-    sample: { number: 'T-1042', link: 'https://bitripay.com/support' },
+    sample: { number: 'T-1042', link: 'https://www.bitripay.com/support' },
   }),
   ev('support', 'support.ticket.closed', 'Ticket closed', 'Ticket {{number}} closed', 'Reopen it any time by replying.', { channels: ['inapp'], sample: { number: 'T-1042' } }),
   ev('support', 'chat.message', 'New chat message', '{{agent}}: {{preview}}', '{{preview}}', {
@@ -991,7 +991,7 @@ export const COMMS_EVENTS: CommsEvent[] = [
   }),
   ev('support', 'nps.survey', 'Quick question', 'How likely are you to recommend {{appName}}?', 'One tap, thirty seconds: {{link}}', {
     channels: ['email', 'inapp'],
-    sample: { link: 'https://bitripay.com/survey' },
+    sample: { link: 'https://www.bitripay.com/survey' },
   }),
 
   // ---------------------------------------------------------------- Platform & System
@@ -1078,13 +1078,13 @@ export const COMMS_EVENTS: CommsEvent[] = [
   ev('legal', 'terms.updated', 'Terms updated', 'Our terms are changing on {{date}}', 'Read what changes: {{link}}. Continuing to use {{appName}} after {{date}} means you accept them.', {
     mandatory: true,
     channels: ['email', 'inapp'],
-    sample: { date: '1 October 2026', link: 'https://bitripay.com/legal/terms' },
+    sample: { date: '1 October 2026', link: 'https://www.bitripay.com/legal/terms' },
   }),
   ev('legal', 'privacy.data_export_ready', 'Data export ready', 'Your data export is ready', 'Download it within {{days}} days: {{link}}', {
     severity: 'success',
     mandatory: true,
     channels: ['email', 'inapp'],
-    sample: { days: '7', link: 'https://bitripay.com/settings' },
+    sample: { days: '7', link: 'https://www.bitripay.com/settings' },
   }),
   ev(
     'legal',

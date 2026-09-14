@@ -130,7 +130,7 @@
         "safeguardingAccount": "SAFEGUARD-GBP-0001",
         "amlProgrammeRef": "AML-POL-2026-01",
         "dataProtectionRef": "ICO ZA000000",
-        "consumerDisclosureUrl": "https://bitripay.com/legal/terms"
+        "consumerDisclosureUrl": "https://www.bitripay.com/legal/terms"
       },
       "payoutCurrencies": [
         "USD"
