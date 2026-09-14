@@ -49,7 +49,8 @@ describe('go-live profile', () => {
     expect(approver.role).toBe('admin');
     expect(JSON.parse((approver as any).permissions)).toContain('issuance');
     expect(first.generatedPasswords).toEqual([{ email: 'approver@bitripay.com', password: expect.any(String) }]);
-    expect(getSmtpSettings().host).toBe('smtp.example.com');
+    expect(getSmtpSettings().host).toBe('smtp.hostinger.com');
+    expect(getSmtpSettings().secure).toBe(true);
     expect(first.remaining.join('\n')).toMatch(/approver@bitripay.com: sign in, set up two-factor/);
     expect(first.remaining.join('\n')).toMatch(/Corridor GBP→CD: press Go live/);
     expect(first.remaining.join('\n')).toMatch(/reserve funding/);
