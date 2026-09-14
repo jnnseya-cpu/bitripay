@@ -41,7 +41,7 @@ The database is `backend/api/data/bitripay.db` (`DATABASE_PATH` to move it). Mig
 | `npm run deps:check` | knip: unused files, exports and dependencies across the workspaces |
 | `npm run docs:http` | regenerates `docs-api.http` from the OpenAPI operation table |
 | `npm run test:backend` | API tests only (vitest, in-memory SQLite, ~1 min) — `cd backend/api && npx vitest run src/tests/core.test.ts` for one suite |
-| `npm run smoke` | 51 live checks with Playwright against `npm run dev` + `npm run seed` (see `scripts/README.md`) |
+| `npm run smoke` | live checks with Playwright against `npm run dev` + `npm run seed` (see `scripts/README.md`); the run prints the count and writes `shots/smoke/results.json` |
 | `npm run typecheck:mobile` / `typecheck:payout-device` | the Expo apps (run `npm install` inside each first) |
 
 CI (`.github/workflows/ci.yml`) runs `npm ci`, `npm run verify`, `npm run format:check`, `npm run deps:check` and `npm audit` on every push.

@@ -257,3 +257,24 @@ describe('positioning and trust copy on every surface', () => {
     expect(users).toMatch(/PERM_LABELS\[p\] \?\? p/);
   });
 });
+
+describe('default content upgrades', () => {
+  it('refreshes never-edited default pages, keeps administrator edits and still adds the national-switch section', async () => {
+    const { setSetting } = await import('../services/settings');
+    const { upsertPage, listPages } = await import('../services/cms');
+    const { ensureDefaultContent, _resetDefaultContentForTests } = await import('../content/defaults');
+    // simulate a deployment seeded before the national-switch section existed: an edited regulatory page without it
+    upsertPage({ slug: 'regulatory', title: 'Regulatory information', content: '## Authorisation status\n\nEdited by the compliance team.', published: true });
+    setSetting('content.version', 1);
+    setSetting('content.seededHashes', {});
+    _resetDefaultContentForTests();
+    const r = ensureDefaultContent();
+    expect(r.pages).toBeGreaterThan(0);
+    const regulatory = listPages(false).find((p) => p.slug === 'regulatory')!;
+    expect(regulatory.content).toContain('Edited by the compliance team.');
+    expect(regulatory.content).toContain('## National payment switch');
+    expect(regulatory.content).toContain('Instruction n°58');
+    // an untouched page is refreshed in place when the default changes
+    expect(listPages(false).find((p) => p.slug === 'about')!.content).toContain('never holds funds it is not licensed to hold');
+  });
+});
