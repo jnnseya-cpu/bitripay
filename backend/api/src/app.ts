@@ -62,6 +62,7 @@ import { ensureAdminExists } from './services/auth';
 import { ensureDefaultGateways, provisionRailsFromEnvironment } from './payments';
 import { getSystemUser } from './services/users';
 import { seedDefaultCatalogs } from './seedDefaults';
+import { ensureOfficialSanctionsSources, refreshAllSources } from './services/risk/compliance';
 
 export function bootstrap() {
   getDb();
@@ -84,6 +85,17 @@ export function bootstrap() {
   ensureDefaultBindings();
   if (!config.isProduction) ensureSimulationParticipants();
   seedDefaultCatalogs();
+  // Screening lists: the official consolidated lists are registered on first start and loaded straight away outside
+  // tests, so a fresh deployment screens against them before its first customer (the compliance job refreshes daily).
+  const seededLists = ensureOfficialSanctionsSources();
+  if (seededLists.length) console.log(`[compliance] registered official sanctions sources: ${seededLists.join(', ')}`);
+  if (!config.isTest)
+    void refreshAllSources({ onlyNeverRefreshed: true })
+      .then((r) => {
+        if (r.refreshed) console.log(`[compliance] loaded ${r.refreshed} sanctions list(s)`);
+        if (r.failed.length) console.warn(`[compliance] sanctions lists not loaded yet: ${r.failed.join('; ')}`);
+      })
+      .catch((err) => console.error('[compliance] sanctions refresh failed', (err as Error).message));
 }
 
 export function createApp() {

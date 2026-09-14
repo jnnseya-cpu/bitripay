@@ -336,7 +336,8 @@ describe('sanctions sources and the AML monitor', () => {
     expect(imp.body.imported).toBe(3);
     const entries = await request(app).get('/api/admin/risk/sanctions/sources').set(admin.auth).query({ source: 'ofac_sdn' });
     expect(entries.body.entries).toHaveLength(3);
-    expect(entries.body.items[0].lastVersion).toBe('2026-09-11');
+    // the official lists are registered at start-up too, so look the test source up by id
+    expect(entries.body.items.find((s: any) => s.id === 'ofac_sdn').lastVersion).toBe('2026-09-11');
     const sender = await registerUser(app);
     const target = await registerUser(app, { fullName: 'Sanctioned Tester Nine' });
     await fund(app, sender.user.id, '50.00');

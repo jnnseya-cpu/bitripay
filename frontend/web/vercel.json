@@ -1,0 +1,30 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://api.bitripay.com/api/:path*" },
+    { "source": "/v1/:path*", "destination": "https://api.bitripay.com/v1/:path*" },
+    { "source": "/lite/:path*", "destination": "https://api.bitripay.com/lite/:path*" },
+    { "source": "/lite", "destination": "https://api.bitripay.com/lite" },
+    { "source": "/blog/:path*", "destination": "https://api.bitripay.com/blog/:path*" },
+    { "source": "/blog", "destination": "https://api.bitripay.com/blog" },
+    { "source": "/legal/:path*", "destination": "https://api.bitripay.com/legal/:path*" },
+    { "source": "/about", "destination": "https://api.bitripay.com/about" },
+    { "source": "/contact", "destination": "https://api.bitripay.com/contact" },
+    { "source": "/brand/:path*", "destination": "https://api.bitripay.com/brand/:path*" },
+    { "source": "/sitemap.xml", "destination": "https://api.bitripay.com/sitemap.xml" },
+    { "source": "/feed.xml", "destination": "https://api.bitripay.com/feed.xml" },
+    { "source": "/robots.txt", "destination": "https://api.bitripay.com/robots.txt" },
+    { "source": "/llms.txt", "destination": "https://api.bitripay.com/llms.txt" },
+    { "source": "/llms-full.txt", "destination": "https://api.bitripay.com/llms-full.txt" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    }
+  ]
+}

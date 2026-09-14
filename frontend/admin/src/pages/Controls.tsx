@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, ConfirmButton, Field, Input, PageHeader, Select, Switch, Table, Tabs, fmtDate, useAsync } from '../components/ui';
@@ -200,12 +201,19 @@ export function Controls() {
             </Alert>
           )}
           <Table
-            head={['', 'Requirement', 'Status', 'What to do']}
+            head={['', 'Requirement', 'Status', 'What to do', '']}
             rows={golive.data.items.map((i: any) => [
               i.ok ? <Chip kind="success">ok</Chip> : <Chip kind={i.blocking ? 'danger' : 'warning'}>{i.blocking ? 'blocking' : 'recommended'}</Chip>,
               <b>{i.label}</b>,
               <span className="tiny">{i.detail}</span>,
               <span className="tiny muted">{i.ok ? '' : (i.fix ?? '')}</span>,
+              !i.ok && i.href ? (
+                <Link to={i.href} className="tiny">
+                  Open →
+                </Link>
+              ) : (
+                ''
+              ),
             ])}
           />
           <div className="row mt">

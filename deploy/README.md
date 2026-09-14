@@ -11,6 +11,51 @@ SQLite database lives on the `api-data` volume with a nightly backup on `backups
 | `admin.bitripay.com` | administration console | `admin` (static) + `api` |
 | `api.bitripay.com` | partner API, webhooks, channels (USSD, SMS, WhatsApp), OpenAPI | `api` |
 
+
+## 0. Where each layer runs
+
+BitriPay is one repository with three deployable layers and one library layer. The backend keeps its ledger in
+SQLite on a persistent disk and runs background jobs, so it needs a real server: a **Hostinger VPS** (KVM plan,
+Ubuntu with the Docker template). The two web front-ends are static builds and can sit either on the same VPS
+(default, one command, one bill) or on **Vercel**. **Firebase Hosting** cannot proxy the API paths the marketing
+pages, blog, legal pages and sitemap are served from, so it is not used. No other vendor is needed.
+
+| Layer | Folder | Recommended home | Alternative |
+| --- | --- | --- | --- |
+| Backend (API, ledger, jobs, SSR site pages, webhooks, channels) | `backend/api` | Hostinger VPS, container `api` behind Caddy | none: it needs a persistent disk and long-running jobs |
+| Customer web app (bitripay.com) | `frontend/web` | Hostinger VPS, container `web` | Vercel project with root `frontend/web` (`vercel.json` is included) |
+| Administration console (admin.bitripay.com) | `frontend/admin` | Hostinger VPS, container `admin` | Vercel project with root `frontend/admin` (`vercel.json` is included) |
+| Shared packages (`@bitripay/shared`, BitriQR, SDKs) | `shared/*` | not deployed: built into the three layers at image / build time | same |
+| Phone apps and payout device | `frontend/mobile`, `frontend/payout-device` | built with EAS against `https://api.bitripay.com` | same |
+
+### Hostinger VPS, step by step
+
+1. hPanel → VPS → order a KVM 2 (2 vCPU, 8 GB) or larger → operating system **Ubuntu 22.04 with Docker** →
+   set the root password and add your SSH key.
+2. hPanel → Domains → bitripay.com → DNS zone: create the records in section 1 below with the VPS IPv4.
+3. SSH in as root, then:
+
+```bash
+apt-get update && apt-get install -y git nodejs npm
+git clone https://github.com/jnnseya-cpu/bitripay.git /opt/bitripay && cd /opt/bitripay
+cp deploy/.env.production.example deploy/.env.production
+nano deploy/.env.production        # ACME_EMAIL, ADMIN_EMAIL, SMTP and SMS providers; secrets may stay empty
+npm run deploy
+```
+
+`npm run deploy` generates any secret left empty (JWT_SECRET, APP_SECRET and, printed once, ADMIN_PASSWORD), builds
+the three images, starts them behind Caddy and runs the go-live command. Hostinger's firewall (hPanel → VPS →
+Firewall) must allow 22, 80 and 443.
+
+### Front-ends on Vercel (optional)
+
+Create two Vercel projects from the same repository, root directory `frontend/web` and `frontend/admin`, framework
+Vite, build command `npm run build`, output `dist`; set the environment variable `VITE_API_URL=https://api.bitripay.com`
+on both. The included `vercel.json` files proxy `/api`, `/v1` and the site pages to the API and serve the SPA
+fallback. Point `bitripay.com` and `admin.bitripay.com` at Vercel (its A / CNAME targets) and keep
+`api.bitripay.com` on the VPS. Set `WEB_URL` / `ADMIN_URL` in `deploy/.env.production` to the same hosts; the API
+already allows those origins.
+
 ## 1. DNS
 
 Create these records at the registrar (A/AAAA to the host's public address; CAA is optional but recommended):
@@ -53,8 +98,13 @@ maker-checker queue covers the rest). Operator-API adapters and BTCPay remain av
 npm run deploy
 ```
 
-The script builds the three images, starts the stack, waits for the API health check and runs the go-live command
-inside the API container. The go-live command prints the digital-rail status, any optional external rail it provisioned, the checklist (blocking items marked ✗)
+The script generates any secret left empty in the env file, builds the three images, starts the stack, waits for the
+API health check and runs the go-live command inside the API container. In production these checklist items are green
+from the first start without console work: production secrets (generated), sandbox gateway off, live exchange rates
+(open.er-api.com, refreshed every 6 hours), KYC required before withdrawals, and the sanctions lists (the official
+US OFAC, UK OFSI, UN and EU consolidated lists are registered and loaded at start-up, then refreshed daily). What
+remains needs your documents and accounts: the e-money issuer programme and reserves, the corridor's regulatory
+arrangements, payout accounts and devices, collection numbers, and a second administrator with a PIN and 2FA. The go-live command prints the digital-rail status, any optional external rail it provisioned, the checklist (blocking items marked ✗)
 and the gate-to-scale metrics, and exits non-zero until every blocking item is green. Run it again at any time:
 
 ```bash

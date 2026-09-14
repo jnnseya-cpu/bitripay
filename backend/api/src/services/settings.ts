@@ -62,13 +62,15 @@ const DEFAULT_APP: AppSettings = {
   supportEmail: 'support@bitripay.local',
   exchangeMarginBps: 100,
   agentCommissionBps: 50,
-  rateAutoRefreshHours: 0,
-  rateProvider: 'manual',
+  // Production starts on live rates from a keyless provider refreshed every 6 hours; development keeps the test rates.
+  rateAutoRefreshHours: config.isProduction ? 6 : 0,
+  rateProvider: config.isProduction ? 'open_er_api' : 'manual',
   rateProviderKey: '',
   autoSettlement: { enabled: false, minAmount: 10_000, intervalHours: 24 },
   maintenanceMode: false,
   registrationOpen: true,
-  requireKycForWithdrawals: false,
+  // Production never pays out to an unverified customer; development keeps the toggle off for the sandbox flows.
+  requireKycForWithdrawals: config.isProduction,
   p2pFeeBps: 50,
 };
 

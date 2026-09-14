@@ -32,6 +32,8 @@ import {
   parseSanctionsCsv,
   refreshSource,
   CASE_DECISIONS,
+  SANCTIONS_FORMATS,
+  type SanctionsFormat,
 } from '../../services/risk/compliance';
 import { listSanctions } from '../../services/risk';
 import { getKycTierSettings, setTier, tierStatus, listKyb, getKyb, reviewKyb, TIER_LABELS } from '../../services/risk/kycTiers';
@@ -250,7 +252,7 @@ r.put('/sanctions/sources/:id', requirePermission('compliance'), (req, res) => {
     z.object({
       name: z.string().min(2).max(120),
       url: z.string().url().optional().nullable(),
-      format: z.enum(['csv', 'json']).optional(),
+      format: z.enum(SANCTIONS_FORMATS as [SanctionsFormat, ...SanctionsFormat[]]).optional(),
       kind: z.enum(['sanctions', 'pep']).optional(),
       enabled: z.boolean().optional(),
     }),

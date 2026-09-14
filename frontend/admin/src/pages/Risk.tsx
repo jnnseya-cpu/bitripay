@@ -375,12 +375,15 @@ function Policies({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
 
 function Sanctions({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
   const data = useAsync(() => api.get<any>('/api/admin/risk/sanctions/sources'), []);
-  const [src, setSrc] = useState({ id: 'ofac_sdn', name: 'OFAC SDN', url: '', kind: 'sanctions' });
+  const [src, setSrc] = useState({ id: '', name: '', url: '', kind: 'sanctions', format: 'csv' });
   const [imp, setImp] = useState({ id: 'ofac_sdn', version: new Date().toISOString().slice(0, 10), csv: '' });
   return (
     <div className="grid cols-2">
       <div className="card">
         <h4>Sources</h4>
+        <p className="tiny muted">
+          The official consolidated lists (US OFAC, UK OFSI, UN, EU) are registered at first start and refreshed daily; Refresh reloads one now. Add your screening provider as a further source.
+        </p>
         <Table
           head={['Source', 'Kind', 'Version', 'Entries', 'Refreshed', 'Error', '']}
           rows={(data.data?.items ?? []).map((s: any) => [
@@ -433,12 +436,22 @@ function Sanctions({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
               <option value="pep">pep</option>
             </Select>
           </Field>
+          <Field label="Format" hint="Official lists are parsed as published; csv accepts kind,value or the OFAC layout">
+            <Select value={src.format} onChange={(e) => setSrc({ ...src, format: e.target.value })}>
+              <option value="csv">csv (kind,value or OFAC layout)</option>
+              <option value="json">json rows</option>
+              <option value="ofac_sdn">US OFAC SDN / consolidated</option>
+              <option value="uk_ofsi">UK OFSI consolidated list</option>
+              <option value="un_xml">UN Security Council XML</option>
+              <option value="eu_fsf">EU financial sanctions file</option>
+            </Select>
+          </Field>
         </div>
         <Button
           size="sm"
           onClick={() =>
             api
-              .put(`/api/admin/risk/sanctions/sources/${src.id}`, { name: src.name, url: src.url || null, kind: src.kind, format: 'csv' })
+              .put(`/api/admin/risk/sanctions/sources/${src.id}`, { name: src.name, url: src.url || null, kind: src.kind, format: src.format })
               .then(() => {
                 ok('Saved');
                 data.reload();

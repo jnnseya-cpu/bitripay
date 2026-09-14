@@ -22,6 +22,7 @@ import { listOperators } from './momo';
 import { listConnections } from './switch/connections';
 import { getModules } from './modules';
 import { listAgents } from './agents';
+import { listSources } from './risk/compliance';
 
 export interface ChecklistItem {
   id: string;
@@ -30,6 +31,8 @@ export interface ChecklistItem {
   blocking: boolean;
   detail: string;
   fix?: string;
+  /** Console screen where the item is completed (admin route); absent when the fix lives in the host environment. */
+  href?: string;
 }
 
 export function goLiveChecklist(): { mode: string; readyForLive: boolean; items: ChecklistItem[]; gateToScale: GateToScale } {
@@ -174,13 +177,23 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
     detail: programmes.map((p) => `${p.currency}: reserves ${p.position.clearedReserves}, outstanding ${p.position.liabilities}, headroom ${p.position.headroom}`).join(' · ') || 'n/a',
     fix: 'Gateway controls → E-money → confirm reserve funding (maker-checker) until every currency is fully covered',
   });
+  const sanctionSources = listSources().filter((x) => x.enabled);
+  const loadedSources = sanctionSources.filter((x) => (x.lastCount ?? 0) > 0);
+  const sanctionEntries = listSanctions({ limit: 5000 }).length;
   items.push({
     id: 'sanctions',
-    label: 'Sanctions / screening list loaded',
-    ok: listSanctions().length > 0,
+    label: 'Sanctions / screening lists loaded (official consolidated lists refresh daily)',
+    ok: sanctionEntries > 0,
     blocking: true,
-    detail: `${listSanctions().length} entries`,
-    fix: 'Gateway controls → Sanctions → import your screening provider list',
+    detail: sanctionSources.length
+      ? `${sanctionEntries >= 5000 ? '5000+' : sanctionEntries} entries · ${sanctionSources
+          .map((x) => `${x.name.replace(/ \(.*\)$/, '')}: ${x.lastCount ?? 0}${x.lastError ? ` ✗ ${x.lastError}` : x.lastRefreshedAt ? '' : ' (not loaded yet)'}`)
+          .join(' · ')}`
+      : `${sanctionEntries} entries, no list source registered`,
+    fix:
+      loadedSources.length === 0 && sanctionSources.length
+        ? 'Lists load automatically at start-up and daily (outbound HTTPS to treasury.gov, ofsistorage.blob.core.windows.net, scsanctions.un.org, webgate.ec.europa.eu); Risk & compliance → Sanctions → Refresh to retry now, or import your provider file'
+        : 'Risk & compliance → Sanctions → Refresh the official sources or import your screening provider list',
   });
   const admins = db.prepare("SELECT id, permissions, pin_hash, two_factor_enabled FROM users WHERE role = 'admin' AND is_system = 0 AND status = 'active'").all() as any[];
   const approvers = admins.filter((a) => hasPermission(a, 'approvals') && a.pin_hash);
@@ -276,6 +289,31 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
     fix: 'Set APP_SECRET and JWT_SECRET in the API environment',
   });
   const readyForLive = items.filter((i) => i.blocking).every((i) => i.ok);
+  const HREFS: Record<string, string> = {
+    digital_rail: '/gateways',
+    processor: '/gateways',
+    processor_live_keys: '/gateways',
+    processor_webhooks: '/gateways',
+    three_d_secure: '/gateways',
+    sandbox_off: '/gateways',
+    rates: '/currencies',
+    corridor_live: '/corridors',
+    liquidity: '/corridors',
+    devices: '/mobile-money',
+    emoney_issuer: '/emoney',
+    emoney_reserves: '/emoney',
+    sanctions: '/risk',
+    maker_checker: '/users?role=admin',
+    admin_2fa: '/profile',
+    kyc: '/fees',
+    shared_secret: '/controls',
+    smtp: '/messaging',
+    rails: '/gateways',
+    direct_rails: '/mobile-money',
+    switch: '/switch',
+  };
+  for (const item of items) if (HREFS[item.id]) item.href = HREFS[item.id];
+
   return { mode: compliance.mode, readyForLive, items, gateToScale: gateToScale() };
 }
 

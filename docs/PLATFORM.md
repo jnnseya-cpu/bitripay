@@ -769,7 +769,9 @@ Cart/Checkout blocks and HPOS.
 
 ## Deployment
 
-Production on bitripay.com: [deploy/README.md](../deploy/README.md) — Caddy with automatic TLS in front of the API,
+Production on bitripay.com: [deploy/README.md](../deploy/README.md) — the backend on a Hostinger VPS (SQLite on a
+persistent disk, background jobs), the two web front-ends on the same VPS or on Vercel (`vercel.json` included),
+shared packages built into each layer; Caddy with automatic TLS in front of the API,
 web and admin containers, `deploy/.env.production` for every secret, `npm run deploy` to build,
 start and run the go-live command, and the webhook registration table. Development composition:
 

@@ -405,7 +405,7 @@ export interface SanctionsSource {
   id: string;
   name: string;
   url: string | null;
-  format: 'csv' | 'json';
+  format: SanctionsFormat;
   kind: 'sanctions' | 'pep';
   enabled: boolean;
   lastVersion: string | null;
@@ -430,7 +430,41 @@ const toSource = (r: any): SanctionsSource => ({
 export function listSources(): SanctionsSource[] {
   return (getDb().prepare('SELECT * FROM sanctions_sources ORDER BY name').all() as any[]).map(toSource);
 }
-export function upsertSource(input: { id?: string | null; name: string; url?: string | null; format?: 'csv' | 'json'; kind?: 'sanctions' | 'pep'; enabled?: boolean }): SanctionsSource {
+/**
+ * Feed formats: `csv` (kind,value header or the OFAC SDN layout), `json` (rows), and the official publications parsed
+ * as published: `ofac_sdn` (US Treasury SDN / consolidated CSV), `uk_ofsi` (UK OFSI consolidated list CSV),
+ * `un_xml` (UN Security Council consolidated list XML) and `eu_fsf` (EU financial sanctions file, semicolon CSV).
+ */
+export type SanctionsFormat = 'csv' | 'json' | 'ofac_sdn' | 'uk_ofsi' | 'un_xml' | 'eu_fsf';
+export const SANCTIONS_FORMATS: SanctionsFormat[] = ['csv', 'json', 'ofac_sdn', 'uk_ofsi', 'un_xml', 'eu_fsf'];
+
+/**
+ * The official, public consolidated lists every deployment screens against from the first start: seeded once (an
+ * administrator may disable or re-point any of them) and refreshed daily by the compliance job. Nothing is invented:
+ * the entries come from the publishing authority, versioned by its ETag / Last-Modified.
+ */
+export const OFFICIAL_SANCTIONS_SOURCES: { id: string; name: string; url: string; format: SanctionsFormat }[] = [
+  { id: 'ofac_sdn', name: 'US OFAC Specially Designated Nationals (SDN)', url: 'https://www.treasury.gov/ofac/downloads/sdn.csv', format: 'ofac_sdn' },
+  { id: 'ofac_consolidated', name: 'US OFAC consolidated non-SDN list', url: 'https://www.treasury.gov/ofac/downloads/consolidated/cons_prim.csv', format: 'ofac_sdn' },
+  { id: 'uk_ofsi', name: 'UK OFSI consolidated list of financial sanctions targets', url: 'https://ofsistorage.blob.core.windows.net/publishlive/2022format/ConList.csv', format: 'uk_ofsi' },
+  { id: 'un_consolidated', name: 'UN Security Council consolidated list', url: 'https://scsanctions.un.org/resources/xml/en/consolidated.xml', format: 'un_xml' },
+  { id: 'eu_fsf', name: 'EU consolidated financial sanctions list', url: 'https://webgate.ec.europa.eu/fsd/fsf/public/files/csvFullSanctionsList_1_1/content?token=dG9rZW4tMjAxNw', format: 'eu_fsf' },
+];
+
+/** Seed the official sources once; a source an administrator edited or disabled is left exactly as they set it. */
+export function ensureOfficialSanctionsSources(): string[] {
+  const db = getDb();
+  const seeded: string[] = [];
+  const known = new Set((db.prepare('SELECT id FROM sanctions_sources').all() as { id: string }[]).map((r) => r.id));
+  for (const src of OFFICIAL_SANCTIONS_SOURCES) {
+    if (known.has(src.id)) continue;
+    upsertSource({ id: src.id, name: src.name, url: src.url, format: src.format, kind: 'sanctions', enabled: true });
+    seeded.push(src.id);
+  }
+  return seeded;
+}
+
+export function upsertSource(input: { id?: string | null; name: string; url?: string | null; format?: SanctionsFormat; kind?: 'sanctions' | 'pep'; enabled?: boolean }): SanctionsSource {
   const db = getDb();
   const id = input.id ?? `src_${shortCode(8).toLowerCase()}`;
   const existing = db.prepare('SELECT * FROM sanctions_sources WHERE id = ?').get(id) as any;
@@ -513,6 +547,126 @@ export function parseSanctionsCsv(text: string): SanctionRow[] {
   }
   return out;
 }
+const XML_ENTITIES: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" };
+const decodeXml = (v: string) => v.replace(/&(amp|lt|gt|quot|apos);/g, (m) => XML_ENTITIES[m] ?? m).trim();
+const xmlTag = (block: string, tag: string): string => {
+  const m = block.match(new RegExp(`<${tag}>([^<]*)</${tag}>`));
+  return m ? decodeXml(m[1]) : '';
+};
+const xmlTags = (block: string, tag: string): string[] => [...block.matchAll(new RegExp(`<${tag}>([^<]*)</${tag}>`, 'g'))].map((m) => decodeXml(m[1])).filter(Boolean);
+const csvSplit = (line: string, sep: string): string[] => {
+  const out: string[] = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (quoted && line[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else quoted = !quoted;
+    } else if (ch === sep && !quoted) {
+      out.push(cur.trim());
+      cur = '';
+    } else cur += ch;
+  }
+  out.push(cur.trim());
+  return out;
+};
+
+/**
+ * UK OFSI consolidated list (ConList.csv): a "Last Updated" line, then a header (Name 6 = surname / entity name,
+ * Name 1-5 = given names, Regime, Group Type, Group ID). Every row (aliases included) becomes one name entry keyed by
+ * the Group ID so a screening hit points at the designation.
+ */
+export function parseUkOfsiCsv(text: string): SanctionRow[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  const headerIdx = lines.findIndex((l) => /(^|,)"?Name 6"?(,|$)/i.test(l));
+  if (headerIdx < 0) return [];
+  const header = csvSplit(lines[headerIdx], ',').map((h) => h.toLowerCase());
+  const col = (name: string) => header.indexOf(name.toLowerCase());
+  const nameCols = ['Name 1', 'Name 2', 'Name 3', 'Name 4', 'Name 5', 'Name 6'].map(col);
+  const regime = col('Regime');
+  const groupId = col('Group ID');
+  const groupType = col('Group Type');
+  const out: SanctionRow[] = [];
+  for (const l of lines.slice(headerIdx + 1)) {
+    const c = csvSplit(l, ',');
+    const value = nameCols
+      .map((i) => (i >= 0 ? (c[i] ?? '') : ''))
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    if (!value) continue;
+    const note = [groupType >= 0 ? c[groupType] : '', regime >= 0 ? c[regime] : ''].filter(Boolean).join(' · ') || null;
+    out.push({ kind: 'name', value, externalId: groupId >= 0 ? c[groupId] || null : null, note });
+  }
+  return out;
+}
+
+/** UN Security Council consolidated list XML: individuals (first to fourth name) and entities, each with its aliases. */
+export function parseUnConsolidatedXml(text: string): SanctionRow[] {
+  const out: SanctionRow[] = [];
+  const push = (value: string, externalId: string, note: string | null) => {
+    const v = value.replace(/\s+/g, ' ').trim();
+    if (v) out.push({ kind: 'name', value: v, externalId: externalId || null, note });
+  };
+  for (const m of text.matchAll(/<INDIVIDUAL>([\s\S]*?)<\/INDIVIDUAL>/g)) {
+    const b = m[1];
+    const id = xmlTag(b, 'DATAID') || xmlTag(b, 'REFERENCE_NUMBER');
+    const note = [xmlTag(b, 'UN_LIST_TYPE'), xmlTag(b, 'REFERENCE_NUMBER')].filter(Boolean).join(' · ') || null;
+    push([xmlTag(b, 'FIRST_NAME'), xmlTag(b, 'SECOND_NAME'), xmlTag(b, 'THIRD_NAME'), xmlTag(b, 'FOURTH_NAME')].join(' '), id, note);
+    for (const alias of xmlTags(b, 'ALIAS_NAME')) push(alias, id, note ? `${note} · alias` : 'alias');
+  }
+  for (const m of text.matchAll(/<ENTITY>([\s\S]*?)<\/ENTITY>/g)) {
+    const b = m[1];
+    const id = xmlTag(b, 'DATAID') || xmlTag(b, 'REFERENCE_NUMBER');
+    const note = [xmlTag(b, 'UN_LIST_TYPE'), xmlTag(b, 'REFERENCE_NUMBER'), 'entity'].filter(Boolean).join(' · ');
+    push(xmlTag(b, 'FIRST_NAME'), id, note);
+    for (const alias of xmlTags(b, 'ALIAS_NAME')) push(alias, id, `${note} · alias`);
+  }
+  return out;
+}
+
+/** EU financial sanctions file (semicolon CSV): one row per name alias, keyed by the entity logical id. */
+export function parseEuFsfCsv(text: string): SanctionRow[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return [];
+  const header = csvSplit(lines[0], ';').map((h) => h.toLowerCase().replace(/[^a-z]/g, ''));
+  const find = (...keys: string[]) => header.findIndex((h) => keys.some((k) => h === k || h.endsWith(k)));
+  const whole = find('wholename');
+  const logical = find('entitylogicalid', 'logicalid');
+  const ref = find('entityeureferencenumber', 'eureferencenumber');
+  const type = find('entitysubjecttype', 'subjecttype');
+  const programme = find('entityregulationprogramme', 'regulationprogramme');
+  if (whole < 0) return [];
+  const out: SanctionRow[] = [];
+  for (const l of lines.slice(1)) {
+    const c = csvSplit(l, ';');
+    const value = (c[whole] ?? '').trim();
+    if (!value) continue;
+    const note = [type >= 0 ? c[type] : '', programme >= 0 ? c[programme] : '', ref >= 0 ? c[ref] : ''].filter(Boolean).join(' · ') || null;
+    out.push({ kind: 'name', value, externalId: logical >= 0 ? c[logical] || null : null, note });
+  }
+  return out;
+}
+
+/** Parse a fetched list in the source's declared format. */
+export function parseSanctionsFeed(format: SanctionsFormat, text: string): SanctionRow[] {
+  switch (format) {
+    case 'json':
+      return JSON.parse(text) as SanctionRow[];
+    case 'uk_ofsi':
+      return parseUkOfsiCsv(text);
+    case 'un_xml':
+      return parseUnConsolidatedXml(text);
+    case 'eu_fsf':
+      return parseEuFsfCsv(text);
+    default:
+      return parseSanctionsCsv(text);
+  }
+}
+
 /** Fetch and import a source from its URL (daily job). Never runs in tests. */
 export async function refreshSource(id: string, actor: Actor = { type: 'system' }): Promise<{ ok: boolean; imported?: number; error?: string }> {
   const db = getDb();
@@ -523,7 +677,7 @@ export async function refreshSource(id: string, actor: Actor = { type: 'system' 
     const res = await fetch(src.url, { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
-    const rows = src.format === 'json' ? (JSON.parse(text) as SanctionRow[]) : parseSanctionsCsv(text);
+    const rows = parseSanctionsFeed(src.format as SanctionsFormat, text);
     const version = res.headers.get('etag') ?? res.headers.get('last-modified') ?? now();
     const r = importSanctionsRows(id, rows, version, actor);
     return { ok: true, imported: r.imported };
@@ -533,10 +687,10 @@ export async function refreshSource(id: string, actor: Actor = { type: 'system' 
     return { ok: false, error: (err as Error).message };
   }
 }
-export async function refreshAllSources(): Promise<{ refreshed: number; failed: string[] }> {
+export async function refreshAllSources(opts: { onlyNeverRefreshed?: boolean } = {}): Promise<{ refreshed: number; failed: string[] }> {
   let refreshed = 0;
   const failed: string[] = [];
-  for (const s of listSources().filter((x) => x.enabled && x.url)) {
+  for (const s of listSources().filter((x) => x.enabled && x.url && (!opts.onlyNeverRefreshed || !x.lastRefreshedAt))) {
     const r = await refreshSource(s.id);
     if (r.ok) refreshed += 1;
     else failed.push(`${s.name}: ${r.error}`);
