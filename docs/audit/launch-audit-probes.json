@@ -1,6 +1,6 @@
 {
   "api": "http://127.0.0.1:4321",
-  "ranAt": "2026-09-14T21:49:07.073Z",
+  "ranAt": "2026-09-14T21:57:01.542Z",
   "counts": {
     "PASS": 34
   },
@@ -9,7 +9,7 @@
       "id": "health",
       "area": "build",
       "status": "PASS",
-      "evidence": "GET /api/health → 200 {\"ok\":true,\"app\":\"BitriPay\",\"time\":\"2026-09-14T21:49:00.842Z\"}"
+      "evidence": "GET /api/health → 200 {\"ok\":true,\"app\":\"BitriPay\",\"time\":\"2026-09-14T21:56:55.609Z\"}"
     },
     {
       "id": "headers.api",
@@ -195,29 +195,29 @@
       "id": "perf.config-read",
       "area": "performance",
       "status": "PASS",
-      "evidence": "300 concurrent GET /api/config in 567 ms: p50 281 ms, p95 520 ms, p99 541 ms, errors 0",
-      "p50": 281,
-      "p95": 520,
-      "p99": 541,
+      "evidence": "300 concurrent GET /api/config in 508 ms: p50 261 ms, p95 467 ms, p99 484 ms, errors 0",
+      "p50": 261,
+      "p95": 467,
+      "p99": 484,
       "errors": 0,
-      "wallMs": 567
+      "wallMs": 508
     },
     {
       "id": "perf.transfers",
       "area": "performance",
       "status": "PASS",
-      "evidence": "40 concurrent transfers in 199 ms: 20 posted, refused {\"insufficient_funds\":20} (controls, not faults), p50 195 ms, p95 197 ms, p99 197 ms; ledger ok=true",
-      "p50": 195,
-      "p95": 197,
-      "p99": 197,
+      "evidence": "40 concurrent transfers in 179 ms: 20 posted, refused {\"insufficient_funds\":20} (controls, not faults), p50 175 ms, p95 176 ms, p99 177 ms; ledger ok=true",
+      "p50": 175,
+      "p95": 176,
+      "p99": 177,
       "posted": 20,
-      "wallMs": 199
+      "wallMs": 179
     },
     {
       "id": "auth.brute-force-limit",
       "area": "auth",
       "status": "PASS",
-      "evidence": "429 after 15 attempts (limit 30 per 15 min per client)"
+      "evidence": "429 after 11 attempts (limit 30 per 15 min per client)"
     }
   ]
 }
