@@ -14,7 +14,7 @@ import { dynamicCommissionBps, enforceAgentLimits } from './risk/agentIntel';
 
 /** Base commission plus the trust-band bonus and the liquidity bonus where float is short (see risk/agentIntel). */
 function agentCommissionBps(agent: UserRow, kind: 'cash_in' | 'cash_out' | 'other' = 'other') {
-  return dynamicCommissionBps(agent, kind).bps;
+  return dynamicCommissionBps(agent, kind, kind === 'cash_in' ? 'agent_cash_in' : kind === 'cash_out' ? 'agent_cash_out' : null).bps;
 }
 
 export function listAgents(search?: string, country?: string | null) {

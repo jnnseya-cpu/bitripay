@@ -245,8 +245,11 @@ export function runSweepRules(): { ran: number; converted: number } {
     const held = Object.values(heldByKind(wallet.id)).reduce((a, b) => a + b, 0);
     const excess = wallet.balance - held - rule.keep_minor;
     if (excess <= 0) continue;
-    const fee = calculateFee('exchange', excess, rule.from_currency);
-    if (runRule(rule, Math.max(0, excess - fee))) converted += 1;
+    // Convert the amount whose fee still fits inside the excess, so the balance lands on the floor rather than fee-above it.
+    let amount = excess - calculateFee('exchange', excess, rule.from_currency);
+    for (let i = 0; i < 3 && amount > 0 && amount + calculateFee('exchange', amount, rule.from_currency) > excess; i += 1) amount = excess - calculateFee('exchange', amount, rule.from_currency);
+    while (amount > 0 && amount + 1 + calculateFee('exchange', amount + 1, rule.from_currency) <= excess) amount += 1; // fee rounding: leave nothing above the floor
+    if (amount > 0 && runRule(rule, amount)) converted += 1;
   }
   return { ran: rules.length, converted };
 }

@@ -332,7 +332,17 @@ export async function initiatePayment(user: UserRow | null, input: InitiatePayme
   // Tiered accounts have a wallet balance ceiling per KYC tier and country; a top-up that would breach it is refused up front.
   if (input.purpose === 'deposit' && user) assertBalanceCap(user, amount, cur.code);
 
-  const feeType = input.purpose === 'checkout' ? 'merchant_payment' : input.method === 'card' ? 'card_deposit' : input.method === 'mobile_money' ? 'mobile_money_deposit' : 'bank_deposit';
+  // Tariff grid: hosted checkout of a payment link is priced as Pay-Link; QR and API requests as merchant payment; top-ups as money in.
+  const feeType =
+    input.purpose === 'checkout'
+      ? request?.kind === 'link'
+        ? 'payment_link'
+        : 'merchant_payment'
+      : input.method === 'card'
+        ? 'card_deposit'
+        : input.method === 'mobile_money'
+          ? 'mobile_money_deposit'
+          : 'bank_deposit';
   const fee = calculateFee(feeType, amount, cur.code);
   if (input.savedCardId) {
     if (!user) throw badRequest('Sign in to use a saved card');

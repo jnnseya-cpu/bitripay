@@ -19,6 +19,7 @@ import { publish } from './bus';
 import { parseCsv } from './bulkPayouts';
 import { initiatePayment, verifyPayment } from './payments';
 import { formatMoney, COUNTRIES } from '@bitripay/shared';
+import { grossUpForFee } from './ledger';
 
 export interface LinkedAccount {
   id: string;
@@ -677,9 +678,11 @@ export async function topUpFromMandate(
   const gateway = getDb().prepare("SELECT id FROM gateways WHERE provider = 'open_banking' AND enabled = 1 LIMIT 1").get() as any;
   if (!gateway) return { ok: false, paymentId: null, failureReason: 'pay-by-bank gateway not enabled' };
   try {
+    // `amountMinor` is what must land in the wallet; the draw is grossed up for the money-in fee of the tariff.
+    const draw = grossUpForFee('bank_deposit', amountMinor, currency, { userId });
     const payment = await initiatePayment(
       user,
-      { purpose: 'deposit', method: 'bank', gateway: gateway.id, amount: amountMinor, currency, openBanking: { linkId: m.link_id, accountId: m.account_id, mandateId: m.id, reason } },
+      { purpose: 'deposit', method: 'bank', gateway: gateway.id, amount: draw, currency, openBanking: { linkId: m.link_id, accountId: m.account_id, mandateId: m.id, reason } },
       { mandateId: m.id },
     );
     const final = payment.status === 'pending' ? await verifyPayment(payment.id) : payment;

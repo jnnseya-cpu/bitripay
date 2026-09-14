@@ -24,7 +24,7 @@ export function VirtualCards() {
     setLoading(true);
     setError(null);
     try {
-      if (action.type === 'issue') await api.post('/api/virtual-cards', { currency: cur, label: label || null, pin });
+      if (action.type === 'issue') await api.post('/api/virtual-cards', { currency: cur, label: label || null, amount: amount || undefined, pin });
       if (action.type === 'fund') await api.post(`/api/virtual-cards/${action.card!.id}/fund`, { amount, pin });
       if (action.type === 'withdraw') await api.post(`/api/virtual-cards/${action.card!.id}/withdraw`, { amount, pin });
       if (action.type === 'reveal') {
@@ -151,6 +151,15 @@ export function VirtualCards() {
             <Field label="Label (optional)">
               <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Subscriptions" />
             </Field>
+            <Field label={`First load (${cur})`} hint={issueTerms(config?.fees?.virtual_card_issue, cur)}>
+              <Input
+                className="amount-input"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                placeholder={issuePlaceholder(config?.fees?.virtual_card_issue)}
+              />
+            </Field>
           </>
         ) : (
           <Field label={`${t('common.amount')} (${action?.card?.currency})`}>
@@ -189,3 +198,14 @@ function PinInline({ onSubmit, loading, disabled }: { onSubmit: (pin: string) =>
     </>
   );
 }
+
+/** The published terms of a card issue: fixed part + percentage of the first load, minimum first load (base-currency figures). */
+function issueTerms(rule: { fixed?: number; bps?: number; minAmount?: number } | undefined, currency: string): string {
+  if (!rule) return '';
+  const parts: string[] = [];
+  if (rule.fixed) parts.push(`fixed ${(rule.fixed / 100).toFixed(2)}`);
+  if (rule.bps) parts.push(`${(rule.bps / 100).toFixed(2)}% of the first load`);
+  if (rule.minAmount) parts.push(`minimum first load ${(rule.minAmount / 100).toFixed(2)}`);
+  return parts.length ? `Issue fee: ${parts.join(' + ').replace(' + minimum', ' · minimum')} (${currency} equivalent). Leave empty to load the minimum.` : '';
+}
+const issuePlaceholder = (rule: { minAmount?: number } | undefined) => (rule?.minAmount ? (rule.minAmount / 100).toFixed(2) : '0.00');

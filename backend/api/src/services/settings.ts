@@ -32,22 +32,31 @@ export interface AppSettings {
   p2pFeeBps: number;
 }
 
+/**
+ * Published tariff grid (grille des coûts par type de transaction): a percentage of the amount, no fixed fee except the
+ * virtual-card issue, amount bands and the agent commission per operation in basis points. Fixed parts and bands are in
+ * base-currency minor units. Administrators change it under Fees, limits & referral; versioned schedules layer on top.
+ */
 const DEFAULT_FEES: Record<string, FeeConfig> = Object.fromEntries(FEE_TYPES.map((t) => [t, { fixed: 0, bps: 0 }]));
 Object.assign(DEFAULT_FEES, {
-  transfer: { fixed: 0, bps: 50 },
-  qr_payment: { fixed: 0, bps: 50 },
-  merchant_payment: { fixed: 0, bps: 150 },
-  card_deposit: { fixed: 30, bps: 290 },
-  bank_deposit: { fixed: 0, bps: 0 },
-  agent_cash_in: { fixed: 0, bps: 100 },
-  agent_cash_out: { fixed: 0, bps: 150 },
-  withdrawal: { fixed: 100, bps: 100 },
-  remittance: { fixed: 200, bps: 100 },
-  exchange: { fixed: 0, bps: 50 },
+  transfer: { fixed: 0, bps: 75, minAmount: 100, maxAmount: 1_000_000, agentBps: 50 },
+  bill_payment: { fixed: 0, bps: 50, agentBps: 20 },
+  mobile_topup: { fixed: 0, bps: 75, minAmount: 1_500, maxAmount: 10_000, agentBps: 50 },
+  merchant_payment: { fixed: 0, bps: 80 },
+  qr_payment: { fixed: 0, bps: 80 },
+  money_request: { fixed: 0, bps: 80 },
+  payment_link: { fixed: 0, bps: 70 },
+  card_deposit: { fixed: 0, bps: 70, agentBps: 40 },
+  bank_deposit: { fixed: 0, bps: 70, agentBps: 40 },
+  mobile_money_deposit: { fixed: 0, bps: 70, agentBps: 40 },
+  agent_cash_in: { fixed: 0, bps: 70, agentBps: 40 },
+  withdrawal: { fixed: 0, bps: 70, agentBps: 40 },
+  agent_cash_out: { fixed: 0, bps: 70, agentBps: 40 },
+  remittance: { fixed: 0, bps: 100, agentBps: 40 },
+  virtual_card_issue: { fixed: 200, bps: 200, minAmount: 10_000 },
   virtual_card_funding: { fixed: 0, bps: 100 },
-  gift_card: { fixed: 0, bps: 0 },
-  bill_payment: { fixed: 0, bps: 50 },
-  mobile_topup: { fixed: 0, bps: 0 },
+  gift_card: { fixed: 0, bps: 100 },
+  exchange: { fixed: 0, bps: 80, agentBps: 50 },
 });
 
 const DEFAULT_LIMITS = {
@@ -71,7 +80,8 @@ const DEFAULT_APP: AppSettings = {
   registrationOpen: true,
   // Production never pays out to an unverified customer; development keeps the toggle off for the sandbox flows.
   requireKycForWithdrawals: config.isProduction,
-  p2pFeeBps: 50,
+  // P2P exchange trades are money exchange on the tariff grid.
+  p2pFeeBps: 80,
 };
 
 export interface GatewayControls {

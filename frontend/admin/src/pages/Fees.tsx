@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Button, Field, Input, PageHeader, Select, Switch, Tabs, useAsync, Alert } from '../components/ui';
-import { FEE_TYPES, TRANSACTION_TYPE_LABELS } from '@bitripay/shared';
+import { FEE_TYPES, FEE_TYPE_LABELS } from '@bitripay/shared';
 
 export function Fees() {
   const { toast, config, refresh } = useStore();
@@ -46,36 +46,67 @@ export function Fees() {
       />
       {tab === 'fees' && (
         <div className="card">
+          <p className="tiny muted">
+            The published tariff grid: BitriPay fee as a percentage of the amount (basis points) plus an optional fixed part, the amount band of the operation and the agent commission paid out of the
+            fee. Blank or 0 = no bound / platform default. Statements, quotes and the developer portal show these figures; versioned schedules (Finance operations) layer on top.
+          </p>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Transaction type</th>
+                  <th>Operation</th>
+                  <th>Fee %</th>
                   <th>Fixed ({base} minor)</th>
-                  <th>Percent (bps)</th>
+                  <th>Min amount ({base} minor)</th>
+                  <th>Max amount ({base} minor)</th>
+                  <th>Agent commission %</th>
                   <th>Example on 100.00</th>
                 </tr>
               </thead>
               <tbody>
-                {FEE_TYPES.map((t) => (
-                  <tr key={t}>
-                    <td>{TRANSACTION_TYPE_LABELS[t]}</td>
-                    <td>
-                      <Input type="number" value={fees[t]?.fixed ?? 0} onChange={(e) => setFees({ ...fees, [t]: { ...fees[t], fixed: Number(e.target.value) } })} style={{ width: 120 }} />
-                    </td>
-                    <td>
-                      <Input type="number" value={fees[t]?.bps ?? 0} onChange={(e) => setFees({ ...fees, [t]: { ...fees[t], bps: Number(e.target.value) } })} style={{ width: 120 }} />
-                    </td>
-                    <td className="muted small">
-                      {(((fees[t]?.fixed ?? 0) + (10000 * (fees[t]?.bps ?? 0)) / 10000) / 100).toFixed(2)} {base}
-                    </td>
-                  </tr>
-                ))}
+                {FEE_TYPES.map((t) => {
+                  const r = fees[t] ?? { fixed: 0, bps: 0 };
+                  const set = (patch: Record<string, number | undefined>) => setFees({ ...fees, [t]: { ...r, ...patch } });
+                  const num = (v: string) => (v === '' ? undefined : Number(v));
+                  return (
+                    <tr key={t}>
+                      <td>
+                        <b>{FEE_TYPE_LABELS[t]}</b>
+                        <div className="tiny muted mono">{t}</div>
+                      </td>
+                      <td>
+                        <Input type="number" step="0.01" value={(r.bps ?? 0) / 100} onChange={(e) => set({ bps: Math.round(Number(e.target.value) * 100) })} style={{ width: 90 }} />
+                      </td>
+                      <td>
+                        <Input type="number" value={r.fixed ?? 0} onChange={(e) => set({ fixed: Number(e.target.value) })} style={{ width: 100 }} />
+                      </td>
+                      <td>
+                        <Input type="number" value={r.minAmount ?? ''} onChange={(e) => set({ minAmount: num(e.target.value) })} style={{ width: 110 }} placeholder="none" />
+                      </td>
+                      <td>
+                        <Input type="number" value={r.maxAmount ?? ''} onChange={(e) => set({ maxAmount: num(e.target.value) })} style={{ width: 110 }} placeholder="none" />
+                      </td>
+                      <td>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={r.agentBps === undefined ? '' : r.agentBps / 100}
+                          onChange={(e) => set({ agentBps: e.target.value === '' ? undefined : Math.round(Number(e.target.value) * 100) })}
+                          style={{ width: 90 }}
+                          placeholder="default"
+                        />
+                      </td>
+                      <td className="muted small">
+                        {(((r.fixed ?? 0) + (10000 * (r.bps ?? 0)) / 10000) / 100).toFixed(2)} {base}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
           <Button className="mt" onClick={() => save('fees', fees)}>
-            Save fees
+            Save tariff grid
           </Button>
         </div>
       )}

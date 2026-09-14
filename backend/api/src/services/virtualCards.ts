@@ -10,6 +10,8 @@ import { ensureWallet, getUserWallet } from './wallets';
 import { getSystemUser, findUserById, type UserRow } from './users';
 import { notify } from './notifications';
 import { getModules } from './modules';
+import { resolveFeeRule } from './finops/fees';
+import { fromBase } from './currencies';
 
 export function toVirtualCard(row: any): VirtualCard {
   return {
@@ -58,10 +60,23 @@ function getCardRow(userId: string, id: string) {
   return row;
 }
 
-export function issueVirtualCard(user: UserRow, currency: string, label?: string | null): VirtualCard {
+/** The first load a new card must carry under the tariff (minimum amount of the issue operation), in minor units of `currency`. */
+export function virtualCardMinimumLoad(currency: string): number {
+  const rule = resolveFeeRule('virtual_card_issue')?.rule;
+  return rule?.minAmount ? fromBase(rule.minAmount, currency) : 0;
+}
+
+/**
+ * Issue a card. The tariff prices the issue as a fixed fee plus a percentage of the first load, with a minimum first
+ * load; the wallet is debited first load + fee in one transaction and the card starts with the first load.
+ */
+export function issueVirtualCard(user: UserRow, currency: string, label?: string | null, firstLoad?: number | null): VirtualCard {
   if (!getModules().virtualCards) throw unprocessable('Virtual cards are currently disabled', 'module_disabled');
   if (user.kyc_status !== 'verified' && listVirtualCards(user.id).length >= 1) throw forbidden('Complete KYC verification to issue more than one virtual card', 'kyc_required');
   const cur = getCurrency(currency);
+  const load = firstLoad ?? virtualCardMinimumLoad(cur.code);
+  if (!Number.isInteger(load) || load < 0) throw badRequest('Invalid first load', 'invalid_amount');
+  const fee = calculateFee('virtual_card_issue', load, cur.code, null, { userId: user.id, band: load > 0 });
   const pan = generatePan();
   const exp = new Date();
   exp.setFullYear(exp.getFullYear() + 3);
@@ -71,6 +86,24 @@ export function issueVirtualCard(user: UserRow, currency: string, label?: string
       'INSERT INTO virtual_cards (id, user_id, currency, balance, pan_encrypted, pan_hash, last4, exp_month, exp_year, cvv_encrypted, holder_name, label, status, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     )
     .run(id, user.id, cur.code, encrypt(pan), sha256(pan), pan.slice(-4), exp.getMonth() + 1, exp.getFullYear(), null, user.full_name.toUpperCase(), label ?? null, 'active', now());
+  if (load > 0 || fee > 0) {
+    const wallet = getUserWallet(user.id, cur.code);
+    const treasury = ensureWallet(getSystemUser('treasury').id, cur.code);
+    // A card with no first load still pays the fixed issue fee: the fee is the whole debit and nothing lands on the card.
+    postTransaction({
+      type: 'virtual_card_funding',
+      amount: load > 0 ? load : fee,
+      fee: load > 0 ? fee : 0,
+      currency: cur.code,
+      fromWalletId: wallet.id,
+      toWalletId: treasury.id,
+      senderUserId: user.id,
+      receiverUserId: user.id,
+      note: `Issue virtual card •••• ${pan.slice(-4)}`,
+      metadata: { cardId: id, direction: 'issue', firstLoad: load, issueFee: fee },
+    });
+    if (load > 0) getDb().prepare('UPDATE virtual_cards SET balance = balance + ? WHERE id = ?').run(load, id);
+  }
   notify(user.id, 'Virtual card issued', `Your new ${cur.code} virtual card ending in ${pan.slice(-4)} is ready.`, {
     kind: 'virtual_card',
     cardId: id,

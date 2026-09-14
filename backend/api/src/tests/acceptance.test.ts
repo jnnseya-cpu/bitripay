@@ -71,7 +71,7 @@ describe('ledger under load', () => {
         posted += 1;
         if (cross) conversions += 1;
       } catch (err: any) {
-        expect(err.code ?? err.message).toMatch(/insufficient_funds|Insufficient/);
+        expect(err.code ?? err.message).toMatch(/insufficient_funds|Insufficient|amount_below_minimum|amount_above_maximum/);
         refused += 1;
       }
     }

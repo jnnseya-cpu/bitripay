@@ -61,7 +61,7 @@ describe('direct mobile money rail (no operator API)', () => {
     expect(ok.body, JSON.stringify(ok.body)).toMatchObject({ handled: 1 });
     const wallets = await request(app).get('/api/wallets').set(u.auth);
     const ghs = wallets.body.items.find((w: any) => w.currency === 'GHS');
-    expect(ghs.balance).toBe(5000); // no mobile money deposit fee by default
+    expect(ghs.balance).toBe(5000 - 35); // tariff: money in 0.7%
 
     // Admin can also confirm manually; verify shows succeeded now.
     const view = await request(app).get(`/api/deposits/${dep.body.payment.id}`).set(u.auth);

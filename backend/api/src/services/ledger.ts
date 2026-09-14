@@ -35,9 +35,10 @@ import { uuid, now, txReference } from '../lib/ids';
 import { badRequest, conflict, forbidden, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
 import type { Transaction, TransactionStatus, TransactionType, PublicUser } from '@bitripay/shared';
-import { applyBps } from '@bitripay/shared';
+import { applyBps, fromMinor, FEE_TYPE_LABELS } from '@bitripay/shared';
 import { getLimits } from './settings';
-import { fromBase, toBase } from './currencies';
+import { fromBase, toBase, getCurrency } from './currencies';
+const decimalsOf = (code: string) => getCurrency(code).decimals;
 import { resolveFeeRule, type FeeContext } from './finops/fees';
 import { enforceTierLimits } from './risk/kycTiers';
 import { findUserById, getSystemUser, usersById, type UserRow } from './users';
@@ -108,12 +109,31 @@ export function calculateFee(type: string, amount: number, currency: string, ove
   const resolved = resolveFeeRule(type, ctx);
   if (!resolved) return 0;
   const rule = resolved.rule;
+  if (ctx.band !== false) assertAmountBand(type, amount, currency, rule);
   const bps = overrideBps ?? rule.bps;
   const fixed = rule.fixed ? fromBase(rule.fixed, currency) : 0;
   let fee = Math.round(fixed + applyBps(amount, bps));
   if (rule.min) fee = Math.max(fee, fromBase(rule.min, currency));
   if (rule.max) fee = Math.min(fee, fromBase(rule.max, currency));
   return Math.max(0, fee);
+}
+
+/** The tariff grid's amount band for an operation (minimum / maximum amount, stored in base currency). */
+export function assertAmountBand(type: string, amount: number, currency: string, rule?: { minAmount?: number; maxAmount?: number } | null) {
+  const r = rule ?? resolveFeeRule(type)?.rule;
+  if (!r) return;
+  const label = (FEE_TYPE_LABELS as Record<string, string>)[type] ?? type;
+  if (r.minAmount && amount < fromBase(r.minAmount, currency))
+    throw unprocessable(`The minimum amount for ${label} is ${fromMinor(fromBase(r.minAmount, currency), decimalsOf(currency))} ${currency}`, 'amount_below_minimum');
+  if (r.maxAmount && amount > fromBase(r.maxAmount, currency))
+    throw unprocessable(`The maximum amount for ${label} is ${fromMinor(fromBase(r.maxAmount, currency), decimalsOf(currency))} ${currency}`, 'amount_above_maximum');
+}
+
+/** Amount to collect so that `netMinor` lands in the wallet after the fee of `type` (money in on a tariff percentage). */
+export function grossUpForFee(type: string, netMinor: number, currency: string, ctx: FeeContext = {}): number {
+  let amount = netMinor + calculateFee(type, netMinor, currency, null, ctx);
+  for (let i = 0; i < 4 && amount - calculateFee(type, amount, currency, null, ctx) < netMinor; i += 1) amount += netMinor - (amount - calculateFee(type, amount, currency, null, ctx));
+  return amount;
 }
 
 /** Enforce per-transaction and daily limits (in base currency) for outgoing money movements. */

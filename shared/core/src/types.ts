@@ -102,6 +102,11 @@ export interface PaymentRequest {
 export interface FeeConfig {
   fixed: number; // in base currency minor units
   bps: number; // basis points
+  /** Amount band for this operation in base-currency minor units (0 or absent = no bound). */
+  minAmount?: number;
+  maxAmount?: number;
+  /** Agent commission on this operation in basis points of the amount, paid out of the BitriPay fee (absent = platform default). */
+  agentBps?: number;
 }
 
 export interface LimitConfig {

@@ -15,9 +15,14 @@ import { FEE_TYPES } from '@bitripay/shared';
 export interface FeeRule {
   fixed: number;
   bps: number;
-  /** Floor and cap in base-currency minor units (0 = none). */
+  /** Floor and cap of the fee in base-currency minor units (0 = none). */
   min?: number;
   max?: number;
+  /** Amount band of the operation in base-currency minor units (0 = none). */
+  minAmount?: number;
+  maxAmount?: number;
+  /** Agent commission on the operation in basis points (absent = platform default). */
+  agentBps?: number;
 }
 export type FeeScope = 'platform' | 'country' | 'tier' | 'merchant';
 export interface FeeScheduleView {
@@ -145,6 +150,8 @@ export interface FeeContext {
   userId?: string | null;
   country?: string | null;
   tier?: string | null;
+  /** Set to false to price without enforcing the operation's amount band (e.g. a fixed issue fee with no first load). */
+  band?: boolean;
 }
 export interface ResolvedFee {
   rule: FeeRule;
@@ -180,7 +187,7 @@ export function resolveFeeRule(type: string, ctx: FeeContext = {}): ResolvedFee 
   }
   const flat = getFees()[type];
   if (!flat) return null;
-  return { rule: { fixed: flat.fixed, bps: flat.bps }, source: { scope: 'settings', scheduleId: null, version: null } };
+  return { rule: { fixed: flat.fixed, bps: flat.bps, minAmount: flat.minAmount, maxAmount: flat.maxAmount, agentBps: flat.agentBps }, source: { scope: 'settings', scheduleId: null, version: null } };
 }
 
 /** What a merchant will pay, per fee type, with provenance (merchant dashboard and developer portal). */

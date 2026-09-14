@@ -116,8 +116,32 @@ export const FEE_TYPES = [
   'gift_card',
   'bill_payment',
   'mobile_topup',
+  'money_request',
+  'payment_link',
+  'virtual_card_issue',
 ] as const;
 export type FeeType = (typeof FEE_TYPES)[number];
+/** Names used on the tariff grid (admin console, statements, developer portal). */
+export const FEE_TYPE_LABELS: Record<FeeType, string> = {
+  transfer: 'Transfer money (P2P)',
+  qr_payment: 'QR payment (merchant)',
+  merchant_payment: 'Merchant payment (make payment)',
+  money_request: 'Request money',
+  payment_link: 'Payment link (Pay-Link)',
+  card_deposit: 'Money in · card',
+  bank_deposit: 'Money in · bank transfer',
+  mobile_money_deposit: 'Money in · mobile money',
+  agent_cash_in: 'Money in · agent cash-in',
+  agent_cash_out: 'Money out · agent cash-out',
+  withdrawal: 'Money out · withdrawal',
+  remittance: 'Remittance (international)',
+  exchange: 'Money exchange',
+  virtual_card_issue: 'Virtual card · issue',
+  virtual_card_funding: 'Virtual card · reload',
+  gift_card: 'Gift card',
+  bill_payment: 'Bill pay',
+  mobile_topup: 'Mobile top-up',
+};
 
 export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   transfer: 'Transfer',

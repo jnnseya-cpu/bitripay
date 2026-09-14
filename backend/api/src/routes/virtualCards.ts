@@ -15,9 +15,14 @@ virtualCardsRouter.get('/', (req, res) => res.json({ items: listVirtualCards(req
 virtualCardsRouter.post(
   '/',
   wrap(async (req, res) => {
-    const body = validate(z.object({ currency: z.string().length(3), label: z.string().max(40).optional().nullable(), pin: z.string().optional() }), req.body);
+    const body = validate(
+      z.object({ currency: z.string().length(3), label: z.string().max(40).optional().nullable(), amount: z.string().optional().nullable(), pin: z.string().optional() }),
+      req.body,
+    );
     assertPin(req.user!, body.pin, req);
-    res.status(201).json({ card: issueVirtualCard(req.user!, body.currency.toUpperCase(), body.label) });
+    const cur = getCurrency(body.currency.toUpperCase());
+    const firstLoad = body.amount ? toMinor(body.amount, cur.decimals) : null;
+    res.status(201).json({ card: issueVirtualCard(req.user!, cur.code, body.label, firstLoad) });
   }),
 );
 virtualCardsRouter.post(

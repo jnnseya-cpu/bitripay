@@ -68,23 +68,23 @@ describe('settlement currency and conversion', () => {
     expect(profile.body.settlementCurrency).toBe('EUR');
     expect(profile.body.autoConvert).toBe(true);
     expect((await request(app).get(`/api/v1/settlement_profiles/${profile.body.id}`).set(m.auth)).body.settlementCurrency).toBe('EUR');
-    await payMerchant(m, payer, 10_000); // fee 150
+    await payMerchant(m, payer, 10_000); // tariff: fee 0.8% = 80
     const preview = await request(app).get(`/api/v1/settlement_profiles/${profile.body.id}/preview`).set(m.auth);
     expect(preview.status, JSON.stringify(preview.body)).toBe(200);
     expect(preview.body.collectionCurrency).toBe('USD');
     expect(preview.body.settlementCurrency).toBe('EUR');
     expect(preview.body.wouldSkip).toBe(false);
     expect(preview.body.totals.gross).toBe(10_000);
-    expect(preview.body.totals.fees).toBe(150);
-    expect(preview.body.totals.platformFees + preview.body.totals.feeTax).toBe(150);
-    expect(preview.body.totals.net).toBe(9_850);
-    const quote = convertWithMargin(9_850, 'USD', 'EUR');
+    expect(preview.body.totals.fees).toBe(80);
+    expect(preview.body.totals.platformFees + preview.body.totals.feeTax).toBe(80);
+    expect(preview.body.totals.net).toBe(9_920);
+    const quote = convertWithMargin(9_920, 'USD', 'EUR');
     expect(quote.marginBps).toBe(getAppSettings().exchangeMarginBps);
     expect(preview.body.settlement).toMatchObject({ currency: 'EUR', amountMinor: quote.amount, convertsAt: 'close' });
     expect(preview.body.settlement.conversion).toMatchObject({
       fromCurrency: 'USD',
       toCurrency: 'EUR',
-      fromMinor: 9_850,
+      fromMinor: 9_920,
       toMinor: quote.amount,
       rate: quote.rate,
       midRate: quote.midRate,
@@ -93,7 +93,7 @@ describe('settlement currency and conversion', () => {
     });
     expect(preview.body.settlement.conversion.rate).toBeCloseTo(quote.midRate * (1 - quote.marginBps / 10_000), 10);
     expect(preview.body.items).toHaveLength(1);
-    expect(preview.body.items[0]).toMatchObject({ amountMinor: 10_000, feeMinor: 150 });
+    expect(preview.body.items[0]).toMatchObject({ amountMinor: 10_000, feeMinor: 80 });
     // another merchant cannot preview it
     const other = await registerUser(app, { role: 'merchant', businessName: 'Other', country: 'CD' });
     expect((await request(app).get(`/api/v1/settlement_profiles/${profile.body.id}/preview`).set(other.auth)).status).toBe(404);
@@ -109,10 +109,10 @@ describe('settlement currency and conversion', () => {
       .send({ currency: 'USD', schedule: 'manual', destination: { method: 'wallet' }, settlement_currency: 'EUR', auto_convert: true });
     await payMerchant(m, payer, 10_000);
     const usdBefore = await walletBalance(m.auth, 'USD');
-    const quote = convertWithMargin(9_850, 'USD', 'EUR');
+    const quote = convertWithMargin(9_920, 'USD', 'EUR');
     const { result: cycle, events } = await captured('settlement.closed', async () => (await request(app).post('/api/v1/settlement_cycles').set(m.auth).send({ currency: 'USD' })).body);
     expect(cycle.status).toBe('CLOSED');
-    expect(cycle.netMinor).toBe(9_850);
+    expect(cycle.netMinor).toBe(9_920);
     expect(cycle.settlementCurrency).toBe('EUR');
     expect(cycle.settlementAmountMinor).toBe(quote.amount);
     expect(cycle.conversion.transactionId).toBeTruthy();
@@ -121,14 +121,14 @@ describe('settlement currency and conversion', () => {
     // the conversion is a real exchange posting: the USD wallet lost the net, the EUR wallet received the converted amount
     const tx = getDb().prepare('SELECT * FROM transactions WHERE id = ?').get(cycle.conversion.transactionId) as any;
     expect(tx.type).toBe('exchange');
-    expect(tx.amount).toBe(9_850);
+    expect(tx.amount).toBe(9_920);
     expect(tx.receive_currency).toBe('EUR');
     expect(tx.receive_amount).toBe(quote.amount);
     expect(JSON.parse(tx.metadata)).toMatchObject({ settlementCycleId: cycle.id, settlementConversion: true, marginBps: quote.marginBps, rate: quote.rate });
-    expect(await walletBalance(m.auth, 'USD')).toBe(usdBefore - 9_850);
+    expect(await walletBalance(m.auth, 'USD')).toBe(usdBefore - 9_920);
     expect(await walletBalance(m.auth, 'EUR')).toBe(quote.amount);
     expect(events).toHaveLength(1);
-    expect(events[0].payload).toMatchObject({ userId: m.user.id, cycleId: cycle.id, currency: 'USD', amountMinor: 9_850, settlementCurrency: 'EUR', settlementAmountMinor: quote.amount });
+    expect(events[0].payload).toMatchObject({ userId: m.user.id, cycleId: cycle.id, currency: 'USD', amountMinor: 9_920, settlementCurrency: 'EUR', settlementAmountMinor: quote.amount });
     expect(events[0].tenantId).toBe(m.user.id);
     // the statement discloses the conversion in every format
     const stmt = await request(app).get(`/api/v1/settlement_cycles/${cycle.id}/statement`).set(m.auth);
@@ -153,7 +153,7 @@ describe('settlement currency and conversion', () => {
       .set(m.auth)
       .send({ currency: 'USD', schedule: 'manual', destination: { method: 'wallet' }, settlement_currency: 'EUR', auto_convert: false });
     await payMerchant(m, payer, 5_000); // fee 75
-    const quote = convertWithMargin(4_925, 'USD', 'EUR');
+    const quote = convertWithMargin(4_960, 'USD', 'EUR');
     const cycle = (await request(app).post('/api/v1/settlement_cycles').set(m.auth).send({ currency: 'USD' })).body;
     expect(cycle.status).toBe('CLOSED');
     expect(cycle.conversion).toMatchObject({ toMinor: quote.amount, transactionId: null, convertedAt: null });
@@ -247,26 +247,26 @@ describe('statements with separate fee and tax lines', () => {
         .post('/api/v1/settlement_profiles')
         .set(m.auth)
         .send({ currency: 'USD', schedule: 'manual', destination: { method: 'wallet' } });
-      const p1 = await payMerchant(m, payer, 10_000); // fee 150 → 127 + 23
-      const p2 = await payMerchant(m, payer, 4_000); // fee 60 → 51 + 9
+      const p1 = await payMerchant(m, payer, 10_000); // tariff: fee 80 → 68 platform + 12 tax
+      const p2 = await payMerchant(m, payer, 4_000); // tariff: fee 32 → 27 platform + 5 tax
       // the connector recorded what the rail charged for the first collection
       getDb().prepare("UPDATE transactions SET metadata = json_set(metadata, '$.providerFeeMinor', 40) WHERE id = ?").run(p1.transactionId);
       const cycle = (await request(app).post('/api/v1/settlement_cycles').set(m.auth).send({ currency: 'USD' })).body;
-      expect(cycle).toMatchObject({ grossMinor: 14_000, feesMinor: 210, providerFeesMinor: 40, platformFeesMinor: 178, feeTaxMinor: 32, netMinor: 14_000 - 210 });
+      expect(cycle).toMatchObject({ grossMinor: 14_000, feesMinor: 112, providerFeesMinor: 40, platformFeesMinor: 95, feeTaxMinor: 17, netMinor: 14_000 - 112 });
       const view = await request(app).get(`/api/v1/settlements/${cycle.id}`).set(m.auth);
       expect(view.status, JSON.stringify(view.body)).toBe(200);
       expect(view.body.statement.number).toMatch(/^SET-\d{8}-/);
-      expect(view.body.statement.totals).toMatchObject({ gross: 14_000, fees: 210, providerFees: 40, platformFees: 178, feeTax: 32, taxRateBps: 1800, taxLabel: 'VAT', net: 13_790 });
+      expect(view.body.statement.totals).toMatchObject({ gross: 14_000, fees: 112, providerFees: 40, platformFees: 95, feeTax: 17, taxRateBps: 1800, taxLabel: 'VAT', net: 13_888 });
       expect(view.body.statement.totals.formatted.feeTax).toBeTruthy();
       const byIntent = Object.fromEntries(view.body.items.map((i: any) => [i.intentId, i]));
-      expect(byIntent[p1.intentId]).toMatchObject({ amountMinor: 10_000, feeMinor: 150, providerFeeMinor: 40, platformFeeMinor: 127, feeTaxMinor: 23 });
-      expect(byIntent[p2.intentId]).toMatchObject({ amountMinor: 4_000, feeMinor: 60, providerFeeMinor: 0, platformFeeMinor: 51, feeTaxMinor: 9 });
+      expect(byIntent[p1.intentId]).toMatchObject({ amountMinor: 10_000, feeMinor: 80, providerFeeMinor: 40, platformFeeMinor: 68, feeTaxMinor: 12 });
+      expect(byIntent[p2.intentId]).toMatchObject({ amountMinor: 4_000, feeMinor: 32, providerFeeMinor: 0, platformFeeMinor: 27, feeTaxMinor: 5 });
       // the existing columns are all still there
-      expect(view.body).toMatchObject({ id: cycle.id, grossMinor: 14_000, feesMinor: 210, refundsMinor: 0, splitsMinor: 0, holdsMinor: 0, hash: cycle.hash });
+      expect(view.body).toMatchObject({ id: cycle.id, grossMinor: 14_000, feesMinor: 112, refundsMinor: 0, splitsMinor: 0, holdsMinor: 0, hash: cycle.hash });
       const csv = await request(app).get(`/api/v1/settlement_cycles/${cycle.id}/statement`).set(m.auth).query({ format: 'csv' });
       expect(csv.text).toContain('Date,Reference,Kind,Description,Amount,Fee,Provider fee,BitriPay fee,Tax on BitriPay fee');
-      expect(csv.text).toContain('# Provider fee 0.40 · BitriPay fee 1.78 · Tax on BitriPay fee 0.32 (VAT 18%)');
-      expect(csv.text).toContain(',10000.00,1.50,0.40,1.27,0.23'.replace('10000.00', '100.00'));
+      expect(csv.text).toContain('# Provider fee 0.40 · BitriPay fee 0.95 · Tax on BitriPay fee 0.17 (VAT 18%)');
+      expect(csv.text).toContain(',10000.00,0.80,0.40,0.68,0.12'.replace('10000.00', '100.00'));
       const pdf = await request(app)
         .get(`/api/v1/settlement_cycles/${cycle.id}/statement`)
         .set(m.auth)
@@ -283,7 +283,7 @@ describe('statements with separate fee and tax lines', () => {
       // ownership: another merchant gets 404, the administrator sees the same view
       const other = await registerUser(app, { role: 'merchant', businessName: 'Nosy', country: 'CD' });
       expect((await request(app).get(`/api/v1/settlements/${cycle.id}`).set(other.auth)).status).toBe(404);
-      expect((await request(app).get(`/api/admin/finops/settlements/${cycle.id}`).set(admin.auth)).body.statement.totals.feeTax).toBe(32);
+      expect((await request(app).get(`/api/admin/finops/settlements/${cycle.id}`).set(admin.auth)).body.statement.totals.feeTax).toBe(17);
     } finally {
       await request(app).put('/api/admin/finops/fees/tax').set(admin.auth).send({ feeTaxRateBps: 0 });
     }
@@ -298,33 +298,33 @@ describe('split refund allocation', () => {
     const p2 = await registerUser(app, { tag: 'prorata2' });
     const payer = await registerUser(app);
     await fund(app, payer.user.id, '100.00');
-    // fee 60 → received 3940; fixed 500 first, then 50% of 3440 = 1720
+    // tariff: fee 32 → received 3968; fixed 500 first, then 50% of 3468 = 1734
     const paid = await payMerchant(m, payer, 4_000, {
       splits: [
         { recipient: 'prorata1', bps: 5000 },
         { recipient: 'prorata2', fixed_minor: 500 },
       ],
     });
-    expect(await walletBalance(p1.auth, 'USD')).toBe(1_720);
+    expect(await walletBalance(p1.auth, 'USD')).toBe(1_734);
     expect(await walletBalance(p2.auth, 'USD')).toBe(500);
     const merchantBefore = await walletBalance(m.auth, 'USD');
     const out = allocateRefundAcrossSplits(paid.intentId, 'rf_direct_1', 2_000, { type: 'system' });
     expect(out).toHaveLength(2);
     const byUser = Object.fromEntries(out.map((a) => [a.recipientUserId, a]));
-    expect(byUser[p1.user.id]).toMatchObject({ amountMinor: 860, policy: 'pro_rata', status: 'RECOVERED', currency: 'USD', refundId: 'rf_direct_1' });
+    expect(byUser[p1.user.id]).toMatchObject({ amountMinor: 867, policy: 'pro_rata', status: 'RECOVERED', currency: 'USD', refundId: 'rf_direct_1' });
     expect(byUser[p2.user.id]).toMatchObject({ amountMinor: 250, policy: 'pro_rata', status: 'RECOVERED' });
-    expect(await walletBalance(p1.auth, 'USD')).toBe(860);
+    expect(await walletBalance(p1.auth, 'USD')).toBe(867);
     expect(await walletBalance(p2.auth, 'USD')).toBe(250);
-    expect(await walletBalance(m.auth, 'USD')).toBe(merchantBefore + 1_110);
+    expect(await walletBalance(m.auth, 'USD')).toBe(merchantBefore + 867 + 250); // both shares given back
     const tx = getDb().prepare('SELECT * FROM transactions WHERE id = ?').get(byUser[p1.user.id].transactionId!) as any;
-    expect(tx).toMatchObject({ type: 'distribution', amount: 860, sender_user_id: p1.user.id, receiver_user_id: m.user.id, status: 'completed' });
+    expect(tx).toMatchObject({ type: 'distribution', amount: 867, sender_user_id: p1.user.id, receiver_user_id: m.user.id, status: 'completed' });
     expect(JSON.parse(tx.metadata)).toMatchObject({ intentId: paid.intentId, split: true, splitRefund: true, refundId: 'rf_direct_1', policy: 'pro_rata' });
     expect((getDb().prepare('SELECT COUNT(*) c FROM ledger_entries WHERE transaction_id = ?').get(tx.id) as any).c).toBe(2);
     // idempotent per refund; a second refund recovers from what is left
     expect(allocateRefundAcrossSplits(paid.intentId, 'rf_direct_1', 2_000, { type: 'system' })).toHaveLength(2);
     expect(listSplitRefundAllocations(paid.intentId)).toHaveLength(2);
     const rest = allocateRefundAcrossSplits(paid.intentId, 'rf_direct_2', 4_000, { type: 'system' });
-    expect(rest.find((a) => a.recipientUserId === p1.user.id)!.amountMinor).toBe(860); // capped by the share not yet given back
+    expect(rest.find((a) => a.recipientUserId === p1.user.id)!.amountMinor).toBe(867); // capped by the share not yet given back
     expect(await walletBalance(p1.auth, 'USD')).toBe(0);
     const listed = await request(app).get(`/api/v1/payment_intents/${paid.intentId}/split_refunds`).set(m.auth).query({ refund: 'rf_direct_2' });
     expect(listed.body.data).toHaveLength(2);
@@ -344,7 +344,7 @@ describe('split refund allocation', () => {
     meta.splits[0].refundPolicy = 'merchant_absorbs';
     getDb().prepare('UPDATE payment_intents SET metadata = ? WHERE id = ?').run(JSON.stringify(meta), paid.intentId);
     const before = await walletBalance(p.auth, 'USD');
-    expect(before).toBe(1_970);
+    expect(before).toBe(1_984);
     const out = allocateRefundAcrossSplits(paid.intentId, 'rf_absorb_1', 4_000, { type: 'system' });
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ policy: 'merchant_absorbs', status: 'ABSORBED', amountMinor: 0, transactionId: null });
@@ -366,8 +366,8 @@ describe('split refund allocation', () => {
     expect(JSON.parse(handled.handled)).toContain('splits-refund-allocation');
     const allocations = listSplitRefundAllocations(paid.intentId, 'rf_bus_1');
     expect(allocations).toHaveLength(1);
-    expect(allocations[0]).toMatchObject({ amountMinor: Math.round(1_970 * 0.25), status: 'RECOVERED', recipientUserId: p.user.id });
-    expect(await walletBalance(p.auth, 'USD')).toBe(1_970 - Math.round(1_970 * 0.25));
+    expect(allocations[0]).toMatchObject({ amountMinor: Math.round(1_984 * 0.25), status: 'RECOVERED', recipientUserId: p.user.id });
+    expect(await walletBalance(p.auth, 'USD')).toBe(1_984 - Math.round(1_984 * 0.25));
     publish('refund.succeeded', payload, { aggregateId: paid.intentId, tenantId: m.user.id });
     expect(listSplitRefundAllocations(paid.intentId)).toHaveLength(1);
     // an event without the contract fields is ignored, never thrown
@@ -387,8 +387,8 @@ describe('split refund allocation', () => {
     expect(refund.body.refundTransactionId).toBeTruthy();
     const allocations = listSplitRefundAllocations(paid.intentId, refund.body.id);
     expect(allocations).toHaveLength(1);
-    expect(allocations[0]).toMatchObject({ amountMinor: 985, status: 'RECOVERED', recipientUserId: p.user.id });
-    expect(await walletBalance(p.auth, 'USD')).toBe(1_970 - 985);
+    expect(allocations[0]).toMatchObject({ amountMinor: 992, status: 'RECOVERED', recipientUserId: p.user.id });
+    expect(await walletBalance(p.auth, 'USD')).toBe(1_984 - 992);
     const bus = getDb().prepare("SELECT payload FROM domain_events WHERE type = 'refund.succeeded' AND aggregate_id = ?").all(paid.intentId) as any[];
     expect(bus.length).toBeGreaterThanOrEqual(1);
     expect(JSON.parse(bus[0].payload)).toMatchObject({ intentId: paid.intentId, refundId: refund.body.id, amountMinor: 2_000, currency: 'USD', merchantUserId: m.user.id });
@@ -412,7 +412,7 @@ describe('split refund allocation', () => {
       receiverUserId: sink.user.id,
     });
     const out = allocateRefundAcrossSplits(paid.intentId, 'rf_retry_1', 4_000, { type: 'system' });
-    expect(out[0]).toMatchObject({ amountMinor: 1_970, status: 'FAILED' });
+    expect(out[0]).toMatchObject({ amountMinor: 1_984, status: 'FAILED' });
     expect(out[0].error).toBeTruthy();
     await fund(app, p.user.id, '20.00');
     const retried = await request(app).post(`/api/v1/payment_intents/${paid.intentId}/split_refunds/retry`).set(m.auth).send({});

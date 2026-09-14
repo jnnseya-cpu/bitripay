@@ -127,6 +127,7 @@ area to them.
 | Open banking: linking under consent, statement import, income verification, pay by bank, VRP mandates | `services/openBanking.ts`, `payments/openBanking.ts`, web **Linked banks** | `openBanking.test.ts` (3 suites) |
 | Virtual cards, bills, top-ups, gift cards, P2P exchange with escrow and disputes, referrals, support | `services/{virtualCards,services,p2p,referrals,support}.ts` | `core.test.ts` "services & referrals", "P2P trading" |
 | Regulatory supervision: normalised operations journal (pseudonymised parties, KYC tier, channel, evidence ref) exported as CSV/JSON with a SHA-256 integrity manifest and event-chain state; real-time supervisory report; audit-logged exports | `services/supervision.ts`, `routes/admin/supervision.ts`, admin **Regulatory supervision** | `supervision.test.ts` (4 tests) |
+| Published tariff grid: percentage fees per operation (no fixed part except the card issue), amount bands with explicit error codes, agent commission per operation with contractual override, Pay-Link / request-money / card-issue fee types, grossed-up mandate draws, grid applied from the go-live profile | `services/settings.ts` (DEFAULT_FEES), `services/ledger.ts` (`assertAmountBand`, `grossUpForFee`), `services/finops/fees.ts`, `services/goLiveProfile.ts`, admin **Fees, limits & referral** | `tariff.test.ts` (5 tests); fee expectations across `core`, `finops`, `contract_finops`, `risk`, `gateway`, `rails`, `emoney`, `growth` |
 
 ## Known limits (stated, not hidden)
 

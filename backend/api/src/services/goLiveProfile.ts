@@ -16,7 +16,8 @@ import { upsertProgramme, listProgrammes } from './emoney';
 import { createPayoutAccount, listPayoutAccounts, updatePayoutAccount } from './liquidity';
 import { upsertCorridor, listCorridors } from './corridors';
 import { createUser, findUserByEmail, updateUser, type UserRow } from './users';
-import { setSetting } from './settings';
+import { setSetting, getFees, getAppSettings } from './settings';
+import { FEE_TYPES } from '@bitripay/shared';
 import { hasPermission } from '../middleware/permissions';
 import type { Actor } from './events';
 
@@ -113,6 +114,27 @@ export const goLiveProfileSchema = z.object({
     )
     .optional(),
   smtp: z.object({ host: z.string().min(2), port: z.number().int().min(1).max(65535).default(587), user: z.string().default(''), pass: z.string().default(''), from: z.string().min(3) }).optional(),
+  /** Tariff grid per operation: fee in basis points, fixed part / amount band in base-currency minor units, agent commission in bps. */
+  fees: z
+    .record(
+      z.enum(FEE_TYPES),
+      z.object({
+        bps: z.number().int().min(0).max(10000),
+        fixed: z.number().int().min(0).default(0),
+        minAmount: z.number().int().min(0).optional(),
+        maxAmount: z.number().int().min(0).optional(),
+        agentBps: z.number().int().min(0).max(10000).optional(),
+      }),
+    )
+    .optional(),
+  /** Platform-wide pricing knobs: P2P exchange trade fee, default agent commission and the FX margin, all in bps. */
+  pricing: z
+    .object({
+      p2pFeeBps: z.number().int().min(0).max(10000).optional(),
+      agentCommissionBps: z.number().int().min(0).max(10000).optional(),
+      exchangeMarginBps: z.number().int().min(0).max(10000).optional(),
+    })
+    .optional(),
 });
 export type GoLiveProfile = z.infer<typeof goLiveProfileSchema>;
 
@@ -277,6 +299,41 @@ export function applyGoLiveProfile(profile: GoLiveProfile, admin: UserRow): Prof
   if (profile.smtp) {
     setSetting('smtp', { ...profile.smtp, secure: profile.smtp.port === 465 });
     lines.push({ section: 'smtp', action: 'updated', subject: `${profile.smtp.host}:${profile.smtp.port}` });
+  }
+
+  if (profile.fees) {
+    const current = getFees();
+    const next = { ...current };
+    for (const [type, rule] of Object.entries(profile.fees)) {
+      if (!rule) continue;
+      const before = current[type];
+      const same =
+        before &&
+        before.bps === rule.bps &&
+        before.fixed === rule.fixed &&
+        (before.minAmount ?? 0) === (rule.minAmount ?? 0) &&
+        (before.maxAmount ?? 0) === (rule.maxAmount ?? 0) &&
+        before.agentBps === rule.agentBps;
+      next[type] = { fixed: rule.fixed, bps: rule.bps, minAmount: rule.minAmount, maxAmount: rule.maxAmount, agentBps: rule.agentBps };
+      lines.push({
+        section: 'fees',
+        action: same ? 'unchanged' : 'updated',
+        subject: type,
+        note: `${rule.bps / 100}%${rule.fixed ? ` + fixed ${rule.fixed}` : ''}${rule.agentBps !== undefined ? ` · agent ${rule.agentBps / 100}%` : ''}`,
+      });
+    }
+    setSetting('fees', next);
+  }
+  if (profile.pricing) {
+    const app = getAppSettings();
+    setSetting('app', { ...app, ...profile.pricing });
+    lines.push({
+      section: 'pricing',
+      action: 'updated',
+      subject: Object.entries(profile.pricing)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(' '),
+    });
   }
 
   // The applying administrator's own human steps.

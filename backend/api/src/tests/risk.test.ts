@@ -400,7 +400,7 @@ describe('agent intelligence', () => {
     const float = await request(app).get('/api/risk/agents/me/float').set(agent.auth);
     expect(float.status).toBe(200);
     const usd = float.body.forecasts.find((f: any) => f.currency === 'USD');
-    expect(usd.balanceMinor).toBe(10_000 - 6_000 + 30); // float out, 0.5% commission in
+    expect(usd.balanceMinor).toBe(10_000 - 6_000 + 24); // float out, tariff 0.4% money-in agent commission in
     expect(usd.window.cashIns).toBe(2);
     expect(usd.avgDailyOutflowMinor).toBeGreaterThan(0);
     expect(usd.runwayDays).toBeGreaterThan(0);
@@ -421,8 +421,8 @@ describe('agent intelligence', () => {
     const bonus = scored.commissionBonusBps;
     const before = await balanceOf(agent.auth);
     await request(app).post('/api/agents/me/cash-in').set(agent.auth).send({ customer: 'intelcust1', amount: '10.00', currency: 'USD', pin: '1234' });
-    const fee = 10; // 1% of 10.00
-    const expectedCommission = Math.min(fee, Math.round((1000 * (50 + bonus)) / 10_000));
+    const fee = 7; // tariff: money in 0.7% of 10.00
+    const expectedCommission = Math.min(fee, Math.round((1000 * (40 + bonus)) / 10_000)); // tariff: 0.4% agent commission + trust bonus
     expect((await balanceOf(agent.auth)) - before).toBe(-1000 + expectedCommission);
     const overview = await request(app).get('/api/admin/risk/agents/overview').set(admin.auth);
     expect(overview.body.agents.find((a: any) => a.id === agent.user.id).band).toBe(scored.band);

@@ -23,6 +23,7 @@ import { hashPassword } from '../../lib/password';
 import { recordCommission } from '../finops/commissions';
 import { setTier } from './kycTiers';
 import { publish } from '../bus';
+import { resolveFeeRule } from '../finops/fees';
 
 export interface AgentIntelSettings {
   /** Days of average outflow the float should cover; below alertDays the agent (and operations) are alerted. */
@@ -253,8 +254,11 @@ export function runTrustScores(): { scored: number } {
 export function dynamicCommissionBps(
   agent: UserRow,
   kind: 'cash_in' | 'cash_out' | 'other' = 'other',
+  /** Operation on the tariff grid; its agent commission applies when the agent has no contractual override. */
+  feeType?: string | null,
 ): { bps: number; base: number; trustBonus: number; liquidityBonus: number; band: TrustBand | null } {
-  const base = agent.agent_commission_bps ?? getAppSettings().agentCommissionBps;
+  const tariff = feeType ? resolveFeeRule(feeType, { userId: agent.id })?.rule.agentBps : undefined;
+  const base = agent.agent_commission_bps ?? tariff ?? getAppSettings().agentCommissionBps;
   const s = getAgentIntelSettings();
   const trust = latestTrustScore(agent.id);
   const trustBonus = trust ? (s.bonusByBand[trust.band] ?? 0) : 0;

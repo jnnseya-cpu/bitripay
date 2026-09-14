@@ -34,7 +34,7 @@ describe('scale', () => {
         Promise.resolve().then(() => {
           const a = Math.floor(rand() * users.length);
           const b = (a + 1 + Math.floor(rand() * (users.length - 1))) % users.length;
-          const amount = 1 + Math.floor(rand() * 500);
+          const amount = 100 + Math.floor(rand() * 500); // within the tariff band (transfers start at 1.00)
           try {
             postTransaction({
               type: 'transfer',

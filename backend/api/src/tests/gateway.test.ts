@@ -169,7 +169,7 @@ describe('no-API evidence engine', () => {
       .send({ ...base, nonce, signature: signEvidence(privateKey, { ...base, nonce }) });
     expect(ok.status, JSON.stringify(ok.body)).toBe(201);
     expect(ok.body.evidence.outcome).toBe('settled');
-    expect(await balance(u.auth, 'KES')).toBe(100000);
+    expect(await balance(u.auth, 'KES')).toBe(100000 - 700); // tariff: money in 0.7%
     const view = await request(app).get(`/api/deposits/${dep.body.payment.id}`).set(u.auth);
     expect(view.body.payment.stage).toBe('SETTLED');
 
@@ -185,7 +185,7 @@ describe('no-API evidence engine', () => {
       .post('/api/evidence/sms')
       .send({ ...base, nonce: n2, signature: signEvidence(privateKey, { ...base, nonce: n2 }) });
     expect(dup.body.evidence.outcome).toBe('duplicate');
-    expect(await balance(u.auth, 'KES')).toBe(100000);
+    expect(await balance(u.auth, 'KES')).toBe(100000 - 700); // tariff: money in 0.7%
 
     // A second intent presented with a receipt whose operator transaction id was already used → DUPLICATE, no credit.
     const dep2 = await request(app).post('/api/deposits').set(u.auth).send({ method: 'mobile_money', amount: '1000', currency: 'KES', operatorId: 'mpesa_ke', phone: '+254712345678', pin: '1234' });
@@ -199,7 +199,7 @@ describe('no-API evidence engine', () => {
     expect(dupRef.body.evidence.reasons.join(',')).toContain('external_ref_reused');
     const v2 = await request(app).get(`/api/deposits/${dep2.body.payment.id}`).set(u.auth);
     expect(v2.body.payment.stage).toBe('DUPLICATE');
-    expect(await balance(u.auth, 'KES')).toBe(100000);
+    expect(await balance(u.auth, 'KES')).toBe(100000 - 700); // tariff: money in 0.7%
 
     // Amount / sender mismatches are recorded, never settled.
     const dep3 = await request(app).post('/api/deposits').set(u.auth).send({ method: 'mobile_money', amount: '1000', currency: 'KES', operatorId: 'mpesa_ke', phone: '+254712345678', pin: '1234' });
@@ -212,7 +212,7 @@ describe('no-API evidence engine', () => {
     expect(mis.body.evidence.reasons).toEqual(expect.arrayContaining(['amount_mismatch', 'sender_mismatch']));
     const v3 = await request(app).get(`/api/deposits/${dep3.body.payment.id}`).set(u.auth);
     expect(v3.body.payment.stage).toBe('MISMATCHED');
-    expect(await balance(u.auth, 'KES')).toBe(100000);
+    expect(await balance(u.auth, 'KES')).toBe(100000 - 700); // tariff: money in 0.7%
 
     // Everything is preserved: raw text, parsed values, verifier identity, outcomes, and the event chain verifies.
     const list = await request(app).get(`/api/admin/evidence?paymentId=${dep.body.payment.id}`).set(admin.auth);
@@ -251,7 +251,7 @@ describe('no-API evidence engine', () => {
     expect(queue.body.queue.some((p: any) => p.id === dep.body.payment.id)).toBe(true);
     const done = await manualConfirm(app, dep.body.payment.id);
     expect(done.payment.stage).toBe('SETTLED');
-    expect(await balance(u.auth, 'KES')).toBe(25000);
+    expect(await balance(u.auth, 'KES')).toBe(25000 - 175); // tariff: money in 0.7%
     // Unparseable text with no reference is stored as unsupported for a human.
     const junk = await request(app).post('/api/webhooks/manual_momo').send({ secret: 'sms-secret', text: 'Hello, your airtime bundle expires tomorrow' });
     expect(junk.body.evidence.outcome).toBe('unsupported');

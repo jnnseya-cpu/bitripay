@@ -71,14 +71,14 @@ describe('wallets, transfers & ledger', () => {
     const b = await registerUser(app, { tag: 'receiver1' });
     await fund(app, a.user.id, '100.00');
     const fee = await request(app).get('/api/transfers/fee?amount=25.00&currency=USD').set(a.auth);
-    expect(fee.body.fee).toBe(13); // 0.5% of 2500 = 12.5 -> 13
+    expect(fee.body.fee).toBe(19); // tariff: 0.75% of 2500 = 18.75 -> 19
     const tx = await request(app).post('/api/transfers').set(a.auth).send({ to: '@receiver1', amount: '25.00', currency: 'USD', note: 'hi', pin: '1234' });
     expect(tx.status).toBe(201);
     expect(tx.body.transaction.type).toBe('transfer');
     expect(tx.body.transaction.counterparty.tag).toBe('receiver1');
     const wa = await request(app).get('/api/wallets').set(a.auth);
     const wb = await request(app).get('/api/wallets').set(b.auth);
-    expect(wa.body.items[0].balance).toBe(10000 - 2500 - 13);
+    expect(wa.body.items[0].balance).toBe(10000 - 2500 - 19);
     expect(wb.body.items[0].balance).toBe(2500);
     const wrongPin = await request(app).post('/api/transfers').set(a.auth).send({ to: 'receiver1', amount: '1.00', currency: 'USD', pin: '0000' });
     expect(wrongPin.status).toBe(403);
@@ -136,7 +136,7 @@ describe('QR & payment requests', () => {
     const again = await request(app).post(`/api/payment-requests/${code}/pay`).set(payer.auth).send({ pin: '1234' });
     expect(again.status).toBe(409);
     const mw = await request(app).get('/api/wallets').set(merchant.auth);
-    expect(mw.body.items[0].balance).toBe(1200 - 18); // 1.5% merchant fee
+    expect(mw.body.items[0].balance).toBe(1200 - 10); // tariff: 0.8% merchant QR fee (9.6 -> 10)
   });
 
   it('handles money requests between users', async () => {
@@ -167,7 +167,7 @@ describe('deposits & checkout via sandbox gateway', () => {
     expect(ok.status).toBe(201);
     expect(ok.body.payment.status).toBe('succeeded');
     const wallets = await request(app).get('/api/wallets').set(a.auth);
-    expect(wallets.body.items[0].balance).toBe(10000 - 30 - 290); // fixed 0.30 + 2.9%
+    expect(wallets.body.items[0].balance).toBe(10000 - 70); // tariff: money in 0.7%, no fixed fee
     const declined = await request(app)
       .post('/api/deposits')
       .set(a.auth)
@@ -204,7 +204,7 @@ describe('deposits & checkout via sandbox gateway', () => {
     expect(confirm.body.payment.status).toBe('succeeded');
     expect(confirm.body.payment.stage).toBe('SETTLED');
     const wallets = await request(app).get('/api/wallets').set(a.auth);
-    expect(wallets.body.items[0].balance).toBe(3000);
+    expect(wallets.body.items[0].balance).toBe(3000 - 21); // tariff: money in 0.7%
   });
 
   it('runs guest checkout with card and virtual card on a merchant payment link', async () => {
@@ -220,11 +220,11 @@ describe('deposits & checkout via sandbox gateway', () => {
     expect(pay.body.payment.status).toBe('succeeded');
     expect(pay.body.paymentRequest.status).toBe('paid');
     const mw = await request(app).get('/api/wallets').set(merchant.auth);
-    expect(mw.body.items[0].balance).toBe(4000 - 60);
+    expect(mw.body.items[0].balance).toBe(4000 - 28); // tariff: payment link 0.7%
 
-    // virtual card flow
+    // virtual card flow: the issue carries the minimum first load (100.00) plus the fixed 2.00 + 2% issue fee
     const holder = await registerUser(app);
-    await fund(app, holder.user.id, '100.00');
+    await fund(app, holder.user.id, '300.00');
     const card = await request(app).post('/api/virtual-cards').set(holder.auth).send({ currency: 'USD', pin: '1234' });
     expect(card.status, JSON.stringify(card.body)).toBe(201);
     await request(app).post(`/api/virtual-cards/${card.body.card.id}/fund`).set(holder.auth).send({ amount: '60.00', pin: '1234' });
@@ -240,7 +240,7 @@ describe('deposits & checkout via sandbox gateway', () => {
     expect(vpay.status).toBe(201);
     expect(vpay.body.status).toBe('succeeded');
     const cards = await request(app).get('/api/virtual-cards').set(holder.auth);
-    expect(cards.body.items[0].balance).toBe(6000 - 2500);
+    expect(cards.body.items[0].balance).toBe(10_000 + 6000 - 2500); // first load + reload - charge
   });
 
   it('exposes the merchant v1 API with API keys and webhooks config', async () => {
@@ -273,14 +273,14 @@ describe('withdrawals, agents, remittance', () => {
     expect(w.status).toBe(201);
     expect(w.body.transaction.status).toBe('pending');
     let wallets = await request(app).get('/api/wallets').set(a.auth);
-    expect(wallets.body.items[0].balance).toBe(10000 - 4000 - 140); // 1.00 fixed + 1%
+    expect(wallets.body.items[0].balance).toBe(10000 - 4000 - 28); // tariff: money out 0.7%, no fixed fee
     const admin = await adminToken(app);
     // A single administrator cannot decide a payout: the reject is a proposal until a second admin approves it.
     const alone = await request(app).post(`/api/admin/withdrawals/${w.body.transaction.id}/reject`).set(admin.auth).send({ reason: 'bad account' });
     expect(alone.status).toBe(200);
     expect(alone.body.transaction.status).toBe('pending');
     const wait = await request(app).get('/api/wallets').set(a.auth);
-    expect(wait.body.items[0].balance).toBe(10000 - 4000 - 140);
+    expect(wait.body.items[0].balance).toBe(10000 - 4000 - 28);
     const self = await request(app).post(`/api/admin/verifications/${alone.body.verification.id}/approve`).set(admin.auth).send({ pin: admin.pin });
     expect(self.status).toBe(403);
     const checker = await (await import('./helpers')).checkerToken(app);
@@ -305,15 +305,15 @@ describe('withdrawals, agents, remittance', () => {
     const cashIn = await request(app).post('/api/agents/me/cash-in').set(agent.auth).send({ customer: 'cust7', amount: '100.00', currency: 'USD', pin: '1234' });
     expect(cashIn.status).toBe(201);
     let cw = await request(app).get('/api/wallets').set(customer.auth);
-    expect(cw.body.items[0].balance).toBe(10000 - 100); // 1% fee deducted
+    expect(cw.body.items[0].balance).toBe(10000 - 70); // tariff: money in 0.7% deducted
     const aw = await request(app).get('/api/wallets').set(agent.auth);
-    expect(aw.body.items[0].balance).toBe(50000 - 10000 + 50); // float out, 0.5% commission earned
+    expect(aw.body.items[0].balance).toBe(50000 - 10000 + 40); // float out, 0.5% commission earned
     const req = await request(app).post('/api/agents/cash-out').set(customer.auth).send({ agent: 'agent7', amount: '50.00', currency: 'USD', pin: '1234' });
     expect(req.status).toBe(201);
     const confirm = await request(app).post('/api/agents/me/cash-out/confirm').set(agent.auth).send({ code: req.body.request.code, pin: '1234' });
     expect(confirm.status).toBe(201);
     cw = await request(app).get('/api/wallets').set(customer.auth);
-    expect(cw.body.items[0].balance).toBe(9900 - 5000 - 75);
+    expect(cw.body.items[0].balance).toBe(9930 - 5000 - 35); // tariff: money out 0.7%
     const stats = await request(app).get('/api/agents/me/stats').set(agent.auth);
     expect(stats.body.cashInCount).toBe(1);
     expect(stats.body.cashOutCount).toBe(1);
@@ -361,8 +361,10 @@ describe('services & referrals', () => {
     expect(bill.body.receiptNo).toMatch(/^BILL-/);
     const ops = await request(app).get('/api/topups/operators').set(a.auth);
     const op = ops.body.items.find((o: any) => o.currency === 'USD');
-    const top = await request(app).post('/api/topups').set(a.auth).send({ operatorId: op.id, phone: '+15550001111', amount: '10.00', pin: '1234' });
-    expect(top.status).toBe(201);
+    const top = await request(app).post('/api/topups').set(a.auth).send({ operatorId: op.id, phone: '+15550001111', amount: '20.00', pin: '1234' });
+    expect(top.status, JSON.stringify(top.body)).toBe(201);
+    // tariff: top-ups are bounded to 15.00 – 100.00
+    expect((await request(app).post('/api/topups').set(a.auth).send({ operatorId: op.id, phone: '+15550001111', amount: '10.00', pin: '1234' })).body.error.code).toBe('amount_below_minimum');
     const products = await request(app).get('/api/gift-cards/products').set(a.auth);
     const p = products.body.items.find((x: any) => x.currency === 'USD');
     const gift = await request(app)
@@ -444,7 +446,7 @@ describe('P2P trading', () => {
     const resolved = await request(app).post(`/api/admin/p2p/trades/${t2.body.trade.id}/resolve`).set(admin.auth).send({ outcome: 'refund' });
     expect(resolved.body.trade.status).toBe('refunded');
     const sw = await request(app).get('/api/wallets').set(seller.auth);
-    expect(sw.body.items.find((w: any) => w.currency === 'USD').balance).toBe(20000 - 5000 - 25); // 0.5% p2p fee on completed trade only
+    expect(sw.body.items.find((w: any) => w.currency === 'USD').balance).toBe(20000 - 5000 - 40); // tariff: 0.8% exchange fee on the completed trade only
   });
 });
 

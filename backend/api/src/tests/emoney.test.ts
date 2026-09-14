@@ -177,7 +177,7 @@ describe('e-money issuance engine', () => {
     const a2 = await request(app)
       .post(`/api/admin/emoney/pools/${master.body.pool.id}/allocate`)
       .set(admin.auth)
-      .send({ toUserId: holder.user.id, amount: '120.00', reason: 'Cash-in at agent', pin: admin.pin });
+      .send({ toUserId: holder.user.id, amount: '150.00', reason: 'Cash-in at agent', pin: admin.pin });
     expect(a2.status).toBe(200);
     const tooMuch = await request(app)
       .post(`/api/admin/emoney/pools/${master.body.pool.id}/allocate`)
@@ -187,13 +187,13 @@ describe('e-money issuance engine', () => {
     expect(tooMuch.body.error.code).toBe('insufficient_funds');
     const pools = await request(app).get('/api/admin/emoney/pools').set(admin.auth);
     expect(pools.body.items.find((p: any) => p.id === country.body.pool.id).balance).toBe(150_000);
-    expect(pools.body.items.find((p: any) => p.id === master.body.pool.id).balance).toBe(38_000);
+    expect(pools.body.items.find((p: any) => p.id === master.body.pool.id).balance).toBe(35_000);
     const w = await request(app).get('/api/wallets').set(holder.auth);
-    expect(w.body.items.find((x: any) => x.currency === 'KES').balance).toBe(12_000);
+    expect(w.body.items.find((x: any) => x.currency === 'KES').balance).toBe(15_000);
     // outstanding e-money = user balances + pool balances; still fully covered
     const p = await request(app).get(`/api/admin/emoney/programmes/${id}`).set(admin.auth);
     expect(p.body.programme.position.liabilities).toBe(200_000);
-    expect(p.body.programme.position.poolBalances).toBe(188_000);
+    expect(p.body.programme.position.poolBalances).toBe(185_000);
     expect(p.body.programme.position.headroom).toBe(300_000);
     // the pool owner can see their pool
     const mine = await request(app).get('/api/account/pools').set(agentUser.auth);
@@ -205,15 +205,15 @@ describe('e-money issuance engine', () => {
     const blocked = await request(app)
       .post('/api/transfers')
       .set(holder.auth)
-      .send({ pin: '1234', to: `@${agentUser.user.tag}`, amount: '10.00', currency: 'KES' });
+      .send({ pin: '1234', to: `@${agentUser.user.tag}`, amount: '130.00', currency: 'KES' }); // ≥ the tariff minimum of 1.00 USD in KES
     expect(blocked.status).toBe(403);
     expect(blocked.body.error.code).toBe('wallet_frozen');
     await request(app).post(`/api/admin/users/${holder.user.id}/wallets/KES/freeze`).set(admin.auth).send({ freeze: false, reason: 'Order lifted', pin: admin.pin });
     const okTx = await request(app)
       .post('/api/transfers')
       .set(holder.auth)
-      .send({ pin: '1234', to: `@${agentUser.user.tag}`, amount: '10.00', currency: 'KES' });
-    expect(okTx.status).toBe(201);
+      .send({ pin: '1234', to: `@${agentUser.user.tag}`, amount: '130.00', currency: 'KES' });
+    expect(okTx.status, JSON.stringify(okTx.body)).toBe(201);
   });
 
   it('refuses to mark a programme live without the issuer arrangements and records every step immutably', async () => {

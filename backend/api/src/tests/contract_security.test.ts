@@ -64,9 +64,10 @@ describe('virtual cards never store a CVV', () => {
   it('issues, reveals and charges a card with a derived CVV, declines a wrong CVV and stores NULL in cvv_encrypted', async () => {
     const merchant = await registerUser(app, { role: 'merchant', businessName: 'CVV Shop' });
     const holder = await registerUser(app);
-    await fund(app, holder.user.id, '100.00');
+    await fund(app, holder.user.id, '300.00'); // tariff: a card issue carries the minimum first load (100.00) + fixed 2.00 + 2%
     const card = await request(app).post('/api/virtual-cards').set(holder.auth).send({ currency: 'USD', pin: '1234' });
     expect(card.status, JSON.stringify(card.body)).toBe(201);
+    expect(card.body.card.balance).toBe(10_000);
     await request(app).post(`/api/virtual-cards/${card.body.card.id}/fund`).set(holder.auth).send({ amount: '60.00', pin: '1234' });
     const row = getDb().prepare('SELECT cvv_encrypted, pan_hash, exp_month, exp_year FROM virtual_cards WHERE id = ?').get(card.body.card.id) as any;
     expect(row.cvv_encrypted).toBeNull();
@@ -93,6 +94,7 @@ describe('virtual cards never store a CVV', () => {
     expect(deriveCvv('abc', 12, 2030)).not.toBe(deriveCvv('abd', 12, 2030));
     expect(deriveCvv('abc', 1, 2031)).toMatch(/^\d{3}$/);
     const holder = await registerUser(app);
+    await fund(app, holder.user.id, '150.00');
     const card = await request(app).post('/api/virtual-cards').set(holder.auth).send({ currency: 'USD', pin: '1234' });
     // a card issued before migration 027 carries its CVV encrypted; it is still the CVV the holder sees
     getDb().prepare('UPDATE virtual_cards SET cvv_encrypted = ? WHERE id = ?').run(encrypt('917'), card.body.card.id);

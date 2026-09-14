@@ -38,7 +38,7 @@ describe('fee schedules', () => {
     const checker = await checkerToken(app);
     const m = await registerUser(app, { role: 'merchant', businessName: 'Tiered Shop', country: 'CD' });
     // baseline from the flat setting
-    expect(calculateFee('merchant_payment', 10_000, 'USD')).toBe(150);
+    expect(calculateFee('merchant_payment', 10_000, 'USD')).toBe(80);
     const before = await request(app).get('/api/admin/finops/fees/effective').set(admin.auth).query({ type: 'merchant_payment', user: m.user.id });
     expect(before.body.resolved.source.scope).toBe('settings');
 
@@ -86,7 +86,7 @@ describe('fee schedules', () => {
       [2, 'ACTIVE'],
       [1, 'RETIRED'],
     ]);
-    expect(calculateFee('merchant_payment', 10_000, 'USD')).toBe(150);
+    expect(calculateFee('merchant_payment', 10_000, 'USD')).toBe(150); // platform schedule v2 (150 bps) outranks the flat tariff
     // clean up the tier so later merchants in this file pay the default fee
     await request(app).post(`/api/admin/finops/fees/schedules/${tier.body.id}/retire`).set(admin.auth);
     await request(app).put(`/api/admin/finops/fees/tier/${m.user.id}`).set(admin.auth).send({ tier: null });
@@ -110,12 +110,12 @@ describe('commission ledger', () => {
     expect(st.status).toBe(200);
     const kinds = st.body.entries.map((e: any) => e.kind).sort();
     expect(kinds).toEqual(['cash_in', 'cash_out']);
-    expect(st.body.entries.find((e: any) => e.kind === 'cash_in').amountMinor).toBe(50); // 0.5% of 100.00
-    expect(st.body.entries.find((e: any) => e.kind === 'cash_in').platformShareMinor).toBe(5); // 10% platform share
-    expect(st.body.statement.totals.USD.earned).toBe(50 + 25);
+    expect(st.body.entries.find((e: any) => e.kind === 'cash_in').amountMinor).toBe(40); // tariff: 0.4% money-in agent commission on 100.00
+    expect(st.body.entries.find((e: any) => e.kind === 'cash_in').platformShareMinor).toBe(4); // 10% platform share
+    expect(st.body.statement.totals.USD.earned).toBe(40 + 20); // tariff: 0.4% of the 100.00 cash-in and of the 50.00 cash-out
     expect(st.body.statement.totals.USD.count).toBe(2);
     const overview = await request(app).get('/api/admin/finops/commissions/overview').set(admin.auth).query({ period });
-    expect(overview.body.rows.some((r: any) => r.agentUserId === agent.user.id && r.kind === 'cash_out' && r.amountMinor === 25)).toBe(true);
+    expect(overview.body.rows.some((r: any) => r.agentUserId === agent.user.id && r.kind === 'cash_out' && r.amountMinor === 20)).toBe(true);
     await request(app).put('/api/admin/finops/commissions/settings').set(admin.auth).send({ platformShareBps: 0 });
   });
 });

@@ -179,7 +179,7 @@ export function Cards() {
     if (!action) return;
     setLoading(true);
     try {
-      if (action.type === 'issue') await api.post('/api/virtual-cards', { currency: cur, pin: p });
+      if (action.type === 'issue') await api.post('/api/virtual-cards', { currency: cur, amount: amount || undefined, pin: p });
       if (action.type === 'fund') await api.post(`/api/virtual-cards/${action.card!.id}/fund`, { amount, pin: p });
       if (action.type === 'withdraw') await api.post(`/api/virtual-cards/${action.card!.id}/withdraw`, { amount, pin: p });
       if (action.type === 'reveal') setRevealed((await api.post<{ card: any }>(`/api/virtual-cards/${action.card!.id}/reveal`, { pin: p })).card);
@@ -242,7 +242,17 @@ export function Cards() {
         title={action?.type === 'issue' ? 'New virtual card' : action?.type === 'fund' ? 'Fund card' : 'Withdraw from card'}
       >
         {action?.type === 'issue' ? (
-          <Select label={t('common.currency')} value={cur} onChange={setCur} options={(config?.currencies ?? []).map((c: any) => ({ value: c.code, label: c.code }))} />
+          <>
+            <Select label={t('common.currency')} value={cur} onChange={setCur} options={(config?.currencies ?? []).map((c: any) => ({ value: c.code, label: c.code }))} />
+            <Input
+              label={`First load (${cur}) · issue fee ${((config?.fees?.virtual_card_issue?.fixed ?? 0) / 100).toFixed(2)} + ${((config?.fees?.virtual_card_issue?.bps ?? 0) / 100).toFixed(2)}%${config?.fees?.virtual_card_issue?.minAmount ? ` · minimum ${(config.fees.virtual_card_issue.minAmount / 100).toFixed(2)}` : ''}`}
+              value={amount}
+              onChangeText={(v) => setAmount(v.replace(/[^\d.]/g, ''))}
+              keyboardType="decimal-pad"
+              placeholder={config?.fees?.virtual_card_issue?.minAmount ? (config.fees.virtual_card_issue.minAmount / 100).toFixed(2) : '0.00'}
+              big
+            />
+          </>
         ) : (
           <Input label={`${t('common.amount')} (${action?.card?.currency})`} value={amount} onChangeText={(v) => setAmount(v.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" big />
         )}

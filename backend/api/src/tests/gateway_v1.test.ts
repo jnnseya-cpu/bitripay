@@ -125,13 +125,14 @@ describe('checkout sessions, links and refunds', () => {
     expect(tooMuch.status).toBe(409);
     expect(tooMuch.body.error.code).toBe('refund_exceeds_refundable');
     // a refund the merchant balance cannot cover fails cleanly and releases its reservation
+    const merchantBalance = (getDb().prepare("SELECT balance FROM wallets WHERE user_id = ? AND currency = 'USD'").get(m.user.id) as any).balance as number;
     getDb().prepare("UPDATE wallets SET balance = 100 WHERE user_id = ? AND currency = 'USD'").run(m.user.id);
     const short = await request(app).post('/api/v1/refunds').set(m.auth).send({ payment_intent: cs.body.intentId });
     expect(short.status).toBe(402);
     expect(short.body.status).toBe('FAILED');
     expect(short.body.error).toMatch(/insufficient/i);
     expect((await request(app).get(`/api/v1/payment_intents/${cs.body.intentId}/refundable`).set(m.auth)).body.refundable).toBe(700);
-    getDb().prepare("UPDATE wallets SET balance = 782 WHERE user_id = ? AND currency = 'USD'").run(m.user.id);
+    getDb().prepare("UPDATE wallets SET balance = ? WHERE user_id = ? AND currency = 'USD'").run(merchantBalance, m.user.id);
     const r2 = await request(app).post('/api/v1/refunds').set(m.auth).send({ payment_intent: cs.body.intentId });
     expect(r2.status, JSON.stringify(r2.body)).toBe(201);
     expect(r2.body.amount.valueMinor).toBe(700);
