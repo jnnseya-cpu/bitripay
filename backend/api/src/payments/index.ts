@@ -3,6 +3,7 @@ import { config } from '../config';
 import { encrypt, decrypt } from '../lib/crypto';
 import { parseJson } from '../lib/json';
 import { now } from '../lib/ids';
+import { recordEvent } from '../services/events';
 import { sandboxProvider } from './sandbox';
 import { stripeProvider } from './stripe';
 import { paystackProvider } from './paystack';
@@ -62,6 +63,17 @@ function envCredentials(provider: GatewayProviderId): Record<string, string> {
       return { subscriptionKey: config.mtnMomo.subscriptionKey, apiUser: config.mtnMomo.apiUser, apiKey: config.mtnMomo.apiKey, env: config.mtnMomo.env };
     case 'mpesa':
       return { consumerKey: config.mpesa.consumerKey, consumerSecret: config.mpesa.consumerSecret, shortcode: config.mpesa.shortcode, passkey: config.mpesa.passkey, env: config.mpesa.env };
+    case 'bitcoin':
+      return config.btcpay.serverUrl && config.btcpay.storeId && config.btcpay.apiKey
+        ? {
+            mode: 'btcpay',
+            serverUrl: config.btcpay.serverUrl,
+            storeId: config.btcpay.storeId,
+            apiKey: config.btcpay.apiKey,
+            webhookSecret: config.btcpay.webhookSecret,
+            network: config.btcpay.network,
+          }
+        : {};
     default:
       return {};
   }
@@ -260,4 +272,53 @@ export function ensureDefaultGateways() {
   upsertGateway({ id: 'manual_momo', name: 'Mobile money (direct, all operators)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], sortOrder: 7 });
   upsertGateway({ id: 'open_banking', name: 'Pay by bank (open banking)', provider: 'open_banking', enabled: true, methods: ['bank'], currencies: [], sortOrder: 8 });
   upsertGateway(BITCOIN_GATEWAY);
+}
+
+/** Providers whose credentials can arrive through the environment (see backend/api/.env.example). */
+export const ENV_PROVISIONABLE_PROVIDERS: GatewayProviderId[] = ['stripe', 'paystack', 'flutterwave', 'mtn_momo', 'mpesa', 'bitcoin'];
+
+export interface RailProvisionResult {
+  gatewayId: string;
+  provider: GatewayProviderId;
+  /** 'configured' = credentials present, 'enabled' = passed its check and switched on, 'failed' = check failed, 'skipped' = nothing in the environment. */
+  outcome: 'configured' | 'enabled' | 'failed' | 'skipped';
+  mode: GatewayMode;
+  message: string;
+}
+
+/**
+ * Provision every rail whose credentials are present in the environment: the credentials become the gateway's
+ * defaults, the provider's connectivity check runs, and (unless RAILS_AUTO_ENABLE=0) a gateway that passes is enabled
+ * with a system event so the activation is traceable. Nothing is invented: a rail without credentials stays exactly as
+ * it was, and a failing check never enables a rail. Safe to run at every start-up.
+ */
+export async function provisionRailsFromEnvironment(opts: { credentials?: Partial<Record<GatewayProviderId, Record<string, string>>>; autoEnable?: boolean } = {}): Promise<RailProvisionResult[]> {
+  const results: RailProvisionResult[] = [];
+  const autoEnable = opts.autoEnable ?? config.railsAutoEnable;
+  for (const provider of ENV_PROVISIONABLE_PROVIDERS) {
+    const creds = opts.credentials?.[provider] ?? envCredentials(provider);
+    const present = provider === 'bitcoin' ? creds.mode === 'btcpay' : Object.entries(creds).some(([k, v]) => k !== 'env' && !!v);
+    const g = listGateways().find((x) => x.provider === provider);
+    if (!g) continue;
+    if (!present) {
+      results.push({ gatewayId: g.id, provider, outcome: 'skipped', mode: g.mode, message: 'No credentials in the environment' });
+      continue;
+    }
+    // environment credentials are defaults for getGatewayCredentials(); the stored record only needs the mode for bitcoin
+    // explicit credentials (tests, operator dry runs) are stored on the record; environment credentials stay defaults
+    if (opts.credentials?.[provider]) upsertGateway({ ...g, credentials: creds });
+    else if (provider === 'bitcoin') upsertGateway({ ...g, credentials: { mode: 'btcpay', network: config.btcpay.network } });
+    const health = await testGateway(g.id);
+    const fresh = getGateway(g.id)!;
+    if (!health.ok) {
+      results.push({ gatewayId: g.id, provider, outcome: 'failed', mode: health.mode, message: health.message });
+      continue;
+    }
+    if (!fresh.enabled && autoEnable) {
+      getDb().prepare('UPDATE gateways SET enabled = 1, updated_at = ? WHERE id = ?').run(now(), g.id);
+      recordEvent('admin', g.id, 'gateway.enabled_from_environment', { type: 'system' }, { provider, mode: health.mode, message: health.message });
+      results.push({ gatewayId: g.id, provider, outcome: 'enabled', mode: health.mode, message: health.message });
+    } else results.push({ gatewayId: g.id, provider, outcome: 'configured', mode: health.mode, message: health.message });
+  }
+  return results;
 }

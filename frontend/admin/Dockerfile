@@ -5,6 +5,7 @@ COPY package.json package-lock.json* ./
 COPY shared/core/package.json shared/core/
 COPY shared/bitriqr/package.json shared/bitriqr/
 COPY shared/sdk-node/package.json shared/sdk-node/
+COPY shared/sdk-js/package.json shared/sdk-js/
 COPY backend/api/package.json backend/api/
 COPY frontend/web/package.json frontend/web/
 COPY frontend/admin/package.json frontend/admin/
@@ -12,6 +13,7 @@ RUN npm install --workspaces --include-workspace-root
 COPY shared/core shared/core
 COPY shared/bitriqr shared/bitriqr
 COPY shared/sdk-node shared/sdk-node
+COPY shared/sdk-js shared/sdk-js
 COPY frontend/admin frontend/admin
 RUN npm run build:shared && npm run build -w @bitripay/admin
 

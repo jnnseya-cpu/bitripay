@@ -11,7 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "seed": "tsx src/seed.ts",
     "test": "vitest run",
-    "docs:http": "tsx src/docs/httpFile.ts"
+    "docs:http": "tsx src/docs/httpFile.ts",
+    "go-live": "tsx src/goLive.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

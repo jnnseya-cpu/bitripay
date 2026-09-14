@@ -16,3 +16,4 @@ coverage/
 
 # live smoke output
 shots/smoke/
+deploy/.env.production

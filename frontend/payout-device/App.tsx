@@ -55,7 +55,7 @@ interface Payout {
   riskFlags: string[];
 }
 
-const DEFAULT_API = (Constants.expoConfig?.extra as any)?.apiUrl ?? 'http://10.0.2.2:4000';
+const DEFAULT_API = process.env.EXPO_PUBLIC_API_URL || (Constants.expoConfig?.extra as any)?.apiUrl || 'http://10.0.2.2:4000';
 const POLL_MS = 10_000;
 
 /** Very loud alarm + long vibration when a new payout instruction lands on this device (operators must not miss one). */

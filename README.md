@@ -128,6 +128,7 @@ npm run typecheck # TypeScript across api, web and admin
 | [docs/DEVELOPER.md](docs/DEVELOPER.md) | Day-to-day developer guide: environment, scripts, tests, smoke, conventions |
 | [docs/PLATFORM.md](docs/PLATFORM.md) | Complete feature, brand, configuration, API, WooCommerce, deployment and security reference |
 | [docs/VERIFICATION.md](docs/VERIFICATION.md) | Requirement → implementation → proof matrix, and how to reproduce every check |
+| [deploy/README.md](deploy/README.md) | Go-live deployment for bitripay.com: DNS, TLS, environment, webhooks, `npm run deploy`, `npm run go-live` |
 | [docs/operating-system](docs/operating-system) | The BitriPay operating-system dossier (gateway, switch, financial operations, risk, intelligence) |
 | [docs-api.http](docs-api.http) | Generated REST Client quick reference for the partner API (`npm run docs:http`) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Layer boundaries, non-negotiable rules and the verification gate |

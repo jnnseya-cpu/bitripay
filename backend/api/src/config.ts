@@ -66,6 +66,30 @@ export const config = {
     passkey: env.MPESA_PASSKEY || '',
     env: env.MPESA_ENV || 'sandbox',
   },
+  /** BTCPay Server (Greenfield) for the Bitcoin rail; empty = sandbox invoices only. */
+  btcpay: {
+    serverUrl: (env.BTCPAY_SERVER_URL || '').replace(/\/+$/, ''),
+    storeId: env.BTCPAY_STORE_ID || '',
+    apiKey: env.BTCPAY_API_KEY || '',
+    webhookSecret: env.BTCPAY_WEBHOOK_SECRET || '',
+    network: env.BTCPAY_NETWORK || 'mainnet',
+  },
+  /**
+   * Direct mobile-money rails provisioned from the environment: `operator_id=collection number[:collection name]`
+   * entries separated by `;`, e.g. `orange_cd=+243890000100:BitriPay SARL;mpesa_ke=+254700000100`.
+   */
+  momoDirectRails: (env.MOMO_DIRECT_RAILS || '')
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [operatorId, rest = ''] = entry.split('=');
+      const [collectionNumber, collectionName] = rest.split(':');
+      return { operatorId: operatorId.trim(), collectionNumber: (collectionNumber || '').trim(), collectionName: (collectionName || '').trim() || null };
+    })
+    .filter((r) => r.operatorId && r.collectionNumber),
+  /** Rails whose environment credentials pass their connectivity check are enabled at start-up (set 0 to keep manual activation). */
+  railsAutoEnable: env.RAILS_AUTO_ENABLE !== '0',
   smtp: {
     host: env.SMTP_HOST || '',
     port: Number(env.SMTP_PORT || 587),

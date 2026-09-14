@@ -1,0 +1,53 @@
+# TLS for bitripay.com (web), www.bitripay.com (redirect), admin.bitripay.com and api.bitripay.com.
+# Caddy obtains and renews Let's Encrypt certificates automatically; HTTP is redirected to HTTPS.
+{
+	email {$ACME_EMAIL}
+}
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options SAMEORIGIN
+	}
+	# server-rendered pages, feeds, crawler files, BitriPay Lite and the partner API are served by the API container
+	@api path /api/* /v1/* /lite* /blog* /legal/* /about /contact /brand* /sitemap.xml /feed.xml /robots.txt /llms.txt /llms-full.txt
+	handle @api {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy web:80
+	}
+}
+
+admin.{$DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+	}
+	@api path /api/* /v1/*
+	handle @api {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy admin:80
+	}
+}
+
+api.{$DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options nosniff
+	}
+	reverse_proxy api:4000
+}

@@ -2,6 +2,8 @@ import { getDb } from '../db';
 import { now } from '../lib/ids';
 import { notFound } from '../lib/errors';
 import { MOBILE_MONEY_OPERATORS } from '@bitripay/shared';
+import { config } from '../config';
+import { recordEvent } from './events';
 
 export interface MomoOperator {
   id: string;
@@ -53,6 +55,41 @@ export function ensureMomoOperators() {
       insert.run(o.id, o.name, o.brand, o.country, o.currency, o.ussd ?? null, o.color, i, now(), now());
     });
   })();
+  provisionDirectRailsFromEnvironment();
+}
+
+/**
+ * Direct mobile-money rails from MOMO_DIRECT_RAILS (`operator=collection number[:name];…`): the collection number is
+ * what turns an operator into a direct rail, so a deployment can open its live SIM-backed rails without a console
+ * session. An operator already carrying a different collection number set by an administrator is left untouched.
+ */
+export function provisionDirectRailsFromEnvironment(rails = config.momoDirectRails): { provisioned: string[]; unknown: string[]; kept: string[] } {
+  const db = getDb();
+  const provisioned: string[] = [];
+  const unknown: string[] = [];
+  const kept: string[] = [];
+  for (const rail of rails) {
+    const row = db.prepare('SELECT id, collection_number FROM momo_operators WHERE id = ?').get(rail.operatorId) as { id: string; collection_number: string | null } | undefined;
+    if (!row) {
+      unknown.push(rail.operatorId);
+      continue;
+    }
+    if (row.collection_number && row.collection_number !== rail.collectionNumber) {
+      kept.push(rail.operatorId);
+      continue;
+    }
+    if (row.collection_number === rail.collectionNumber) continue;
+    db.prepare('UPDATE momo_operators SET collection_number = ?, collection_name = COALESCE(?, collection_name), enabled = 1, updated_at = ? WHERE id = ?').run(
+      rail.collectionNumber,
+      rail.collectionName,
+      now(),
+      rail.operatorId,
+    );
+    recordEvent('admin', rail.operatorId, 'operator.direct_rail_from_environment', { type: 'system' }, { collectionNumber: rail.collectionNumber });
+    provisioned.push(rail.operatorId);
+  }
+  if (unknown.length) console.warn(`[rails] MOMO_DIRECT_RAILS names unknown operators: ${unknown.join(', ')}`);
+  return { provisioned, unknown, kept };
 }
 
 export function listOperators(filter: { country?: string | null; currency?: string | null; onlyEnabled?: boolean; onlyDirect?: boolean } = {}): MomoOperator[] {

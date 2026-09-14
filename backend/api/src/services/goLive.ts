@@ -18,6 +18,8 @@ import { getSmtpSettings } from './messaging';
 import { hasPermission } from '../middleware/permissions';
 import { toBase } from './currencies';
 import { getOperatingState } from './guardian';
+import { listOperators } from './momo';
+import { listConnections } from './switch/connections';
 
 export interface ChecklistItem {
   id: string;
@@ -183,6 +185,48 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
     fix: 'Gateway controls → disable sharedSecretAutoConfirm',
   });
   items.push({ id: 'smtp', label: 'Email delivery configured', ok: !!getSmtpSettings().host, blocking: false, detail: getSmtpSettings().host ? getSmtpSettings().host : 'Not configured' });
+  // Rails provisioned from the environment: every enabled live rail must have passed its connectivity check.
+  const liveRails = gateways.filter((g) => g.enabled && !['sandbox', 'manual_bank', 'manual_momo', 'open_banking'].includes(g.provider));
+  const untested = liveRails.filter((g) => !g.lastHealth?.ok);
+  items.push({
+    id: 'rails',
+    label: 'Every enabled rail passed its connectivity check (processors, mobile money, Bitcoin)',
+    ok: liveRails.length > 0 && untested.length === 0,
+    blocking: false,
+    detail: liveRails.length
+      ? liveRails.map((g) => `${g.name}: ${g.mode}${g.lastHealth ? (g.lastHealth.ok ? ' ✓' : ` ✗ ${g.lastHealth.message}`) : ' (not tested)'}`).join(' · ')
+      : 'No live rail enabled',
+    fix: 'Provide the credentials in the API environment (STRIPE_*, PAYSTACK_*, FLUTTERWAVE_*, MTN_MOMO_*, MPESA_*, BTCPAY_*, MOMO_DIRECT_RAILS) or in the console, then Test connection; rails that pass are enabled at start-up',
+  });
+  const directRails = listOperators({ onlyDirect: true, onlyEnabled: true });
+  items.push({
+    id: 'direct_rails',
+    label: 'Direct mobile-money rails (prefunded operator SIMs) configured',
+    ok: directRails.length > 0,
+    blocking: false,
+    detail: directRails.length ? directRails.map((o) => `${o.name} ${o.collectionNumber}`).join(' · ') : 'None: set MOMO_DIRECT_RAILS or add collection numbers in the console',
+    fix: 'MOMO_DIRECT_RAILS="orange_cd=+243…:Account name;mpesa_ke=+254…" or Mobile money → operator → collection number',
+  });
+  const connections = listConnections();
+  const certified = connections.filter((c) => c.enabled && c.certification.status === 'CERTIFIED');
+  items.push({
+    id: 'switch',
+    label: 'National switch: certified adapter configured or connection kept in simulation',
+    ok: config.switch.adapterModule ? certified.length > 0 : true,
+    blocking: false,
+    detail: config.switch.adapterModule
+      ? `${certified.length} certified connection(s) with adapter ${config.switch.adapterModule}`
+      : 'SWITCH_ADAPTER_MODULE not set: national routing stays in simulation until the official profile is delivered',
+    fix: 'After the official profile (BCC-04/06/13): SWITCH_ADAPTER_MODULE=/path/to/adapter.js, certificates in the vault, certification set to CERTIFIED by the approver',
+  });
+  items.push({
+    id: 'public_urls',
+    label: 'Public URLs are HTTPS on the production domain',
+    ok: !config.isProduction || [config.webUrl, config.adminUrl, config.apiUrl].every((u) => u.startsWith('https://')),
+    blocking: config.isProduction,
+    detail: `web ${config.webUrl} · admin ${config.adminUrl} · api ${config.apiUrl}`,
+    fix: 'WEB_URL=https://bitripay.com ADMIN_URL=https://admin.bitripay.com API_URL=https://api.bitripay.com (deploy/.env.production.example)',
+  });
   items.push({
     id: 'secrets',
     label: 'Production secrets set (APP_SECRET / JWT_SECRET)',

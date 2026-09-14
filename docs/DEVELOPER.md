@@ -40,6 +40,8 @@ The database is `backend/api/data/bitripay.db` (`DATABASE_PATH` to move it). Mig
 | `npm run format` / `format:check` | Prettier (`.prettierrc.json`; markdown, PHP, Python and generated files are excluded) |
 | `npm run deps:check` | knip: unused files, exports and dependencies across the workspaces |
 | `npm run docs:http` | regenerates `docs-api.http` from the OpenAPI operation table |
+| `npm run go-live` | provisions every rail whose credentials are in the environment (connectivity-checked), prints the go-live checklist and gate-to-scale metrics, exits non-zero while a blocking item is open |
+| `npm run deploy` | production deployment for bitripay.com behind Caddy (see `deploy/README.md`) |
 | `npm run test:backend` | API tests only (vitest, in-memory SQLite, ~1 min) — `cd backend/api && npx vitest run src/tests/core.test.ts` for one suite |
 | `npm run smoke` | live checks with Playwright against `npm run dev` + `npm run seed` (see `scripts/README.md`); the run prints the count and writes `shots/smoke/results.json` |
 | `npm run typecheck:mobile` / `typecheck:payout-device` | the Expo apps (run `npm install` inside each first) |

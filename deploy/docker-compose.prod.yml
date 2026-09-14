@@ -1,0 +1,86 @@
+# Production composition for bitripay.com: Caddy terminates TLS (automatic Let's Encrypt certificates) in front of the
+# API, the web app and the admin console. Run from the repository root:
+#   docker compose --env-file deploy/.env.production -f deploy/docker-compose.prod.yml up -d --build
+# Every secret comes from deploy/.env.production (never committed); compose refuses to start without the required ones.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      DOMAIN: ${DOMAIN:-bitripay.com}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL to the certificate contact address}
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+      admin:
+        condition: service_started
+  api:
+    build:
+      context: ..
+      dockerfile: backend/api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_PATH: /data/bitripay.db
+      WEB_URL: https://${DOMAIN:-bitripay.com}
+      ADMIN_URL: https://admin.${DOMAIN:-bitripay.com}
+      API_URL: https://api.${DOMAIN:-bitripay.com}
+      WEBAUTHN_RP_ID: ${DOMAIN:-bitripay.com}
+      WEBAUTHN_ORIGINS: https://${DOMAIN:-bitripay.com},https://www.${DOMAIN:-bitripay.com},https://admin.${DOMAIN:-bitripay.com}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET to a random string of at least 32 characters}
+      APP_SECRET: ${APP_SECRET:?set APP_SECRET to a random string of at least 32 characters}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD to a strong password (12+ characters)}
+    volumes:
+      - api-data:/data
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:4000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  web:
+    build:
+      context: ..
+      dockerfile: frontend/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+  admin:
+    build:
+      context: ..
+      dockerfile: frontend/admin/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+  backup:
+    # Nightly SQLite backup (WAL-safe) kept for 30 days under the backups volume; restore with `sqlite3 bitripay.db ".restore FILE"`.
+    image: alpine:3.20
+    restart: unless-stopped
+    volumes:
+      - api-data:/data:ro
+      - backups:/backups
+    command: >
+      sh -c "apk add --no-cache sqlite >/dev/null && while true; do
+        sqlite3 /data/bitripay.db \".backup /backups/bitripay-$(date +%Y%m%d-%H%M).db\" &&
+        find /backups -name 'bitripay-*.db' -mtime +30 -delete;
+        sleep 86400; done"
+volumes:
+  api-data:
+  caddy-data:
+  caddy-config:
+  backups:

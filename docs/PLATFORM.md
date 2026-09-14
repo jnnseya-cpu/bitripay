@@ -769,9 +769,18 @@ Cart/Checkout blocks and HPOS.
 
 ## Deployment
 
+Production on bitripay.com: [deploy/README.md](../deploy/README.md) — Caddy with automatic TLS in front of the API,
+web and admin containers, `deploy/.env.production` for every secret and rail credential, `npm run deploy` to build,
+start and run the go-live command, and the webhook registration table. Development composition:
+
 ```bash
 docker compose up --build      # api :4000, web :8080, admin :8081
 ```
+
+Rails are provisioned from the environment at start-up: credentials present → connectivity check → enabled when the
+check passes (`RAILS_AUTO_ENABLE`), direct mobile-money rails from `MOMO_DIRECT_RAILS`, BTCPay from `BTCPAY_*`, the
+national switch adapter from `SWITCH_ADAPTER_MODULE`. `npm run go-live` prints the checklist and exits non-zero while a
+blocking item is open.
 
 Or build manually: `npm run build` then `node backend/api/dist/index.js` and serve `frontend/web/dist` and
 `frontend/admin/dist` as static sites (both proxy `/api` and `/v1` to the API; set `VITE_API_URL` at build

@@ -12,9 +12,13 @@ import { lua } from './lua';
 
 /** Built-in UI dictionaries shared by the web and mobile apps. Admin overrides are merged on top at runtime. */
 export const LOCALES: Record<string, Record<string, string>> = { en, fr, es, pt, ar, sw, hi, bn, ln, kg, lua };
-/** Partial launch packs and the language each falls back to before English (francophone Central Africa → French). */
+/**
+ * Regional fallback before English for the Central-African packs (a key added to `en` before its translation lands
+ * shows in French rather than English). Every shipped pack is complete: the parity test enforces it.
+ */
 export const LOCALE_FALLBACKS: Record<string, string> = { ln: 'fr', kg: 'fr', lua: 'fr' };
-export const PARTIAL_LOCALES = Object.keys(LOCALE_FALLBACKS);
+/** No pack ships partially any more; kept for callers that checked it. */
+export const PARTIAL_LOCALES: string[] = [];
 
 export function translate(lang: string, key: string, vars?: Record<string, string | number>, overrides?: Record<string, string>): string {
   const fallback = LOCALE_FALLBACKS[lang];

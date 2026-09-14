@@ -59,7 +59,7 @@ import { ensureParseTemplates } from './services/evidence';
 import { ensureMomoOperators } from './services/momo';
 import { ensureDefaultCurrencies } from './services/currencies';
 import { ensureAdminExists } from './services/auth';
-import { ensureDefaultGateways } from './payments';
+import { ensureDefaultGateways, provisionRailsFromEnvironment } from './payments';
 import { getSystemUser } from './services/users';
 import { seedDefaultCatalogs } from './seedDefaults';
 
@@ -72,6 +72,10 @@ export function bootstrap() {
   ensureAdminExists();
   ensureDefaultGateways();
   ensureMomoOperators();
+  if (!config.isTest)
+    void provisionRailsFromEnvironment()
+      .then((r) => r.filter((x) => x.outcome !== 'skipped').forEach((x) => console.log(`[rails] ${x.gatewayId}: ${x.outcome} (${x.mode}) ${x.message}`)))
+      .catch((err) => console.error('[rails] provisioning from environment failed', (err as Error).message));
   ensureParseTemplates();
   // National switch gateway: the DRC connection in simulation, the message catalogue and (outside production) the fictitious institutions the simulator uses.
   ensureDefaultConnections();

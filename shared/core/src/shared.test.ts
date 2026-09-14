@@ -67,7 +67,7 @@ test('card helpers', () => {
 
 test('every built-in locale carries every English key, no orphan keys and the same placeholders', () => {
   const LOCALES: Record<string, Record<string, string>> = { en, fr, es, pt, ar, sw, hi, bn, ln, kg, lua };
-  const PARTIAL = ['ln', 'kg', 'lua']; // launch packs that fall back to French, then English
+  const PARTIAL: string[] = []; // every shipped pack is complete
   const keys = Object.keys(en);
   const placeholders = (v: string) => (v.match(/\{\w+\}/g) ?? []).sort();
   for (const [lang, dict] of Object.entries(LOCALES)) {
@@ -85,9 +85,9 @@ test('every built-in locale carries every English key, no orphan keys and the sa
   // partial packs fall back to French before English
   const chain = (lang: string, key: string) => LOCALES[lang]?.[key] ?? (PARTIAL.includes(lang) ? fr[key] : undefined) ?? en[key];
   assert.equal(chain('ln', 'nav.send'), 'Kotinda mbongo');
-  assert.equal(chain('ln', 'nav.statements'), 'Relevés');
+  assert.equal(chain('ln', 'nav.statements'), 'Ba relevé');
   assert.equal(chain('kg', 'dash.welcome'), 'Mbote, {name}');
-  assert.equal(chain('lua', 'nav.savings'), 'Épargne et objectifs');
+  assert.equal(chain('lua', 'nav.savings'), 'Kulama makuta ne bipatshila');
 });
 
 test('phone normalisation is shared and prefix-tolerant', () => {
