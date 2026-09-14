@@ -62,6 +62,9 @@ jobs:
           push: false
           load: true
           tags: bitripay/${{ matrix.image.name }}:ci
+      - name: Validate the nginx configuration of the web and admin images
+        if: matrix.image.name != 'api'
+        run: docker run --rm --add-host api:127.0.0.1 bitripay/${{ matrix.image.name }}:ci nginx -t
       - name: Start the API image in production mode and check its health
         if: matrix.image.name == 'api'
         run: |
