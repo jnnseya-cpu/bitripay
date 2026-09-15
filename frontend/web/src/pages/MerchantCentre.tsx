@@ -21,6 +21,8 @@ export function MerchantCentre() {
   const disputes = useAsync(() => api.get<any>('/api/v1/disputes'), [tab]);
   const verification = useAsync(() => api.get<any>('/api/risk/verification'), [tab]);
   const fees = useAsync(() => (tab === 'fees' ? api.get<any>('/api/v1/fee_schedule') : Promise.resolve(null)), [tab]);
+  const aggregation = useAsync(() => (tab === 'fees' ? api.get<any>('/api/v1/fees/aggregation').catch(() => null) : Promise.resolve(null)), [tab]);
+  const [payInvoice, setPayInvoice] = useState<any>(null);
   /** The organisation this session acts for (§43): merchant-class owners, administrators and invited members. */
   const org = useAsync(() => api.get<any>('/api/organisations/me').catch(() => null), [tab]);
   const err = (e: any) => toast(e.message, 'error');
@@ -179,6 +181,57 @@ export function MerchantCentre() {
               </div>
             ))}
           </div>
+          {aggregation.data && (
+            <div className="mt">
+              <h4>{tr('Aggregation fees on national switch payments')}</h4>
+              <p className="small muted">
+                {tr(
+                  'Payments routed through the national switch never pass through your BitriPay balance. The aggregation fee ({0}% per completed payment) is accrued, invoiced per month and paid from your wallet or by bank transfer.',
+                  {
+                    0: aggregation.data.rate.bps / 100,
+                  },
+                )}
+              </p>
+              {aggregation.data.accrued.length === 0 && aggregation.data.invoices.length === 0 && <div className="muted small">{tr('No switch payment completed yet.')}</div>}
+              {aggregation.data.accrued.map((a: any) => (
+                <KV key={`${a.period}-${a.currency}`} k={`${a.period} · ${a.count} ${tr('payment(s)')} · ${tr('not yet invoiced')}`} v={money(a.total, a.currency)} />
+              ))}
+              {aggregation.data.invoices.map((inv: any) => (
+                <div key={inv.id} className="list-item">
+                  <div className="flex1">
+                    <div className="main-text">
+                      {inv.number} · {inv.period} · {money(inv.total, inv.currency)}
+                    </div>
+                    <div className="sub-text">
+                      {inv.entryCount} {tr('payment(s)')}
+                      {inv.paidAt ? ` · ${tr('paid on')} ${new Date(inv.paidAt).toLocaleDateString()}` : ''}
+                    </div>
+                  </div>
+                  <StatusBadge status={inv.status} />
+                  {inv.status === 'open' && (
+                    <Button size="sm" onClick={() => setPayInvoice(inv)}>
+                      {tr('Pay from wallet')}
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <PinModal
+                open={!!payInvoice}
+                onClose={() => setPayInvoice(null)}
+                title={payInvoice ? `${tr('Pay invoice')} ${payInvoice.number} · ${money(payInvoice.total, payInvoice.currency)}` : ''}
+                onSubmit={(pin) =>
+                  api
+                    .post(`/api/v1/fees/invoices/${payInvoice.id}/pay`, { pin })
+                    .then(() => {
+                      toast(tr('Invoice paid'), 'success');
+                      setPayInvoice(null);
+                      aggregation.reload();
+                    })
+                    .catch(err)
+                }
+              />
+            </div>
+          )}
         </div>
       )}
       {tab === 'payouts' && <BulkPayouts money={money} toast={toast} err={err} currencies={(config?.currencies ?? []).map((c) => c.code)} />}

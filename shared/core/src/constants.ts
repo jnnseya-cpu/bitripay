@@ -151,6 +151,8 @@ export type PaymentRequestStatus = (typeof PAYMENT_REQUEST_STATUSES)[number];
 /** Transaction types that can carry a configurable platform fee. */
 export const FEE_TYPES = [
   'transfer',
+  /** Aggregation fee on a payment routed through the national switch (charged to the merchant, never taken from the interbank flow). */
+  'switch_payment',
   'qr_payment',
   'merchant_payment',
   'card_deposit',
@@ -175,6 +177,7 @@ export const FEE_TYPE_LABELS: Record<FeeType, string> = {
   transfer: 'Transfer money (P2P)',
   qr_payment: 'QR payment (merchant)',
   merchant_payment: 'Merchant payment (make payment)',
+  switch_payment: 'National switch payment (aggregation fee, invoiced to the merchant)',
   money_request: 'Request money',
   payment_link: 'Payment link (Pay-Link)',
   card_deposit: 'Money in · card',

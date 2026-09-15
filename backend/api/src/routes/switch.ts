@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
 import { requireAuth, requireRole, requireScope } from '../middleware/auth';
 import { rateLimit } from '../middleware/rateLimit';
+import { assertPin } from '../services/auth';
+import { merchantAggregationFees, payInvoiceFromWallet } from '../services/switch/fees';
 import { AppError, forbidden } from '../lib/errors';
 import {
   createPayment,
@@ -113,6 +115,19 @@ switchRouter.get('/payments/:id/refunds', ...merchantOnly, requireScope('refunds
 });
 
 /** Capabilities actually usable by this tenant: active participants of the merchant's country with their open pairs. */
+/** Aggregation fees: what the merchant owes on switch payments, invoices per period, and paying an invoice from the wallet. */
+switchRouter.get('/fees/aggregation', ...merchantOnly, requireScope('payments:read'), (req, res) => res.json(merchantAggregationFees(req.user!.id)));
+switchRouter.post(
+  '/fees/invoices/:id/pay',
+  ...merchantOnly,
+  requireScope('payments:create'),
+  writeLimit,
+  wrap(async (req, res) => {
+    const body = validate(z.object({ pin: z.string().optional() }), req.body ?? {});
+    assertPin(req.user!, body.pin, req);
+    res.json({ invoice: payInvoiceFromWallet(req.user!, String(req.params.id)) });
+  }),
+);
 switchRouter.get('/participants', ...merchantOnly, requireScope('participants:read'), (req, res) => {
   const country = (req.user!.country ?? 'CD').toUpperCase();
   const conn = connectionForCountry(country);

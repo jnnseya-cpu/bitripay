@@ -10,6 +10,8 @@ import fs from 'node:fs';
 import { validate, wrap } from '../../lib/http';
 import { requirePermission } from '../../middleware/permissions';
 import { audit } from '../../services/audit';
+import { assertAdminStepUp } from '../../services/verification';
+import { aggregationFeesOverview, closeAggregationPeriod, settleInvoice } from '../../services/switch/fees';
 import { getDb } from '../../db';
 import { config } from '../../config';
 import { now, shortCode } from '../../lib/ids';
@@ -516,6 +518,27 @@ r.post('/cases/:id/approve-closure', requirePermission('approvals'), (req, res) 
   const c = approveClosure(String(req.params.id), req.user!.id);
   audit(req.user!.id, 'reconciliation.case.close', 'reconciliation_case', c.id, {});
   res.json({ case: c });
+});
+
+// ---------------------------------------------------------------- aggregation fees
+/** The aggregator's remuneration on switch payments: accrued per period, invoiced, settled from the wallet or recorded here under step-up. */
+r.get('/fees', requirePermission('switch'), (_req, res) => res.json(aggregationFeesOverview()));
+r.post('/fees/close', requirePermission('approvals'), (req, res) => {
+  const body = validate(z.object({ period: z.string().regex(/^\d{4}-\d{2}$/), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  const invoices = closeAggregationPeriod(body.period, req.user!.id);
+  res.json({ invoices });
+});
+r.post('/fees/invoices/:id/settle', requirePermission('approvals'), (req, res) => {
+  const body = validate(
+    z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('paid'), reference: z.string().min(4).max(120), pin: z.string().optional() }),
+      z.object({ kind: z.literal('void'), reason: z.string().min(4).max(300), pin: z.string().optional() }),
+    ]),
+    req.body,
+  );
+  assertAdminStepUp(req.user!, body.pin, req);
+  res.json({ invoice: settleInvoice(String(req.params.id), req.user!.id, body.kind === 'paid' ? { kind: 'paid', reference: body.reference } : { kind: 'void', reason: body.reason }) });
 });
 
 // ---------------------------------------------------------------- incidents

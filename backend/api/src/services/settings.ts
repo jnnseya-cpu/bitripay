@@ -43,6 +43,7 @@ Object.assign(DEFAULT_FEES, {
   bill_payment: { fixed: 0, bps: 50, agentBps: 20 },
   mobile_topup: { fixed: 0, bps: 75, minAmount: 1_500, maxAmount: 10_000, agentBps: 50 },
   merchant_payment: { fixed: 0, bps: 80 },
+  switch_payment: { fixed: 0, bps: 80 },
   qr_payment: { fixed: 0, bps: 80 },
   money_request: { fixed: 0, bps: 80 },
   payment_link: { fixed: 0, bps: 70 },

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
+import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, StepUpButton, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
 
 /**
  * National switch console (CMP-13): connections and certification, participants and pairs, routing policies,
@@ -10,7 +10,7 @@ import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader
  */
 export function SwitchConsole() {
   const { toast, money } = useStore();
-  const [tab, setTab] = useState<'national' | 'config' | 'pra' | 'connections' | 'participants' | 'policies' | 'payments' | 'messages' | 'recon' | 'rails' | 'incidents'>('national');
+  const [tab, setTab] = useState<'national' | 'config' | 'pra' | 'connections' | 'participants' | 'policies' | 'payments' | 'messages' | 'recon' | 'rails' | 'incidents' | 'fees'>('national');
   const err = (e: any) => toast(e.message, 'error');
   const ok = (m: string) => toast(m, 'success');
   return (
@@ -32,6 +32,7 @@ export function SwitchConsole() {
           { id: 'recon', label: 'Reconciliation' },
           { id: 'rails', label: 'Rails & Smart Route' },
           { id: 'incidents', label: 'Incidents' },
+          { id: 'fees', label: 'Aggregation fees' },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -47,6 +48,7 @@ export function SwitchConsole() {
       {tab === 'recon' && <Recon ok={ok} err={err} money={money} />}
       {tab === 'rails' && <Rails ok={ok} err={err} />}
       {tab === 'incidents' && <Incidents ok={ok} err={err} />}
+      {tab === 'fees' && <AggregationFees ok={ok} err={err} money={money} />}
     </div>
   );
 }
@@ -1011,6 +1013,107 @@ function Pra({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => voi
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The aggregator's remuneration on switch payments: accrued per period, invoiced at period close, settled from the merchant wallet or recorded here. */
+function AggregationFees({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => void; money: (m: number, c: string) => string }) {
+  const data = useAsync(() => api.get<any>('/api/admin/switch/fees'), []);
+  const [period, setPeriod] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString().slice(0, 7);
+  });
+  const [settle, setSettle] = useState<any>(null);
+  const [form, setForm] = useState({ kind: 'paid', reference: '', reason: '' });
+  return (
+    <div>
+      <div className="card mb">
+        <div className="row wrap">
+          <Field label="Close a period (YYYY-MM)">
+            <Input value={period} onChange={(e) => setPeriod(e.target.value)} style={{ width: 120 }} />
+          </Field>
+          <StepUpButton
+            title="Close period"
+            onConfirm={(pin) =>
+              api
+                .post('/api/admin/switch/fees/close', { period, pin })
+                .then((r: any) => (ok(`${r.invoices.length} invoice(s) created`), data.reload()))
+                .catch(err)
+            }
+          >
+            Close period and invoice
+          </StepUpButton>
+        </div>
+        <p className="tiny muted">
+          One invoice per merchant and currency for the fees accrued in that month. Merchants pay from their wallet; a bank settlement is recorded below with its reference. Earned so far:{' '}
+          {(data.data?.earned ?? []).map((e: any) => money(e.total, e.currency)).join(' · ') || '—'}.
+        </p>
+      </div>
+      <div className="card mb">
+        <h4>Accrued, not yet invoiced</h4>
+        <Table
+          head={['Period', 'Currency', 'Payments', 'Merchants', 'Total']}
+          rows={(data.data?.accrued ?? []).map((a: any) => [a.period, a.currency, a.count, a.merchants, money(a.total, a.currency)])}
+          empty="Nothing accrued"
+        />
+      </div>
+      <div className="card">
+        <h4>Invoices</h4>
+        <Table
+          head={['Number', 'Merchant', 'Period', 'Total', 'Status', '']}
+          rows={(data.data?.invoices ?? []).map((i: any) => [
+            <b className="mono">{i.number}</b>,
+            i.merchant ? `${i.merchant.businessName || i.merchant.fullName} (@${i.merchant.tag})` : i.merchantUserId,
+            i.period,
+            money(i.total, i.currency),
+            <span>
+              <StatusBadge status={i.status} />
+              {i.paidReference ? <span className="tiny muted"> ref {i.paidReference}</span> : null}
+              {i.paidTransactionId ? <span className="tiny muted"> wallet</span> : null}
+            </span>,
+            i.status === 'open' ? (
+              <Button size="sm" variant="secondary" onClick={() => setSettle(i)}>
+                Settle / void
+              </Button>
+            ) : null,
+          ])}
+          empty="No invoice yet"
+        />
+      </div>
+      <Modal open={!!settle} onClose={() => setSettle(null)} title={settle ? `Invoice ${settle.number}` : ''}>
+        {settle && (
+          <>
+            <Field label="Action">
+              <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
+                <option value="paid">Record a bank settlement</option>
+                <option value="void">Void (entries return to accrued)</option>
+              </Select>
+            </Field>
+            {form.kind === 'paid' ? (
+              <Field label="Bank reference">
+                <Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
+              </Field>
+            ) : (
+              <Field label="Reason">
+                <Input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+              </Field>
+            )}
+            <StepUpButton
+              title="Confirm"
+              onConfirm={(pin) =>
+                api
+                  .post(`/api/admin/switch/fees/invoices/${settle.id}/settle`, form.kind === 'paid' ? { kind: 'paid', reference: form.reference, pin } : { kind: 'void', reason: form.reason, pin })
+                  .then(() => (ok('Invoice updated'), setSettle(null), data.reload()))
+                  .catch(err)
+              }
+            >
+              Confirm
+            </StepUpButton>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -161,7 +161,7 @@ describe('L1 internal core: identity, idempotency, state machine', () => {
     expect(intent.transaction_id).toBeNull();
     expect(runGuardian().findings.filter((f) => f.kind === 'captured_without_posting')).toHaveLength(0);
     const journal = getDb().prepare('SELECT fact FROM switch_journal WHERE payment_id = ? ORDER BY occurred_at').all(pid) as any[];
-    expect(journal.map((j) => j.fact)).toEqual(['PRINCIPAL_REQUESTED', 'CREDIT_CONFIRMED']);
+    expect(journal.map((j) => j.fact)).toEqual(['PRINCIPAL_REQUESTED', 'CREDIT_CONFIRMED', 'AGGREGATION_FEE']);
   });
 
   it('T14 — cancellation races the dispatcher: cancel before emission is safe; after emission it is refused', async () => {

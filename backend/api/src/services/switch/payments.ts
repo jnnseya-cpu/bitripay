@@ -20,6 +20,7 @@ import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { recordEvent, type Actor } from '../events';
 import { findUserById, type UserRow } from '../users';
 import { getCurrency } from '../currencies';
+import { accrueAggregationFee, feeEntryForPayment, quoteAggregationFee, type FeeEntry, type FeeQuote } from './fees';
 import { countryCapabilities } from '../capabilities';
 import { screenSanctions } from '../risk';
 import { emitEvent } from '../webhooks';
@@ -433,6 +434,8 @@ export interface SwitchPaymentView {
   rejection: { code: string; message: string } | null;
   action: { type: string; message: string } | null;
   customer_message: { fr: string; en: string };
+  /** The aggregator's fee on this payment: quoted before emission, accrued (with its period and status) once completed. */
+  fees: { aggregation: FeeEntry | (FeeQuote & { status: 'quoted' }) };
   simulation: boolean;
   expires_at: string;
   dispatched_at: string | null;
@@ -481,6 +484,7 @@ export function paymentView(p: SwitchPaymentRow): SwitchPaymentView {
       reference: p.external_reference,
       reason: rejection?.message ?? null,
     }),
+    fees: { aggregation: feeEntryForPayment(p.id) ?? { ...quoteAggregationFee(p.merchant_user_id, p.amount_minor, p.currency), status: 'quoted' as const } },
     simulation: conn?.adapter === 'simulator',
     expires_at: p.expires_at,
     dispatched_at: p.dispatched_at,
@@ -1258,6 +1262,8 @@ export function applyObservation(paymentId: string, obs: ExternalObservation, ct
         journal(paymentId, 'CREDIT_CONFIRMED', p.amount_minor, p.currency, obs.authority, obs.externalReference, proofRef, obs.occurredAt);
         if (ctx.attemptId) db.prepare("UPDATE switch_attempts SET status = 'COMPLETED' WHERE id = ?").run(ctx.attemptId);
         const fresh = getPaymentRow(paymentId);
+        // the aggregator's remuneration: accrued for invoicing, never deducted from the interbank flow
+        accrueAggregationFee(fresh);
         mirrorIntent(fresh, 'captured');
         webhook(fresh, 'payment.completed');
         return done('applied:COMPLETED');
