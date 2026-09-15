@@ -18,9 +18,6 @@ export function setTrLang(lang: string): void {
   currentLang = lang;
   bump();
 }
-export function getTrLang(): string {
-  return currentLang;
-}
 export function hasOverrides(lang: string): boolean {
   return !!overrides[lang];
 }
