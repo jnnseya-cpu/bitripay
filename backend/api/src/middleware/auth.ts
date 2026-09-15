@@ -9,6 +9,7 @@ import { getAppSettings, getSecuritySettings } from '../services/settings';
 import type { Role, OrgPermission, OrgRole } from '@bitripay/shared';
 import type { ApiKeyScope } from '../services/merchant';
 import { findOrganisationForOwner, hasOrgPermission, resolveMembership, type OrganisationRow } from '../services/organisations';
+import { resolveConnectedAccount } from '../services/platform';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -21,6 +22,8 @@ declare global {
       organisation?: OrganisationRow;
       organisationRole?: OrgRole;
       organisationPermissions?: string[];
+      /** Set when an API key acts for a connected account (`BitriPay-Account: acct_…`): req.user is then the customer, req.actor the platform. */
+      connectedAccountId?: string;
       apiKeyId?: string;
       apiKeyKind?: 'secret' | 'publishable' | 'restricted';
       apiKeyScopes?: string[];
@@ -51,6 +54,20 @@ export function resolveOrganisationContext(req: Request, user: UserRow): UserRow
   if (user.role === 'admin') return user;
   const header = req.headers['x-organisation-id'];
   const requested = typeof header === 'string' && header ? header : null;
+  if (req.authVia === 'api_key') {
+    // A platform key acting for one of its connected accounts: the request runs as the customer (merchant of record),
+    // the platform stays the actor for audit, and it holds the administrator permissions of that organisation.
+    const accountHeader = req.headers['bitripay-account'];
+    if (typeof accountHeader === 'string' && accountHeader) {
+      const c = resolveConnectedAccount(user, accountHeader.trim());
+      req.actor = user;
+      req.organisation = c.organisation;
+      req.organisationRole = 'administrator';
+      req.organisationPermissions = c.permissions;
+      req.connectedAccountId = c.account.id;
+      return c.user;
+    }
+  }
   if (req.authVia === 'api_key' || isMerchantRole(user.role) || user.role === 'agent') {
     const own = findOrganisationForOwner(user.id);
     // An owner acts for its own organisation unless the session explicitly picks another workspace it belongs to

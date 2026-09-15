@@ -10,6 +10,7 @@ import { verifyOtp } from '../services/otp';
 import { issueOtp } from '../services/otp';
 import { normalizeEmail, normalizePhone, findUserByEmail, findUserByPhone, isMerchantRole } from '../services/users';
 import { membershipSummaries, onAgentRegistered, onMerchantClassRegistered } from '../services/organisations';
+import { claimConnectedAccount, describeClaimLink } from '../services/platform';
 import { signToken } from '../lib/jwt';
 import { badRequest, conflict } from '../lib/errors';
 
@@ -158,6 +159,19 @@ authRouter.post(
     res.json({ ok: true });
   }),
 );
+
+/** A connected account's owner opens the claim link a platform sent, sets a password and signs in as the account. */
+authRouter.post(
+  '/claim',
+  authLimit,
+  wrap(async (req, res) => {
+    const body = validate(z.object({ token: z.string().min(16).max(120), password: z.string().min(8).max(200) }), req.body);
+    const { user, account } = claimConnectedAccount(body.token, body.password);
+    res.json({ token: signToken({ sub: user.id, role: user.role }), user: toUser(user), account: { id: account.id, organisationId: account.organisation_id } });
+  }),
+);
+/** What a claim link is for, before the person commits: the business name and the platform that created the account. */
+authRouter.get('/claim/:token', authLimit, (req, res) => res.json(describeClaimLink(String(req.params.token))));
 
 /** The session's account plus every organisation the person can act for (own or as an invited member) and with which role. */
 authRouter.get('/me', requireAuth, (req, res) => {

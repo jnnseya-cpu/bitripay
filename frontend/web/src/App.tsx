@@ -3,7 +3,7 @@ import { useStore } from './lib/store';
 import { Layout, Toasts } from './components/Layout';
 import { Loading } from './components/ui';
 import { Landing } from './pages/Landing';
-import { Login, Register, Forgot } from './pages/Auth';
+import { Login, Register, Forgot, Claim } from './pages/Auth';
 import { Dashboard } from './pages/Dashboard';
 import { Send } from './pages/Send';
 import { Scan, QrLanding } from './pages/Scan';
@@ -56,6 +56,7 @@ export function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot" element={<Forgot />} />
+        <Route path="/claim/:token" element={<Claim />} />
         <Route path="/pay/:code" element={<Checkout />} />
         <Route path="/checkout/:code" element={<Checkout />} />
         <Route path="/q" element={<QrLanding />} />

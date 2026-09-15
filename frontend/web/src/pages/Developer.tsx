@@ -347,6 +347,17 @@ const CURL = `curl -X POST https://api.bitripay.com/v1/payment_intents \\
   -H "Authorization: Bearer sk_test_..." -H "Idempotency-Key: order-1001" \\
   -H "Content-Type: application/json" \\
   -d '{"amount_minor":2500,"currency":"USD","reference":"ORDER-1001"}'`;
+const PLATFORM = `# 1. Create your customer's account (returns acct_…; they get a claim link to own it)
+curl -X POST https://api.bitripay.com/v1/accounts -H "Authorization: Bearer sk_live_..." -H "Content-Type: application/json" \\
+  -d '{"business_name":"Pharmacie Lumière","type":"merchant","email":"owner@pharmacie.example","country":"CD","application_fee_bps":150}'
+
+# 2. Any operation for that customer: your key + the account header (their money, your fee)
+curl -X POST https://api.bitripay.com/v1/payment_intents -H "Authorization: Bearer sk_live_..." -H "BitriPay-Account: acct_..." \\
+  -H "Idempotency-Key: inv-88" -H "Content-Type: application/json" \\
+  -d '{"amount_minor":250000,"currency":"CDF","description":"Invoice 88","application_fee_minor":3750}'
+
+# 3. Hand over: a one-time claim link (7 days) for the customer to set a password
+curl -X POST https://api.bitripay.com/v1/accounts/acct_.../account_links -H "Authorization: Bearer sk_live_..."`;
 function Docs() {
   const [lang, setLang] = useState<'node' | 'php' | 'python' | 'curl'>('node');
   const code = { node: NODE, php: PHP, python: PY, curl: CURL }[lang];
@@ -383,6 +394,15 @@ function Docs() {
         <p className="small muted">
           Your own account can also hold a merchant organisation for products you sell yourself. Register it as a <Link to="/register?role=developer">developer account</Link>.
         </p>
+      </div>
+      <div className="card">
+        <h3>Connected accounts: onboard your customers by API</h3>
+        <p className="small muted">
+          For platforms, marketplaces, billing systems and integrators with many customers. Create each customer's merchant account with one call, take their payments with your own key and the{' '}
+          <code>BitriPay-Account</code> header (every v1 operation), keep an application fee (a transparent split paid at capture), receive their events on your webhooks with <code>account</code>, and
+          hand the account over with a claim link. The customer is the merchant of record; BitriPay holds the aggregator licence. Scopes: <code>accounts:write</code>, <code>accounts:read</code>.
+        </p>
+        <pre className="code">{PLATFORM}</pre>
       </div>
       <div className="card">
         <h3>Quick start</h3>

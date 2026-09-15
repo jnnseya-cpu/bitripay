@@ -39,6 +39,8 @@ import { getDb } from '../db';
 import { createPlan, listPlans, getPlan, archivePlan, listSubscriptions, getSubscription, recordUsage, cancelSubscription, listInvoices, billingOverview } from '../services/billing';
 import { readinessForLender } from '../services/creditReadiness';
 import { MERCHANT_ROLES } from '../services/users';
+import { createAccountLink, createConnectedAccount, detachByPlatform, getConnectedAccount, listConnectedAccounts, updateConnectedAccount, MAX_APPLICATION_FEE_BPS } from '../services/platform';
+import { MERCHANT_CLASS_ROLES } from '@bitripay/shared';
 
 export const v1ExtRouter = Router();
 const merchantOnly = [requireAuth, requireRole(...MERCHANT_ROLES, 'admin')];
@@ -586,3 +588,49 @@ v1ExtRouter.get('/invoices', ...merchantOnly, requireScope('subscriptions:read',
 v1ExtRouter.get('/credit_readiness/:code', requireAuth, requireScope('credit:read'), rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'v1cr' }), (req, res) =>
   res.json(readinessForLender(String(req.params.code), { id: req.apiKeyId ?? req.user!.id, label: req.user!.business_name || req.user!.full_name })),
 );
+
+// ---------------------------------------------------------------- connected accounts (aggregator / platform model)
+/**
+ * A developer or platform creates its customers' merchant accounts and acts for them with its own key plus the
+ * `BitriPay-Account: acct_…` header (intents, checkout, links, refunds, payouts, balance — every v1 operation), keeps
+ * an application fee, receives the customers' events on its own webhooks, and hands each account over with a claim
+ * link. Always the platform's own identity here: these routes refuse the account header.
+ */
+const platformOnly = (req: import('express').Request, _res: import('express').Response, next: import('express').NextFunction) =>
+  next(req.connectedAccountId ? badRequest('Manage connected accounts with your own key, without the BitriPay-Account header', 'account_header_not_allowed') : undefined);
+const platformOf = (req: import('express').Request) => req.user!;
+const accountSchema = z.object({
+  business_name: z.string().min(2).max(120),
+  type: z.enum(MERCHANT_CLASS_ROLES).optional().nullable(),
+  email: z.string().email().max(160).optional().nullable(),
+  phone: z.string().min(6).max(20).optional().nullable(),
+  country: z.string().length(2).optional().nullable(),
+  application_fee_bps: z.number().int().min(0).max(MAX_APPLICATION_FEE_BPS).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+});
+v1ExtRouter.post('/accounts', ...merchantOnly, requireScope('accounts:write'), platformOnly, writeLimit, (req, res) => {
+  const b = validate(accountSchema, req.body);
+  res.status(201).json(
+    createConnectedAccount(platformOf(req), {
+      businessName: b.business_name,
+      type: b.type ?? null,
+      email: b.email ?? null,
+      phone: b.phone ?? null,
+      country: b.country ?? null,
+      applicationFeeBps: b.application_fee_bps ?? null,
+      metadata: b.metadata ?? null,
+    }),
+  );
+});
+v1ExtRouter.get('/accounts', ...merchantOnly, requireScope('accounts:read', 'accounts:write'), platformOnly, (req, res) =>
+  res.json({ data: listConnectedAccounts(platformOf(req), { status: req.query.status ? String(req.query.status) : null, limit: Number(req.query.limit) || 50 }) }),
+);
+v1ExtRouter.get('/accounts/:id', ...merchantOnly, requireScope('accounts:read', 'accounts:write'), platformOnly, (req, res) => res.json(getConnectedAccount(platformOf(req), String(req.params.id))));
+v1ExtRouter.patch('/accounts/:id', ...merchantOnly, requireScope('accounts:write'), platformOnly, writeLimit, (req, res) => {
+  const b = validate(accountSchema.pick({ application_fee_bps: true, metadata: true }), req.body ?? {});
+  res.json(updateConnectedAccount(platformOf(req), String(req.params.id), { applicationFeeBps: b.application_fee_bps, metadata: b.metadata }));
+});
+v1ExtRouter.post('/accounts/:id/account_links', ...merchantOnly, requireScope('accounts:write'), platformOnly, writeLimit, (req, res) =>
+  res.status(201).json(createAccountLink(platformOf(req), String(req.params.id))),
+);
+v1ExtRouter.post('/accounts/:id/detach', ...merchantOnly, requireScope('accounts:write'), platformOnly, writeLimit, (req, res) => res.json(detachByPlatform(platformOf(req), String(req.params.id))));

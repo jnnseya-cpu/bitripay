@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
@@ -327,6 +327,65 @@ export function Forgot() {
           </>
         )}
         <Button block>{sent ? t('common.confirm') : t('auth.sendCode')}</Button>
+      </form>
+    </AuthShell>
+  );
+}
+
+/**
+ * Claim link of a connected account: a platform created this merchant account through the API and sent its owner
+ * here to set a password. From then on the account is theirs to sign into; the platform appears under Team.
+ */
+export function Claim() {
+  const t = useT();
+  const nav = useNavigate();
+  const { token = '' } = useParams();
+  const { login } = useStore();
+  const [info, setInfo] = useState<{ business_name: string; platform: string; expires_at: string } | null>(null);
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    api
+      .get<{ business_name: string; platform: string; expires_at: string }>(`/api/auth/claim/${encodeURIComponent(token)}`)
+      .then(setInfo)
+      .catch((e: Error) => setError(e.message));
+  }, [token]);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (password !== confirm) return setError('The two passwords differ');
+    setLoading(true);
+    try {
+      const r = await api.post<AuthResult>('/api/auth/claim', { token, password });
+      await login(r.token, r.user);
+      nav('/app/merchant/centre');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <AuthShell title="Claim your BitriPay account" footer={<Link to="/login">{t('auth.login')}</Link>}>
+      {error && <Alert kind="error">{error}</Alert>}
+      {info && (
+        <Alert kind="info">
+          <b>{info.platform}</b> created the BitriPay account of <b>{info.business_name}</b> and integrated it into your systems. Set a password to own it: your money, your settlement details and your
+          statements are yours; the platform stays listed under Team until you remove it. This link works once, until {new Date(info.expires_at).toLocaleDateString()}.
+        </Alert>
+      )}
+      <form onSubmit={submit}>
+        <Field label="New password">
+          <Input type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required disabled={!info} />
+        </Field>
+        <Field label="Confirm password">
+          <Input type="password" minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} required disabled={!info} />
+        </Field>
+        <Button block loading={loading} disabled={!info}>
+          Set password and sign in
+        </Button>
       </form>
     </AuthShell>
   );

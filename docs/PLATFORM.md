@@ -952,6 +952,22 @@ per surface; `X-Organisation-Id` still selects one explicitly.
 Platform administrators are individual console accounts with their own permission sets, PIN and 2FA; personal
 customer accounts own no organisation and cannot be shared.
 
+#### Connected accounts: the aggregator / platform model of the API
+
+A developer or platform (any merchant-class account with an API key) onboards its own customers through the API:
+`POST /v1/accounts` creates the customer's merchant account (user without password, organisation, wallets) with the
+platform as `administrator` member; `BitriPay-Account: acct_…` with the platform's own key on **any v1 operation**
+runs the request as the customer (merchant of record) with the platform as `req.actor`; `application_fee_minor`
+(or the account's default `application_fee_bps`) becomes a split labelled `application_fee` paid to the platform
+from the customer's proceeds at capture; every event of the customer is fanned out to the platform's webhooks with
+`account` on the envelope; `POST /v1/accounts/{id}/account_links` returns a one-time claim URL (`/claim/:token`,
+7 days) with which the customer sets a password and owns the account (`POST /api/auth/claim`); the customer sees
+the platform under Team and removing it (or `POST /v1/accounts/{id}/detach`) ends the platform's access while the
+account, its keys and its money stay the customer's. Account management is refused with the header
+(`account_header_not_allowed`); a foreign or detached account is refused (`account_not_connected`,
+`account_detached`). Scopes `accounts:read` / `accounts:write`; table `connected_accounts` (migration 036);
+service `services/platform.ts`; tests `platform.test.ts`.
+
 #### Workspaces and developers who integrate several clients
 
 `X-Organisation-Id` is the **workspace** header. A session that belongs to several organisations (its own shop or

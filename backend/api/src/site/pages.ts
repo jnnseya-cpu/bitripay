@@ -265,6 +265,8 @@ export function enterprisePage(): string {
 
 // ---------------------------------------------------------------------------------------------------------------- developers
 const SCOPE_NOTES: Record<string, string> = {
+  'accounts:write': "Create your customers' connected accounts, send claim links, set application fees, detach.",
+  'accounts:read': 'List and read your connected accounts: status, verification, balances.',
   'payment_intents:write': 'Create and cancel payment intents. Publishable pk_ keys get only this: safe to ship in a browser, they can start a payment and never read your data.',
   'payment_intents:read': 'Read intents, timelines and refundable amounts.',
   'checkout_sessions:write': 'Create hosted checkout sessions.',
@@ -353,6 +355,24 @@ curl -X POST ${escapeHtml(base)}/payment_intents \\
 <section class="sect"><h2>Drop-in checkout: pay by mobile money, automatically</h2><p class="lead">Add “Pay with BitriPay” to any website or marketplace. The customer picks the operator, pays to the collection number, and BitriPay matches the operator's confirmation; the order moves forward on its own. Two integration paths:</p><div class="tiles">
 <div class="tile"><h3>1 · Hosted checkout (recommended)</h3><p>Create an intent or a checkout session and redirect to its URL. BitriPay renders the operators, the reference, the QR and the confirmation step, then returns the customer to your success URL and sends the webhook.</p></div>
 <div class="tile"><h3>2 · Embedded widget</h3><p>Load the checkout script with a publishable key and mount the panel in your page; the browser can start a payment but never read your data. WooCommerce and Shopify plugins ship in the repository.</p></div>
+</div></section>
+<section class="sect"><h2>Platforms and aggregators: onboard your customers by API</h2><p class="lead">Marketplaces, SaaS, billing systems, cooperatives, schools, institutions: create each customer's merchant account with one call, take their payments with your own key, keep your fee, and hand the account over when they are ready. BitriPay holds the aggregator licence and remains the regulated party; each customer is the merchant of record with its own wallets, settlement profile, statements and verification.</p>
+<pre class="code"><span class="c"># 1. Create the customer's account (they get a claim link to own it)</span>
+curl -X POST ${escapeHtml(base)}/accounts -H "Authorization: Bearer sk_live_…" -H "Content-Type: application/json" \
+  -d '{"business_name":"Pharmacie Lumière","type":"merchant","email":"owner@pharmacie.example","country":"CD","application_fee_bps":150}'
+<span class="c"># → {"id":"acct_…","status":"active","kyb_status":"none","onboarding":{"claimed":false}, …}</span>
+
+<span class="c"># 2. Take a payment for that customer with YOUR key: add the account header (works on every operation)</span>
+curl -X POST ${escapeHtml(base)}/payment_intents -H "Authorization: Bearer sk_live_…" -H "BitriPay-Account: acct_…" \
+  -H "Idempotency-Key: inv-88" -H "Content-Type: application/json" \
+  -d '{"amount_minor":250000,"currency":"CDF","description":"Invoice 88","application_fee_minor":3750}'
+
+<span class="c"># 3. Their events reach your webhooks with "account":"acct_…"; send them a claim link when they should sign in themselves</span>
+curl -X POST ${escapeHtml(base)}/accounts/acct_…/account_links -H "Authorization: Bearer sk_live_…"</pre>
+<div class="tiles">
+<div class="tile"><h3>Merchant of record</h3><p>The customer's money lands in the customer's wallet and settles by the customer's settlement profile; your application fee is a transparent split on the intent, paid at capture and shown on both statements.</p></div>
+<div class="tile"><h3>Every operation, one header</h3><p>Intents, checkout sessions, payment links, QR codes, refunds, payouts, balance, disputes, settlement: whatever your key may do for you, it does for a connected account with <code>BitriPay-Account</code>. Scopes still apply.</p></div>
+<div class="tile"><h3>Hand-over and revocation</h3><p>The customer claims the account with a one-time link and sees you under Team as administrator. They can remove you at any time, or you detach: keys, wallets and history stay theirs.</p></div>
 </div></section>
 <section class="sect"><h2>Install BitriPay for your clients</h2><p class="lead">BitriPay holds the aggregator licence; you integrate it into your clients' websites, apps, billing and institutional systems. Each client is the merchant of record: their money settles to their own account, their statements are theirs, and you never hold their funds or their password.</p><div class="steps">
 <div class="step"><b>1 · The client opens a merchant account</b><h3>Or you open it with their details</h3><p>Every business, NGO, institution or government body you integrate registers as a merchant-class account and passes business verification as its volume grows.</p></div>

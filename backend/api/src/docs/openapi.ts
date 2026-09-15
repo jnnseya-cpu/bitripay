@@ -45,6 +45,7 @@ const OPS: Op[] = [
       cancel_url: { type: 'string' },
       qr: { type: 'boolean' },
       splits: { type: 'array', items: { type: 'object', properties: { recipient: { type: 'string' }, bps: { type: 'integer' }, fixed_minor: { type: 'integer' }, label: { type: 'string' } } } },
+      application_fee_minor: { type: 'integer', description: 'Platform fee kept when acting for a connected account (BitriPay-Account header); defaults to the account rate' },
     },
   },
   { method: 'get', path: '/payment_intents', tag: 'Payment intents', summary: 'List payment intents', scope: 'payment_intents:read', query: ['status', 'limit'] },
@@ -425,6 +426,41 @@ const OPS: Op[] = [
     query: ['refund'],
   },
   { method: 'post', path: '/payment_intents/{id}/split_refunds/retry', tag: 'Payment intents', summary: 'Retry failed split refund recoveries', scope: 'payment_intents:write' },
+  // Connected accounts: the aggregator / platform model
+  {
+    method: 'post',
+    path: '/accounts',
+    tag: 'Connected accounts',
+    summary: "Create a customer's merchant account (user, organisation, wallets) that your key can act for with the BitriPay-Account header",
+    scope: 'accounts:write',
+    body: {
+      business_name: { type: 'string' },
+      type: { enum: ['merchant', 'corporate', 'ngo', 'government', 'developer'] },
+      email: { type: 'string' },
+      phone: { type: 'string' },
+      country: { type: 'string' },
+      application_fee_bps: { type: 'integer', description: 'Default platform fee in basis points, kept from each payment at capture (0–5000)' },
+      metadata: { type: 'object' },
+    },
+  },
+  { method: 'get', path: '/accounts', tag: 'Connected accounts', summary: 'List your connected accounts', scope: 'accounts:read', query: ['status', 'limit'] },
+  { method: 'get', path: '/accounts/{id}', tag: 'Connected accounts', summary: 'A connected account: status, verification, onboarding, balances', scope: 'accounts:read' },
+  {
+    method: 'patch',
+    path: '/accounts/{id}',
+    tag: 'Connected accounts',
+    summary: 'Change the default application fee or metadata',
+    scope: 'accounts:write',
+    body: { application_fee_bps: { type: 'integer' }, metadata: { type: 'object' } },
+  },
+  {
+    method: 'post',
+    path: '/accounts/{id}/account_links',
+    tag: 'Connected accounts',
+    summary: 'A one-time claim link (7 days) the customer opens to set a password and own the account',
+    scope: 'accounts:write',
+  },
+  { method: 'post', path: '/accounts/{id}/detach', tag: 'Connected accounts', summary: "End your access; the account, its keys and its money stay the customer's", scope: 'accounts:write' },
 ];
 
 export function openApiDocument() {
@@ -460,7 +496,7 @@ export function openApiDocument() {
       title: `${config.appName} Gateway API`,
       version: '2026-09-01',
       description:
-        'One QR. One gateway. Every eligible rail. Amounts are integers in minor units. Every money-moving POST takes an Idempotency-Key: a replay returns the same object, a reuse with a different body or on a different endpoint is refused (409 `idempotency_key_reused`); keys expire after 24 h. Errors carry `code`, a stable `bp` family (BP-1xxx auth · 2xxx validation · 3xxx ledger · 4xxx rail · 5xxx compliance · 6xxx intelligence) and `message`.',
+        "One QR. One gateway. Every eligible rail. Amounts are integers in minor units. Every money-moving POST takes an Idempotency-Key: a replay returns the same object, a reuse with a different body or on a different endpoint is refused (409 `idempotency_key_reused`); keys expire after 24 h. Errors carry `code`, a stable `bp` family (BP-1xxx auth · 2xxx validation · 3xxx ledger · 4xxx rail · 5xxx compliance · 6xxx intelligence) and `message`. Platforms and aggregators: create your customers' accounts with `POST /accounts`, then send `BitriPay-Account: acct_…` with your own key on any operation to act for that customer (the customer is the merchant of record; `application_fee_minor` keeps your fee; their events reach your webhooks with `account`).",
       contact: { url: config.webUrl },
     },
     servers: [{ url: `${config.webUrl.replace(/\/$/, '')}/api/v1` }, { url: `${config.webUrl.replace(/\/$/, '')}/v1` }],

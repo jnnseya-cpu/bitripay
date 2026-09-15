@@ -75,6 +75,12 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
             </Button>
           </form>
         )}
+        {data.platform && (
+          <p className="small muted">
+            <b>{data.platform.platform.businessName || data.platform.platform.fullName}</b> created this account through the BitriPay API on {new Date(data.platform.since).toLocaleDateString()} and
+            acts for it as administrator (payments, refunds, keys, webhooks). Your money, settlement details and statements are yours. Remove it from the members below to end its access.
+          </p>
+        )}
         <h3>Members</h3>
         <div className="list">
           {(data.members ?? []).map((m: any) => (

@@ -64,6 +64,8 @@ export const API_KEY_SCOPES = [
   'settlements:write',
   'disputes:read',
   'disputes:write',
+  'accounts:read',
+  'accounts:write',
 ] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 export type ApiKeyKind = 'secret' | 'publishable' | 'restricted';

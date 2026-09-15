@@ -107,6 +107,7 @@ import {
 import { listApiKeys, createApiKey, revokeApiKey, API_KEY_SCOPES } from '../services/merchant';
 import { availableBalance, heldByKind } from '../services/finops/holds';
 import { validateSplits } from '../services/finops/splits';
+import { findConnectedAccount } from '../services/platform';
 import { v1ExtRouter } from './v1ext';
 
 export const v1Router = Router();
@@ -163,6 +164,8 @@ const intentSchema = z.object({
   cancel_url: redirectUrl.optional().nullable(),
   qr: z.boolean().optional(),
   qr_ttl_seconds: z.number().int().min(30).max(3600).optional(),
+  /** Platform fee kept by the caller when it acts for a connected account (BitriPay-Account); paid from the customer's proceeds at capture. */
+  application_fee_minor: z.number().int().min(0).optional().nullable(),
   /** Marketplace / cooperative splits: paid from the merchant wallet when the intent is captured. */
   splits: z
     .array(
@@ -217,11 +220,23 @@ v1Router.post(
   wrap(async (req, res) => {
     const body = validate(intentSchema, req.body);
     const idem = (req.headers['idempotency-key'] as string | undefined) ?? null;
-    if (body.splits?.length)
+    const splits = [...(body.splits ?? [])];
+    if (body.application_fee_minor != null && !req.connectedAccountId)
+      throw badRequest('application_fee_minor applies only when a platform key acts for a connected account (BitriPay-Account header)', 'application_fee_requires_account');
+    if (req.connectedAccountId) {
+      // The platform's fee: explicit per intent, else the account's default rate; always a split to the platform, visible on the intent.
+      const account = findConnectedAccount(req.connectedAccountId)!;
+      const amount = body.amount_minor ?? body.amount ?? 0;
+      const fee = body.application_fee_minor ?? Math.floor((amount * account.application_fee_bps) / 10_000);
+      if (fee > amount) throw badRequest('application_fee_minor cannot exceed the amount', 'application_fee_too_high');
+      if (fee > 0) splits.push({ recipient: req.actor!.tag, fixed_minor: fee, bps: null, label: 'application_fee' });
+      body.metadata = { ...(body.metadata ?? {}), account: req.connectedAccountId, application_fee_minor: fee };
+    }
+    if (splits.length)
       body.metadata = {
         ...(body.metadata ?? {}),
         splits: validateSplits(
-          body.splits.map((s) => ({ recipient: s.recipient, bps: s.bps ?? null, fixedMinor: s.fixed_minor ?? null, label: s.label ?? null })),
+          splits.map((s) => ({ recipient: s.recipient, bps: s.bps ?? null, fixedMinor: s.fixed_minor ?? null, label: s.label ?? null })),
           req.user!.id,
         ),
       };

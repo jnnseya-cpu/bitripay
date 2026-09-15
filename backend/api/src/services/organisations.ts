@@ -320,7 +320,22 @@ export function removeMember(org: OrganisationRow, actor: UserRow, userId: strin
     db.prepare('DELETE FROM organisation_members WHERE organisation_id = ? AND user_id = ?').run(org.id, userId);
     recordEvent('auth', org.id, 'organisation.member_removed', { type: 'merchant', id: actor.id }, { userId, role: row.role });
   })();
+  for (const hook of memberRemovedHooks) hook(org.id, userId, actor.id);
   return { removed: true, userId };
+}
+
+// Extension points for modules built on organisations (connected accounts): they import this module, so they register here.
+type MemberRemovedHook = (organisationId: string, memberUserId: string, actorUserId: string) => void;
+const memberRemovedHooks: MemberRemovedHook[] = [];
+/** Runs after a member was removed by the owner or an administrator (a connected platform loses its access this way). */
+export function onMemberRemovedHook(hook: MemberRemovedHook): void {
+  if (!memberRemovedHooks.includes(hook)) memberRemovedHooks.push(hook);
+}
+type SummaryExtension = (org: OrganisationRow) => Record<string, unknown>;
+const summaryExtensions: SummaryExtension[] = [];
+/** Adds fields to `organisationSummary` (what the Team tab shows), e.g. the platform that connected the account. */
+export function extendOrganisationSummary(extension: SummaryExtension): void {
+  if (!summaryExtensions.includes(extension)) summaryExtensions.push(extension);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -502,6 +517,7 @@ export function organisationSummary(org: OrganisationRow, ctx: OrganisationConte
     membership: { userId: actor.id, role: ctx?.role ?? 'owner', permissions: ctx?.permissions ?? ['*'] },
     members: listMembers(org.id),
     businessUnits: listBusinessUnits(org.id),
+    ...Object.assign({}, ...summaryExtensions.map((e) => e(org))),
     roles: ORG_ROLES,
     permissions: ORG_PERMISSIONS,
   };

@@ -319,6 +319,10 @@ export interface EmitOptions {
   occurredAt?: string | null;
   /** Deliver to this endpoint only (test pings). */
   endpointId?: string | null;
+  /** The connected account the event is about, when a platform receives it (`acct_…`). */
+  account?: string | null;
+  /** Internal: already fanned out to the platform. */
+  forwarded?: boolean;
 }
 
 /**
@@ -349,6 +353,7 @@ export function emitEvent(userId: string, type: string, data: Record<string, unk
     emitted_at: ts,
     resource: opts.resource ?? null,
     state_version: opts.stateVersion ?? null,
+    account: opts.account ?? null,
     livemode: config.isProduction,
     data,
   };
@@ -373,6 +378,11 @@ export function emitEvent(userId: string, type: string, data: Record<string, unk
     ids.push(did);
   }
   if (!config.isTest) for (const did of ids) void attemptDelivery(did);
+  // Aggregator model: every event of a connected account is also the platform's, carrying the account id.
+  if (!opts.forwarded && !opts.endpointId) {
+    const link = db.prepare("SELECT id, platform_user_id FROM connected_accounts WHERE user_id = ? AND status = 'active'").get(userId) as { id: string; platform_user_id: string } | undefined;
+    if (link) emitEvent(link.platform_user_id, type, { ...data, account: link.id }, { ...opts, account: link.id, forwarded: true });
+  }
   return id;
 }
 
