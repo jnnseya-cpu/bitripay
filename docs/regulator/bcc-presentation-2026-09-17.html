@@ -287,6 +287,40 @@ flowchart LR
 </section>
 
 <section class="slide">
+  <div class="eyebrow">9 · Spécifications techniques (suite)</div>
+  <h2>L'agrégateur BitriPay et le Switch Monétique National</h2>
+  <p class="lead">Un paiement interbancaire ne passe jamais par le grand livre de BitriPay : BitriPay l'initie, le contrôle, le normalise, le suit et le réconcilie ; le switch le route et règle entre les participants. Le marchand ne voit qu'une passerelle et un état ; BitriPay perçoit un pourcentage convenu sur chaque transaction, facturé au marchand, jamais prélevé sur le flux national.</p>
+  <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant M as Marchand / partenaire<br/>(API v1, QR, TPV)
+  participant B as BitriPay<br/>agrégateur
+  participant S as Switch Monétique<br/>National
+  participant I as Institution du client<br/>(banque · opérateur mobile money)
+  M->>B: Demande de paiement (montant, devise, bénéficiaire, clé d'idempotence)
+  B->>B: Contrôles : KYC/KYB, sanctions, plafonds, politique de routage (règle explicable)
+  B->>S: Message normalisé, identifiant stable, certificat homologué
+  S->>I: Routage vers l'institution du payeur
+  I-->>S: Autorisation (ou refus)
+  S-->>B: Accusé ≠ autorisation · puis état AUTORISÉ / COMPLÉTÉ / REJETÉ
+  B-->>M: Webhook signé + état (jamais « complété » sans preuve du switch)
+  S->>I: Règlement entre participants (observé par BitriPay, jamais exécuté)
+  S-->>B: Rapport / relevé quotidien
+  B->>B: Réconciliation à trois voies, cas d'écart, coffre de preuves
+  B->>M: Facture des frais d'agrégation (% convenu par transaction)
+  </pre>
+  <div class="cols">
+    <div class="box"><h4>Ce que fait l'agrégateur</h4><ul><li>Initiation, orchestration, normalisation, traçabilité, suivi d'état et réconciliation des paiements nationaux.</li><li>Un seul point d'entrée pour le marchand (API, QR, point de vente) : toutes les banques et tous les opérateurs de mobile money raccordés au switch sont atteignables sans intégration par institution.</li><li>Politique de routage calculée côté serveur (interopérable domestique, on-us, boucle fermée, transfrontalier, non supporté) ; aucun appelant ne peut forcer un rail, une devise ou une exception.</li></ul></div>
+    <div class="box"><h4>Ce qu'il ne fait jamais</h4><ul><li>Ne détient pas les fonds des flux nationaux et n'exécute pas le règlement final : le journal d'observation enregistre principal, crédit, frais et références de règlement, sans écriture au grand livre client.</li><li>Ne contourne pas le switch : pas de route bilatérale de substitution en cas d'indisponibilité (le client voit « Service temporairement indisponible »).</li><li>Ne réémet jamais à l'aveugle : un délai dépassé donne l'état INCONNU avec chaîne d'enquête, jamais un doublon.</li></ul></div>
+  </div>
+  <div class="cols">
+    <div class="box"><h4>Raccordement et homologation</h4><ul><li>Mode d'accès DIRECT ou SPONSORISÉ (participation expressément admise) ; adaptateur abstrait, connecteur certifié seulement après homologation : NON DÉMARRÉ → TESTS INTERNES → BAC À SABLE → CERTIFIÉ, avec preuves et approbateur distinct.</li><li>Inventaire des certificats avec alertes à 60/30/14/7 jours ; un certificat expiré arrête l'émission (incident P1), TLS jamais désactivé.</li><li>Le simulateur (étiqueté SIMULATION, institutions fictives) exerce les 32 cas d'acceptation du dossier ; il n'atteste rien.</li></ul></div>
+    <div class="box"><h4>Modèle économique et garanties</h4><ul><li>Rémunération : un pourcentage fixé par transaction, perçu par BitriPay auprès du marchand ou du partenaire, affiché avant tout paiement ; les frais interbancaires restent ceux du switch et des participants.</li><li>Machine d'états séparée pour autorisation, crédit du bénéficiaire, règlement et réconciliation ; catalogue de messages versionné (code inconnu → quarantaine).</li><li>Références et preuves conservées pour le suivi, la réconciliation avec le switch et les institutions, la supervision et les audits.</li></ul></div>
+  </div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>12</span></div>
+</section>
+
+<section class="slide">
   <div class="eyebrow">10 · Spécifications fonctionnelles</div>
   <h2>Les flux principaux, étape par étape</h2>
   <h3>Entrée de fonds par mobile money (sans API opérateur)</h3>
@@ -297,7 +331,7 @@ flowchart LR
   <div class="flow"><div><b>1</b>Demande de retrait vers mobile money, banque ou agent ; contrôle KYC, limites et sanctions.</div><div><b>2</b>Fonds bloqués (hold) ; validation à quatre yeux au-dessus des seuils.</div><div><b>3</b>Instruction de versement routée vers un compte de versement ou un agent avec liquidité.</div><div><b>4</b>Exécution, preuve de l'opérateur rapprochée, clôture ; en cas d'échec, libération des fonds et notification.</div></div>
   <h3>Interopérabilité par API (e-commerce, facturation, institutions)</h3>
   <div class="flow"><div><b>1</b>Clé d'API nominative à périmètre restreint créée depuis le portail développeur.</div><div><b>2</b>Création d'une intention de paiement (montant, devise, opérateurs autorisés, expiration).</div><div><b>3</b>Page de paiement hébergée ou intégration embarquée ; état suivi en temps réel.</div><div><b>4</b>Webhook signé à chaque changement d'état, relivraison avec rejeu contrôlé, reçus et remboursements par API.</div></div>
-  <div class="foot"><span>BitriPay · Présentation BCC</span><span>12</span></div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>13</span></div>
 </section>
 
 <section class="slide">
@@ -308,7 +342,7 @@ flowchart LR
     <div class="box"><h4>Journal normalisé des opérations</h4><ul><li>Une ligne par opération, format unique (22 colonnes) : horodatages, référence, type, statut, canal, opérateur, montant, devise, frais, contre-valeur, parties pseudonymisées avec rôle, palier KYC et pays, référence de preuve, clé d'idempotence.</li><li>Export CSV ou JSON sur période, devise ou type, accompagné d'un manifeste : nombre d'enregistrements, empreinte SHA-256 du fichier, état de la chaîne d'événements, mode de conformité, date de génération, méthode de pseudonymisation.</li><li>Chaque export est inscrit au journal d'audit avec son empreinte ; les parties sont ré-identifiables par BitriPay sur demande légale.</li></ul></div>
   </div>
   <p class="note">Ces rapports sont disponibles dans la console d'administration (page « Supervision réglementaire ») et seront démontrés en séance.</p>
-  <div class="foot"><span>BitriPay · Présentation BCC</span><span>13</span></div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>14</span></div>
 </section>
 
 <section class="slide">
@@ -328,7 +362,7 @@ flowchart LR
     <tr><td class="num">55 – 60</td><td>Questions et conditions de lancement</td><td>Page 15</td><td>Prochaines étapes</td></tr>
   </table></div>
   <p class="note">Toute la démonstration s'effectue sur la plateforme de production en mode « sandbox » : fonds de test, aucun fonds client réel, notifications SMS et e-mail réelles vers les téléphones de la délégation.</p>
-  <div class="foot"><span>BitriPay · Présentation BCC</span><span>14</span></div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>15</span></div>
 </section>
 
 <section class="slide">
@@ -345,7 +379,7 @@ flowchart LR
     <li><span class="fill">Liste des modifications par rapport au dossier initial déposé</span> (page 7, à confronter au dossier).</li>
     <li><span class="fill">Partenaires bancaires de cantonnement et opérateurs avec lesquels les numéros de collecte sont ouverts</span>.</li>
   </ul>
-  <div class="foot"><span>BitriPay · Présentation BCC</span><span>15</span></div>
+  <div class="foot"><span>BitriPay · Présentation BCC</span><span>16</span></div>
 </section>
 
 </div>
