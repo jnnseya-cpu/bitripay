@@ -65,6 +65,7 @@ export const fr: Record<string, string> = {
   'auth.forgot': 'Mot de passe oublié ?',
   'auth.otpLogin': 'Connexion par code unique',
   'auth.noAccount': 'Pas de compte ?',
+  'auth.adminSignIn': 'Connexion administrateur',
   'auth.haveAccount': 'Vous avez déjà un compte ?',
   'auth.fullName': 'Nom complet',
   'auth.role': 'Type de compte',

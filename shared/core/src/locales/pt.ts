@@ -55,6 +55,7 @@ export const pt: Record<string, string> = {
   'auth.forgot': 'Esqueceu a palavra-passe?',
   'auth.otpLogin': 'Entrar com código único',
   'auth.noAccount': 'Não tem conta?',
+  'auth.adminSignIn': 'Acesso de administrador',
   'auth.haveAccount': 'Já tem conta?',
   'auth.fullName': 'Nome completo',
   'auth.role': 'Tipo de conta',

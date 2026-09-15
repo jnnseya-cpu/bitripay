@@ -55,6 +55,7 @@ export const sw: Record<string, string> = {
   'auth.forgot': 'Umesahau nenosiri?',
   'auth.otpLogin': 'Ingia kwa msimbo wa mara moja',
   'auth.noAccount': 'Huna akaunti?',
+  'auth.adminSignIn': 'Ingia kama msimamizi',
   'auth.haveAccount': 'Una akaunti tayari?',
   'auth.fullName': 'Jina kamili',
   'auth.role': 'Aina ya akaunti',

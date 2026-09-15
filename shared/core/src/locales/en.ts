@@ -76,6 +76,7 @@ export const en: Record<string, string> = {
   'auth.forgot': 'Forgot password?',
   'auth.otpLogin': 'Sign in with a one-time code',
   'auth.noAccount': "Don't have an account?",
+  'auth.adminSignIn': 'Administrator sign-in',
   'auth.haveAccount': 'Already have an account?',
   'auth.fullName': 'Full name',
   'auth.role': 'Account type',

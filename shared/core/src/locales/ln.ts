@@ -81,6 +81,7 @@ export const ln: Record<string, string> = {
   'auth.forgot': 'Obosani mot de passe?',
   'auth.otpLogin': 'Kokota na code ya mbala moko',
   'auth.noAccount': 'Ozali na compte te?',
+  'auth.adminSignIn': 'Kokota ya mokambi',
   'auth.haveAccount': 'Ozali déjà na compte?',
   'auth.fullName': 'Kombo mobimba',
   'auth.role': 'Lolenge ya compte',

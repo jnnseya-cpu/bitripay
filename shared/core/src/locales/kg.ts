@@ -81,6 +81,7 @@ export const kg: Record<string, string> = {
   'auth.forgot': 'Nge me vila mot de passe?',
   'auth.otpLogin': 'Kukota na code ya mbala mosi',
   'auth.noAccount': 'Nge kele na compte ve?',
+  'auth.adminSignIn': 'Kukota ya mfumu',
   'auth.haveAccount': 'Nge kele déjà na compte?',
   'auth.fullName': 'Zina ya mvimba',
   'auth.role': 'Mutindu ya compte',

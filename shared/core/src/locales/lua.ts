@@ -81,6 +81,7 @@ export const lua: Record<string, string> = {
   'auth.forgot': 'Wakupua mot de passe muoyo?',
   'auth.otpLogin': 'Kubuela ne code wa musangu umue',
   'auth.noAccount': 'Kuena ne compte to?',
+  'auth.adminSignIn': 'Kubuela kua mulombodi',
   'auth.haveAccount': 'Udi kale ne compte?',
   'auth.fullName': 'Dina dijima',
   'auth.role': 'Mushindu wa compte',

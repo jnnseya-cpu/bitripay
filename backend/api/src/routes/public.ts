@@ -47,6 +47,7 @@ publicRouter.get('/config', (_req, res) => {
       idempotencyKeys: true,
     },
     webUrl: config.webUrl,
+    adminUrl: config.adminUrl,
     apiUrl: config.apiUrl,
     agentCommissionBps: app.agentCommissionBps,
     referral: getReferralSettings(),

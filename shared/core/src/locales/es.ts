@@ -55,6 +55,7 @@ export const es: Record<string, string> = {
   'auth.forgot': '¿Olvidaste tu contraseña?',
   'auth.otpLogin': 'Entrar con código único',
   'auth.noAccount': '¿No tienes cuenta?',
+  'auth.adminSignIn': 'Acceso de administrador',
   'auth.haveAccount': '¿Ya tienes cuenta?',
   'auth.fullName': 'Nombre completo',
   'auth.role': 'Tipo de cuenta',

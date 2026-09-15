@@ -55,6 +55,7 @@ export const hi: Record<string, string> = {
   'auth.forgot': 'पासवर्ड भूल गए?',
   'auth.otpLogin': 'वन-टाइम कोड से साइन इन करें',
   'auth.noAccount': 'खाता नहीं है?',
+  'auth.adminSignIn': 'व्यवस्थापक साइन-इन',
   'auth.haveAccount': 'पहले से खाता है?',
   'auth.fullName': 'पूरा नाम',
   'auth.role': 'खाते का प्रकार',

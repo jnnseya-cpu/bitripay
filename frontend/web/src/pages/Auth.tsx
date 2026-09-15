@@ -30,7 +30,7 @@ export function Login() {
   const t = useT();
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const { login } = useStore();
+  const { login, config } = useStore();
   const [mode, setMode] = useState<'password' | 'otp'>('password');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -79,6 +79,12 @@ export function Login() {
       footer={
         <>
           {t('auth.noAccount')} <Link to="/register">{t('auth.signUp')}</Link>
+          {config?.adminUrl && (
+            <>
+              {' · '}
+              <a href={`${config.adminUrl}/login`}>{t('auth.adminSignIn')}</a>
+            </>
+          )}
         </>
       }
     >

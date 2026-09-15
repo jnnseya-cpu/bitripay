@@ -55,6 +55,7 @@ export const bn: Record<string, string> = {
   'auth.forgot': 'পাসওয়ার্ড ভুলে গেছেন?',
   'auth.otpLogin': 'ওয়ান-টাইম কোড দিয়ে সাইন ইন',
   'auth.noAccount': 'অ্যাকাউন্ট নেই?',
+  'auth.adminSignIn': 'প্রশাসক সাইন-ইন',
   'auth.haveAccount': 'ইতিমধ্যে অ্যাকাউন্ট আছে?',
   'auth.fullName': 'পুরো নাম',
   'auth.role': 'অ্যাকাউন্টের ধরন',

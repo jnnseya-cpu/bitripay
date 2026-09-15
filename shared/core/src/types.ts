@@ -128,6 +128,8 @@ export interface AppConfig {
     smsOtp: boolean;
   };
   webUrl: string;
+  /** The administration console (separate host name); the sign-in page links to it. */
+  adminUrl?: string;
   agentCommissionBps: number;
   referral: { enabled: boolean; rewards: number[]; trigger: 'registration' | 'first_deposit' };
 }

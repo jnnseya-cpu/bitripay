@@ -55,6 +55,7 @@ export const ar: Record<string, string> = {
   'auth.forgot': 'نسيت كلمة المرور؟',
   'auth.otpLogin': 'الدخول برمز لمرة واحدة',
   'auth.noAccount': 'ليس لديك حساب؟',
+  'auth.adminSignIn': 'دخول المسؤول',
   'auth.haveAccount': 'لديك حساب بالفعل؟',
   'auth.fullName': 'الاسم الكامل',
   'auth.role': 'نوع الحساب',
