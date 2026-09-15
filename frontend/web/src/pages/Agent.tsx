@@ -7,15 +7,28 @@ import { Link } from 'react-router-dom';
 import { columnChart, type AnalyticsSeries } from '@bitripay/charts';
 import { Chart } from '@bitripay/charts/react';
 import { tickMoney } from './Insights';
+import { OrganisationTeam } from '../components/OrganisationTeam';
 
+/**
+ * Agent dashboard: the till. The agent account owns it; members of the agent's team (invited under the Team tab) reach
+ * the same page with their own login and see the agent's float and queue, limited to what their role allows.
+ */
 export function AgentDashboard() {
-  const { user, money, wallets, toast, refreshWallets, config } = useStore();
-  const [tab, setTab] = useState<'cashin' | 'cashout' | 'pickup' | 'requests' | 'payouts'>('cashin');
-  const payouts = useAsync(() => (tab === 'payouts' ? api.get<{ items: any[] }>('/api/payouts/agent/queue') : Promise.resolve(null)), [tab]);
+  const { user, money, wallets, memberships, toast, refreshWallets, config } = useStore();
+  const [tab, setTab] = useState<'cashin' | 'cashout' | 'pickup' | 'requests' | 'payouts' | 'team'>('cashin');
+  const isAgent = user?.role === 'agent' || user?.role === 'admin';
+  const counter = memberships.find((m) => m.kind === 'agent' && !m.owner) ?? null;
+  const allowed = isAgent || !!counter;
+  const payouts = useAsync(() => (allowed && tab === 'payouts' ? api.get<{ items: any[] }>('/api/payouts/agent/queue') : Promise.resolve(null)), [tab, allowed]);
   const [evidence, setEvidence] = useState<{ id: string; text: string; externalRef: string } | null>(null);
-  const stats = useAsync(() => api.get<any>('/api/agents/me/stats'), [tab]);
-  const insights = useAsync(() => api.get<AnalyticsSeries>('/api/account/analytics?days=30'), [tab]);
-  const requests = useAsync(() => api.get<{ items: any[] }>('/api/agents/cash-requests'), [tab]);
+  const stats = useAsync(() => (allowed ? api.get<any>('/api/agents/me/stats') : Promise.resolve(null)), [tab, allowed]);
+  const insights = useAsync(() => (isAgent ? api.get<AnalyticsSeries>('/api/account/analytics?days=30') : Promise.resolve(null)), [tab, isAgent]);
+  const requests = useAsync(() => (allowed ? api.get<{ items: any[] }>('/api/agents/me/cash-requests') : Promise.resolve(null)), [tab, allowed]);
+  const org = useAsync(() => (allowed ? api.get<any>('/api/organisations/me').catch(() => null) : Promise.resolve(null)), [tab, allowed]);
+  const can = (p: string) => {
+    const mine: string[] = org.data?.membership?.permissions ?? ['*'];
+    return mine.includes('*') || mine.includes(p);
+  };
   const [customer, setCustomer] = useState('');
   const dCustomer = useDebounce(customer, 300);
   const found = useAsync(() => (dCustomer.length >= 3 ? api.get<{ user: PublicUser }>(`/api/account/lookup?q=${encodeURIComponent(dCustomer)}`) : Promise.resolve(null)), [dCustomer]);
@@ -27,8 +40,12 @@ export function AgentDashboard() {
   const [pin, setPin] = useState<null | 'cashin' | 'cashout' | 'pickup'>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  if (user?.role !== 'agent' && user?.role !== 'admin') return <Alert kind="warning">This area is for agent accounts.</Alert>;
+  if (!allowed) return <Alert kind="warning">This area is for agent accounts and the members of an agent's team.</Alert>;
   const s = stats.data;
+  // A team member sees the agent's float, never their own wallet; the agent sees the same figures from the wallet store.
+  const float: { currency: string; balance: number }[] = s?.float?.length ? s.float : wallets;
+  const agentTag = s?.agent?.tag ?? user?.tag;
+  const title = s?.agent?.name || user?.businessName || 'Agent dashboard';
 
   const run = async (p: string) => {
     setLoading(true);
@@ -61,14 +78,22 @@ export function AgentDashboard() {
 
   return (
     <div>
-      <PageHeader title={user?.businessName || 'Agent dashboard'} subtitle={`@${user?.tag} · commission ${(s?.commissionBps ?? config?.agentCommissionBps ?? 0) / 100}%`} />
+      <PageHeader
+        title={title}
+        subtitle={`@${agentTag} · commission ${(s?.commissionBps ?? config?.agentCommissionBps ?? 0) / 100}%${counter ? ` · you work here as ${counter.role.replace(/_/g, ' ')}` : ''}`}
+      />
+      {counter && (
+        <Alert kind="info">
+          You are at the counter of <b>{counter.name}</b> with your own login. Cash operations use the agent's float and record you as the operator; confirm them with your own PIN.
+        </Alert>
+      )}
       <div className="grid cols-4">
         <div className="card">
           <div className="stat">
             <span className="label">Float</span>
-            <span className="value">{wallets[0] ? money(wallets[0].balance, wallets[0].currency) : '—'}</span>
+            <span className="value">{float[0] ? money(float[0].balance, float[0].currency) : '—'}</span>
             <span className="small muted">
-              {wallets
+              {float
                 .slice(1)
                 .map((w) => money(w.balance, w.currency))
                 .join(' · ')}
@@ -123,6 +148,7 @@ export function AgentDashboard() {
           { id: 'pickup', label: 'Cash pickup' },
           { id: 'requests', label: 'Requests' },
           { id: 'payouts', label: '📤 Payouts to execute' },
+          { id: 'team', label: `👥 Team${s?.teamSize ? ` (${s.teamSize})` : ''}` },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -223,7 +249,7 @@ export function AgentDashboard() {
                     </div>
                   </div>
                   <StatusBadge status={r.status} />
-                  {r.status === 'pending' && (
+                  {r.status === 'pending' && can('agent:cash_out') && (
                     <Button
                       size="sm"
                       onClick={() => {
@@ -239,13 +265,16 @@ export function AgentDashboard() {
             </div>
           </div>
         )}
-        <div className="card center">
-          <h3>Your agent QR</h3>
-          <p className="small muted">Customers scan this to cash out with you or send you money.</p>
-          <QrImage value={`${config?.webUrl}/q?v=1&t=ag&id=${user?.tag}`} size={200} />
-          <div className="mt bold">@{user?.tag}</div>
-        </div>
+        {tab !== 'team' && (
+          <div className="card center">
+            <h3>{counter ? 'Agent QR' : 'Your agent QR'}</h3>
+            <p className="small muted">Customers scan this to cash out {counter ? 'at this counter' : 'with you'} or send money to the agent.</p>
+            <QrImage value={`${config?.webUrl}/q?v=1&t=ag&id=${agentTag}`} size={200} />
+            <div className="mt bold">@{agentTag}</div>
+          </div>
+        )}
       </div>
+      {tab === 'team' && <OrganisationTeam org={org} toast={toast} err={(e: any) => toast(e.message, 'error')} kind="agent" />}
       {tab === 'payouts' && (
         <div className="card">
           <h3>Payouts assigned to your payout account</h3>

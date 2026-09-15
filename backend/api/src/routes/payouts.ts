@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireOrgPermission, requireRole } from '../middleware/auth';
 import { rateLimit } from '../middleware/rateLimit';
 import { verifyDeviceRequest, type EvidenceDevice } from '../services/evidence';
 import { queueFor, claimPayout, releasePayout, submitPayoutEvidence, getPayout, listPayouts } from '../services/payouts';
@@ -66,7 +66,9 @@ payoutsRouter.post(
   }),
 );
 
-payoutsRouter.use('/agent', requireAuth, requireRole('agent', 'admin'));
+// The agent, an administrator, or a member of the agent's team (`agent:view` to look, `agent:payouts` to claim, release and attest).
+payoutsRouter.use('/agent', requireAuth, requireRole('agent', 'admin'), requireOrgPermission('agent:view', 'agent:payouts'));
+const canHandle = requireOrgPermission('agent:payouts');
 payoutsRouter.get('/agent/queue', (req, res) => res.json({ items: queueFor({ agent: req.user }) }));
 /** Payout accounts this agent operates – the device app picks one at enrolment. */
 payoutsRouter.get('/agent/accounts', (req, res) =>
@@ -89,13 +91,13 @@ payoutsRouter.get('/agent/accounts', (req, res) =>
   }),
 );
 payoutsRouter.get('/agent/history', (req, res) => res.json(listPayouts({ agentUserId: req.user!.id, pageSize: 50 })));
-payoutsRouter.post('/agent/:id/claim', (req, res) => res.json({ payout: claimPayout(String(req.params.id), { agent: req.user }) }));
-payoutsRouter.post('/agent/:id/release', (req, res) => {
+payoutsRouter.post('/agent/:id/claim', canHandle, (req, res) => res.json({ payout: claimPayout(String(req.params.id), { agent: req.user }) }));
+payoutsRouter.post('/agent/:id/release', canHandle, (req, res) => {
   const body = validate(z.object({ reason: z.string().min(2).max(300) }), req.body);
   res.json({ payout: releasePayout(String(req.params.id), { agent: req.user }, body.reason) });
 });
 /** Agent types the operator confirmation by hand: recorded as manual evidence and routed to maker-checker – never settles on its own. */
-payoutsRouter.post('/agent/:id/evidence', (req, res) => {
+payoutsRouter.post('/agent/:id/evidence', canHandle, (req, res) => {
   const body = validate(z.object({ text: z.string().min(5).max(2000), externalRef: z.string().max(60).optional().nullable(), operatorId: z.string().max(60).optional().nullable() }), req.body);
   const p = getPayout(String(req.params.id));
   const acc = p.payoutAccountId ? getPayoutAccount(p.payoutAccountId) : null;

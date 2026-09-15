@@ -1,7 +1,7 @@
 /**
- * Organisations (specification §43) and merchant RBAC (§44): the legal entity behind every merchant-class account,
- * its members (people invited by email, tag or phone who act for the organisation with their own session), the
- * permission matrix per role, business units, and the customer export. Members never own merchant data: the
+ * Organisations (specification §43) and merchant RBAC (§44): the legal entity behind every merchant-class account
+ * and every agent account, its members (people invited by email, tag or phone who act for the organisation with
+ * their own session), the permission matrix per role, business units, and the customer export. Members never own merchant data: the
  * organisation's owner account is the principal every merchant table is keyed on, so a member's request is executed
  * as the owner while `req.actor` keeps the human for audit and step-up.
  */
@@ -13,6 +13,7 @@ import {
   ORG_PERMISSIONS,
   ORG_PERMISSION_KEYS,
   ORG_ROLES,
+  canOwnOrganisation,
   orgRoleHasPermission,
   type BusinessUnit,
   type Organisation,
@@ -105,14 +106,18 @@ export function findOrganisationForOwner(userId: string): OrganisationRow | unde
   return getDb().prepare('SELECT * FROM organisations WHERE owner_user_id = ? ORDER BY created_at LIMIT 1').get(userId) as OrganisationRow | undefined;
 }
 
+/** An organisation owned by an agent account: its members are the agent's counter staff and act on the agent surfaces. */
+export const isAgentOrganisation = (org: Pick<OrganisationRow, 'kind'>): boolean => org.kind === 'agent';
+
 /**
- * The organisation a merchant-class account owns, created on first use for accounts that predate organisations
- * (registration and `upgradeToMerchant` create it eagerly). Administrators and personal accounts own none.
+ * The organisation a merchant-class or agent account owns, created on first use for accounts that predate
+ * organisations (registration, `upgradeToMerchant` and agent sign-up create it eagerly). Administrators and personal
+ * accounts own none.
  */
 export function ensureOrganisation(user: UserRow): OrganisationRow {
   const existing = findOrganisationForOwner(user.id);
   if (existing) return existing;
-  if (!isMerchantRole(user.role)) throw badRequest('Only merchant-class accounts (merchant, corporate, NGO, government, developer) own an organisation', 'merchant_required');
+  if (!canOwnOrganisation(user.role)) throw badRequest('Only merchant-class accounts (merchant, corporate, NGO, government, developer) and agent accounts own an organisation', 'merchant_required');
   const db = getDb();
   const id = `org_${shortCode(12).toLowerCase()}`;
   const ts = now();
@@ -155,6 +160,14 @@ export function onMerchantClassRegistered(userId: string, requestedRole: string 
   if (!isMerchantRole(user.role) && !isMerchantRole(requestedRole)) return user;
   if (requestedRole && isMerchantRole(requestedRole) && user.role !== requestedRole) user = updateUser(user.id, { role: requestedRole });
   ensureOrganisation(user);
+  return user;
+}
+
+/** Registration of an agent account: the agent's organisation (its team) exists from the first sign-in. */
+export function onAgentRegistered(userId: string): UserRow {
+  const user = findUserById(userId);
+  if (!user) throw notFound('User not found', 'user_not_found');
+  if (user.role === 'agent') ensureOrganisation(user);
   return user;
 }
 
@@ -223,8 +236,13 @@ export function membershipsOf(userId: string): OrganisationContext[] {
   return rows.map((r) => ({ organisation: getOrganisation(r.organisation_id), role: r.role, permissions: effectivePermissions(r.role, memberPermissions(r)) }));
 }
 
-/** The organisation a signed-in person acts for: the one requested (X-Organisation-Id) or their first membership. */
-export function resolveMembership(user: UserRow, preferredOrganisationId?: string | null): OrganisationContext | null {
+/**
+ * The organisation a signed-in person acts for: the one requested (X-Organisation-Id), else their first membership
+ * of the kind the surface serves (`agent` on the agent surfaces, a merchant-class organisation on the merchant
+ * surfaces) so a person who is both a shop's cashier and an agent's counter clerk lands in the right one without a
+ * header; the first membership of any kind when the surface is shared.
+ */
+export function resolveMembership(user: UserRow, preferredOrganisationId?: string | null, surface: 'merchant' | 'agent' | 'any' = 'any'): OrganisationContext | null {
   const all = membershipsOf(user.id);
   if (!all.length) return null;
   if (preferredOrganisationId) {
@@ -232,7 +250,14 @@ export function resolveMembership(user: UserRow, preferredOrganisationId?: strin
     if (!picked) throw forbidden('You are not a member of that organisation', 'not_a_member');
     return picked;
   }
+  if (surface === 'agent') return all.find((m) => isAgentOrganisation(m.organisation)) ?? null;
+  if (surface === 'merchant') return all.find((m) => !isAgentOrganisation(m.organisation)) ?? null;
   return all[0];
+}
+
+/** Compact list of a person's memberships for the session payload (`GET /api/auth/me`): where they can act and as what. */
+export function membershipSummaries(userId: string): { organisationId: string; name: string; kind: string; role: OrgRole; owner: boolean }[] {
+  return membershipsOf(userId).map((m) => ({ organisationId: m.organisation.id, name: m.organisation.name, kind: m.organisation.kind, role: m.role, owner: m.role === 'owner' }));
 }
 
 function assertAssignableRole(role: string): asserts role is OrgRole {
@@ -263,7 +288,8 @@ export function inviteMember(org: OrganisationRow, actor: UserRow, input: { iden
     );
     recordEvent('auth', org.id, 'organisation.member_added', { type: 'merchant', id: actor.id }, { userId: user.id, role: input.role, permissions: extra });
   })();
-  notify(user.id, `You joined ${org.name}`, `${actor.full_name} added you to ${org.name} as ${input.role.replace(/_/g, ' ')}. Open the merchant centre to act for the organisation.`, {
+  const where = isAgentOrganisation(org) ? 'Open the agent dashboard to work at its counter.' : 'Open the merchant centre to act for the organisation.';
+  notify(user.id, `You joined ${org.name}`, `${actor.full_name} added you to ${org.name} as ${input.role.replace(/_/g, ' ')}. ${where}`, {
     kind: 'organisation',
     organisationId: org.id,
     role: input.role,

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { AppConfig, User, Wallet, Notification, CurrencyInfo, Country } from '@bitripay/shared';
+import type { AppConfig, User, Wallet, Notification, CurrencyInfo, Country, MembershipSummary } from '@bitripay/shared';
 import { armAlerts, ringForNew } from './alerts';
 import { api, getToken, setToken } from './api';
 import { formatMoney as fmt } from '@bitripay/shared';
@@ -18,6 +18,8 @@ export interface FullConfig extends AppConfig {
 interface Store {
   config: FullConfig | null;
   user: User | null;
+  /** Organisations this person can act for with their own login (own shop or agent counter, or invited as a member). */
+  memberships: MembershipSummary[];
   wallets: Wallet[];
   notifications: Notification[];
   unread: number;
@@ -44,6 +46,7 @@ const StoreContext = createContext<Store | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<FullConfig | null>(null);
   const [user, setUserState] = useState<User | null>(null);
+  const [memberships, setMemberships] = useState<MembershipSummary[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
@@ -75,8 +78,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const cfg = await api.get<FullConfig>('/api/config');
       setConfig(cfg);
       if (getToken()) {
-        const me = await api.get<{ user: User }>('/api/auth/me');
+        const me = await api.get<{ user: User; memberships?: MembershipSummary[] }>('/api/auth/me');
         setUserState(me.user);
+        setMemberships(me.memberships ?? []);
         await refreshWallets();
         api
           .get<{ items: unknown[] }>('/api/account/passkeys')
@@ -125,6 +129,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     () => ({
       config,
       user,
+      memberships,
       wallets,
       notifications,
       unread,
@@ -136,6 +141,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setUserState(u);
         await refreshWallets();
         api
+          .get<{ memberships?: MembershipSummary[] }>('/api/auth/me')
+          .then((r) => setMemberships(r.memberships ?? []))
+          .catch(() => {});
+        api
           .get<{ items: unknown[] }>('/api/account/passkeys')
           .then((r) => setHasPasskeys(r.items.length > 0))
           .catch(() => {});
@@ -143,6 +152,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       logout: () => {
         setToken(null);
         setUserState(null);
+        setMemberships([]);
         setWallets([]);
       },
       refresh,
@@ -157,7 +167,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       hasPasskeys,
       setHasPasskeys,
     }),
-    [config, user, wallets, notifications, unread, loading, currency, money, refresh, refreshWallets, theme, lang, toast, toasts, hasPasskeys],
+    [config, user, memberships, wallets, notifications, unread, loading, currency, money, refresh, refreshWallets, theme, lang, toast, toasts, hasPasskeys],
   );
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

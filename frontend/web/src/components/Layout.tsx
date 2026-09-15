@@ -29,7 +29,7 @@ function OfflineBanner() {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { user, config, logout, theme, toggleTheme, unread, notifications, lang, setLang, refreshWallets } = useStore();
+  const { user, memberships, config, logout, theme, toggleTheme, unread, notifications, lang, setLang, refreshWallets } = useStore();
   const t = useT();
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
@@ -90,7 +90,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <img className="brand-img swap" src="/brand/logo.svg" alt="BitriPay" width={140} height={34} />
         </Link>
         {renderItems(main)}
-        {(isMerchantClass(user?.role) || user?.role === 'admin') && has('merchantGateway') && (
+        {(isMerchantClass(user?.role) || user?.role === 'admin' || memberships.some((m) => m.kind !== 'agent')) && has('merchantGateway') && (
           <>
             <div className="nav-section">{t('nav.merchant')}</div>
             {renderItems([
@@ -104,7 +104,7 @@ export function Layout({ children }: { children: ReactNode }) {
             ])}
           </>
         )}
-        {user?.role === 'agent' && has('agents') && (
+        {(user?.role === 'agent' || memberships.some((m) => m.kind === 'agent')) && has('agents') && (
           <>
             <div className="nav-section">{t('nav.agentTools')}</div>
             {renderItems([{ to: '/app/agent', key: 'nav.agentTools', ico: '🏪' }])}

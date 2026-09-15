@@ -30,19 +30,26 @@ declare global {
   }
 }
 
-/** Surfaces where an organisation member acts for the organisation with their own session (§44). */
-const ORGANISATION_SURFACES = ['/api/v1', '/v1', '/api/organisations'];
+/** Surfaces where a member of a merchant-class organisation acts for it with their own session (§44). */
+const MERCHANT_SURFACES = ['/api/v1', '/v1'];
+/** Surfaces where a member of an agent organisation (counter staff) acts for the agent: the till, float, pickups and the payout queue. */
+const AGENT_SURFACES = ['/api/agents/me', '/api/risk/agents/me', '/api/payouts/agent', '/api/insights/float-outlook'];
+/** Shared: the organisation itself (members, roles), whichever kind the person belongs to. */
+const SHARED_SURFACES = ['/api/organisations'];
+
+const under = (path: string, prefixes: readonly string[]) => prefixes.some((p) => path === p || path.startsWith(`${p}/`));
 
 /**
- * Resolve the organisation context. Merchant-class accounts and API keys act for the organisation they own with
- * every permission. A personal account that is a member of an organisation acts for it on the merchant surfaces:
- * the request runs as the owner account (every merchant table is keyed on it) while `req.actor` keeps the human
- * for audit and step-up, and `req.organisationRole` / `req.organisationPermissions` drive `requireOrgPermission`.
- * Elsewhere (their wallet, profile, security settings) members stay themselves.
+ * Resolve the organisation context. Merchant-class accounts, agents and API keys act for the organisation they own
+ * with every permission. A personal account that is a member of an organisation acts for it on that organisation's
+ * surfaces (merchant surfaces for a shop, the till surfaces for an agent): the request runs as the owner account
+ * (every merchant and agent table is keyed on it) while `req.actor` keeps the human for audit and step-up, and
+ * `req.organisationRole` / `req.organisationPermissions` drive `requireOrgPermission`. Elsewhere (their wallet,
+ * profile, security settings) members stay themselves.
  */
 export function resolveOrganisationContext(req: Request, user: UserRow): UserRow {
   if (user.role === 'admin') return user;
-  if (req.authVia === 'api_key' || isMerchantRole(user.role)) {
+  if (req.authVia === 'api_key' || isMerchantRole(user.role) || user.role === 'agent') {
     const own = findOrganisationForOwner(user.id);
     if (own) {
       req.organisation = own;
@@ -52,9 +59,10 @@ export function resolveOrganisationContext(req: Request, user: UserRow): UserRow
     return user;
   }
   const path = (req.originalUrl || req.url || '').split('?')[0];
-  if (!ORGANISATION_SURFACES.some((p) => path === p || path.startsWith(`${p}/`))) return user;
+  const surface = under(path, MERCHANT_SURFACES) ? 'merchant' : under(path, AGENT_SURFACES) ? 'agent' : under(path, SHARED_SURFACES) ? 'any' : null;
+  if (!surface) return user;
   const header = req.headers['x-organisation-id'];
-  const membership = resolveMembership(user, typeof header === 'string' && header ? header : null);
+  const membership = resolveMembership(user, typeof header === 'string' && header ? header : null, surface);
   if (!membership) return user;
   const principal = findUserById(membership.organisation.owner_user_id);
   if (!principal || principal.status !== 'active') return user;

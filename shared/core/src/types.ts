@@ -203,6 +203,16 @@ export interface Organisation {
   updatedAt: string;
 }
 
+/** One line per organisation a signed-in person can act for (`GET /api/auth/me`): their own or one they were invited to. */
+export interface MembershipSummary {
+  organisationId: string;
+  name: string;
+  /** `agent` for an agent's team; a merchant-class role (merchant, corporate, ngo, government, developer) for a shop. */
+  kind: string;
+  role: OrgRole;
+  owner: boolean;
+}
+
 export interface OrganisationMember {
   organisationId: string;
   userId: string;

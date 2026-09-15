@@ -36,7 +36,10 @@ export function listAgents(search?: string, country?: string | null) {
 }
 
 /** Agent gives cash to nobody – the customer hands cash to the agent; agent credits the customer from the agent float. */
-export function agentCashIn(agent: UserRow, input: { customer: string; amount: number; currency: string; note?: string | null }): TransactionRow {
+/** Who is at the till when a member of the agent's team operates: recorded on the transaction and the commission, never the payer or payee. */
+const operatorMeta = (operator?: UserRow | null) => (operator && operator.id ? { operatorUserId: operator.id, operatorTag: operator.tag } : {});
+
+export function agentCashIn(agent: UserRow, input: { customer: string; amount: number; currency: string; note?: string | null; operator?: UserRow | null }): TransactionRow {
   if (!getModules().agents) throw unprocessable('Agent services are currently disabled', 'module_disabled');
   const customer = findUserByIdentifier(input.customer);
   if (!customer || customer.is_system) throw notFound('Customer not found', 'recipient_not_found');
@@ -60,11 +63,18 @@ export function agentCashIn(agent: UserRow, input: { customer: string; amount: n
     senderUserId: agent.id,
     receiverUserId: customer.id,
     note: input.note ?? `Cash in via agent @${agent.tag}`,
-    metadata: { agentId: agent.id, commission, method: 'agent' },
+    metadata: { agentId: agent.id, commission, method: 'agent', ...operatorMeta(input.operator) },
     feeSplits: [{ walletId: agentWallet.id, amount: commission }],
   });
   if (commission > 0)
-    recordCommission({ agentUserId: agent.id, transactionId: tx.id, kind: 'cash_in', amountMinor: commission, currency: cur.code, metadata: { customerId: customer.id, amount: input.amount, fee } });
+    recordCommission({
+      agentUserId: agent.id,
+      transactionId: tx.id,
+      kind: 'cash_in',
+      amountMinor: commission,
+      currency: cur.code,
+      metadata: { customerId: customer.id, amount: input.amount, fee, ...operatorMeta(input.operator) },
+    });
   notify(customer.id, 'Cash-in received', `${formatMoney(input.amount - fee, cur)} was added to your wallet by agent ${agent.business_name || agent.full_name}.`, {
     kind: 'agent_cash_in',
     transactionId: tx.id,
@@ -109,7 +119,7 @@ export function listCashRequests(user: UserRow) {
 }
 
 /** Agent confirms a cash-out with the customer's code: wallet → agent float, commission to agent. */
-export function confirmCashOut(agent: UserRow, code: string): TransactionRow {
+export function confirmCashOut(agent: UserRow, code: string, operator?: UserRow | null): TransactionRow {
   const db = getDb();
   return db.transaction(() => {
     const req = db.prepare("SELECT * FROM cash_requests WHERE code = ? AND kind = 'cash_out'").get(code.toUpperCase()) as any;
@@ -137,7 +147,7 @@ export function confirmCashOut(agent: UserRow, code: string): TransactionRow {
       senderUserId: customer.id,
       receiverUserId: agent.id,
       note: `Cash out via agent @${agent.tag}`,
-      metadata: { agentId: agent.id, commission, cashRequestId: req.id, method: 'agent' },
+      metadata: { agentId: agent.id, commission, cashRequestId: req.id, method: 'agent', ...operatorMeta(operator) },
       feeSplits: [{ walletId: agentWallet.id, amount: commission }],
     });
     db.prepare("UPDATE cash_requests SET status = 'completed', transaction_id = ? WHERE id = ?").run(tx.id, req.id);
@@ -148,7 +158,7 @@ export function confirmCashOut(agent: UserRow, code: string): TransactionRow {
         kind: 'cash_out',
         amountMinor: commission,
         currency: cur.code,
-        metadata: { customerId: customer.id, amount: req.amount, fee, cashRequestId: req.id },
+        metadata: { customerId: customer.id, amount: req.amount, fee, cashRequestId: req.id, ...operatorMeta(operator) },
       });
     notify(customer.id, 'Cash-out completed', `${formatMoney(req.amount, cur)} was paid out in cash by agent ${agent.business_name || agent.full_name}.`, {
       kind: 'agent_cash_out',
@@ -182,7 +192,16 @@ export function agentStats(agent: UserRow) {
     .all(agent.id, agent.id, since) as any[];
   const commission = commissionRows.reduce((s, r) => s + (JSON.parse(r.metadata || '{}').commission || 0), 0);
   const pending = (db.prepare("SELECT COUNT(*) c FROM cash_requests WHERE agent_id = ? AND status = 'pending' AND expires_at > ?").get(agent.id, now()) as any).c;
+  // The float itself and the size of the team: a member at the till sees the agent's float, not their own wallet.
+  const float = (db.prepare('SELECT currency, balance FROM wallets WHERE user_id = ? ORDER BY created_at').all(agent.id) as { currency: string; balance: number }[]).map((w) => ({
+    currency: w.currency,
+    balance: w.balance,
+  }));
+  const team = (db.prepare('SELECT COUNT(*) c FROM organisation_members m JOIN organisations o ON o.id = m.organisation_id WHERE o.owner_user_id = ?').get(agent.id) as { c: number }).c;
   return {
+    agent: { id: agent.id, tag: agent.tag, name: agent.business_name || agent.full_name },
+    float,
+    teamSize: team,
     cashInCount: cashIn.c,
     cashInVolume: cashIn.s,
     cashOutCount: cashOut.c,

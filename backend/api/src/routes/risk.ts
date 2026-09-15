@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
-import { requireAuth, requireAgent, requireRole } from '../middleware/auth';
+import { requireAuth, requireAgent, requireOrgPermission, requireRole } from '../middleware/auth';
 import { rateLimit } from '../middleware/rateLimit';
 import { assertPin } from '../services/auth';
 import { getCurrency } from '../services/currencies';
@@ -65,14 +65,14 @@ riskRouter.post('/destination-changes/:id/revoke', writeLimit, (req, res) => {
 });
 
 // ---------------------------------------------------------------- agents
-riskRouter.get('/agents/me/float', ...requireAgent, (req, res) =>
+riskRouter.get('/agents/me/float', ...requireAgent, requireOrgPermission('agent:view'), (req, res) =>
   res.json({
     forecasts: floatForecast(req.user!.id),
     settings: { targetDays: getAgentIntelSettings().targetDays, alertDays: getAgentIntelSettings().alertDays },
     requests: listFloatRequests({ agentId: req.user!.id, limit: 20 }),
   }),
 );
-riskRouter.post('/agents/me/float/requests', ...requireAgent, writeLimit, (req, res) => {
+riskRouter.post('/agents/me/float/requests', ...requireAgent, requireOrgPermission('agent:float'), writeLimit, (req, res) => {
   const b = validate(
     z.object({
       currency: z.string().length(3),
@@ -86,13 +86,14 @@ riskRouter.post('/agents/me/float/requests', ...requireAgent, writeLimit, (req, 
   const cur = getCurrency(b.currency);
   res.status(201).json(requestFloat(req.user!, { currency: cur.code, amountMinor: toMinor(b.amount, cur.decimals), method: b.method, reference: b.reference, note: b.note }));
 });
-riskRouter.get('/agents/me/trust', ...requireAgent, (req, res) => {
+riskRouter.get('/agents/me/trust', ...requireAgent, requireOrgPermission('agent:view'), (req, res) => {
   const latest = latestTrustScore(req.user!.id) ?? computeTrustScore(req.user!.id, true);
   res.json({ ...latest, commission: { cashIn: dynamicCommissionBps(req.user!, 'cash_in'), cashOut: dynamicCommissionBps(req.user!, 'cash_out') } });
 });
 riskRouter.post(
   '/agents/me/onboard',
   ...requireAgent,
+  requireOrgPermission('agent:onboard'),
   writeLimit,
   wrap(async (req, res) => {
     const b = validate(
@@ -107,7 +108,7 @@ riskRouter.post(
       }),
       req.body,
     );
-    assertPin(req.user!, b.pin, req);
+    assertPin(req.actor ?? req.user!, b.pin, req); // a team member at the till confirms with their own PIN
     res.status(201).json(onboardCustomer(req.user!, b));
   }),
 );

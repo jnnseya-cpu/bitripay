@@ -211,13 +211,15 @@ export function MerchantGateway() {
   );
 }
 
+/** The till. Members of an agent's team (invited on the web Team tab) reach it with their own login and see the agent's float and queue. */
 export function Agent() {
-  const { t, user, money, wallets, toast, refreshWallets, config } = useStore();
+  const { t, user, money, wallets, memberships, toast, refreshWallets, config } = useStore();
   const [tab, setTab] = useState<'cashin' | 'cashout' | 'pickup' | 'requests' | 'payouts'>('cashin');
+  const counter = memberships.find((m) => m.kind === 'agent' && !m.owner) ?? null;
   const stats = useAsync(() => api.get<any>('/api/agents/me/stats'), [tab]);
   const payouts = useAsync(() => (tab === 'payouts' ? api.get<{ items: any[] }>('/api/payouts/agent/queue') : Promise.resolve(null)), [tab]);
   const [ev, setEv] = useState<{ id: string; text: string; externalRef: string } | null>(null);
-  const requests = useAsync(() => api.get<{ items: any[] }>('/api/agents/cash-requests'), [tab]);
+  const requests = useAsync(() => api.get<{ items: any[] }>('/api/agents/me/cash-requests'), [tab]);
   const [customer, setCustomer] = useState('');
   const [found, setFound] = useState<PublicUser | null>(null);
   const [amount, setAmount] = useState('');
@@ -269,16 +271,25 @@ export function Agent() {
     }
   };
   const s = stats.data;
+  // A team member sees the agent's float, never their own wallet.
+  const float: { currency: string; balance: number }[] = s?.float?.length ? s.float : wallets;
   return (
     <Screen>
-      <Header title={user?.businessName || t('nav.agentTools')} />
+      <Header title={s?.agent?.name || user?.businessName || t('nav.agentTools')} />
+      {counter && (
+        <Card>
+          <T muted size={12}>
+            You work at the counter of {counter.name} as {counter.role.replace(/_/g, ' ')}. Cash operations use the agent's float, record you as the operator and are confirmed with your own PIN.
+          </T>
+        </Card>
+      )}
       <Row style={{ flexWrap: 'wrap' }}>
         <Card style={{ flexGrow: 1 }}>
           <T muted size={12}>
             Float
           </T>
           <T bold size={18}>
-            {wallets[0] ? money(wallets[0].balance, wallets[0].currency) : '—'}
+            {float[0] ? money(float[0].balance, float[0].currency) : '—'}
           </T>
         </Card>
         <Card style={{ flexGrow: 1 }}>
@@ -471,9 +482,9 @@ export function Agent() {
       )}
       <Card style={{ alignItems: 'center' }}>
         <T bold>Your agent QR</T>
-        <Qr value={`${config?.webUrl}/q?v=1&t=ag&id=${user?.tag}`} size={170} />
+        <Qr value={`${config?.webUrl}/q?v=1&t=ag&id=${s?.agent?.tag ?? user?.tag}`} size={170} />
         <T muted size={12}>
-          @{user?.tag}
+          @{s?.agent?.tag ?? user?.tag}
         </T>
       </Card>
       <PinSheet open={!!pin} onClose={() => setPin(null)} onSubmit={run} loading={loading} />

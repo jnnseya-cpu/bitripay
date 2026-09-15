@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../lib/http';
-import { requireAuth, requireRole, requireScope } from '../middleware/auth';
+import { requireAuth, requireOrgPermission, requireRole, requireScope } from '../middleware/auth';
 import { rateLimit } from '../middleware/rateLimit';
 import { computeAcceptanceScore, listAcceptanceSnapshots, ACCEPTANCE_WEIGHTS } from '../services/acceptanceScore';
 import { merchantGraphSummary } from '../services/paymentGraph';
@@ -31,7 +31,7 @@ insightsRouter.get('/graph/summary', requireRole(...MERCHANT_ROLES, 'admin'), re
 );
 
 // ---------------------------------------------------------------- agents
-insightsRouter.get('/float-outlook', requireRole('agent'), (req, res) => {
+insightsRouter.get('/float-outlook', requireRole('agent'), requireOrgPermission('agent:view'), (req, res) => {
   const s = getAgentIntelSettings();
   res.json({
     outlooks: floatOutlook(req.user!.id, req.query.currency ? String(req.query.currency) : null),
@@ -39,9 +39,9 @@ insightsRouter.get('/float-outlook', requireRole('agent'), (req, res) => {
     settings: { outlookHours: s.outlookHours, depletionMediumProbability: s.depletionMediumProbability, depletionHighProbability: s.depletionHighProbability },
   });
 });
-insightsRouter.post('/float-outlook/cash', requireRole('agent'), writeLimit, (req, res) => {
+insightsRouter.post('/float-outlook/cash', requireRole('agent'), requireOrgPermission('agent:float'), writeLimit, (req, res) => {
   const b = validate(z.object({ currency: z.string().length(3), amount: z.string() }), req.body);
   const cur = getCurrency(b.currency);
   res.status(201).json({ declaration: declareCash(req.user!, { currency: cur.code, amountMinor: toMinor(b.amount, cur.decimals) }), outlooks: floatOutlook(req.user!.id, cur.code) });
 });
-insightsRouter.get('/float-outlook/limits', requireRole('agent'), (req, res) => res.json(agentLimitsFor(req.user!)));
+insightsRouter.get('/float-outlook/limits', requireRole('agent'), requireOrgPermission('agent:view'), (req, res) => res.json(agentLimitsFor(req.user!)));

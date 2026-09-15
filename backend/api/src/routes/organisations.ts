@@ -1,5 +1,5 @@
 /**
- * Organisations, members and business units (specification §43, §44). Merchant-class accounts own their organisation;
+ * Organisations, members and business units (specification §43, §44). Merchant-class and agent accounts own their organisation;
  * members reach it with their own session (middleware/auth resolves the membership) and every write is checked
  * against the permission matrix with `requireOrgPermission`.
  */
@@ -33,10 +33,10 @@ import { badRequest } from '../lib/errors';
 export const organisationsRouter = Router();
 const writeLimit = rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'orgw' });
 
-// Merchant-class accounts (owners), their members (resolved to the owner by the middleware) and administrators.
-organisationsRouter.use(requireAuth, requireRole(...MERCHANT_ROLES, 'admin'));
+// Merchant-class and agent accounts (owners), their members (resolved to the owner by the middleware) and administrators.
+organisationsRouter.use(requireAuth, requireRole(...MERCHANT_ROLES, 'agent', 'admin'));
 
-/** The organisation the request acts for; a merchant-class account that predates organisations gets one here. */
+/** The organisation the request acts for; a merchant-class or agent account that predates organisations gets one here. */
 function currentOrganisation(req: import('express').Request): OrganisationRow {
   if (req.organisation) return req.organisation;
   if (req.user!.role === 'admin') throw badRequest('Administrators do not own an organisation; sign in as the merchant or one of its members', 'no_organisation');

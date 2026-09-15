@@ -924,7 +924,34 @@ the organisation when a person belongs to several.
 | cashier | payments:create, payments:view, refunds:issue (only up to the cashier refund limit) |
 | support | payments:view, refunds:issue, disputes:respond |
 | compliance_reviewer | payments:view, statements:view, compliance:review, disputes:respond |
-| read_only | payments:view, settlement:view, statements:view |
+| read_only | payments:view, settlement:view, statements:view, agent:view |
+
+Rows above list the merchant permissions; at an agent counter the same roles carry the `agent:*` keys: `agent:view`
+(every people-facing role), `agent:cash_in`, `agent:cash_out`, `agent:pickups`, `agent:onboard` (cashier, operations
+manager, administrator), `agent:float` and `agent:payouts` (operations manager, finance manager for float,
+administrator). The developer role is an API role and holds none of them.
+
+#### Agent teams: several people on one agent account
+
+Every **agent account owns an organisation too** (`kind = 'agent'`; registration creates it, `ensureOrganisation`
+on first use, migration `035_agent_organisations.sql` backfills existing agents). The agent invites counter staff
+under the **Team** tab of the agent dashboard exactly as a merchant invites members: by email, phone or `@tag`,
+with a role. Nobody shares a password: each person signs in with their own credentials and, on the agent surfaces
+(`/api/agents/me/*`, `/api/risk/agents/me/*`, `/api/payouts/agent/*`, `/api/insights/float-outlook*`), the request
+runs as the agent account (the float, the limits, the trust band and the commissions are all the agent's) while
+`req.actor` is the person at the till: **their own PIN** confirms every cash operation, and `operatorUserId` /
+`operatorTag` are written into the transaction metadata, the commission entry and the pickup payout record, so
+a statement or a supervisory export shows who served the customer. `requireOrgPermission('agent:…')` refuses a
+role that lacks the permission with `org_permission_denied` and a message naming the role. Outside the till (their
+wallet, profile, security settings) members stay themselves; a member's own wallet never holds the float.
+`GET /api/auth/me` returns `memberships` (organisation, kind, role) so the web and mobile apps open the till for
+members and show the agent's float from `GET /api/agents/me/stats` (`agent`, `float`, `teamSize`) rather than the
+member's wallet. A person who is both a shop's cashier and an agent's counter clerk lands in the right organisation
+per surface; `X-Organisation-Id` still selects one explicitly.
+
+Platform administrators are individual console accounts with their own permission sets, PIN and 2FA; personal
+customer accounts own no organisation and cannot be shared.
+
 
 `requireOrgPermission(...)` guards the sensitive v1 routes: intent / checkout / link / money-request creation
 (`payments:create`), refunds (`refunds:issue`; a member without `refunds:unrestricted` may refund at most the

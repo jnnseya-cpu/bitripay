@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import type { User, Wallet, Notification, CurrencyInfo } from '@bitripay/shared';
+import type { User, Wallet, Notification, CurrencyInfo, MembershipSummary } from '@bitripay/shared';
 import { formatMoney, translate } from '@bitripay/shared';
 import { api, loadToken, saveToken, onLogout } from './api';
 import { ringForNew, ringLoud, setLoudEnabled, VIBRATION_PATTERN } from './alerts';
@@ -15,6 +15,8 @@ interface Store {
   unlock: () => Promise<void>;
   config: any;
   user: User | null;
+  /** Organisations this person can act for with their own login (own shop or agent counter, or invited as a member). */
+  memberships: MembershipSummary[];
   wallets: Wallet[];
   notifications: Notification[];
   unread: number;
@@ -78,6 +80,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [locked, setLocked] = useState(false);
   const [config, setConfig] = useState<any>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [memberships, setMemberships] = useState<MembershipSummary[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
@@ -105,8 +108,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       const cfg = await api.get<any>('/api/config');
       setConfig(cfg);
-      const me = await api.get<{ user: User }>('/api/auth/me');
+      const me = await api.get<{ user: User; memberships?: MembershipSummary[] }>('/api/auth/me');
       setUser(me.user);
+      setMemberships(me.memberships ?? []);
       await refreshWallets();
     } catch {
       /* not signed in */
@@ -181,6 +185,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       unlock,
       config,
       user,
+      memberships,
       wallets,
       notifications,
       unread,
@@ -192,6 +197,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       logout: async () => {
         await saveToken(null);
         setUser(null);
+        setMemberships([]);
         setWallets([]);
       },
       refresh,
@@ -234,7 +240,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       toast,
       toasts,
     }),
-    [ready, locked, unlock, config, user, wallets, notifications, unread, refresh, refreshWallets, currency, lang, overrides, dark, biometrics, biometricsAvailable, toast, toasts],
+    [ready, locked, unlock, config, user, memberships, wallets, notifications, unread, refresh, refreshWallets, currency, lang, overrides, dark, biometrics, biometricsAvailable, toast, toasts],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

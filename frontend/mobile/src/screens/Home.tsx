@@ -8,7 +8,7 @@ import { useNav } from '../navigation';
 import { convertMinor, type Transaction } from '@bitripay/shared';
 
 export function Home() {
-  const { user, wallets, config, money, currency, t, unread } = useStore();
+  const { user, memberships, wallets, config, money, currency, t, unread } = useStore();
   const nav = useNav();
   const th = useTheme();
   const tx = useAsync(() => api.get<{ items: Transaction[] }>('/api/wallets/transactions?pageSize=6'), [wallets]);
@@ -97,7 +97,7 @@ export function Home() {
       </View>
       <Button title="🧭 Command centre · ask your agents" variant="secondary" onPress={() => nav.navigate('Assist')} />
       {user?.role === 'merchant' && <Button title="🏪 Merchant tools · POS & gateway" variant="secondary" onPress={() => nav.navigate('Merchant')} />}
-      {user?.role === 'agent' && <Button title="🧑‍💼 Agent tools · cash in / out" variant="secondary" onPress={() => nav.navigate('Agent')} />}
+      {(user?.role === 'agent' || memberships.some((mb) => mb.kind === 'agent')) && <Button title="🧑‍💼 Agent tools · cash in / out" variant="secondary" onPress={() => nav.navigate('Agent')} />}
       {user?.kycStatus !== 'verified' && m.kyc !== false && (
         <Pressable onPress={() => nav.navigate('Kyc')}>
           <Chip label={user?.kycStatus === 'pending' ? 'KYC under review' : 'Verify your identity to raise limits →'} kind="warning" />
@@ -130,7 +130,7 @@ export function Home() {
 }
 
 export function More() {
-  const { user, logout, t, config } = useStore();
+  const { user, memberships, logout, t, config } = useStore();
   const nav = useNav();
   const th = useTheme();
   const m = config?.modules ?? {};
@@ -157,7 +157,7 @@ export function More() {
     ['Settings', '⚙️', t('nav.settings')],
   ];
   if (user?.role === 'merchant') items.unshift(['Merchant', '🏪', t('nav.merchant')], ['MerchantGateway', '🔌', 'Gateway & API keys']);
-  if (user?.role === 'agent') items.unshift(['Agent', '🧑‍💼', t('nav.agentTools')]);
+  if (user?.role === 'agent' || memberships.some((mb) => mb.kind === 'agent')) items.unshift(['Agent', '🧑‍💼', t('nav.agentTools')]);
   return (
     <Screen title="More">
       <Card>

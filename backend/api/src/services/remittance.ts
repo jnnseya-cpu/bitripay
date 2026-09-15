@@ -182,7 +182,7 @@ export function getRemittance(id: string) {
 }
 
 /** Agent pays out a cash pickup: verifies the code, gets the target amount credited to their float. */
-export function payoutCashPickup(agent: UserRow, pickupCode: string, recipientIdNumber?: string) {
+export function payoutCashPickup(agent: UserRow, pickupCode: string, recipientIdNumber?: string, operator?: UserRow | null) {
   const db = getDb();
   return db.transaction(() => {
     const row = db.prepare('SELECT * FROM remittances WHERE pickup_code = ?').get(pickupCode.trim().toUpperCase()) as any;
@@ -194,7 +194,7 @@ export function payoutCashPickup(agent: UserRow, pickupCode: string, recipientId
     }
     const agentWallet = ensureWallet(agent.id, row.target_currency);
     // Move the held target amount: pending tx receiver wallet is treasury; complete it to treasury then pay the agent from treasury.
-    completeTransaction(row.transaction_id, { pickupAgentId: agent.id, paidOutAt: now() });
+    completeTransaction(row.transaction_id, { pickupAgentId: agent.id, paidOutAt: now(), ...(operator ? { operatorUserId: operator.id, operatorTag: operator.tag } : {}) });
     const treasury = ensureWallet(getSystemUser('treasury').id, row.target_currency);
     postTransaction({
       type: 'agent_cash_out',

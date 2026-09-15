@@ -7,6 +7,14 @@ export type MerchantClassRole = (typeof MERCHANT_CLASS_ROLES)[number];
 /** True for every account type that accepts payments as a business (merchant, corporate, NGO, government, developer). */
 export const isMerchantClass = (role: string | null | undefined): boolean => (MERCHANT_CLASS_ROLES as readonly string[]).includes(role ?? '');
 
+/**
+ * Account types that own an organisation and can therefore let other people work in it with their own login and an
+ * assigned role: every merchant-class account and agents (counter staff, branch cashiers). Personal accounts own none;
+ * platform administrators are individual accounts with console permissions.
+ */
+export const ORGANISATION_OWNER_ROLES = [...MERCHANT_CLASS_ROLES, 'agent'] as const;
+export const canOwnOrganisation = (role: string | null | undefined): boolean => (ORGANISATION_OWNER_ROLES as readonly string[]).includes(role ?? '');
+
 /** Roles a person can hold inside an organisation (specification §44). The owner is the account that registered the organisation. */
 export const ORG_ROLES = ['owner', 'administrator', 'finance_manager', 'operations_manager', 'developer', 'analyst', 'cashier', 'support', 'compliance_reviewer', 'read_only'] as const;
 export type OrgRole = (typeof ORG_ROLES)[number];
@@ -30,25 +38,66 @@ export const ORG_PERMISSION_KEYS = [
   'customers:export',
   'disputes:respond',
   'compliance:review',
+  // Agent organisations (counter staff acting for an agent with their own login)
+  'agent:view',
+  'agent:cash_in',
+  'agent:cash_out',
+  'agent:pickups',
+  'agent:onboard',
+  'agent:float',
+  'agent:payouts',
 ] as const;
 export type OrgPermission = (typeof ORG_PERMISSION_KEYS)[number];
+
+/** The agent-side permission keys (`agent:*`): what counter staff of an agent organisation may do at the till. */
+export const AGENT_ORG_PERMISSION_KEYS = ORG_PERMISSION_KEYS.filter((k) => k.startsWith('agent:'));
 
 /**
  * Permission matrix per organisation role. `*` is every permission. A cashier issues refunds only up to the
  * organisation's cashier limit (`refunds:issue` without `refunds:unrestricted`), never touches settlement
  * instructions, API secrets or customer exports. API keys act with the organisation's full permissions.
+ * In an agent organisation the same roles apply to the till: a cashier serves customers (cash-in, cash-out,
+ * pickups, assisted onboarding) with the agent's float but never requests float or handles payout claims; an
+ * operations manager runs the whole counter; analysts and read-only members only see the figures.
  */
 export const ORG_PERMISSIONS: Record<OrgRole, readonly (OrgPermission | '*')[]> = {
   owner: ['*'],
   administrator: [...ORG_PERMISSION_KEYS],
-  finance_manager: ['payments:view', 'refunds:issue', 'refunds:unrestricted', 'settlement:view', 'settlement:change', 'payouts:create', 'statements:view', 'customers:export', 'disputes:respond'],
-  operations_manager: ['org:manage_units', 'payments:create', 'payments:view', 'refunds:issue', 'settlement:view', 'statements:view', 'disputes:respond'],
+  finance_manager: [
+    'payments:view',
+    'refunds:issue',
+    'refunds:unrestricted',
+    'settlement:view',
+    'settlement:change',
+    'payouts:create',
+    'statements:view',
+    'customers:export',
+    'disputes:respond',
+    'agent:view',
+    'agent:float',
+  ],
+  operations_manager: [
+    'org:manage_units',
+    'payments:create',
+    'payments:view',
+    'refunds:issue',
+    'settlement:view',
+    'statements:view',
+    'disputes:respond',
+    'agent:view',
+    'agent:cash_in',
+    'agent:cash_out',
+    'agent:pickups',
+    'agent:onboard',
+    'agent:float',
+    'agent:payouts',
+  ],
   developer: ['api_keys:view', 'api_keys:manage', 'webhooks:manage', 'payments:create', 'payments:view'],
-  analyst: ['payments:view', 'settlement:view', 'statements:view'],
-  cashier: ['payments:create', 'payments:view', 'refunds:issue'],
-  support: ['payments:view', 'refunds:issue', 'disputes:respond'],
-  compliance_reviewer: ['payments:view', 'statements:view', 'compliance:review', 'disputes:respond'],
-  read_only: ['payments:view', 'settlement:view', 'statements:view'],
+  analyst: ['payments:view', 'settlement:view', 'statements:view', 'agent:view'],
+  cashier: ['payments:create', 'payments:view', 'refunds:issue', 'agent:view', 'agent:cash_in', 'agent:cash_out', 'agent:pickups', 'agent:onboard'],
+  support: ['payments:view', 'refunds:issue', 'disputes:respond', 'agent:view'],
+  compliance_reviewer: ['payments:view', 'statements:view', 'compliance:review', 'disputes:respond', 'agent:view'],
+  read_only: ['payments:view', 'settlement:view', 'statements:view', 'agent:view'],
 };
 
 /** Whether a role (plus any extra per-member grants) holds a permission. */

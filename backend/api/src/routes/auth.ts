@@ -9,7 +9,7 @@ import { toUser } from '../services/users';
 import { verifyOtp } from '../services/otp';
 import { issueOtp } from '../services/otp';
 import { normalizeEmail, normalizePhone, findUserByEmail, findUserByPhone, isMerchantRole } from '../services/users';
-import { onMerchantClassRegistered } from '../services/organisations';
+import { membershipSummaries, onAgentRegistered, onMerchantClassRegistered } from '../services/organisations';
 import { signToken } from '../lib/jwt';
 import { badRequest, conflict } from '../lib/errors';
 
@@ -80,6 +80,7 @@ authRouter.post(
       res.status(201).json({ ...result, token: signToken({ sub: user.id, role: user.role }), user: toUser(user) });
       return;
     }
+    if (body.role === 'agent') onAgentRegistered(result.user.id); // the agent's team exists from the first sign-in
     res.status(201).json(result);
   }),
 );
@@ -158,4 +159,8 @@ authRouter.post(
   }),
 );
 
-authRouter.get('/me', requireAuth, (req, res) => res.json({ user: toUser(req.user!) }));
+/** The session's account plus every organisation the person can act for (own or as an invited member) and with which role. */
+authRouter.get('/me', requireAuth, (req, res) => {
+  const me = req.actor ?? req.user!;
+  res.json({ user: toUser(me), memberships: membershipSummaries(me.id) });
+});
