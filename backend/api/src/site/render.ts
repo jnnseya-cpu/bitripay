@@ -23,14 +23,14 @@ export interface Meta {
 }
 
 const CSS = `
-:root{--bg:#f6f6fb;--paper:#ffffff;--ink:#161832;--muted:#5b5e7e;--line:#e2e2ef;--accent:#2E2A7B;--accent-2:#12A34B;--amber:#F49D1F;--display:'Bricolage Grotesque',ui-sans-serif,system-ui,sans-serif;--body:'Source Sans 3',ui-sans-serif,system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace}
-@media (prefers-color-scheme:dark){:root{--bg:#0f0f22;--paper:#17173a;--ink:#ecebf7;--muted:#a6a8c4;--line:#2b2b5c;--accent:#9c96ee;--accent-2:#3ac47a;--amber:#f5b04a}}
+:root{--bg:#f6f6fb;--paper:#ffffff;--ink:#161832;--muted:#565979;--line:#e2e2ef;--accent:#2E2A7B;--accent-2:#0b7a3b;--on-accent:#ffffff;--amber:#F49D1F;--strip-bg:#161832;--strip-ink:#ffffff;--display:'Bricolage Grotesque',ui-sans-serif,system-ui,sans-serif;--body:'Source Sans 3',ui-sans-serif,system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#0c0c1c;--paper:#161636;--ink:#f1f0fb;--muted:#b3b5cf;--line:#2f2f62;--accent:#b3aef5;--accent-2:#4fd48b;--on-accent:#0c0c1c;--amber:#f5b04a;--strip-bg:#1c1c48;--strip-ink:#f6f6ff}}
 *{box-sizing:border-box}html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
 a{color:var(--accent-2)}a:hover{text-decoration-thickness:2px}
 .wrap{max-width:1120px;margin:0 auto;padding-inline:clamp(16px,4vw,40px)}
 header.top{border-bottom:1px solid var(--line);background:var(--paper)}
-.positioning{background:var(--ink,#0f172a);color:#fff;font-size:13px;letter-spacing:.04em}.positioning .wrap{display:flex;flex-wrap:wrap;gap:6px 18px;padding:8px 20px;align-items:center}.positioning strong{font-weight:700}.positioning span{opacity:.85}
+.positioning{background:var(--strip-bg);color:var(--strip-ink);font-size:13px;letter-spacing:.04em}.positioning .wrap{display:flex;flex-wrap:wrap;gap:6px 18px;padding:8px 20px;align-items:center}.positioning strong{font-weight:700}.positioning span{opacity:.85}
 header.top .wrap{display:flex;align-items:center;gap:24px;min-height:64px}
 .brand{font-family:var(--display);font-weight:700;font-size:20px;color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:10px;letter-spacing:-.01em}
 .brand i{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:inline-block}.brand img{height:34px;width:auto;display:block}@media (prefers-color-scheme:dark){.brand img{filter:brightness(0) invert(1)}}
@@ -62,7 +62,7 @@ aside.toc{position:sticky;top:20px;display:grid;gap:18px}
 .byline{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:13px;color:var(--muted);margin-bottom:28px}
 .hero-post{border-radius:18px;padding:40px clamp(20px,4vw,48px);color:#fff;background:radial-gradient(1200px 400px at 10% -20%,rgba(255,255,255,.22),transparent 60%),linear-gradient(120deg,#0b6e4f,#1f4fd8 70%,#123b8f);margin-bottom:36px}
 .hero-post .eyebrow{color:rgba(255,255,255,.75)}.hero-post h1{color:#fff;font-size:clamp(26px,3.6vw,44px)}.hero-post p{color:rgba(255,255,255,.85);max-width:60ch}.hero-post a.btn{display:inline-block;margin-top:8px;background:#fff;color:#12161c;padding:10px 16px;border-radius:9px;text-decoration:none;font-weight:600}
-.cta-band{margin-top:48px;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:28px;display:flex;gap:20px;align-items:center;flex-wrap:wrap}.cta-band .btn{background:var(--accent);color:#fff;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600}
+.cta-band{margin-top:48px;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:28px;display:flex;gap:20px;align-items:center;flex-wrap:wrap}.cta-band .btn{background:var(--accent);color:var(--on-accent);padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600}
 footer.site{border-top:1px solid var(--line);background:var(--paper);padding-block:44px 36px;font-size:15px}
 footer .cols{display:grid;grid-template-columns:2fr repeat(4,1fr);gap:28px}@media (max-width:820px){footer .cols{grid-template-columns:1fr 1fr}}@media (max-width:480px){footer .cols{grid-template-columns:1fr}}
 footer h4{margin:0 0 10px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}footer ul{list-style:none;padding:0;margin:0;display:grid;gap:7px}footer a{color:var(--ink);text-decoration:none}footer a:hover{color:var(--accent-2)}
@@ -246,7 +246,7 @@ ${post.related.length ? `<h2>Keep reading</h2><div class="grid">${post.related.m
 <aside class="toc">
 ${post.headings.length ? `<div class="tocbox"><b>In this article</b>${post.headings.map((h) => `<a class="${h.level === 3 ? 'l3' : ''}" href="#${h.id}">${escapeHtml(h.text)}</a>`).join('')}${post.faq.length ? '<a href="#faq">FAQ</a>' : ''}</div>` : ''}
 <div class="tocbox"><b>Share</b><div class="share">${share.map(([n, h]) => `<a href="${h}" rel="noopener" target="_blank">${n}</a>`).join('')}</div></div>
-<div class="tocbox"><b>Get the app</b><p style="margin:0 0 10px;font-size:14px;color:var(--muted)">Send with a QR code, add money by card or mobile money, get a virtual card.</p><a href="/register" style="display:inline-block;background:var(--accent);color:#fff;padding:9px 14px;border-radius:9px;text-decoration:none;font-weight:600;font-size:14px">Open an account</a></div>
+<div class="tocbox"><b>Get the app</b><p style="margin:0 0 10px;font-size:14px;color:var(--muted)">Send with a QR code, add money by card or mobile money, get a virtual card.</p><a href="/register" style="display:inline-block;background:var(--accent);color:var(--on-accent);padding:9px 14px;border-radius:9px;text-decoration:none;font-weight:600;font-size:14px">Open an account</a></div>
 </aside>
 </article>`;
   return layout(

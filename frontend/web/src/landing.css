@@ -5,8 +5,9 @@
   --lp-ink: #161832;
   --lp-ink-2: #4e5170;
   --lp-line: #e2e2ef;
-  --lp-forest: #12a34b;
-  --lp-forest-2: #0e8a3e;
+  --lp-forest: #0b7a3b;
+  --lp-forest-2: #0a6e36;
+  --lp-on-forest: #ffffff;
   --lp-cobalt: #2e2a7b;
   --lp-amber: #f49d1f;
   --lp-night: #151537;
@@ -26,9 +27,10 @@
   --lp-ink: #ecebf7;
   --lp-ink-2: #a6a8c4;
   --lp-line: #2b2b5c;
-  --lp-forest: #3ac47a;
-  --lp-forest-2: #2fae69;
-  --lp-cobalt: #9c96ee;
+  --lp-forest: #4fd48b;
+  --lp-forest-2: #3ac47a;
+  --lp-on-forest: #0f0f22;
+  --lp-cobalt: #b3aef5;
 }
 .lp * {
   box-sizing: border-box;
@@ -115,7 +117,7 @@
 }
 .lp-btn.primary {
   background: var(--lp-forest);
-  color: #fff;
+  color: var(--lp-on-forest);
 }
 .lp-btn.primary:hover {
   background: var(--lp-forest-2);
@@ -307,7 +309,7 @@
   height: 38px;
   border-radius: 50%;
   background: var(--lp-forest);
-  color: #fff;
+  color: var(--lp-on-forest);
   display: grid;
   place-items: center;
   font-weight: 700;
@@ -512,7 +514,7 @@
 .lp-step.check i {
   background: var(--lp-forest);
   border-color: var(--lp-forest);
-  color: #fff;
+  color: var(--lp-on-forest);
 }
 /* pillars */
 .lp-pillars {
@@ -667,7 +669,7 @@
 }
 .lp-role.forest {
   background: var(--lp-forest);
-  color: #fff;
+  color: var(--lp-on-forest);
   border-color: transparent;
 }
 .lp-role h3 {
