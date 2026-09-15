@@ -10,7 +10,7 @@ export interface DefaultPage {
   content: string;
 }
 
-const CONTACT = 'You can reach us at hello@bitripay.app, in the app under Support → Live chat, or by post at the registered address shown in the Regulatory information page.';
+const CONTACT = 'You can reach us at support@bitripay.com, in the app under Support → Live chat, or by post at the registered address shown in the Regulatory information page.';
 
 export const DEFAULT_PAGES: DefaultPage[] = [
   {
@@ -51,7 +51,7 @@ ${CONTACT} We answer in English, French, Lingala and Swahili.`,
     content: `## We are here to help
 
 - **In the app:** Support → Live chat, seven days a week. This is the fastest way to solve a problem with a payment.
-- **Email:** hello@bitripay.app for general questions, support@bitripay.app for account help, complaints@bitripay.app for formal complaints, press@bitripay.app for media, partners@bitripay.app for agents, merchants and payout partners.
+- **Email:** support@bitripay.com for everything: general questions, account help, formal complaints, media enquiries, and partnerships with agents, merchants and payout partners. One inbox, read by the team every working day.
 - **Phone and post:** the numbers and addresses for each country we operate in are listed on the Regulatory information page.
 
 ## Before you write
@@ -60,11 +60,11 @@ If it is about a specific payment, have the reference (it starts with BP-) ready
 
 ## Lost or stolen phone
 
-Sign in on another device and freeze your account under Settings → Security, or write to support@bitripay.app with your @tag and the last four digits of your phone number. We will block the old device immediately.
+Sign in on another device and freeze your account under Settings → Security, or write to support@bitripay.com with your @tag and the last four digits of your phone number. We will block the old device immediately.
 
 ## Reporting a security issue
 
-Write to security@bitripay.app. We acknowledge reports within two working days and do not take action against researchers who report responsibly.`,
+Write to support@bitripay.com. We acknowledge reports within two working days and do not take action against researchers who report responsibly.`,
   },
   {
     slug: 'privacy',
@@ -106,7 +106,7 @@ Account, identity and transaction records are kept for the period required by an
 
 ## Your rights
 
-You can ask for a copy of your data, correct it, ask us to delete what we are not required to keep, object to marketing, and complain to the data-protection authority in your country. Write to privacy@bitripay.app. We answer within one month.
+You can ask for a copy of your data, correct it, ask us to delete what we are not required to keep, object to marketing, and complain to the data-protection authority in your country. Write to support@bitripay.com. We answer within one month.
 
 ## Children
 
@@ -178,7 +178,7 @@ The mobile and web apps store your session token, language, theme and the "loud 
 
 ## Your choices
 
-You can delete cookies in your browser at any time. If you clear them you will be signed out. Questions: privacy@bitripay.app.`,
+You can delete cookies in your browser at any time. If you clear them you will be signed out. Questions: support@bitripay.com.`,
   },
   {
     slug: 'acceptable-use',
@@ -293,14 +293,14 @@ Refunds from online merchants return to the virtual card balance. You can move t
 
 ## How to ask
 
-Support → Live chat in the app, or support@bitripay.app with the BP- reference.`,
+Support → Live chat in the app, or support@bitripay.com with the BP- reference.`,
   },
   {
     slug: 'complaints',
     title: 'Complaints',
     content: `## We want to know
 
-If something has gone wrong, tell us. You do not need to write in a particular way and you can complain in English, French, Lingala or Swahili, in the app, by email to complaints@bitripay.app, or by post to the address on the Regulatory information page.
+If something has gone wrong, tell us. You do not need to write in a particular way and you can complain in English, French, Lingala or Swahili, in the app, by email to support@bitripay.com, or by post to the address on the Regulatory information page.
 
 ## What happens next
 
@@ -339,7 +339,7 @@ BitriPay was designed with people who do not read easily, who share a phone, who
 
 ## Tell us what is hard
 
-If something in BitriPay is difficult for you to use, write to accessibility@bitripay.app or use Live chat. We fix accessibility problems as bugs, not as feature requests.`,
+If something in BitriPay is difficult for you to use, write to support@bitripay.com or use Live chat. We fix accessibility problems as bugs, not as feature requests.`,
   },
   {
     slug: 'fees',
@@ -392,7 +392,7 @@ BitriPay staff will never ask for your PIN, password or a code sent to your phon
 
 ## Reporting a vulnerability
 
-security@bitripay.app. We acknowledge within two working days and thank researchers publicly when they wish.`,
+support@bitripay.com. We acknowledge within two working days and thank researchers publicly when they wish.`,
   },
   {
     slug: 'regulatory',

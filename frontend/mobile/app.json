@@ -19,7 +19,7 @@
         "NSCameraUsageDescription": "BitriPay uses the camera to scan payment QR codes.",
         "NSFaceIDUsageDescription": "BitriPay uses Face ID to unlock the app."
       },
-      "associatedDomains": ["applinks:pay.bitripay.app"]
+      "associatedDomains": ["applinks:www.bitripay.com"]
     },
     "android": {
       "package": "com.bitripay.app",
@@ -31,12 +31,12 @@
           "data": [
             {
               "scheme": "https",
-              "host": "pay.bitripay.app",
+              "host": "www.bitripay.com",
               "pathPrefix": "/q"
             },
             {
               "scheme": "https",
-              "host": "pay.bitripay.app",
+              "host": "www.bitripay.com",
               "pathPrefix": "/pay"
             }
           ],

@@ -153,7 +153,14 @@ describe('content agent and editing', () => {
     const bl = await request(app)
       .put('/api/admin/seo/backlinks/new')
       .set(admin.auth)
-      .send({ direction: 'partner', sourceUrl: 'https://partner-directory.example/fintech', targetUrl: 'https://bitripay.app/', anchor: 'BitriPay', status: 'pending', notes: 'Listing requested' });
+      .send({
+        direction: 'partner',
+        sourceUrl: 'https://partner-directory.example/fintech',
+        targetUrl: 'https://www.bitripay.com/',
+        anchor: 'BitriPay',
+        status: 'pending',
+        notes: 'Listing requested',
+      });
     expect(bl.status).toBe(200);
     expect(bl.body.backlink.sourceDomain).toBe('partner-directory.example');
     const settings = await request(app)

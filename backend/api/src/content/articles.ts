@@ -47,7 +47,7 @@ export const DEFAULT_ARTICLES: PostInput[] = [
 
 ## Step 1: print your QR code
 
-Open BitriPay, tap **Receive** and then **Enlarge**. Print it, or ask an agent to print it for you. The same code also works as a link (\`bitripay.app/u/yourtag\`), so a customer with no camera can type it.
+Open BitriPay, tap **Receive** and then **Enlarge**. Print it, or ask an agent to print it for you. The same code also works as a link (\`www.bitripay.com/u/yourtag\`), so a customer with no camera can type it.
 
 If you want the customer to see the amount before paying, use **Point of sale** on a merchant account: you type the amount, the phone shows a one-time code, the customer scans and the amount is already filled in.
 

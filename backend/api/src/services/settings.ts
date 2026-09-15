@@ -334,7 +334,7 @@ const DEFAULT_SEO: SeoSettings = {
   ogImage: null,
   twitterHandle: '@bitripay',
   languages: ['en', 'fr', 'sw', 'ln'],
-  organization: { legalName: 'BitriPay', foundingCountry: 'CD', email: 'hello@bitripay.app', phone: '', address: '', sameAs: [] },
+  organization: { legalName: 'BitriPay', foundingCountry: 'CD', email: 'support@bitripay.com', phone: '', address: '', sameAs: [] },
   indexNowKey: '',
   agent: {
     enabled: true,

@@ -82,7 +82,7 @@ npx expo start
 ```
 
 Scan the Expo QR code with Expo Go, or build with EAS (`eas build`). Camera scanning, biometric
-unlock, push notifications and deep links (`bitripay://`, `https://pay.bitripay.app/pay/CODE`) are
+unlock, push notifications and deep links (`bitripay://`, `https://www.bitripay.com/pay/CODE`) are
 configured in `app.json`.
 
 ### Run the Android payout device / SMS forwarder

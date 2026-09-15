@@ -135,7 +135,7 @@
   "administrators": [
     {
       "fullName": "Second Administrator",
-      "email": "approver@bitripay.com",
+      "email": "second-admin@example.com",
       "permissions": ["approvals", "issuance", "treasury", "settings", "gateways", "kyc", "users", "transactions"]
     }
   ],

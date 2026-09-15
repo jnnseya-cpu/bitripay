@@ -45,13 +45,13 @@ describe('go-live profile', () => {
     expect(corridor.status).toBe('sandbox');
     expect(corridor.readiness.missing).toEqual([]);
     expect(corridor.compliance.licenceNumber).toBe('000000');
-    const approver = findUserByEmail('approver@bitripay.com')!;
+    const approver = findUserByEmail('second-admin@example.com')!;
     expect(approver.role).toBe('admin');
     expect(JSON.parse((approver as any).permissions)).toContain('issuance');
-    expect(first.generatedPasswords).toEqual([{ email: 'approver@bitripay.com', password: expect.any(String) }]);
+    expect(first.generatedPasswords).toEqual([{ email: 'second-admin@example.com', password: expect.any(String) }]);
     expect(getSmtpSettings().host).toBe('smtp.hostinger.com');
     expect(getSmtpSettings().secure).toBe(true);
-    expect(first.remaining.join('\n')).toMatch(/approver@bitripay.com: sign in, set up two-factor/);
+    expect(first.remaining.join('\n')).toMatch(/second-admin@example.com: sign in, set up two-factor/);
     expect(first.remaining.join('\n')).toMatch(/Corridor GBP→CD: press Go live/);
     expect(first.remaining.join('\n')).toMatch(/reserve funding/);
     expect(first.remaining.join('\n')).toMatch(/prefund the float/);
@@ -81,12 +81,12 @@ describe('go-live profile', () => {
     const noPin = await request(app)
       .post('/api/admin/go-live/profile')
       .set(admin.auth)
-      .send({ profile: { smtp: { host: 'mail.bitripay.com', from: 'BitriPay <no-reply@bitripay.com>' } } });
+      .send({ profile: { smtp: { host: 'mail.bitripay.com', from: 'BitriPay <support@bitripay.com>' } } });
     expect(noPin.status).toBeGreaterThanOrEqual(400);
     const ok = await request(app)
       .post('/api/admin/go-live/profile')
       .set(admin.auth)
-      .send({ profile: JSON.stringify({ smtp: { host: 'mail.bitripay.com', from: 'BitriPay <no-reply@bitripay.com>' }, currencies: { enable: ['CDF'] } }), pin: admin.pin });
+      .send({ profile: JSON.stringify({ smtp: { host: 'mail.bitripay.com', from: 'BitriPay <support@bitripay.com>' }, currencies: { enable: ['CDF'] } }), pin: admin.pin });
     expect(ok.status).toBe(200);
     expect(ok.body.lines.find((l: any) => l.section === 'smtp').subject).toBe('mail.bitripay.com:587');
     expect(ok.body.checklist.items.some((i: any) => i.id === 'smtp' && i.ok)).toBe(true);

@@ -485,7 +485,7 @@ export function Seo() {
                 <Field label="Site name">
                   <Input value={settings.siteName} onChange={(e) => setSettings({ ...settings, siteName: e.target.value })} />
                 </Field>
-                <Field label="Public site URL (canonical, sitemap)" hint="e.g. https://bitripay.app">
+                <Field label="Public site URL (canonical, sitemap)" hint="e.g. https://www.bitripay.com">
                   <Input value={settings.siteUrl} onChange={(e) => setSettings({ ...settings, siteUrl: e.target.value })} />
                 </Field>
                 <Field label="Default title">

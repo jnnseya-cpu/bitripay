@@ -79,7 +79,7 @@ function LockScreen() {
 }
 
 const linking: LinkingOptions<RootParams> = {
-  prefixes: [Linking.createURL('/'), 'bitripay://', 'https://pay.bitripay.app'],
+  prefixes: [Linking.createURL('/'), 'bitripay://', 'https://www.bitripay.com'],
   config: {
     screens: {
       QrLink: 'q',

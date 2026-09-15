@@ -11,7 +11,44 @@ import { upsertLinkRule } from '../services/seo';
 import { DEFAULT_PAGES } from './policies';
 import { DEFAULT_ARTICLES } from './articles';
 
-const CONTENT_VERSION = 2;
+const CONTENT_VERSION = 3;
+
+/** The one mailbox BitriPay operates and the canonical public host; earlier defaults mentioned other addresses and domains. */
+export const SUPPORT_EMAIL = 'support@bitripay.com';
+export const PUBLIC_HOST = 'www.bitripay.com';
+
+/** Retired mailboxes (any address on bitripay.app) and the retired web domain (pay.bitripay.app, bitripay.app) → the current ones. */
+export function retireOldAddresses(text: string): string {
+  return text.replace(/[a-z0-9._-]+@bitripay\.app/gi, SUPPORT_EMAIL).replace(/\b(?:pay\.)?bitripay\.app\b/gi, PUBLIC_HOST);
+}
+
+/**
+ * Rewrites retired addresses in every page, every article and the SEO organisation record, including content an
+ * administrator has edited (the text around the address is left exactly as written). Returns the number of documents changed.
+ */
+export function retireOldMailboxes(): number {
+  let changed = 0;
+  for (const page of listPages(false)) {
+    const content = retireOldAddresses(page.content);
+    if (content === page.content) continue;
+    upsertPage({ slug: page.slug, title: page.title, content, published: page.published });
+    changed++;
+  }
+  const db = getDb();
+  for (const post of db.prepare("SELECT id, body_md, excerpt FROM blog_posts WHERE body_md LIKE '%bitripay.app%' OR excerpt LIKE '%bitripay.app%'").all() as {
+    id: string;
+    body_md: string;
+    excerpt: string;
+  }[]) {
+    db.prepare('UPDATE blog_posts SET body_md = ?, excerpt = ? WHERE id = ?').run(retireOldAddresses(post.body_md), retireOldAddresses(post.excerpt), post.id);
+    changed++;
+  }
+  const seo = getSetting<{ organization?: { email?: string } }>('seo', {});
+  if (seo?.organization?.email && retireOldAddresses(seo.organization.email) !== seo.organization.email) {
+    setSetting('seo', { ...seo, organization: { ...seo.organization, email: SUPPORT_EMAIL } });
+  }
+  return changed;
+}
 let done = false;
 
 const LINK_RULES: { keyword: string; url: string; title: string }[] = [
@@ -56,6 +93,7 @@ export function ensureDefaultContent(): { pages: number; posts: number } {
     }
   }
   setSetting('content.seededHashes', seeded);
+  pages += retireOldMailboxes();
   let posts = 0;
   const day = 86_400_000;
   DEFAULT_ARTICLES.forEach((a, i) => {

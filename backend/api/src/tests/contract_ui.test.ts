@@ -277,4 +277,24 @@ describe('default content upgrades', () => {
     // an untouched page is refreshed in place when the default changes
     expect(listPages(false).find((p) => p.slug === 'about')!.content).toContain('never holds funds it is not licensed to hold');
   });
+
+  it('retires the old mailboxes and web domain everywhere, inside administrator edits too: support@bitripay.com is the only inbox', async () => {
+    const { setSetting, getSetting } = await import('../services/settings');
+    const { upsertPage, listPages } = await import('../services/cms');
+    const { ensureDefaultContent, _resetDefaultContentForTests, retireOldAddresses } = await import('../content/defaults');
+    const { getDb } = await import('../db');
+    upsertPage({ slug: 'complaints', title: 'Complaints', content: 'Edited: write to complaints@bitripay.app or privacy@bitripay.app; the app is at https://pay.bitripay.app/pay.', published: true });
+    getDb().prepare("UPDATE blog_posts SET body_md = body_md || ' Old link: bitripay.app/u/yourtag' WHERE slug = (SELECT slug FROM blog_posts LIMIT 1)").run();
+    setSetting('seo', { ...getSetting<any>('seo'), organization: { ...getSetting<any>('seo').organization, email: 'hello@bitripay.app' } });
+    setSetting('content.version', 2);
+    _resetDefaultContentForTests();
+    ensureDefaultContent();
+    const complaints = listPages(false).find((p) => p.slug === 'complaints')!;
+    expect(complaints.content).toBe('Edited: write to support@bitripay.com or support@bitripay.com; the app is at https://www.bitripay.com/pay.');
+    expect(getSetting<any>('seo').organization.email).toBe('support@bitripay.com');
+    const stale = getDb().prepare("SELECT COUNT(*) c FROM blog_posts WHERE body_md LIKE '%bitripay.app%'").get() as { c: number };
+    expect(stale.c).toBe(0);
+    for (const page of listPages(false)) expect(page.content, page.slug).not.toMatch(/bitripay\.app/);
+    expect(retireOldAddresses('security@bitripay.app')).toBe('support@bitripay.com');
+  });
 });

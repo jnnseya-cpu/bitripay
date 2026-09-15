@@ -40,4 +40,4 @@ npm run smoke         # optional: 51 live checks against a running `npm run dev`
 
 ## Reporting a security issue
 
-Email security@bitripay.app with reproduction steps. Do not open a public issue for vulnerabilities.
+Email support@bitripay.com (subject "Security") with reproduction steps. Do not open a public issue for vulnerabilities.
