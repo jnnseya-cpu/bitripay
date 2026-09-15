@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, Field, Input, KV, PageHeader, PinModal, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
 import { currencyFlag } from '@bitripay/shared';
 
@@ -21,8 +21,8 @@ export function Banks() {
   const err = (e: any) => toast(e.message, 'error');
   useEffect(() => {
     const st = params.get('status');
-    if (st === 'linked') toast('Bank linked', 'success');
-    if (st === 'declined') toast('Authorisation declined at the bank', 'info');
+    if (st === 'linked') toast(tr('Bank linked'), 'success');
+    if (st === 'declined') toast(tr('Authorisation declined at the bank'), 'info');
   }, [params, toast]);
   const institutions = (view.data?.institutions ?? []).filter((i: any) => i.country === country);
   const link = (institutionId: string) =>
@@ -64,7 +64,7 @@ export function Banks() {
       .then(() => {
         setPin(false);
         view.reload();
-        toast('Mandate created', 'success');
+        toast(tr('Mandate created'), 'success');
       })
       .catch(err)
       .finally(() => setBusy(false));
@@ -76,13 +76,13 @@ export function Banks() {
     <div>
       <PageHeader
         title={t('nav.banks')}
-        subtitle="Connect a bank account under your consent, or import a statement. Your income is verified from your real transactions; you can pay by bank and allow limited recurring draws."
+        subtitle={tr('Connect a bank account under your consent, or import a statement. Your income is verified from your real transactions; you can pay by bank and allow limited recurring draws.')}
       />
       <Tabs
         tabs={[
-          { id: 'links', label: 'Linked banks' },
-          { id: 'income', label: 'Verified income' },
-          { id: 'mandates', label: 'Recurring mandates' },
+          { id: 'links', label: tr('Linked banks') },
+          { id: 'income', label: tr('Verified income') },
+          { id: 'mandates', label: tr('Recurring mandates') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -90,8 +90,8 @@ export function Banks() {
       {tab === 'links' && (
         <div className="grid cols-2">
           <div className="card">
-            <h3>Connect a bank</h3>
-            <Field label="Country">
+            <h3>{tr('Connect a bank')}</h3>
+            <Field label={tr('Country')}>
               <Select value={country} onChange={(e) => setCountry(e.target.value)}>
                 {(view.data?.countries ?? []).map((c: any) => (
                   <option key={c.code} value={c.code}>
@@ -100,7 +100,7 @@ export function Banks() {
                 ))}
               </Select>
             </Field>
-            {institutions.length === 0 && <Empty icon="🏦" text="No connected institution in this country yet. Import a statement below." />}
+            {institutions.length === 0 && <Empty icon="🏦" text={tr('No connected institution in this country yet. Import a statement below.')} />}
             {institutions.map((i: any) => (
               <div key={i.id} className="list-item">
                 <div className="flex1">
@@ -111,17 +111,17 @@ export function Banks() {
                   </div>
                 </div>
                 <Button size="sm" onClick={() => link(i.id)}>
-                  Connect
+                  {tr('Connect')}
                 </Button>
               </div>
             ))}
-            <h4 style={{ marginTop: 16 }}>Import a statement</h4>
-            <p className="sub-text">CSV with date, description and amount columns (credit/debit columns also work). Nothing leaves your account; the rows verify your income.</p>
+            <h4 style={{ marginTop: 16 }}>{tr('Import a statement')}</h4>
+            <p className="sub-text">{tr('CSV with date, description and amount columns (credit/debit columns also work). Nothing leaves your account; the rows verify your income.')}</p>
             <div className="grid cols-2">
-              <Field label="Bank">
-                <Input value={statement.institutionName} onChange={(e) => setStatement({ ...statement, institutionName: e.target.value })} placeholder="My bank" />
+              <Field label={tr('Bank')}>
+                <Input value={statement.institutionName} onChange={(e) => setStatement({ ...statement, institutionName: e.target.value })} placeholder={tr('My bank')} />
               </Field>
-              <Field label="Currency">
+              <Field label={tr('Currency')}>
                 <Input value={statement.currency} onChange={(e) => setStatement({ ...statement, currency: e.target.value.toUpperCase() })} maxLength={3} />
               </Field>
             </div>
@@ -136,13 +136,13 @@ export function Banks() {
             <input type="file" accept=".csv,text/csv" onChange={(e) => e.target.files?.[0]?.text().then((csv) => setStatement({ ...statement, csv }))} />
             <div style={{ marginTop: 8 }}>
               <Button onClick={importCsv} disabled={!statement.csv.trim() || statement.institutionName.length < 2}>
-                Import
+                {tr('Import')}
               </Button>
             </div>
           </div>
           <div className="card">
-            <h3>Linked</h3>
-            {links.length === 0 && <Empty icon="🔗" text="No bank linked yet." />}
+            <h3>{tr('Linked')}</h3>
+            {links.length === 0 && <Empty icon="🔗" text={tr('No bank linked yet.')} />}
             {links.map((l) => (
               <div key={l.id} className="list-item" style={{ display: 'block' }}>
                 <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -166,17 +166,17 @@ export function Banks() {
                         window.location.href = l.authUrl;
                       }}
                     >
-                      Continue at the bank
+                      {tr('Continue at the bank')}
                     </Button>
                   )}
                   {l.status === 'LINKED' && l.provider !== 'statement_import' && (
                     <Button size="sm" variant="secondary" onClick={() => sync(l.id)}>
-                      Sync
+                      {tr('Sync')}
                     </Button>
                   )}
                   {['LINKED', 'PENDING', 'EXPIRED'].includes(l.status) && (
                     <Button size="sm" variant="ghost" onClick={() => revoke(l.id)}>
-                      Revoke
+                      {tr('Revoke')}
                     </Button>
                   )}
                 </div>
@@ -187,9 +187,9 @@ export function Banks() {
       )}
       {tab === 'income' && (
         <div className="card">
-          <h3>Verified income</h3>
+          <h3>{tr('Verified income')}</h3>
           {!income || income.confidence === 'none' ? (
-            <Empty icon="📄" text="No recurring income found yet. Link a bank or import at least three months of statements." />
+            <Empty icon="📄" text={tr('No recurring income found yet. Link a bank or import at least three months of statements.')} />
           ) : (
             <>
               <div className="row" style={{ gap: 8, alignItems: 'center' }}>
@@ -202,7 +202,7 @@ export function Banks() {
               {income.streams.map((s: any) => (
                 <KV key={s.label + s.currency} k={`${s.label} (${s.months} months)`} v={`${money(s.medianMinor, s.currency)} / month${s.regular ? '' : ' · irregular'}`} />
               ))}
-              <p className="sub-text">This feeds your credit readiness signal. It is shared with a lender only through a consent you grant.</p>
+              <p className="sub-text">{tr('This feeds your credit readiness signal. It is shared with a lender only through a consent you grant.')}</p>
             </>
           )}
           <Button
@@ -214,16 +214,18 @@ export function Banks() {
                 .catch(err)
             }
           >
-            Recompute
+            {tr('Recompute')}
           </Button>
         </div>
       )}
       {tab === 'mandates' && (
         <div className="grid cols-2">
           <div className="card">
-            <h3>New mandate</h3>
-            <p className="sub-text">A recurring mandate lets BitriPay draw from your bank within the limits you set: to top up your balance, or to cover a subscription when the wallet is short.</p>
-            <Field label="Bank">
+            <h3>{tr('New mandate')}</h3>
+            <p className="sub-text">
+              {tr('A recurring mandate lets BitriPay draw from your bank within the limits you set: to top up your balance, or to cover a subscription when the wallet is short.')}
+            </p>
+            <Field label={tr('Bank')}>
               <Select value={mandate.linkId} onChange={(e) => setMandate({ ...mandate, linkId: e.target.value, accountId: '' })}>
                 <option value="">—</option>
                 {linkable.map((l) => (
@@ -233,7 +235,7 @@ export function Banks() {
                 ))}
               </Select>
             </Field>
-            <Field label="Account">
+            <Field label={tr('Account')}>
               <Select value={mandate.accountId} onChange={(e) => setMandate({ ...mandate, accountId: e.target.value })}>
                 <option value="">—</option>
                 {(linkable.find((l) => l.id === mandate.linkId)?.accounts ?? []).map((a: any) => (
@@ -243,27 +245,27 @@ export function Banks() {
                 ))}
               </Select>
             </Field>
-            <Field label="Purpose">
+            <Field label={tr('Purpose')}>
               <Select value={mandate.purpose} onChange={(e) => setMandate({ ...mandate, purpose: e.target.value })}>
-                <option value="top_up">Top up my balance</option>
-                <option value="billing">Cover my subscriptions</option>
+                <option value="top_up">{tr('Top up my balance')}</option>
+                <option value="billing">{tr('Cover my subscriptions')}</option>
               </Select>
             </Field>
             <div className="grid cols-2">
-              <Field label="Max per payment">
+              <Field label={tr('Max per payment')}>
                 <Input inputMode="decimal" value={mandate.maxPerPayment} onChange={(e) => setMandate({ ...mandate, maxPerPayment: e.target.value })} />
               </Field>
-              <Field label="Max per month">
+              <Field label={tr('Max per month')}>
                 <Input inputMode="decimal" value={mandate.maxPerMonth} onChange={(e) => setMandate({ ...mandate, maxPerMonth: e.target.value })} />
               </Field>
             </div>
             <Button onClick={() => setPin(true)} disabled={!mandate.linkId || !mandate.accountId || !mandate.maxPerPayment || !mandate.maxPerMonth}>
-              Create mandate
+              {tr('Create mandate')}
             </Button>
           </div>
           <div className="card">
-            <h3>Mandates</h3>
-            {(view.data?.mandates ?? []).length === 0 && <Empty icon="🔁" text="No mandate." />}
+            <h3>{tr('Mandates')}</h3>
+            {(view.data?.mandates ?? []).length === 0 && <Empty icon="🔁" text={tr('No mandate.')} />}
             {(view.data?.mandates ?? []).map((m: any) => (
               <div key={m.id} className="list-item">
                 <div className="flex1">
@@ -286,7 +288,7 @@ export function Banks() {
                         .catch(err)
                     }
                   >
-                    Revoke
+                    {tr('Revoke')}
                   </Button>
                 )}
               </div>
@@ -300,7 +302,7 @@ export function Banks() {
         onClose={() => setPin(false)}
         loading={busy}
         onSubmit={createMandate}
-        title="Confirm the mandate"
+        title={tr('Confirm the mandate')}
         summary={`BitriPay may draw up to ${mandate.maxPerPayment} per payment and ${mandate.maxPerMonth} a month from the selected account for ${mandate.purpose === 'billing' ? 'subscriptions' : 'top-ups'}.`}
       />
     </div>

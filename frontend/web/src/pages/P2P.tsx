@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Route, Routes, useNavigate, useParams, Link } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, Avatar, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
 import { fromMinor, currencyFlag } from '@bitripay/shared';
 
@@ -47,7 +47,7 @@ function Marketplace() {
     try {
       await api.post('/api/p2p/ads', { ...ad, rate: Number(ad.rate) });
       setCreateOpen(false);
-      toast('Ad published', 'success');
+      toast(tr('Ad published'), 'success');
       setTab('ads');
     } catch (err) {
       setError((err as Error).message);
@@ -68,14 +68,14 @@ function Marketplace() {
     <div>
       <PageHeader
         title={t('nav.p2p')}
-        subtitle="Buy and sell currency directly with other users. Escrow protects every trade."
-        actions={<Button onClick={() => setCreateOpen(true)}>+ Post an ad</Button>}
+        subtitle={tr('Buy and sell currency directly with other users. Escrow protects every trade.')}
+        actions={<Button onClick={() => setCreateOpen(true)}>{tr('+ Post an ad')}</Button>}
       />
       <Tabs
         tabs={[
-          { id: 'market', label: 'Marketplace' },
-          { id: 'trades', label: 'My trades' },
-          { id: 'ads', label: 'My ads' },
+          { id: 'market', label: tr('Marketplace') },
+          { id: 'trades', label: tr('My trades') },
+          { id: 'ads', label: tr('My ads') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -86,14 +86,14 @@ function Marketplace() {
             <Tabs
               pills
               tabs={[
-                { id: 'sell', label: 'Buy currency (from sellers)' },
-                { id: 'buy', label: 'Sell currency (to buyers)' },
+                { id: 'sell', label: tr('Buy currency (from sellers)') },
+                { id: 'buy', label: tr('Sell currency (to buyers)') },
               ]}
               value={side}
               onChange={(v) => setSide(v as any)}
             />
             <Select value={cur} onChange={(e) => setCur(e.target.value)} style={{ width: 160 }}>
-              <option value="">All currencies</option>
+              <option value="">{tr('All currencies')}</option>
               {(config?.currencies ?? []).map((c) => (
                 <option key={c.code} value={c.code}>
                   {currencyFlag(c.code)} {c.code}
@@ -101,17 +101,17 @@ function Marketplace() {
               ))}
             </Select>
           </div>
-          {ads.data?.items.length === 0 && <Empty icon="🤝" text="No live offers match" />}
+          {ads.data?.items.length === 0 && <Empty icon="🤝" text={tr('No live offers match')} />}
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Trader</th>
-                  <th>Currency</th>
-                  <th>Rate</th>
-                  <th>Limits</th>
-                  <th>Available</th>
-                  <th>Payment</th>
+                  <th>{tr('Trader')}</th>
+                  <th>{tr('Currency')}</th>
+                  <th>{tr('Rate')}</th>
+                  <th>{tr('Limits')}</th>
+                  <th>{tr('Available')}</th>
+                  <th>{tr('Payment')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -156,7 +156,7 @@ function Marketplace() {
                             setTradeMethod(a.paymentMethods[0]);
                           }}
                         >
-                          {a.side === 'sell' ? 'Buy' : 'Sell'}
+                          {a.side === 'sell' ? tr('Buy') : tr('Sell')}
                         </Button>
                       )}
                     </td>
@@ -175,7 +175,7 @@ function Marketplace() {
               <div key={tr.id} className="list-item clickable" onClick={() => nav(`/app/p2p/trades/${tr.id}`)}>
                 <div className="flex1">
                   <div className="main-text">
-                    {tr.buyerId === user?.id ? 'Buy' : 'Sell'} {money(tr.amount, tr.currency)} for {money(tr.priceAmount, tr.priceCurrency)}
+                    {tr.buyerId === user?.id ? tr('Buy') : tr('Sell')} {money(tr.amount, tr.currency)} for {money(tr.priceAmount, tr.priceCurrency)}
                   </div>
                   <div className="sub-text">
                     {tr.reference} · with {(tr.buyerId === user?.id ? tr.seller : tr.buyer)?.fullName} · {new Date(tr.updatedAt).toLocaleString()}
@@ -204,16 +204,16 @@ function Marketplace() {
                 <StatusBadge status={a.status} />
                 {a.status === 'active' ? (
                   <Button size="sm" variant="secondary" onClick={() => api.post(`/api/p2p/ads/${a.id}/status`, { status: 'paused' }).then(myAds.reload)}>
-                    Pause
+                    {tr('Pause')}
                   </Button>
                 ) : a.status === 'paused' ? (
                   <Button size="sm" variant="secondary" onClick={() => api.post(`/api/p2p/ads/${a.id}/status`, { status: 'active' }).then(myAds.reload)}>
-                    Resume
+                    {tr('Resume')}
                   </Button>
                 ) : null}
                 {a.status !== 'closed' && (
                   <Button size="sm" variant="ghost" onClick={() => api.post(`/api/p2p/ads/${a.id}/status`, { status: 'closed' }).then(myAds.reload)}>
-                    Close
+                    {tr('Close')}
                   </Button>
                 )}
               </div>
@@ -221,16 +221,16 @@ function Marketplace() {
           </div>
         </div>
       )}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Post a P2P ad">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={tr('Post a P2P ad')}>
         {error && <Alert kind="error">{error}</Alert>}
         <Field label="I want to">
           <Select value={ad.side} onChange={(e) => setAd({ ...ad, side: e.target.value })}>
-            <option value="sell">Sell currency</option>
-            <option value="buy">Buy currency</option>
+            <option value="sell">{tr('Sell currency')}</option>
+            <option value="buy">{tr('Buy currency')}</option>
           </Select>
         </Field>
         <div className="grid cols-2">
-          <Field label="Currency">
+          <Field label={tr('Currency')}>
             <Select value={ad.currency} onChange={(e) => setAd({ ...ad, currency: e.target.value })}>
               {(config?.currencies ?? []).map((c) => (
                 <option key={c.code} value={c.code}>
@@ -253,17 +253,17 @@ function Marketplace() {
           <Input inputMode="decimal" value={ad.rate} onChange={(e) => setAd({ ...ad, rate: e.target.value })} />
         </Field>
         <div className="grid cols-3">
-          <Field label="Min">
+          <Field label={tr('Min')}>
             <Input inputMode="decimal" value={ad.minAmount} onChange={(e) => setAd({ ...ad, minAmount: e.target.value })} />
           </Field>
-          <Field label="Max">
+          <Field label={tr('Max')}>
             <Input inputMode="decimal" value={ad.maxAmount} onChange={(e) => setAd({ ...ad, maxAmount: e.target.value })} />
           </Field>
-          <Field label="Available">
+          <Field label={tr('Available')}>
             <Input inputMode="decimal" value={ad.availableAmount} onChange={(e) => setAd({ ...ad, availableAmount: e.target.value })} />
           </Field>
         </div>
-        <Field label="Payment methods accepted">
+        <Field label={tr('Payment methods accepted')}>
           <div className="row wrap">
             {['wallet', 'bank_transfer', 'mobile_money', 'cash'].map((m) => (
               <span
@@ -276,14 +276,14 @@ function Marketplace() {
             ))}
           </div>
         </Field>
-        <Field label="Terms (optional)">
+        <Field label={tr('Terms (optional)')}>
           <Textarea value={ad.terms} onChange={(e) => setAd({ ...ad, terms: e.target.value })} />
         </Field>
         <Button block onClick={createAd} disabled={!ad.rate || !ad.minAmount || !ad.maxAmount || !ad.availableAmount}>
-          Publish
+          {tr('Publish')}
         </Button>
       </Modal>
-      <Modal open={!!openAd} onClose={() => setOpenAd(null)} title={openAd ? `${openAd.side === 'sell' ? 'Buy' : 'Sell'} ${openAd.currency}` : ''}>
+      <Modal open={!!openAd} onClose={() => setOpenAd(null)} title={openAd ? `${openAd.side === 'sell' ? tr('Buy') : tr('Sell')} ${openAd.currency}` : ''}>
         {error && <Alert kind="error">{error}</Alert>}
         {openAd && (
           <>
@@ -293,7 +293,7 @@ function Marketplace() {
             <Field label={`Amount (${openAd.currency})`}>
               <Input className="amount-input" inputMode="decimal" value={tradeAmount} onChange={(e) => setTradeAmount(e.target.value.replace(/[^\d.]/g, ''))} />
             </Field>
-            <Field label="Payment method">
+            <Field label={tr('Payment method')}>
               <Select value={tradeMethod} onChange={(e) => setTradeMethod(e.target.value)}>
                 {openAd.paymentMethods.map((m: string) => (
                   <option key={m} value={m}>
@@ -304,11 +304,11 @@ function Marketplace() {
               </Select>
             </Field>
             <p className="small muted">
-              You'll pay about {tradeAmount && !isNaN(Number(tradeAmount)) ? (Number(tradeAmount) * openAd.rate).toFixed(2) : '—'} {openAd.priceCurrency}. The other party can accept or counter your
-              offer.
+              {tr("You'll pay about")} {tradeAmount && !isNaN(Number(tradeAmount)) ? (Number(tradeAmount) * openAd.rate).toFixed(2) : '—'} {openAd.priceCurrency}. The other party can accept or counter
+              your offer.
             </p>
             <Button block onClick={openTrade} disabled={!tradeAmount}>
-              Open trade
+              {tr('Open trade')}
             </Button>
           </>
         )}
@@ -331,7 +331,7 @@ function TradeDetail() {
     const timer = setInterval(() => trade.reload(), 5000);
     return () => clearInterval(timer);
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!tr) return <div className="card">Loading…</div>;
+  if (!tr) return <div className="card">{tr('Loading…')}</div>;
   const isBuyer = tr.buyerId === user?.id;
   const other = isBuyer ? tr.seller : tr.buyer;
   const pending = tr.offers?.filter((o: any) => o.status === 'pending').slice(-1)[0];
@@ -341,7 +341,7 @@ function TradeDetail() {
       await api.post(`/api/p2p/trades/${tr.id}/${path}`, body);
       trade.reload();
       refreshWallets();
-      toast('Updated', 'success');
+      toast(tr('Updated'), 'success');
     } catch (err) {
       setError((err as Error).message);
     }
@@ -350,10 +350,10 @@ function TradeDetail() {
     <div>
       <PageHeader
         title={`Trade ${tr.reference}`}
-        subtitle={`${isBuyer ? 'Buying' : 'Selling'} ${money(tr.amount, tr.currency)} for ${money(tr.priceAmount, tr.priceCurrency)} · ${tr.paymentMethod}`}
+        subtitle={`${isBuyer ? tr('Buying') : tr('Selling')} ${money(tr.amount, tr.currency)} for ${money(tr.priceAmount, tr.priceCurrency)} · ${tr.paymentMethod}`}
         actions={
           <Link to="/app/p2p" className="btn secondary">
-            ← Back
+            {tr('← Back')}
           </Link>
         }
       />
@@ -362,7 +362,7 @@ function TradeDetail() {
         <div className="card">
           <div className="row between mb">
             <StatusBadge status={tr.status} />
-            <span className="small muted">Rate {tr.rate}</span>
+            <span className="small muted">{tr('Rate {0}', { 0: tr.rate })}</span>
           </div>
           <div className="list-item">
             <Avatar user={other} />
@@ -373,11 +373,11 @@ function TradeDetail() {
               </div>
             </div>
           </div>
-          <h4 className="mt">Offers</h4>
+          <h4 className="mt">{tr('Offers')}</h4>
           {tr.offers?.map((o: any) => (
             <div key={o.id} className="kv">
               <span className="k">
-                {o.fromUserId === user?.id ? 'You' : other?.fullName}: {money(o.amount, tr.currency)} @ {o.rate}
+                {o.fromUserId === user?.id ? tr('You') : other?.fullName}: {money(o.amount, tr.currency)} @ {o.rate}
                 {o.message ? ` · "${o.message}"` : ''}
               </span>
               <StatusBadge status={o.status} />
@@ -386,62 +386,60 @@ function TradeDetail() {
           <div className="divider" />
           {tr.status === 'negotiating' && (
             <div className="row wrap">
-              {pending && pending.fromUserId !== user?.id && <Button onClick={() => setPinAction('accept')}>Accept offer</Button>}
+              {pending && pending.fromUserId !== user?.id && <Button onClick={() => setPinAction('accept')}>{tr('Accept offer')}</Button>}
               <Button variant="secondary" onClick={() => setCounter({ amount: fromMinor(tr.amount, 2), rate: String(tr.rate) })}>
-                Counter-offer
+                {tr('Counter-offer')}
               </Button>
               <Button variant="ghost" onClick={() => act('cancel')}>
-                Cancel
+                {tr('Cancel')}
               </Button>
             </div>
           )}
           {tr.status === 'escrowed' && isBuyer && (
             <div className="col">
-              <Alert kind="info">
-                Pay {money(tr.priceAmount, tr.priceCurrency)} to the seller via {tr.paymentMethod.replace('_', ' ')}, then mark as paid.
-              </Alert>
+              <Alert kind="info">{tr('Pay {0} to the seller via {1}, then mark as paid.', { 0: money(tr.priceAmount, tr.priceCurrency), 1: tr.paymentMethod.replace('_', ' ') })}</Alert>
               <div className="row">
-                <Button onClick={() => act('paid')}>I have paid</Button>
+                <Button onClick={() => act('paid')}>{tr('I have paid')}</Button>
                 <Button variant="ghost" onClick={() => act('cancel')}>
-                  Cancel
+                  {tr('Cancel')}
                 </Button>
               </div>
             </div>
           )}
-          {tr.status === 'escrowed' && !isBuyer && <Alert kind="info">Your {money(tr.amount, tr.currency)} is held in escrow. Waiting for the buyer to pay.</Alert>}
+          {tr.status === 'escrowed' && !isBuyer && <Alert kind="info">{tr('Your {0} is held in escrow. Waiting for the buyer to pay.', { 0: money(tr.amount, tr.currency) })}</Alert>}
           {tr.status === 'paid' && !isBuyer && (
             <div className="col">
-              <Alert kind="warning">The buyer says they paid {money(tr.priceAmount, tr.priceCurrency)}. Confirm receipt to release escrow.</Alert>
+              <Alert kind="warning">{tr('The buyer says they paid {0}. Confirm receipt to release escrow.', { 0: money(tr.priceAmount, tr.priceCurrency) })}</Alert>
               <div className="row">
                 <Button variant="success" onClick={() => setPinAction('release')}>
-                  Release escrow
+                  {tr('Release escrow')}
                 </Button>
                 <Button variant="danger" onClick={() => setDispute('')}>
-                  Dispute
+                  {tr('Dispute')}
                 </Button>
               </div>
             </div>
           )}
           {tr.status === 'paid' && isBuyer && (
             <div className="col">
-              <Alert kind="info">Waiting for the seller to confirm your payment.</Alert>
+              <Alert kind="info">{tr('Waiting for the seller to confirm your payment.')}</Alert>
               <Button variant="danger" onClick={() => setDispute('')}>
-                Open dispute
+                {tr('Open dispute')}
               </Button>
             </div>
           )}
           {tr.status === 'escrowed' && (
             <Button variant="ghost" className="mt-sm" onClick={() => setDispute('')}>
-              Open dispute
+              {tr('Open dispute')}
             </Button>
           )}
-          {tr.status === 'disputed' && <Alert kind="warning">Dispute open: {tr.disputeReason}. Support will review and resolve.</Alert>}
-          {tr.status === 'completed' && <Alert kind="success">Trade completed.</Alert>}
+          {tr.status === 'disputed' && <Alert kind="warning">{tr('Dispute open: {0}. Support will review and resolve.', { 0: tr.disputeReason })}</Alert>}
+          {tr.status === 'completed' && <Alert kind="success">{tr('Trade completed.')}</Alert>}
         </div>
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-          <h4>Chat</h4>
+          <h4>{tr('Chat')}</h4>
           <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }} className="col">
-            {tr.messages?.length === 0 && <div className="muted small">Say hello 👋</div>}
+            {tr.messages?.length === 0 && <div className="muted small">{tr('Say hello 👋')}</div>}
             {tr.messages?.map((m: any) => (
               <div
                 key={m.id}
@@ -472,12 +470,12 @@ function TradeDetail() {
               });
             }}
           >
-            <Input value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Message…" />
-            <Button>Send</Button>
+            <Input value={msg} onChange={(e) => setMsg(e.target.value)} placeholder={tr('Message…')} />
+            <Button>{tr('Send')}</Button>
           </form>
         </div>
       </div>
-      <Modal open={!!counter} onClose={() => setCounter(null)} title="Counter-offer">
+      <Modal open={!!counter} onClose={() => setCounter(null)} title={tr('Counter-offer')}>
         {counter && (
           <>
             <Field label={`Amount (${tr.currency})`}>
@@ -487,24 +485,24 @@ function TradeDetail() {
               <Input value={counter.rate} onChange={(e) => setCounter({ ...counter, rate: e.target.value })} />
             </Field>
             <Button block onClick={() => act('counter', { amount: counter.amount, rate: Number(counter.rate) }).then(() => setCounter(null))}>
-              Send counter-offer
+              {tr('Send counter-offer')}
             </Button>
           </>
         )}
       </Modal>
-      <Modal open={dispute !== null} onClose={() => setDispute(null)} title="Open a dispute">
-        <Field label="What went wrong?">
+      <Modal open={dispute !== null} onClose={() => setDispute(null)} title={tr('Open a dispute')}>
+        <Field label={tr('What went wrong?')}>
           <Textarea value={dispute ?? ''} onChange={(e) => setDispute(e.target.value)} />
         </Field>
         <Button block variant="danger" disabled={!dispute || dispute.length < 3} onClick={() => act('dispute', { reason: dispute }).then(() => setDispute(null))}>
-          Submit dispute
+          {tr('Submit dispute')}
         </Button>
       </Modal>
       <PinModal
         open={!!pinAction}
         onClose={() => setPinAction(null)}
         onSubmit={(pin) => act(pinAction!, { pin }).then(() => setPinAction(null))}
-        title={pinAction === 'accept' ? 'Accept offer' : 'Release escrow'}
+        title={pinAction === 'accept' ? tr('Accept offer') : tr('Release escrow')}
       />
     </div>
   );

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, KV, Modal, PageHeader, Select, StatusBadge, useAsync } from '../components/ui';
 import { SwitchMessage } from '../components/SwitchMessage';
 import { formatMoney } from '@bitripay/shared';
@@ -36,8 +36,8 @@ export function SwitchPayments() {
   if (user?.role !== 'admin')
     return (
       <Alert kind="info">
-        The national switch is operated by BitriPay. Your payments through banks and mobile money show under <Link to="/app/merchant">Merchant</Link> and{' '}
-        <Link to="/app/transactions">Transactions</Link>.
+        The national switch is operated by BitriPay. Your payments through banks and mobile money show under <Link to="/app/merchant">{tr('Merchant')}</Link> and{' '}
+        <Link to="/app/transactions">{tr('Transactions')}</Link>.
       </Alert>
     );
   const money = (a: { currency: string; value_minor: string } | null | undefined) => {
@@ -50,15 +50,17 @@ export function SwitchPayments() {
     <div>
       <PageHeader
         title={t('nav.switchPayments')}
-        subtitle="Domestic interoperability payments routed through the Switch Monétique National under Instruction n°58 of the Banque Centrale du Congo. BitriPay initiates, orchestrates, normalises and reports; licensed institutions hold and settle the funds."
+        subtitle={tr(
+          'Domestic interoperability payments routed through the Switch Monétique National under Instruction n°58 of the Banque Centrale du Congo. BitriPay initiates, orchestrates, normalises and reports; licensed institutions hold and settle the funds.',
+        )}
         actions={
           <Link className="btn secondary" to="/app/merchant/developer">
-            Developer portal
+            {tr('Developer portal')}
           </Link>
         }
       />
       <p className="tiny muted" data-testid="switch-trust">
-        {t('trust.notProof')} The customer wording below is the switch's own state, never a guess: «Confirmation en cours» means do not repeat the payment.
+        {t('trust.notProof')} {tr("The customer wording below is the switch's own state, never a guess: «Confirmation en cours» means do not repeat the payment.")}
       </p>
       {unavailable && (
         <Alert kind="warning">
@@ -68,7 +70,7 @@ export function SwitchPayments() {
       {list.error && !unavailable && <Alert kind="error">{list.error}</Alert>}
       <div className="row wrap mb">
         <Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ maxWidth: 260 }}>
-          <option value="">All states</option>
+          <option value="">{tr('All states')}</option>
           {STATES.map((s) => (
             <option key={s} value={s}>
               {s}
@@ -76,11 +78,11 @@ export function SwitchPayments() {
           ))}
         </Select>
         <Button variant="secondary" size="sm" onClick={() => list.reload()}>
-          Refresh
+          {tr('Refresh')}
         </Button>
       </div>
       <div className="card">
-        {list.data && list.data.data.length === 0 && <Empty icon="🏦" text="No national switch payments yet. Create one with POST /v1/payments from the developer portal." />}
+        {list.data && list.data.data.length === 0 && <Empty icon="🏦" text={tr('No national switch payments yet. Create one with POST /v1/payments from the developer portal.')} />}
         <div className="list">
           {(list.data?.data ?? []).map((p: any) => (
             <div key={p.payment_id} className="list-item" data-testid="switch-payment">
@@ -96,7 +98,7 @@ export function SwitchPayments() {
               </div>
               <StatusBadge status={p.status} />
               <Button size="sm" variant="secondary" onClick={() => setSelected(p)}>
-                Timeline
+                {tr('Timeline')}
               </Button>
             </div>
           ))}
@@ -122,14 +124,14 @@ export function SwitchPayments() {
             {timeline.error === UNAVAILABLE && <SwitchMessage unavailable />}
             {timeline.data && (
               <div className="mt">
-                <h4>Events</h4>
-                {timeline.data.events.length === 0 && <div className="tiny muted">No events yet.</div>}
+                <h4>{tr('Events')}</h4>
+                {timeline.data.events.length === 0 && <div className="tiny muted">{tr('No events yet.')}</div>}
                 {timeline.data.events.map((e: any) => (
                   <KV key={e.seq} k={`${e.seq} · ${e.type} · ${e.source}`} v={`${e.from ?? '—'} → ${e.to ?? '—'} · ${new Date(e.occurredAt).toLocaleString()}`} />
                 ))}
                 {timeline.data.journal?.length > 0 && (
                   <>
-                    <h4 className="mt">Ledger facts</h4>
+                    <h4 className="mt">{tr('Ledger facts')}</h4>
                     {timeline.data.journal.map((j: any, i: number) => (
                       <KV key={i} k={j.fact} v={`${j.amountMinor} ${j.currency} · ${new Date(j.occurredAt).toLocaleString()}`} />
                     ))}

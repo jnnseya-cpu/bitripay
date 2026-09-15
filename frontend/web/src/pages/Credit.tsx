@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, Field, Input, PageHeader, PinModal, useAsync } from '../components/ui';
 
 /** Credit readiness: your signal, factor by factor, with tips; share it with a lender only when you say so. */
@@ -23,7 +23,7 @@ export function Credit() {
         setPin(false);
         setLender({ ...lender, lenderName: '', purpose: '' });
         view.reload();
-        toast('Access code created', 'success');
+        toast(tr('Access code created'), 'success');
       })
       .catch(err)
       .finally(() => setBusy(false));
@@ -32,10 +32,10 @@ export function Credit() {
     <div>
       <PageHeader
         title={t('nav.credit')}
-        subtitle="A signal built from your own BitriPay history that a lender can read with your consent. BitriPay does not lend and never shares your transactions."
+        subtitle={tr('A signal built from your own BitriPay history that a lender can read with your consent. BitriPay does not lend and never shares your transactions.')}
         actions={
           <Button variant="secondary" onClick={() => api.get<any>('/api/credit?refresh=1').then(() => view.reload())}>
-            Recompute
+            {tr('Recompute')}
           </Button>
         }
       />
@@ -47,9 +47,7 @@ export function Credit() {
               <div className="sub-text">/ 1000</div>
               <Chip kind={bandKind(r.band)}>{r.band}</Chip>
             </div>
-            <div className="sub-text">
-              Computed {new Date(r.computedAt).toLocaleString()} over the last {r.windowDays} days.
-            </div>
+            <div className="sub-text">{tr('Computed {0} over the last {1} days.', { 0: new Date(r.computedAt).toLocaleString(), 1: r.windowDays })}</div>
             {r.signals.map((s: any) => (
               <div key={s.key} style={{ marginTop: 10 }}>
                 <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -66,7 +64,7 @@ export function Credit() {
             ))}
             {r.tips.length > 0 && (
               <Alert kind="info">
-                <strong>How to improve</strong>
+                <strong>{tr('How to improve')}</strong>
                 <ul style={{ margin: '6px 0 0 18px' }}>
                   {r.tips.map((tip: string) => (
                     <li key={tip}>{tip}</li>
@@ -76,24 +74,24 @@ export function Credit() {
             )}
           </div>
           <div className="card">
-            <h3>Share with a lender</h3>
-            <p className="sub-text">The lender receives your score, band and the factors above for the period you choose. You can revoke at any time; every read is logged.</p>
-            <Field label="Lender">
-              <Input value={lender.lenderName} onChange={(e) => setLender({ ...lender, lenderName: e.target.value })} placeholder="Kivu Microfinance" />
+            <h3>{tr('Share with a lender')}</h3>
+            <p className="sub-text">{tr('The lender receives your score, band and the factors above for the period you choose. You can revoke at any time; every read is logged.')}</p>
+            <Field label={tr('Lender')}>
+              <Input value={lender.lenderName} onChange={(e) => setLender({ ...lender, lenderName: e.target.value })} placeholder={tr('Kivu Microfinance')} />
             </Field>
             <div className="grid cols-2">
-              <Field label="Purpose (optional)">
+              <Field label={tr('Purpose (optional)')}>
                 <Input value={lender.purpose} onChange={(e) => setLender({ ...lender, purpose: e.target.value })} placeholder="stock loan" />
               </Field>
-              <Field label="Valid for (days)">
+              <Field label={tr('Valid for (days)')}>
                 <Input inputMode="numeric" value={lender.days} onChange={(e) => setLender({ ...lender, days: e.target.value })} />
               </Field>
             </div>
             <Button onClick={() => setPin(true)} disabled={lender.lenderName.trim().length < 2}>
-              Create access code
+              {tr('Create access code')}
             </Button>
-            <h4 style={{ marginTop: 16 }}>Consents</h4>
-            {(view.data?.consents ?? []).length === 0 && <Empty icon="🔐" text="Nothing shared." />}
+            <h4 style={{ marginTop: 16 }}>{tr('Consents')}</h4>
+            {(view.data?.consents ?? []).length === 0 && <Empty icon="🔐" text={tr('Nothing shared.')} />}
             {(view.data?.consents ?? []).map((c: any) => (
               <div key={c.id} className="list-item">
                 <div className="flex1">
@@ -116,7 +114,7 @@ export function Credit() {
                         .catch(err)
                     }
                   >
-                    Revoke
+                    {tr('Revoke')}
                   </Button>
                 )}
               </div>
@@ -129,7 +127,7 @@ export function Credit() {
         onClose={() => setPin(false)}
         loading={busy}
         onSubmit={grant}
-        title="Share your readiness signal"
+        title={tr('Share your readiness signal')}
         summary={`${lender.lenderName} will be able to read your score and factors for ${lender.days} days.`}
       />
     </div>

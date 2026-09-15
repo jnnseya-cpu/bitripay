@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { Button, Chip, Empty, Field, Input, KV, Select } from './ui';
 import { ORG_PERMISSIONS, type OrgRole } from '@bitripay/shared';
@@ -16,7 +17,7 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
   const [limit, setLimit] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const data = org.data;
-  if (!data) return org.loading ? null : <Empty text="No organisation on this account yet." />;
+  if (!data) return org.loading ? null : <Empty text={tr('No organisation on this account yet.')} />;
   const agent = kind === 'agent';
   const allRoles: OrgRole[] = data.roles ?? Object.keys(ORG_PERMISSIONS);
   const fullMatrix: Record<string, string[]> = data.permissions ?? ORG_PERMISSIONS;
@@ -46,8 +47,9 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
         </p>
         {agent && (
           <p className="small muted">
-            Counter staff sign in with their own credentials, confirm every cash operation with their own PIN and are recorded as the operator on each transaction. The float, the commissions and the
-            limits stay on this agent account.
+            {tr(
+              'Counter staff sign in with their own credentials, confirm every cash operation with their own PIN and are recorded as the operator on each transaction. The float, the commissions and the limits stay on this agent account.',
+            )}
           </p>
         )}
         {!agent && <KV k="Cashier refund limit" v={`${data.organisation.settings.cashierRefundLimitMinor} minor units per refund`} />}
@@ -59,7 +61,7 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
               run(api.patch('/api/organisations/me', { cashierRefundLimitMinor: Number(limit) }), 'Cashier refund limit updated');
             }}
           >
-            <Field label="New cashier limit (minor units)">
+            <Field label={tr('New cashier limit (minor units)')}>
               <Input
                 type="number"
                 min={0}
@@ -71,7 +73,7 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
               />
             </Field>
             <Button type="submit" size="sm" variant="secondary" disabled={busy || !limit || !can('org:settings')}>
-              Save
+              {tr('Save')}
             </Button>
           </form>
         )}
@@ -81,7 +83,7 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
             acts for it as administrator (payments, refunds, keys, webhooks). Your money, settlement details and statements are yours. Remove it from the members below to end its access.
           </p>
         )}
-        <h3>Members</h3>
+        <h3>{tr('Members')}</h3>
         <div className="list">
           {(data.members ?? []).map((m: any) => (
             <div key={m.userId} className="list-item">
@@ -114,7 +116,7 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
                     disabled={busy || !can('org:manage_members')}
                     onClick={() => run(api.del(`/api/organisations/members/${m.userId}`), `${m.user?.fullName ?? 'Member'} removed`)}
                   >
-                    Remove
+                    {tr('Remove')}
                   </Button>
                 </>
               )}
@@ -127,16 +129,16 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
             run(api.post('/api/organisations/members', invite), `${invite.identifier} invited as ${label(invite.role)}`).then(() => setInvite({ ...invite, identifier: '' }));
           }}
         >
-          <h3>Invite a member</h3>
+          <h3>{tr('Invite a member')}</h3>
           <p className="small muted">
             They need a BitriPay account already: enter their email, phone or @tag. They sign in with their own credentials and {agent ? 'work at the counter of' : 'act for'} {data.organisation.name}{' '}
             with the role you choose.
           </p>
           <div className="grid cols-2">
-            <Field label="Email, phone or @tag">
+            <Field label={tr('Email, phone or @tag')}>
               <Input value={invite.identifier} onChange={(e) => setInvite({ ...invite, identifier: e.target.value })} placeholder="ana@example.com or @ana" required />
             </Field>
-            <Field label="Role" hint={(matrix[invite.role] ?? []).map(label).join(', ')}>
+            <Field label={tr('Role')} hint={(matrix[invite.role] ?? []).map(label).join(', ')}>
               <Select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value as OrgRole })}>
                 {roles
                   .filter((r) => r !== 'owner')
@@ -149,17 +151,18 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
             </Field>
           </div>
           <Button type="submit" loading={busy} disabled={!invite.identifier}>
-            Invite
+            {tr('Invite')}
           </Button>
-          {!can('org:manage_members') && <p className="small muted">Your role ({label(data.membership.role)}) cannot manage members; the API will refuse and say so.</p>}
+          {!can('org:manage_members') && <p className="small muted">{tr('Your role ({0}) cannot manage members; the API will refuse and say so.', { 0: label(data.membership.role) })}</p>}
         </form>
       </div>
       {agent ? (
         <div className="card">
-          <h3>Roles at the counter</h3>
+          <h3>{tr('Roles at the counter')}</h3>
           <p className="small muted">
-            A cashier serves customers (cash-in, cash-out, pickups, assisted onboarding). An operations manager also declares cash, requests float and handles the payout queue. Analysts and read-only
-            members only see the figures. Administrators do everything, including managing this team.
+            {tr(
+              'A cashier serves customers (cash-in, cash-out, pickups, assisted onboarding). An operations manager also declares cash, requests float and handles the payout queue. Analysts and read-only members only see the figures. Administrators do everything, including managing this team.',
+            )}
           </p>
           <div className="list">
             {roles.map((r) => (
@@ -174,9 +177,9 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
         </div>
       ) : (
         <div className="card">
-          <h3>Business units</h3>
-          <p className="small muted">Departments, branches or programmes. Attach locations to a unit from the QR centre; every payment taken at that location then carries the unit.</p>
-          {(data.businessUnits ?? []).length === 0 && <Empty text="No business units yet." />}
+          <h3>{tr('Business units')}</h3>
+          <p className="small muted">{tr('Departments, branches or programmes. Attach locations to a unit from the QR centre; every payment taken at that location then carries the unit.')}</p>
+          {(data.businessUnits ?? []).length === 0 && <Empty text={tr('No business units yet.')} />}
           <div className="list">
             {(data.businessUnits ?? []).map((u: any) => (
               <div key={u.id} className="list-item">
@@ -190,7 +193,7 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
                   </div>
                 </div>
                 <Button size="sm" variant="ghost" disabled={busy || !can('org:manage_units')} onClick={() => run(api.del(`/api/organisations/business-units/${u.id}`), `${u.name} deleted`)}>
-                  Delete
+                  {tr('Delete')}
                 </Button>
               </div>
             ))}
@@ -201,20 +204,20 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
               run(api.post('/api/organisations/business-units', { name: unit.name, code: unit.code || null }), `${unit.name} created`).then(() => setUnit({ name: '', code: '' }));
             }}
           >
-            <h3>New business unit</h3>
+            <h3>{tr('New business unit')}</h3>
             <div className="grid cols-2">
-              <Field label="Name">
-                <Input value={unit.name} onChange={(e) => setUnit({ ...unit, name: e.target.value })} placeholder="Gombe branch" required />
+              <Field label={tr('Name')}>
+                <Input value={unit.name} onChange={(e) => setUnit({ ...unit, name: e.target.value })} placeholder={tr('Gombe branch')} required />
               </Field>
-              <Field label="Code (optional)" hint="Letters and digits; derived from the name when empty">
+              <Field label={tr('Code (optional)')} hint={tr('Letters and digits; derived from the name when empty')}>
                 <Input value={unit.code} onChange={(e) => setUnit({ ...unit, code: e.target.value })} placeholder="GOMBE" maxLength={16} />
               </Field>
             </div>
             <Button type="submit" loading={busy} disabled={unit.name.trim().length < 2}>
-              Create unit
+              {tr('Create unit')}
             </Button>
           </form>
-          <h3>Permission matrix</h3>
+          <h3>{tr('Permission matrix')}</h3>
           <div className="list">
             {roles.map((r) => (
               <div key={r} className="list-item">

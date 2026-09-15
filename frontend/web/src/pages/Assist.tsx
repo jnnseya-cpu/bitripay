@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { API_BASE, api, getToken } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, PageHeader, useAsync } from '../components/ui';
 
 /**
@@ -220,23 +220,23 @@ export function Assist() {
   return (
     <div>
       <PageHeader
-        title="Command centre"
-        subtitle="Your agents read your account through audited tools, explain what they find and prepare actions you confirm yourself. They never move money."
+        title={tr('Command centre')}
+        subtitle={tr('Your agents read your account through audited tools, explain what they find and prepare actions you confirm yourself. They never move money.')}
         actions={
           addon?.required && addon.subscription ? (
             <span className="tiny muted">
-              Active until {new Date(addon.subscription.expiresAt).toLocaleDateString()} ·{' '}
+              {tr('Active until')} {new Date(addon.subscription.expiresAt).toLocaleDateString()} ·{' '}
               {addon.subscription.autoRenew ? (
                 <button
                   className="btn ghost sm"
                   onClick={() =>
                     api.post('/api/assist/addon/cancel').then(() => {
-                      toast('Renewal cancelled. Your agents stay active until the end of the period.', 'success');
+                      toast(tr('Renewal cancelled. Your agents stay active until the end of the period.'), 'success');
                       data.reload();
                     })
                   }
                 >
-                  Cancel renewal
+                  {tr('Cancel renewal')}
                 </button>
               ) : (
                 <button className="btn ghost sm" onClick={() => api.post('/api/assist/addon/auto-renew', { on: true }).then(() => data.reload())}>
@@ -249,10 +249,10 @@ export function Assist() {
       />
       {billing?.mode === 'per_use' && !billing.subscriptionActive && (
         <div className="row wrap tiny muted mb" style={{ gap: 12 }}>
-          <span>Lookups from your own records are free.</span>
+          <span>{tr('Lookups from your own records are free.')}</span>
           {price && (
             <span>
-              Other questions {price.standardFormatted}
+              {tr('Other questions')} {price.standardFormatted}
               {billing.canDeep ? `, in-depth ${price.deepFormatted}` : ''}, taken from your wallet after the answer.
             </span>
           )}
@@ -268,7 +268,7 @@ export function Assist() {
                 setParams({ agent: agent?.key ?? '', plan: '1' });
               }}
             >
-              Flat plan {addon.prices[0].formatted}/{addon.periodDays} days
+              {tr('Flat plan {0}/{1} days', { 0: addon.prices[0].formatted, 1: addon.periodDays })}
             </Link>
           )}
         </div>
@@ -281,7 +281,7 @@ export function Assist() {
           </Alert>
         </div>
       )}
-      {billing?.degraded && <Alert kind="info">Paid answers are paused for the rest of the month while the platform stays within its budget. Free lookups still work.</Alert>}
+      {billing?.degraded && <Alert kind="info">{tr('Paid answers are paused for the rest of the month while the platform stays within its budget. Free lookups still work.')}</Alert>}
       {params.get('plan') === '1' && addon && (
         <Activate
           addon={addon}
@@ -292,17 +292,17 @@ export function Assist() {
         />
       )}
       {mode === 'offline' && (
-        <Alert kind="info">Agents are answering from built-in checks right now (no language model connected). Every question still runs through the same tools and audit log.</Alert>
+        <Alert kind="info">{tr('Agents are answering from built-in checks right now (no language model connected). Every question still runs through the same tools and audit log.')}</Alert>
       )}
       <div className="cc-layout">
         <aside className="cc-agents">
           <div className="cc-usage card">
             <div className="row between">
-              <b>This month</b>
+              <b>{tr('This month')}</b>
               <span className="tiny muted">{usage.runs} runs</span>
             </div>
             {usage.unlimited ? (
-              <div className="tiny muted">Unlimited agent credit</div>
+              <div className="tiny muted">{tr('Unlimited agent credit')}</div>
             ) : (
               <>
                 <div className="progress mt-sm">
@@ -326,7 +326,7 @@ export function Assist() {
               <span className="cc-ico">{a.icon}</span>
               <span className="cc-agent-text">
                 <b>{a.name}</b>
-                <span className="tiny muted">{a.paused ? 'Paused by BitriPay' : !a.enabled ? 'Switched off' : a.tagline}</span>
+                <span className="tiny muted">{a.paused ? tr('Paused by BitriPay') : !a.enabled ? tr('Switched off') : a.tagline}</span>
               </span>
             </button>
           ))}
@@ -349,7 +349,7 @@ export function Assist() {
                   <div className="row" style={{ gap: 4 }}>
                     {(['chat', 'memory', 'history'] as const).map((k) => (
                       <Chip key={k} selected={tab === k} onClick={() => setTab(k)}>
-                        {k === 'chat' ? 'Chat' : k === 'memory' ? 'Memory' : 'History'}
+                        {k === 'chat' ? tr('Chat') : k === 'memory' ? tr('Memory') : tr('History')}
                       </Chip>
                     ))}
                   </div>
@@ -376,14 +376,14 @@ export function Assist() {
                       <div className="cc-run">
                         <div className="cc-msg me">
                           {runs.length ? '' : ''}
-                          {live.actions.length === 0 && !live.text ? 'Working…' : ''}
+                          {live.actions.length === 0 && !live.text ? tr('Working…') : ''}
                         </div>
                         <Steps actions={live.actions} />
                         {live.text ? (
                           <div className="cc-msg agent">{live.text}</div>
                         ) : (
                           <div className="cc-msg agent muted">
-                            <span className="spinner" /> {live.status === 'awaiting_approval' ? 'Waiting for an approval' : 'Checking…'}
+                            <span className="spinner" /> {live.status === 'awaiting_approval' ? tr('Waiting for an approval') : tr('Checking…')}
                           </div>
                         )}
                       </div>
@@ -413,15 +413,15 @@ export function Assist() {
                       maxLength={4000}
                     />
                     {billing?.canDeep && billing.mode === 'per_use' && (
-                      <label className="tiny muted row" style={{ gap: 4, whiteSpace: 'nowrap' }} title="Uses the main model for a longer analysis; priced higher">
-                        <input type="checkbox" checked={deep} onChange={(e) => setDeep(e.target.checked)} /> In depth
+                      <label className="tiny muted row" style={{ gap: 4, whiteSpace: 'nowrap' }} title={tr('Uses the main model for a longer analysis; priced higher')}>
+                        <input type="checkbox" checked={deep} onChange={(e) => setDeep(e.target.checked)} /> {tr('In depth')}
                       </label>
                     )}
                     <Button disabled={!input.trim() || !!live || !agent.enabled || agent.paused || depleted} title={depleted ? t('assist.paused') : undefined}>
-                      Ask{priceLabel}
+                      {tr('Ask{0}', { 0: priceLabel })}
                     </Button>
                   </form>
-                  <div className="tiny muted mt-sm">Answers come from your own data. Money only moves when you confirm an action with your PIN or passkey. Every step is logged.</div>
+                  <div className="tiny muted mt-sm">{tr('Answers come from your own data. Money only moves when you confirm an action with your PIN or passkey. Every step is logged.')}</div>
                 </>
               )}
             </>
@@ -450,33 +450,34 @@ function Consent({ billing, onDone }: { billing: any; onDone: () => void }) {
   };
   return (
     <div>
-      <PageHeader title="Command centre" subtitle="Personal agents that read your account, explain your money and prepare actions you confirm yourself. Here is exactly what it costs." />
+      <PageHeader title={tr('Command centre')} subtitle={tr('Personal agents that read your account, explain your money and prepare actions you confirm yourself. Here is exactly what it costs.')} />
       <div className="grid cols-2">
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>How questions are priced</h3>
+          <h3 style={{ marginTop: 0 }}>{tr('How questions are priced')}</h3>
           <ul className="small" style={{ paddingLeft: 18, lineHeight: 1.7 }}>
             {d.lines.map((l: string, i: number) => (
               <li key={i}>{l}</li>
             ))}
           </ul>
           <p className="tiny muted">
-            You can read this again any time under the command centre. Not for you? Nothing changes: sending, receiving, cards, agents, statements and everything else keep working exactly as they do
-            today.
+            {tr(
+              'You can read this again any time under the command centre. Not for you? Nothing changes: sending, receiving, cards, agents, statements and everything else keep working exactly as they do today.',
+            )}
           </p>
         </div>
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>Prices in your wallet currencies</h3>
+          <h3 style={{ marginTop: 0 }}>{tr('Prices in your wallet currencies')}</h3>
           <table style={{ width: '100%', fontSize: 14 }}>
             <tbody>
               <tr>
-                <td>Lookups from your own records</td>
+                <td>{tr('Lookups from your own records')}</td>
                 <td className="bold" style={{ textAlign: 'right' }}>
-                  Free
+                  {tr('Free')}
                 </td>
               </tr>
               {billing.prices.map((p: any) => (
                 <tr key={p.currency}>
-                  <td>Question ({p.currency})</td>
+                  <td>{tr('Question ({0})', { 0: p.currency })}</td>
                   <td className="bold" style={{ textAlign: 'right' }}>
                     {p.standardFormatted}
                   </td>
@@ -485,7 +486,7 @@ function Consent({ billing, onDone }: { billing: any; onDone: () => void }) {
               {billing.canDeep &&
                 billing.prices.map((p: any) => (
                   <tr key={`d${p.currency}`}>
-                    <td>In-depth analysis ({p.currency})</td>
+                    <td>{tr('In-depth analysis ({0})', { 0: p.currency })}</td>
                     <td className="bold" style={{ textAlign: 'right' }}>
                       {p.deepFormatted}
                     </td>
@@ -494,10 +495,10 @@ function Consent({ billing, onDone }: { billing: any; onDone: () => void }) {
             </tbody>
           </table>
           <Button block loading={busy} onClick={accept}>
-            I understand the prices, continue
+            {tr('I understand the prices, continue')}
           </Button>
           <Link className="btn ghost" to="/app" style={{ display: 'block', textAlign: 'center', marginTop: 8 }}>
-            Not now
+            {tr('Not now')}
           </Link>
         </div>
       </div>
@@ -516,7 +517,7 @@ function Activate({ addon, onDone }: { addon: any; onDone: () => void }) {
     setBusy(true);
     try {
       await api.post('/api/assist/addon/activate', { currency, pin });
-      toast('Command centre activated', 'success');
+      toast(tr('Command centre activated'), 'success');
       refreshWallets();
       onDone();
     } catch (e) {
@@ -527,29 +528,32 @@ function Activate({ addon, onDone }: { addon: any; onDone: () => void }) {
   };
   return (
     <div>
-      <PageHeader title="Flat plan" subtitle="Ask as many questions as you like for one fixed price per period, instead of paying per question." />
+      <PageHeader title={tr('Flat plan')} subtitle={tr('Ask as many questions as you like for one fixed price per period, instead of paying per question.')} />
       <div className="grid cols-2">
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>What you get</h3>
+          <h3 style={{ marginTop: 0 }}>{tr('What you get')}</h3>
           <ul className="small" style={{ paddingLeft: 18, lineHeight: 1.7 }}>
             <li>
-              <b>Chief of Staff</b>: a daily briefing of what matters on your account.
+              <b>{tr('Chief of Staff')}</b>: a daily briefing of what matters on your account.
             </li>
             <li>
-              <b>Analyst</b>: why a fee was charged, what you spent, a statement in one question.
+              <b>{tr('Analyst')}</b>: why a fee was charged, what you spent, a statement in one question.
             </li>
             <li>
-              <b>Research, Automation, Security, Knowledge</b>: answers from BitriPay's guides, prepared repeat payments, safety checks and preferences it remembers.
+              <b>{tr('Research, Automation, Security, Knowledge')}</b>: answers from BitriPay's guides, prepared repeat payments, safety checks and preferences it remembers.
             </li>
-            <li>Every step is logged. Agents never move money: you confirm each action with your PIN or passkey.</li>
+            <li>{tr('Every step is logged. Agents never move money: you confirm each action with your PIN or passkey.')}</li>
           </ul>
-          <p className="tiny muted">Not for you? Nothing changes. Sending, receiving, cards, agents, statements and everything else keep working exactly as they do today.</p>
+          <p className="tiny muted">{tr('Not for you? Nothing changes. Sending, receiving, cards, agents, statements and everything else keep working exactly as they do today.')}</p>
         </div>
         <div className="card">
           <h3 style={{ marginTop: 0 }}>
             {price?.formatted} <span className="small muted">for {addon.periodDays} days</span>
           </h3>
-          <p className="small muted">Paid from your wallet now.{addon.autoRenewDefault ? ' Renews automatically; cancel any time.' : ''}</p>
+          <p className="small muted">
+            {tr('Paid from your wallet now.')}
+            {addon.autoRenewDefault ? tr('Renews automatically; cancel any time.') : ''}
+          </p>
           {addon.prices.length > 1 && (
             <div className="row wrap mb">
               {addon.prices.map((p: any) => (
@@ -559,13 +563,13 @@ function Activate({ addon, onDone }: { addon: any; onDone: () => void }) {
               ))}
             </div>
           )}
-          <label className="small">Your transaction PIN</label>
+          <label className="small">{tr('Your transaction PIN')}</label>
           <input className="input" type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••" />
           <Button block loading={busy} disabled={pin.length < 4} onClick={activate}>
             Activate for {price?.formatted}
           </Button>
           <p className="tiny muted mt-sm">
-            Low balance? <Link to="/app/add-money">Add money</Link> first.
+            {tr('Low balance?')} <Link to="/app/add-money">{tr('Add money')}</Link> first.
           </p>
         </div>
       </div>
@@ -617,27 +621,27 @@ function RunBubble({ run, user }: { run: Run; user: string }) {
       )}
       {run.status === 'failed' && (
         <div className="cc-msg agent">
-          <Alert kind="error">{run.error ?? 'Something went wrong.'}</Alert>
+          <Alert kind="error">{run.error ?? tr('Something went wrong.')}</Alert>
         </div>
       )}
       {run.status === 'budget_exhausted' && (
         <div className="cc-msg agent">
-          <Alert kind="warning">Your monthly agent credit is used up. It resets next month.</Alert>
+          <Alert kind="warning">{tr('Your monthly agent credit is used up. It resets next month.')}</Alert>
         </div>
       )}
       {run.status === 'awaiting_approval' && (
         <div className="cc-msg agent">
-          <Alert kind="warning">An action is queued for a second administrator to approve. You will be notified.</Alert>
+          <Alert kind="warning">{tr('An action is queued for a second administrator to approve. You will be notified.')}</Alert>
         </div>
       )}
       {run.proposals.map((p, i) => (
         <div key={i} className="cc-proposal">
           <div>
             <b>{p.title}</b>
-            <div className="tiny muted">{p.why ?? 'Prepared for you to confirm. Nothing has been executed.'}</div>
+            <div className="tiny muted">{p.why ?? tr('Prepared for you to confirm. Nothing has been executed.')}</div>
           </div>
           <Link className="btn" to={p.link}>
-            Review & confirm
+            {tr('Review & confirm')}
           </Link>
         </div>
       ))}
@@ -657,8 +661,8 @@ function Memory() {
   };
   return (
     <div>
-      <p className="small muted">What your agents remember about you. Only what you asked for is kept; delete anything at any time. Secrets are never stored.</p>
-      {(mem.data?.items ?? []).length === 0 && <Empty icon="📚" text="Nothing stored yet." />}
+      <p className="small muted">{tr('What your agents remember about you. Only what you asked for is kept; delete anything at any time. Secrets are never stored.')}</p>
+      {(mem.data?.items ?? []).length === 0 && <Empty icon="📚" text={tr('Nothing stored yet.')} />}
       {(mem.data?.items ?? []).map((m) => (
         <div key={m.id} className="row between cc-memory">
           <span>
@@ -674,7 +678,7 @@ function Memory() {
                 .catch((e) => toast(e.message, 'error'))
             }
           >
-            Delete
+            {tr('Delete')}
           </Button>
         </div>
       ))}
@@ -686,11 +690,11 @@ function Memory() {
         }}
       >
         <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. I prefer receipts on WhatsApp" maxLength={400} />
-        <Button variant="secondary">Remember</Button>
+        <Button variant="secondary">{tr('Remember')}</Button>
       </form>
       {(mem.data?.items ?? []).length > 0 && (
         <Button variant="ghost" size="sm" onClick={() => api.del('/api/assist/memories').then(() => mem.reload())}>
-          Delete everything
+          {tr('Delete everything')}
         </Button>
       )}
     </div>
@@ -700,7 +704,7 @@ function Memory() {
 function History({ agent }: { agent: string }) {
   const runs = useAsync(() => api.get<{ items: Run[] }>(`/api/assist/runs?agent=${agent}&limit=50`), [agent]);
   const items = runs.data?.items ?? [];
-  if (!items.length) return <Empty icon="🕓" text="No runs yet." />;
+  if (!items.length) return <Empty icon="🕓" text={tr('No runs yet.')} />;
   return (
     <div className="col">
       {items.map((r) => (

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, AmountInput, Avatar, Button, Field, Input, KV, PageHeader, PinModal, useDebounce } from '../components/ui';
 import { toMinor, type PublicUser, type Transaction } from '@bitripay/shared';
 import { isMerchantClass } from '@bitripay/shared';
@@ -70,7 +70,7 @@ export function Send() {
 
   return (
     <div style={{ maxWidth: 560 }}>
-      <PageHeader title={t('send.title')} subtitle="Send to any BitriPay user by @tag, email or phone" />
+      <PageHeader title={t('send.title')} subtitle={tr('Send to any BitriPay user by @tag, email or phone')} />
       <div className="card">
         {error && <Alert kind="error">{error}</Alert>}
         <Field label={t('send.to')}>
@@ -87,12 +87,12 @@ export function Send() {
             </div>
           </div>
         )}
-        {to.length >= 3 && !recipient && <div className="small muted mb">No user found for "{to}"</div>}
-        <Field label={t('common.amount')} hint={wallet ? `${t('common.balance')}: ${money(wallet.balance, wallet.currency)}` : 'Create a wallet in this currency first'}>
+        {to.length >= 3 && !recipient && <div className="small muted mb">{tr('No user found for "{0}"', { 0: to })}</div>}
+        <Field label={t('common.amount')} hint={wallet ? `${t('common.balance')}: ${money(wallet.balance, wallet.currency)}` : tr('Create a wallet in this currency first')}>
           <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} big />
         </Field>
         <Field label={t('common.note')}>
-          <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder="What's it for?" />
+          <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder={tr("What's it for?")} />
         </Field>
         {fee && minor > 0 && (
           <div className="card soft compact mb">

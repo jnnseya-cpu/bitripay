@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, Button, Field, Input, Select, Tabs } from '../components/ui';
 import type { User } from '@bitripay/shared';
 import { currencyFlag } from '@bitripay/shared';
@@ -106,7 +106,7 @@ export function Login() {
       <form onSubmit={submit} className="mt">
         {error && <Alert kind="error">{error}</Alert>}
         {mfa ? (
-          <Field label={t('settings.2fa')} hint="Enter the 6-digit code from your authenticator app">
+          <Field label={t('settings.2fa')} hint={tr('Enter the 6-digit code from your authenticator app')}>
             <Input className="pin-input" autoFocus inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} />
           </Field>
         ) : (
@@ -148,7 +148,7 @@ export function Login() {
               }
             }}
           >
-            🔐 Sign in with biometrics / passkey
+            {tr('🔐 Sign in with biometrics / passkey')}
           </Button>
         )}
         {mode === 'password' && !mfa && (
@@ -242,7 +242,7 @@ export function Register() {
           <Input required value={form.fullName} onChange={(e) => set('fullName', e.target.value)} />
         </Field>
         {form.role !== 'user' && (
-          <Field label="Business name">
+          <Field label={tr('Business name')}>
             <Input value={form.businessName} onChange={(e) => set('businessName', e.target.value)} />
           </Field>
         )}
@@ -275,7 +275,7 @@ export function Register() {
         <Field label={t('auth.referral')}>
           <Input value={form.referralCode} onChange={(e) => set('referralCode', e.target.value)} />
         </Field>
-        <Field label={t('auth.code')} hint="Optional: verify your phone/email now">
+        <Field label={t('auth.code')} hint={tr('Optional: verify your phone/email now')}>
           <div className="row">
             <Input value={form.otpCode} onChange={(e) => set('otpCode', e.target.value)} placeholder="123456" />
             <Button type="button" variant="secondary" onClick={sendCode} disabled={!form.email && !form.phone}>
@@ -328,7 +328,7 @@ export function Forgot() {
             <Field label={t('auth.code')}>
               <Input value={code} onChange={(e) => setCode(e.target.value)} />
             </Field>
-            <Field label="New password">
+            <Field label={tr('New password')}>
               <Input type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
             </Field>
           </>
@@ -362,7 +362,7 @@ export function Claim() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (password !== confirm) return setError('The two passwords differ');
+    if (password !== confirm) return setError(tr('The two passwords differ'));
     setLoading(true);
     try {
       const r = await api.post<AuthResult>('/api/auth/claim', { token, password });
@@ -375,7 +375,7 @@ export function Claim() {
     }
   };
   return (
-    <AuthShell title="Claim your BitriPay account" footer={<Link to="/login">{t('auth.login')}</Link>}>
+    <AuthShell title={tr('Claim your BitriPay account')} footer={<Link to="/login">{t('auth.login')}</Link>}>
       {error && <Alert kind="error">{error}</Alert>}
       {info && (
         <Alert kind="info">
@@ -384,10 +384,10 @@ export function Claim() {
         </Alert>
       )}
       <form onSubmit={submit}>
-        <Field label="New password">
+        <Field label={tr('New password')}>
           <Input type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required disabled={!info} />
         </Field>
-        <Field label="Confirm password">
+        <Field label={tr('Confirm password')}>
           <Input type="password" minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} required disabled={!info} />
         </Field>
         <Button block loading={loading} disabled={!info}>

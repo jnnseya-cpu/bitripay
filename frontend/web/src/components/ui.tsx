@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes, type SelectHTMLAttributes } from 'react';
 import QRCode from 'qrcode';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import type { PublicUser, Transaction } from '@bitripay/shared';
 import { TRANSACTION_TYPE_LABELS } from '@bitripay/shared';
 import { Link } from 'react-router-dom';
@@ -118,7 +118,7 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
       <div className={`modal ${wide ? 'wide' : ''}`}>
         <div className="modal-title">
           <h3 style={{ margin: 0 }}>{title}</h3>
-          <button className="btn ghost sm" onClick={onClose} aria-label="Close">
+          <button className="btn ghost sm" onClick={onClose} aria-label={tr('Close')}>
             ✕
           </button>
         </div>
@@ -173,7 +173,7 @@ export function PinModal({
       {hasPasskeys && passkeysSupported() && (
         <div className="mb">
           <Button block variant="secondary" loading={bioBusy} onClick={useBiometrics} type="button">
-            🔐 Confirm with biometrics
+            {tr('🔐 Confirm with biometrics')}
           </Button>
           {bioError && (
             <div className="hint mt-sm" style={{ color: 'var(--danger)' }}>
@@ -185,7 +185,7 @@ export function PinModal({
       )}
       {!user?.hasPin && !hasPasskeys ? (
         <Alert kind="warning">
-          Set a transaction PIN first in <Link to="/settings?tab=security">Security settings</Link>.
+          Set a transaction PIN first in <Link to="/settings?tab=security">{tr('Security settings')}</Link>.
         </Alert>
       ) : (
         <form
@@ -412,11 +412,11 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
 
 /** Lifecycle of an external payment: makes the difference between initiated, confirmed and settled explicit. */
 export const STAGE_STEPS: { id: string; label: string; stages: string[] }[] = [
-  { id: 'initiated', label: 'Initiated', stages: ['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED'] },
-  { id: 'sent', label: 'Sent', stages: ['PAYMENT_SENT'] },
-  { id: 'verifying', label: 'Verifying', stages: ['EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'] },
-  { id: 'confirmed', label: 'Confirmed', stages: ['CONFIRMED'] },
-  { id: 'settled', label: 'Settled', stages: ['SETTLED'] },
+  { id: 'initiated', label: tr('Initiated'), stages: ['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED'] },
+  { id: 'sent', label: tr('Sent'), stages: ['PAYMENT_SENT'] },
+  { id: 'verifying', label: tr('Verifying'), stages: ['EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'] },
+  { id: 'confirmed', label: tr('Confirmed'), stages: ['CONFIRMED'] },
+  { id: 'settled', label: tr('Settled'), stages: ['SETTLED'] },
 ];
 export function StageTimeline({ stage, stageLabel, stageDescription }: { stage?: string; stageLabel?: string; stageDescription?: string }) {
   const t = useT();
@@ -485,7 +485,8 @@ export function RouteDisclosure({ declaration, fx }: { declaration?: any; fx?: a
   return (
     <details className="card soft compact mb">
       <summary className="small bold" style={{ cursor: 'pointer' }}>
-        How this payment works{declaration ? ` · ${declaration.processing ?? declaration.funding?.processing ?? ''} · ${declaration.expectedCompletion ?? ''}` : ''}
+        {tr('How this payment works')}
+        {declaration ? ` · ${declaration.processing ?? declaration.funding?.processing ?? ''} · ${declaration.expectedCompletion ?? ''}` : ''}
       </summary>
       <div className="mt-sm">
         {declaration?.funding ? leg('Money in', declaration.funding) : declaration?.initiation ? leg('Payment', declaration) : null}
@@ -493,19 +494,22 @@ export function RouteDisclosure({ declaration, fx }: { declaration?: any; fx?: a
         {declaration?.disclosure && <div className="tiny muted">{declaration.disclosure}</div>}
         {fx && fx.sourceCurrency !== fx.targetCurrency && (
           <div className="mt-sm">
-            <div className="small bold">Exchange rate</div>
+            <div className="small bold">{tr('Exchange rate')}</div>
             <div className="tiny">
-              Reference rate 1 {fx.sourceCurrency} = {Number(fx.midRate).toFixed(6)} {fx.targetCurrency} · {fx.providerLabel}
+              {tr('Reference rate 1')} {fx.sourceCurrency} = {Number(fx.midRate).toFixed(6)} {fx.targetCurrency} · {fx.providerLabel}
               {fx.rateTimestamp ? ` · ${new Date(fx.rateTimestamp).toLocaleString()}` : ''}
             </div>
             <div className="tiny">
-              Markup {(fx.markupBps / 100).toFixed(2)}% · your rate 1 {fx.sourceCurrency} = {Number(fx.rate).toFixed(6)} {fx.targetCurrency}
+              {tr('Markup')} {(fx.markupBps / 100).toFixed(2)}% · your rate 1 {fx.sourceCurrency} = {Number(fx.rate).toFixed(6)} {fx.targetCurrency}
             </div>
             <div className="tiny">
               {fx.guaranteed ? (
-                <span className="chip success">Rate guaranteed until {new Date(fx.expiresAt).toLocaleTimeString()}</span>
+                <span className="chip success">{tr('Rate guaranteed until {0}', { 0: new Date(fx.expiresAt).toLocaleTimeString() })}</span>
               ) : (
-                <span className="chip warning">Indicative rate – not guaranteed{fx.stale ? ' (administrator-approved / stale)' : ''}</span>
+                <span className="chip warning">
+                  {tr('Indicative rate – not guaranteed')}
+                  {fx.stale ? ' (administrator-approved / stale)' : ''}
+                </span>
               )}
             </div>
           </div>
@@ -517,10 +521,10 @@ export function RouteDisclosure({ declaration, fx }: { declaration?: any; fx?: a
 
 /** Lifecycle of a cross-rail transfer: initiated → funded → paying out → settled. */
 export const ROUTE_STEPS: { id: string; label: string; stages: string[] }[] = [
-  { id: 'initiated', label: 'Approved', stages: ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'BIOMETRICALLY_APPROVED', 'FUNDING_PENDING'] },
-  { id: 'funded', label: 'Funded · FX reserved', stages: ['FUNDED', 'FX_RESERVED', 'AWAITING_CONFIRMATION', 'MANUAL_REVIEW', 'INSUFFICIENT_LIQUIDITY'] },
-  { id: 'paying', label: 'Paying out', stages: ['PAYOUT_ROUTED', 'PAYOUT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'VERIFIED', 'MISMATCHED', 'DUPLICATE'] },
-  { id: 'settled', label: 'Settled', stages: ['SETTLED'] },
+  { id: 'initiated', label: tr('Approved'), stages: ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'BIOMETRICALLY_APPROVED', 'FUNDING_PENDING'] },
+  { id: 'funded', label: tr('Funded · FX reserved'), stages: ['FUNDED', 'FX_RESERVED', 'AWAITING_CONFIRMATION', 'MANUAL_REVIEW', 'INSUFFICIENT_LIQUIDITY'] },
+  { id: 'paying', label: tr('Paying out'), stages: ['PAYOUT_ROUTED', 'PAYOUT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'VERIFIED', 'MISMATCHED', 'DUPLICATE'] },
+  { id: 'settled', label: tr('Settled'), stages: ['SETTLED'] },
 ];
 export function RouteTimeline({ stage, stageLabel, stageDescription }: { stage?: string; stageLabel?: string; stageDescription?: string }) {
   if (!stage) return null;

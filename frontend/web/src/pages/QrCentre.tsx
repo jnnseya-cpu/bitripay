@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { api, qs, API_BASE } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, Field, Input, KV, Modal, PageHeader, QrImage, Select, StatusBadge, Tabs, useAsync } from '../components/ui';
 import { offlineDevice } from '../lib/offline';
 import { isMerchantClass, currencyFlag } from '@bitripay/shared';
@@ -41,10 +41,10 @@ function DownloadButtons({ q, err, size }: { q: any; err: (e: any) => void; size
       <Button size={size} variant="ghost" onClick={() => downloadPng(q).catch(err)} title="PNG">
         {t('qr.downloadPng')}
       </Button>
-      <Button size={size} variant="ghost" onClick={() => downloadSvg(q).catch(err)} title="SVG from /api/qr/image.svg">
+      <Button size={size} variant="ghost" onClick={() => downloadSvg(q).catch(err)} title={tr('SVG from /api/qr/image.svg')}>
         {t('qr.downloadSvg')}
       </Button>
-      <Button size={size} variant="ghost" onClick={() => downloadPayload(q)} title="Payload as text">
+      <Button size={size} variant="ghost" onClick={() => downloadPayload(q)} title={tr('Payload as text')}>
         {t('qr.downloadPayload')}
       </Button>
     </>
@@ -95,7 +95,7 @@ export function QrCentre() {
   if (!isMerchantClass(user?.role) && user?.role !== 'admin')
     return (
       <Alert kind="info">
-        The QR centre is for merchant accounts. <Link to="/app/merchant">Upgrade</Link> or use <Link to="/app/receive">Receive</Link> for personal codes.
+        {tr('The QR centre is for merchant accounts.')} <Link to="/app/merchant">{tr('Upgrade')}</Link> or use <Link to="/app/receive">{tr('Receive')}</Link> for personal codes.
       </Alert>
     );
   /** Client-side check of the same rules the service applies; returns the message to show or null when the form may be sent. */
@@ -133,7 +133,7 @@ export function QrCentre() {
             reference: intent.reference ?? form.reference ?? null,
           });
           codes.reload();
-          toast('Dynamic code created', 'success');
+          toast(tr('Dynamic code created'), 'success');
         })
         .catch((e) => {
           setFormError(localised(e));
@@ -147,7 +147,7 @@ export function QrCentre() {
       .then((q) => {
         setShown(q);
         codes.reload();
-        toast('Code created', 'success');
+        toast(tr('Code created'), 'success');
       })
       .catch((e) => {
         setFormError(localised(e));
@@ -178,20 +178,20 @@ export function QrCentre() {
   return (
     <div>
       <PageHeader
-        title="QR centre"
-        subtitle="One code, every eligible rail. Static for the counter, dynamic per sale, offline when the network is down."
+        title={tr('QR centre')}
+        subtitle={tr('One code, every eligible rail. Static for the counter, dynamic per sale, offline when the network is down.')}
         actions={
           <Link className="btn secondary" to="/app/merchant/centre">
-            ← Command centre
+            {tr('← Command centre')}
           </Link>
         }
       />
       <Tabs
         tabs={[
-          { id: 'codes', label: 'Codes' },
-          { id: 'locations', label: 'Locations & terminals' },
-          { id: 'analytics', label: 'Analytics' },
-          { id: 'institution', label: 'Diaspora-Direct' },
+          { id: 'codes', label: tr('Codes') },
+          { id: 'locations', label: tr('Locations & terminals') },
+          { id: 'analytics', label: tr('Analytics') },
+          { id: 'institution', label: tr('Diaspora-Direct') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -199,22 +199,22 @@ export function QrCentre() {
       {tab === 'codes' && (
         <div className="grid cols-3">
           <div className="card">
-            <h3>New code</h3>
+            <h3>{tr('New code')}</h3>
             <div className="grid cols-2">
-              <Field label="Mode" hint={form.mode === 'dynamic' ? 'One sale, one code: carries the amount and expires.' : 'Printed at the counter: the payer enters the amount.'}>
+              <Field label={tr('Mode')} hint={form.mode === 'dynamic' ? tr('One sale, one code: carries the amount and expires.') : tr('Printed at the counter: the payer enters the amount.')}>
                 <Select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value, amount: e.target.value === 'static' ? '' : form.amount })}>
-                  <option value="static">Static</option>
-                  <option value="dynamic">Dynamic (fixed amount)</option>
+                  <option value="static">{tr('Static')}</option>
+                  <option value="dynamic">{tr('Dynamic (fixed amount)')}</option>
                 </Select>
               </Field>
-              <Field label="Currency" hint={walletCurrencies.length ? `Your wallets: ${walletCurrencies.join(', ')}` : undefined}>
+              <Field label={tr('Currency')} hint={walletCurrencies.length ? `Your wallets: ${walletCurrencies.join(', ')}` : undefined}>
                 <Select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
                   {currencyOptions.map((c) => (
                     <option key={c}>{c}</option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Kind">
+              <Field label={tr('Kind')}>
                 <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
                   {['merchant', 'invoice', 'agent', 'institution', 'mandate'].map((k) => (
                     <option key={k}>{k}</option>
@@ -233,13 +233,13 @@ export function QrCentre() {
                   <Input inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value.replace(/[^\d.]/g, '') })} placeholder="0.00" />
                 </Field>
               ) : (
-                <Field label="Amount">
+                <Field label={tr('Amount')}>
                   <Input value="" disabled placeholder="payer enters the amount" />
                 </Field>
               )}
-              <Field label="Purpose">
+              <Field label={tr('Purpose')}>
                 <Select value={form.purpose_code} onChange={(e) => setForm({ ...form, purpose_code: e.target.value })}>
-                  <option value="">General</option>
+                  <option value="">{tr('General')}</option>
                   {(purposes.data?.purposes ?? []).map((p: any) => (
                     <option key={p.code} value={p.code}>
                       {p.code}
@@ -249,12 +249,12 @@ export function QrCentre() {
                 </Select>
               </Field>
             </div>
-            <Field label="Reference / label">
+            <Field label={tr('Reference / label')}>
               <Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} placeholder="TILL-1" />
             </Field>
-            <Field label="Location">
+            <Field label={tr('Location')}>
               <Select value={form.location_id} onChange={(e) => setForm({ ...form, location_id: e.target.value })}>
-                <option value="">None</option>
+                <option value="">{tr('None')}</option>
                 {(locations.data?.data ?? []).map((l: any) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
@@ -264,20 +264,20 @@ export function QrCentre() {
             </Field>
             {form.mode === 'static' && (
               <label className="checkbox mb">
-                <input type="checkbox" checked={form.sign} onChange={(e) => setForm({ ...form, sign: e.target.checked })} /> Sign with my merchant key (recommended)
+                <input type="checkbox" checked={form.sign} onChange={(e) => setForm({ ...form, sign: e.target.checked })} /> {tr('Sign with my merchant key (recommended)')}
               </label>
             )}
             {formError && <Alert kind="error">{formError}</Alert>}
             <Button onClick={create} disabled={form.mode === 'dynamic' && !form.amount}>
-              Create {form.mode} code
+              {tr('Create {0} code', { 0: form.mode })}
             </Button>
-            <h3 className="mt">Offline code</h3>
-            <p className="small muted">Works with or without signal. The customer's phone signs a promise; the money is confirmed when either of you is back online.</p>
+            <h3 className="mt">{tr('Offline code')}</h3>
+            <p className="small muted">{tr("Works with or without signal. The customer's phone signs a promise; the money is confirmed when either of you is back online.")}</p>
             <div className="grid cols-2">
-              <Field label="Amount">
+              <Field label={tr('Amount')}>
                 <Input value={offline.amount} onChange={(e) => setOffline({ ...offline, amount: e.target.value })} />
               </Field>
-              <Field label="Currency">
+              <Field label={tr('Currency')}>
                 <Select value={offline.currency} onChange={(e) => setOffline({ ...offline, currency: e.target.value })}>
                   {(config?.currencies ?? []).map((c) => (
                     <option key={c.code} value={c.code}>
@@ -287,16 +287,16 @@ export function QrCentre() {
                 </Select>
               </Field>
             </div>
-            <Field label="Reference">
+            <Field label={tr('Reference')}>
               <Input value={offline.reference} onChange={(e) => setOffline({ ...offline, reference: e.target.value })} />
             </Field>
             <Button variant="secondary" onClick={offlineCode} disabled={!offline.amount}>
-              Show offline code {navigator.onLine ? '' : '(signed on this device)'}
+              {tr('Show offline code')} {navigator.onLine ? '' : '(signed on this device)'}
             </Button>
           </div>
           <div className="card" style={{ gridColumn: 'span 2' }}>
-            <h3>My codes</h3>
-            {(codes.data?.data ?? []).length === 0 && <Empty icon="🔳" text="No codes yet" />}
+            <h3>{tr('My codes')}</h3>
+            {(codes.data?.data ?? []).length === 0 && <Empty icon="🔳" text={tr('No codes yet')} />}
             <div className="list">
               {(codes.data?.data ?? []).map((q: any) => (
                 <div key={q.id} className="list-item">
@@ -317,7 +317,7 @@ export function QrCentre() {
                   <StatusBadge status={q.status} />
                   <div className="row wrap">
                     <Button size="sm" variant="secondary" onClick={() => setShown(q)}>
-                      Show
+                      {tr('Show')}
                     </Button>
                     <DownloadButtons q={q} err={err} size="sm" />
                     {q.status === 'active' && (
@@ -329,12 +329,12 @@ export function QrCentre() {
                             .post(`/api/v1/qr_codes/${q.id}/revoke`, { reason: 'replaced' })
                             .then(() => {
                               codes.reload();
-                              toast('Code revoked', 'success');
+                              toast(tr('Code revoked'), 'success');
                             })
                             .catch(err)
                         }
                       >
-                        Revoke
+                        {tr('Revoke')}
                       </Button>
                     )}
                   </div>
@@ -360,8 +360,8 @@ export function QrCentre() {
               ))}
           {Array.isArray(analytics.data?.byDay) && (
             <div className="card" style={{ gridColumn: 'span 3' }}>
-              <h3>Scans by day</h3>
-              <p className="tiny muted">Last {analytics.data.days} days · scans and paid codes per day (days without activity are shown as zero).</p>
+              <h3>{tr('Scans by day')}</h3>
+              <p className="tiny muted">{tr('Last {0} days · scans and paid codes per day (days without activity are shown as zero).', { 0: analytics.data.days })}</p>
               <div className="row" style={{ alignItems: 'flex-end', height: 140, gap: 4 }}>
                 {analytics.data.byDay.map((d: any) => {
                   const peak = Math.max(1, ...analytics.data.byDay.map((x: any) => x.scans));
@@ -381,9 +381,9 @@ export function QrCentre() {
                 <table data-testid="qr-by-day">
                   <thead>
                     <tr>
-                      <th>Day</th>
-                      <th className="right">Scans</th>
-                      <th className="right">Paid</th>
+                      <th>{tr('Day')}</th>
+                      <th className="right">{tr('Scans')}</th>
+                      <th className="right">{tr('Paid')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -404,8 +404,8 @@ export function QrCentre() {
           )}
           {Array.isArray(analytics.data?.byOutcome) && (
             <div className="card" style={{ gridColumn: 'span 3' }} data-testid="qr-by-outcome">
-              <h3>Outcomes</h3>
-              {analytics.data.byOutcome.length === 0 && <Empty icon="📈" text="No scans in this window yet" />}
+              <h3>{tr('Outcomes')}</h3>
+              {analytics.data.byOutcome.length === 0 && <Empty icon="📈" text={tr('No scans in this window yet')} />}
               {analytics.data.byOutcome.map((o: any) => (
                 <KV key={o.outcome} k={String(o.outcome).replace(/_/g, ' ')} v={String(o.count)} />
               ))}
@@ -413,7 +413,7 @@ export function QrCentre() {
           )}
           {analytics.data?.byLocation?.length > 0 && (
             <div className="card" style={{ gridColumn: 'span 3' }}>
-              <h3>By location</h3>
+              <h3>{tr('By location')}</h3>
               {analytics.data.byLocation.map((l: any, i: number) => (
                 <KV key={`${l.name}-${i}`} k={l.name} v={String(l.scans)} />
               ))}
@@ -422,7 +422,7 @@ export function QrCentre() {
         </div>
       )}
       {tab === 'institution' && <Institution toast={toast} err={err} purposes={purposes.data?.purposes ?? []} currencies={(config?.currencies ?? []).map((c) => c.code)} />}
-      <Modal open={!!shown} onClose={() => setShown(null)} title={shown?.mode === 'OFFLINE' ? 'Offline code' : 'Your code'}>
+      <Modal open={!!shown} onClose={() => setShown(null)} title={shown?.mode === 'OFFLINE' ? tr('Offline code') : tr('Your code')}>
         {shown && (
           <div className="print-sheet" style={{ textAlign: 'center' }}>
             <div className="bold" style={{ fontSize: 18 }}>
@@ -442,7 +442,7 @@ export function QrCentre() {
             {shown.reference && <div className="small muted">{shown.reference}</div>}
             {shown.mode === 'OFFLINE' && (
               <Alert kind="warning">
-                Valid until {new Date(shown.expiresAt).toLocaleTimeString()}. The customer's app will confirm when back online{shown.local ? ' (signed on this device)' : ''}.
+                {tr('Valid until')} {new Date(shown.expiresAt).toLocaleTimeString()}. The customer's app will confirm when back online{shown.local ? ' (signed on this device)' : ''}.
               </Alert>
             )}
             {shown.uri && (
@@ -452,7 +452,7 @@ export function QrCentre() {
             )}
             <div className="row wrap mt" style={{ justifyContent: 'center' }}>
               <Button variant="secondary" onClick={() => window.print()}>
-                Print
+                {tr('Print')}
               </Button>
               <DownloadButtons q={shown} err={err} />
             </div>
@@ -469,15 +469,15 @@ function Locations({ locations, toast, err }: { locations: any; toast: any; err:
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h3>New location</h3>
-        <Field label="Name">
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Marché de la Liberté, stand 12" />
+        <h3>{tr('New location')}</h3>
+        <Field label={tr('Name')}>
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={tr('Marché de la Liberté, stand 12')} />
         </Field>
         <div className="grid cols-2">
-          <Field label="Address">
+          <Field label={tr('Address')}>
             <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
           </Field>
-          <Field label="City">
+          <Field label={tr('City')}>
             <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           </Field>
         </div>
@@ -489,19 +489,19 @@ function Locations({ locations, toast, err }: { locations: any; toast: any; err:
             api
               .post('/api/v1/locations', { name: form.name, address: form.address || null, city: form.city || null, mcc: form.mcc || null })
               .then(() => {
-                toast('Location added', 'success');
+                toast(tr('Location added'), 'success');
                 locations.reload();
               })
               .catch(err)
           }
           disabled={form.name.length < 2}
         >
-          Add location
+          {tr('Add location')}
         </Button>
       </div>
       <div className="card">
-        <h3>Locations</h3>
-        {(locations.data?.data ?? []).length === 0 && <Empty icon="📍" text="No locations yet" />}
+        <h3>{tr('Locations')}</h3>
+        {(locations.data?.data ?? []).length === 0 && <Empty icon="📍" text={tr('No locations yet')} />}
         {(locations.data?.data ?? []).map((l: any) => (
           <div key={l.id} className="list-item">
             <div className="flex1">
@@ -512,27 +512,27 @@ function Locations({ locations, toast, err }: { locations: any; toast: any; err:
               </div>
             </div>
             <Button size="sm" variant="secondary" onClick={() => setTerminal({ locationId: l.id, label: '' })}>
-              + Terminal
+              {tr('+ Terminal')}
             </Button>
           </div>
         ))}
-        <Modal open={!!terminal} onClose={() => setTerminal(null)} title="New terminal">
-          <Field label="Label">
-            <Input value={terminal?.label ?? ''} onChange={(e) => setTerminal({ ...terminal!, label: e.target.value })} placeholder="Till 1" />
+        <Modal open={!!terminal} onClose={() => setTerminal(null)} title={tr('New terminal')}>
+          <Field label={tr('Label')}>
+            <Input value={terminal?.label ?? ''} onChange={(e) => setTerminal({ ...terminal!, label: e.target.value })} placeholder={tr('Till 1')} />
           </Field>
           <Button
             onClick={() =>
               api
                 .post(`/api/v1/locations/${terminal!.locationId}/terminals`, { label: terminal!.label })
                 .then(() => {
-                  toast('Terminal added', 'success');
+                  toast(tr('Terminal added'), 'success');
                   setTerminal(null);
                   locations.reload();
                 })
                 .catch(err)
             }
           >
-            Add
+            {tr('Add')}
           </Button>
         </Modal>
       </div>
@@ -549,10 +549,11 @@ function Institution({ toast, err, purposes, currencies }: { toast: any; err: (e
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h3>Institution registration</h3>
+        <h3>{tr('Institution registration')}</h3>
         <p className="small muted">
-          Schools, hospitals, utilities, landlords, government services and NGOs receive purpose-locked payments from the diaspora at a published rate. Verification by BitriPay is required before the
-          first payment.
+          {tr(
+            'Schools, hospitals, utilities, landlords, government services and NGOs receive purpose-locked payments from the diaspora at a published rate. Verification by BitriPay is required before the first payment.',
+          )}
         </p>
         {me.data && (
           <Alert kind={me.data.status === 'verified' ? 'success' : 'warning'}>
@@ -560,21 +561,21 @@ function Institution({ toast, err, purposes, currencies }: { toast: any; err: (e
           </Alert>
         )}
         <div className="grid cols-2">
-          <Field label="Kind">
+          <Field label={tr('Kind')}>
             <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
               {['school', 'hospital', 'utility', 'government', 'ngo', 'landlord', 'cooperative'].map((k) => (
                 <option key={k}>{k}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Registry reference">
+          <Field label={tr('Registry reference')}>
             <Input value={form.registryRef} onChange={(e) => setForm({ ...form, registryRef: e.target.value })} placeholder="MINEDUC-KIN-0042" />
           </Field>
         </div>
-        <Field label="Official name">
+        <Field label={tr('Official name')}>
           <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
-        <Field label="Purposes">
+        <Field label={tr('Purposes')}>
           <div className="row wrap">
             {restricted.map((p) => (
               <Chip
@@ -592,28 +593,28 @@ function Institution({ toast, err, purposes, currencies }: { toast: any; err: (e
             api
               .post('/api/v1/institutions', { kind: form.kind, name: form.name, registryRef: form.registryRef || null, purposeCodes: form.purposeCodes })
               .then(() => {
-                toast('Registration submitted', 'success');
+                toast(tr('Registration submitted'), 'success');
                 me.reload();
               })
               .catch(err)
           }
           disabled={form.name.length < 2 || !form.purposeCodes.length}
         >
-          Submit for verification
+          {tr('Submit for verification')}
         </Button>
       </div>
       <div className="card">
-        <h3>Diaspora-Direct code</h3>
-        <p className="small muted">A “DD” flagged code your payers abroad scan; the app quotes at the published rate card and locks the payment to your purpose.</p>
+        <h3>{tr('Diaspora-Direct code')}</h3>
+        <p className="small muted">{tr('A “DD” flagged code your payers abroad scan; the app quotes at the published rate card and locks the payment to your purpose.')}</p>
         <div className="grid cols-2">
-          <Field label="Purpose">
+          <Field label={tr('Purpose')}>
             <Select value={qr.purposeCode} onChange={(e) => setQr({ ...qr, purposeCode: e.target.value })}>
               {(me.data?.purposeCodes ?? ['SCHOOL']).map((c: string) => (
                 <option key={c}>{c}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Currency">
+          <Field label={tr('Currency')}>
             <Select value={qr.currency} onChange={(e) => setQr({ ...qr, currency: e.target.value })}>
               {currencies.map((c) => (
                 <option key={c}>{c}</option>
@@ -621,7 +622,7 @@ function Institution({ toast, err, purposes, currencies }: { toast: any; err: (e
             </Select>
           </Field>
         </div>
-        <Field label="Reference">
+        <Field label={tr('Reference')}>
           <Input value={qr.reference} onChange={(e) => setQr({ ...qr, reference: e.target.value })} placeholder="FEES-2026-T1" />
         </Field>
         <Button
@@ -630,15 +631,15 @@ function Institution({ toast, err, purposes, currencies }: { toast: any; err: (e
               .post<any>('/api/v1/institutions/me/qr', { purposeCode: qr.purposeCode, currency: qr.currency, reference: qr.reference || null })
               .then((q) => {
                 setShown(q);
-                toast('Code issued', 'success');
+                toast(tr('Code issued'), 'success');
               })
               .catch(err)
           }
           disabled={me.data?.status !== 'verified'}
         >
-          Issue DD code
+          {tr('Issue DD code')}
         </Button>
-        <Modal open={!!shown} onClose={() => setShown(null)} title="Diaspora-Direct code">
+        <Modal open={!!shown} onClose={() => setShown(null)} title={tr('Diaspora-Direct code')}>
           {shown && (
             <div style={{ textAlign: 'center' }}>
               <QrImage value={shown.qrPayload ?? shown.uri} size={280} />

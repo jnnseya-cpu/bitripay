@@ -10,6 +10,23 @@ export function Languages() {
   const [lang, setLang] = useState('en');
   const [overrides, setOverrides] = useState('');
   const current = useAsync(() => api.get<{ overrides: Record<string, string> }>(`/api/admin/translations/${lang}`), [lang]);
+  const status = useAsync(
+    () => api.get<{ total: number; translated: number; missing: number; fallback: string | null; engineReady: boolean; model: string }>(`/api/admin/translations/${lang}/status`),
+    [lang, current.data],
+  );
+  const [translating, setTranslating] = useState(false);
+  const runEngine = async () => {
+    setTranslating(true);
+    try {
+      const r = await api.post<{ stored: number; rejected: string[]; missing: number }>(`/api/admin/translations/${lang}/translate`, {});
+      toast(`${r.stored} phrase(s) translated${r.rejected.length ? `, ${r.rejected.length} refused (placeholders)` : ''}; ${r.missing} still missing`, 'success');
+      current.reload();
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    } finally {
+      setTranslating(false);
+    }
+  };
   useEffect(() => {
     if (current.data) setOverrides(JSON.stringify(current.data.overrides, null, 2));
   }, [current.data]);
@@ -78,9 +95,41 @@ export function Languages() {
               ))}
             </Select>
           </Field>
+          {status.data && (
+            <div className="card soft compact mb">
+              <div className="row between wrap">
+                <div>
+                  <b>
+                    {status.data.translated} / {status.data.total}
+                  </b>{' '}
+                  phrases of the app translated
+                  {status.data.missing > 0 && (
+                    <span className="muted">
+                      {' '}
+                      · {status.data.missing} shown in {status.data.fallback ? `${status.data.fallback.toUpperCase()} (fallback)` : 'English'}
+                    </span>
+                  )}
+                </div>
+                {lang !== 'en' && status.data.missing > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={runEngine}
+                    loading={translating}
+                    disabled={!status.data.engineReady}
+                    title={status.data.engineReady ? `Model ${status.data.model}` : 'Configure the content agent key under Blog & SEO first'}
+                  >
+                    Translate missing phrases
+                  </Button>
+                )}
+              </div>
+              <p className="tiny muted" style={{ margin: '6px 0 0' }}>
+                The engine translates only what is missing, keeps placeholders and product names, and stores the result below as overrides you can correct by hand. French ships hand-written.
+              </p>
+            </div>
+          )}
           <Alert kind="info">
             JSON map of key → text, e.g. <code>{'{"nav.send": "Transfer funds", "landing.hero": "Pay with a scan"}'}</code>. Keys match the app dictionaries (nav.*, common.*, auth.*, dash.*, send.*,
-            receive.*, scan.*, addMoney.*, withdraw.*, settings.*, landing.*).
+            receive.*, scan.*, addMoney.*, withdraw.*, settings.*, landing.*) or the English phrase itself for sentences of the app (e.g. <code>{'{"Add money": "Ajouter des fonds"}'}</code>).
           </Alert>
           <Textarea value={overrides} onChange={(e) => setOverrides(e.target.value)} style={{ minHeight: 260, fontFamily: 'monospace' }} />
           <div className="mt">

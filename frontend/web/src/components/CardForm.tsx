@@ -1,4 +1,5 @@
 import { detectCardBrand, formatCardNumber, luhnCheck } from '@bitripay/shared';
+import { tr } from '../lib/i18n';
 import { Field, Input } from './ui';
 
 export interface CardValues {
@@ -14,7 +15,7 @@ export function CardForm({ value, onChange }: { value: CardValues; onChange: (v:
   const valid = value.number.replace(/\s/g, '').length >= 12 && luhnCheck(value.number);
   return (
     <div>
-      <Field label="Card number" error={value.number.replace(/\s/g, '').length >= 12 && !valid ? 'Invalid card number' : null}>
+      <Field label={tr('Card number')} error={value.number.replace(/\s/g, '').length >= 12 && !valid ? 'Invalid card number' : null}>
         <div className="input-group">
           <input
             className="input mono"
@@ -30,7 +31,7 @@ export function CardForm({ value, onChange }: { value: CardValues; onChange: (v:
         </div>
       </Field>
       <div className="grid cols-3">
-        <Field label="Month">
+        <Field label={tr('Month')}>
           <Input
             inputMode="numeric"
             placeholder="MM"
@@ -40,7 +41,7 @@ export function CardForm({ value, onChange }: { value: CardValues; onChange: (v:
             onChange={(e) => onChange({ ...value, expMonth: e.target.value.replace(/\D/g, '') })}
           />
         </Field>
-        <Field label="Year">
+        <Field label={tr('Year')}>
           <Input
             inputMode="numeric"
             placeholder="YY"
@@ -54,7 +55,7 @@ export function CardForm({ value, onChange }: { value: CardValues; onChange: (v:
           <Input inputMode="numeric" placeholder="123" maxLength={4} autoComplete="cc-csc" value={value.cvc} onChange={(e) => onChange({ ...value, cvc: e.target.value.replace(/\D/g, '') })} />
         </Field>
       </div>
-      <Field label="Name on card">
+      <Field label={tr('Name on card')}>
         <Input autoComplete="cc-name" value={value.holderName} onChange={(e) => onChange({ ...value, holderName: e.target.value })} />
       </Field>
     </div>

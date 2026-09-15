@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { Alert, Button } from './ui';
 
 declare global {
@@ -57,7 +58,7 @@ export function StripePayment({ clientSecret, publishableKey, onComplete }: { cl
       {error && <Alert kind="error">{error}</Alert>}
       <div ref={mount} className="mb" />
       <Button block loading={loading} disabled={!ready} onClick={confirm}>
-        Pay securely
+        {tr('Pay securely')}
       </Button>
     </div>
   );

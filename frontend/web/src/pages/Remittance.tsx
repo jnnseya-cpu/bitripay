@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, AmountInput, Button, Empty, Field, Input, KV, PageHeader, PinModal, Select, StatusBadge, Tabs, useAsync, useDebounce } from '../components/ui';
 import { currencyFlag } from '@bitripay/shared';
 
@@ -78,12 +78,12 @@ export function Remittance() {
 
   return (
     <div>
-      <PageHeader title={t('nav.remittance')} subtitle="Send money abroad to a BitriPay wallet, a bank account or for cash pickup at an agent" />
+      <PageHeader title={t('nav.remittance')} subtitle={tr('Send money abroad to a BitriPay wallet, a bank account or for cash pickup at an agent')} />
       <Tabs
         tabs={[
-          { id: 'send', label: 'Send' },
-          { id: 'history', label: 'History' },
-          { id: 'recipients', label: 'Saved recipients' },
+          { id: 'send', label: tr('Send') },
+          { id: 'history', label: tr('History') },
+          { id: 'recipients', label: tr('Saved recipients') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -92,7 +92,7 @@ export function Remittance() {
         <div className="grid cols-2">
           <div className="card">
             {error && <Alert kind="error">{error}</Alert>}
-            <Field label="You send">
+            <Field label={tr('You send')}>
               <AmountInput amount={amount} currency={from} onAmount={setAmount} onCurrency={setFrom} big />
             </Field>
             <Field label="Recipient receives in">
@@ -112,13 +112,13 @@ export function Remittance() {
                 <KV k="Recipient gets" v={<b style={{ color: 'var(--success)' }}>{money(quote.targetAmount, to)}</b>} />
               </div>
             )}
-            <Field label="Payout method">
+            <Field label={tr('Payout method')}>
               <Tabs
                 pills
                 tabs={[
-                  { id: 'wallet', label: 'BitriPay wallet' },
-                  { id: 'bank', label: 'Bank transfer' },
-                  { id: 'cash_pickup', label: 'Cash pickup' },
+                  { id: 'wallet', label: tr('BitriPay wallet') },
+                  { id: 'bank', label: tr('Bank transfer') },
+                  { id: 'cash_pickup', label: tr('Cash pickup') },
                 ]}
                 value={method}
                 onChange={(m) => setMethod(m as Method)}
@@ -131,9 +131,9 @@ export function Remittance() {
             </p>
           </div>
           <div className="card">
-            <h3>Recipient</h3>
+            <h3>{tr('Recipient')}</h3>
             {recipients.data && recipients.data.items.length > 0 && (
-              <Field label="Saved recipients">
+              <Field label={tr('Saved recipients')}>
                 <div className="row wrap">
                   {recipients.data.items.map((r) => (
                     <span key={r.id} className="chip clickable" onClick={() => pickRecipient(r)}>
@@ -143,10 +143,10 @@ export function Remittance() {
                 </div>
               </Field>
             )}
-            <Field label="Full name">
+            <Field label={tr('Full name')}>
               <Input value={rec.name} onChange={(e) => setRec({ ...rec, name: e.target.value })} />
             </Field>
-            <Field label="Country">
+            <Field label={tr('Country')}>
               <Select value={rec.country} onChange={(e) => setRec({ ...rec, country: e.target.value })}>
                 <option value="">—</option>
                 {(config?.countries ?? []).map((c) => (
@@ -157,41 +157,41 @@ export function Remittance() {
               </Select>
             </Field>
             {method === 'wallet' && (
-              <Field label="BitriPay @tag, email or phone">
+              <Field label={tr('BitriPay @tag, email or phone')}>
                 <Input value={rec.tag} onChange={(e) => setRec({ ...rec, tag: e.target.value })} placeholder="@family" />
               </Field>
             )}
             {method === 'bank' && (
               <>
-                <Field label="Bank name">
+                <Field label={tr('Bank name')}>
                   <Input value={rec.bankName} onChange={(e) => setRec({ ...rec, bankName: e.target.value })} />
                 </Field>
-                <Field label="Account number / IBAN">
+                <Field label={tr('Account number / IBAN')}>
                   <Input value={rec.accountNumber} onChange={(e) => setRec({ ...rec, accountNumber: e.target.value })} />
                 </Field>
-                <Field label="SWIFT / BIC (optional)">
+                <Field label={tr('SWIFT / BIC (optional)')}>
                   <Input value={rec.swift} onChange={(e) => setRec({ ...rec, swift: e.target.value })} />
                 </Field>
               </>
             )}
             {method === 'cash_pickup' && (
-              <Field label="Recipient ID number" hint="The agent checks this ID before paying out">
+              <Field label={tr('Recipient ID number')} hint={tr('The agent checks this ID before paying out')}>
                 <Input value={rec.idNumber} onChange={(e) => setRec({ ...rec, idNumber: e.target.value })} />
               </Field>
             )}
             <div className="grid cols-2">
-              <Field label="Phone">
+              <Field label={tr('Phone')}>
                 <Input value={rec.phone} onChange={(e) => setRec({ ...rec, phone: e.target.value })} />
               </Field>
-              <Field label="Email">
+              <Field label={tr('Email')}>
                 <Input value={rec.email} onChange={(e) => setRec({ ...rec, email: e.target.value })} />
               </Field>
             </div>
             <label className="checkbox mb">
-              <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} /> Save recipient for next time
+              <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} /> {tr('Save recipient for next time')}
             </label>
             <Button block size="lg" disabled={!quote || !rec.name} onClick={() => setPinOpen(true)}>
-              Send {quote ? money(quote.targetAmount, to) : ''}
+              {tr('Send')} {quote ? money(quote.targetAmount, to) : ''}
             </Button>
           </div>
         </div>
@@ -229,10 +229,10 @@ export function Remittance() {
                   </div>
                 </div>
                 <Button size="sm" onClick={() => pickRecipient(r)}>
-                  Send
+                  {tr('Send')}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => api.del(`/api/recipients/${r.id}`).then(recipients.reload)}>
-                  Remove
+                  {tr('Remove')}
                 </Button>
               </div>
             ))}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, Field, Input, KV, Modal, PageHeader, Select, useAsync } from '../components/ui';
 import { currencyFlag } from '@bitripay/shared';
 
@@ -26,11 +26,11 @@ export function Savings() {
       .put<any>('/api/savings/settings', patch)
       .then(() => {
         overview.reload();
-        toast('Savings settings saved', 'success');
+        toast(tr('Savings settings saved'), 'success');
       })
       .catch(err);
   const createGoal = () => {
-    if (!goalForm.name.trim()) return toast('Give the goal a name', 'error');
+    if (!goalForm.name.trim()) return toast(tr('Give the goal a name'), 'error');
     api
       .post<any>('/api/savings/goals', {
         name: goalForm.name,
@@ -41,7 +41,7 @@ export function Savings() {
       .then(() => {
         setGoalForm({ ...goalForm, name: '', target: '', deadline: '' });
         overview.reload();
-        toast('Goal created', 'success');
+        toast(tr('Goal created'), 'success');
       })
       .catch(err);
   };
@@ -67,7 +67,7 @@ export function Savings() {
       .then(() => {
         overview.reload();
         refreshWallets();
-        toast('Goal closed', 'success');
+        toast(tr('Goal closed'), 'success');
       })
       .catch(err);
   };
@@ -78,19 +78,21 @@ export function Savings() {
     <div>
       <PageHeader
         title={t('nav.savings')}
-        subtitle="Money you set aside stays in your wallet but cannot be spent by accident. The anchor puts at least 10% of everything you receive into your goal; round-ups sweep the change of every payment."
+        subtitle={tr(
+          'Money you set aside stays in your wallet but cannot be spent by accident. The anchor puts at least 10% of everything you receive into your goal; round-ups sweep the change of every payment.',
+        )}
       />
       {overview.error && <Alert kind="error">{overview.error}</Alert>}
       <div className="grid cols-2">
         <div className="card">
-          <h3>Living within your means</h3>
+          <h3>{tr('Living within your means')}</h3>
           {wb ? (
             <>
               <div className="row" style={{ alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <Chip kind={stateKind(wb.overall)}>{wb.overall === 'green' ? 'On track' : wb.overall === 'amber' ? 'Watch your spending' : 'Spending more than you receive'}</Chip>
+                <Chip kind={stateKind(wb.overall)}>{wb.overall === 'green' ? tr('On track') : wb.overall === 'amber' ? tr('Watch your spending') : tr('Spending more than you receive')}</Chip>
                 <span className="sub-text">last {wb.days} days</span>
               </div>
-              {wb.currencies.length === 0 && <Empty icon="🌱" text="No completed movements in the last 30 days yet." />}
+              {wb.currencies.length === 0 && <Empty icon="🌱" text={tr('No completed movements in the last 30 days yet.')} />}
               {wb.currencies.map((c: any) => (
                 <div key={c.currency} className="list-item" style={{ display: 'block' }}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -104,8 +106,10 @@ export function Savings() {
                     <Alert kind={c.state === 'red' ? 'error' : 'warning'}>
                       <div>{c.plan.message}</div>
                       <div style={{ marginTop: 6 }}>
-                        Set aside <strong>{money(c.plan.weeklySavingMinor, c.currency)}</strong> a week.
-                        {c.plan.cutFrom.length > 0 && <> Trim: {c.plan.cutFrom.map((x: any) => `${x.type.replace(/_/g, ' ')} by ${money(x.reduceByMinor, c.currency)}`).join(', ')}.</>}
+                        {tr('Set aside')} <strong>{money(c.plan.weeklySavingMinor, c.currency)}</strong> a week.
+                        {c.plan.cutFrom.length > 0 && (
+                          <> {tr('Trim: {0}.', { 0: c.plan.cutFrom.map((x: any) => `${x.type.replace(/_/g, ' ')} by ${money(x.reduceByMinor, c.currency)}`).join(', ') })}</>
+                        )}
                       </div>
                     </Alert>
                   )}
@@ -113,18 +117,18 @@ export function Savings() {
               ))}
             </>
           ) : (
-            <div className="sub-text">Loading…</div>
+            <div className="sub-text">{tr('Loading…')}</div>
           )}
         </div>
         <div className="card">
-          <h3>Automatic saving</h3>
+          <h3>{tr('Automatic saving')}</h3>
           {s && (
             <>
               <label className="row" style={{ gap: 8, alignItems: 'center' }}>
                 <input type="checkbox" checked={s.autoAnchor} onChange={(e) => saveSettings({ autoAnchor: e.target.checked })} />
-                <span>Anchor {s.anchorBps / 100}% of every income into my default goal</span>
+                <span>{tr('Anchor {0}% of every income into my default goal', { 0: s.anchorBps / 100 })}</span>
               </label>
-              <Field label="Anchor share" hint={`Never below ${overview.data.minimumAnchorBps / 100}%; at most 50%.`}>
+              <Field label={tr('Anchor share')} hint={`Never below ${overview.data.minimumAnchorBps / 100}%; at most 50%.`}>
                 <Select value={s.anchorBps} onChange={(e) => saveSettings({ anchorBps: Number(e.target.value) })}>
                   {[1000, 1500, 2000, 2500, 3000, 4000, 5000].map((b) => (
                     <option key={b} value={b}>
@@ -135,7 +139,7 @@ export function Savings() {
               </Field>
               <label className="row" style={{ gap: 8, alignItems: 'center' }}>
                 <input type="checkbox" checked={s.roundUps} onChange={(e) => saveSettings({ roundUps: e.target.checked })} />
-                <span>Round up every payment and keep the change</span>
+                <span>{tr('Round up every payment and keep the change')}</span>
               </label>
               <Field label="Round to">
                 <Select value={s.roundToMinor} onChange={(e) => saveSettings({ roundToMinor: Number(e.target.value) })}>
@@ -144,7 +148,7 @@ export function Savings() {
                   <option value={1000}>nearest 10.00</option>
                 </Select>
               </Field>
-              <Field label="Default goal">
+              <Field label={tr('Default goal')}>
                 <Select value={s.defaultGoalId ?? ''} onChange={(e) => saveSettings({ defaultGoalId: e.target.value || null })}>
                   <option value="">— none —</option>
                   {goals.map((g) => (
@@ -156,10 +160,12 @@ export function Savings() {
               </Field>
               {Object.keys(setAside).length > 0 && (
                 <div className="sub-text">
-                  Set aside:{' '}
-                  {Object.entries(setAside)
-                    .map(([c, m]) => money(m as number, c))
-                    .join(' · ')}
+                  {tr('Set aside:{0} {1}', {
+                    0: ' ',
+                    1: Object.entries(setAside)
+                      .map(([c, m]) => money(m as number, c))
+                      .join(' · '),
+                  })}
                 </div>
               )}
             </>
@@ -167,8 +173,8 @@ export function Savings() {
         </div>
       </div>
       <div className="card">
-        <h3>Goals</h3>
-        {goals.length === 0 && <Empty icon="🎯" text="No goal yet. Create one below and the anchor starts working." />}
+        <h3>{tr('Goals')}</h3>
+        {goals.length === 0 && <Empty icon="🎯" text={tr('No goal yet. Create one below and the anchor starts working.')} />}
         {goals.map((g) => (
           <div key={g.id} className="list-item" style={{ display: 'block' }}>
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -190,7 +196,7 @@ export function Savings() {
                     setAmount('');
                   }}
                 >
-                  Set aside
+                  {tr('Set aside')}
                 </Button>
                 <Button
                   size="sm"
@@ -201,10 +207,10 @@ export function Savings() {
                     setAmount('');
                   }}
                 >
-                  Release
+                  {tr('Release')}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => closeGoal(g)}>
-                  Close
+                  {tr('Close')}
                 </Button>
               </div>
             </div>
@@ -216,7 +222,7 @@ export function Savings() {
             <div className="sub-text" style={{ marginTop: 4 }}>
               {g.projection.weeklyPaceMinor > 0 ? (
                 <>
-                  Pace {money(g.projection.weeklyPaceMinor, g.currency)} a week
+                  {tr('Pace')} {money(g.projection.weeklyPaceMinor, g.currency)} a week
                   {g.projection.weeksToTarget !== null && g.projection.weeksToTarget > 0 && <> · about {g.projection.weeksToTarget} weeks to go</>}
                   {g.projection.onTrack === false && (
                     <>
@@ -231,12 +237,12 @@ export function Savings() {
             </div>
           </div>
         ))}
-        <h4 style={{ marginTop: 16 }}>New goal</h4>
+        <h4 style={{ marginTop: 16 }}>{tr('New goal')}</h4>
         <div className="grid cols-2">
-          <Field label="Name">
-            <Input value={goalForm.name} onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} placeholder="School fees, a moto, stock for the shop…" />
+          <Field label={tr('Name')}>
+            <Input value={goalForm.name} onChange={(e) => setGoalForm({ ...goalForm, name: e.target.value })} placeholder={tr('School fees, a moto, stock for the shop…')} />
           </Field>
-          <Field label="Currency">
+          <Field label={tr('Currency')}>
             <Select value={goalForm.currency} onChange={(e) => setGoalForm({ ...goalForm, currency: e.target.value })}>
               {wallets.map((w) => (
                 <option key={w.currency} value={w.currency}>
@@ -245,28 +251,28 @@ export function Savings() {
               ))}
             </Select>
           </Field>
-          <Field label="Target (optional)">
+          <Field label={tr('Target (optional)')}>
             <Input inputMode="decimal" value={goalForm.target} onChange={(e) => setGoalForm({ ...goalForm, target: e.target.value })} placeholder="0.00" />
           </Field>
-          <Field label="Deadline (optional)">
+          <Field label={tr('Deadline (optional)')}>
             <Input type="date" value={goalForm.deadline} onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })} />
           </Field>
         </div>
-        <Button onClick={createGoal}>Create goal</Button>
+        <Button onClick={createGoal}>{tr('Create goal')}</Button>
       </div>
       <Modal open={!!move} onClose={() => setMove(null)} title={move?.dir === 'contribute' ? `Set aside into ${move?.goal.name}` : `Release from ${move?.goal.name}`}>
         {move && (
           <>
             <p className="sub-text">
               {move.dir === 'contribute'
-                ? 'The amount stays in your wallet but is ring-fenced: it cannot be spent until you release it.'
+                ? tr('The amount stays in your wallet but is ring-fenced: it cannot be spent until you release it.')
                 : `Up to ${money(move.goal.savedMinor, move.goal.currency)} can go back to your spendable balance.`}
             </p>
             <Field label={`Amount (${move.goal.currency})`}>
               <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" autoFocus />
             </Field>
             <Button block loading={busy} onClick={submitMove}>
-              {move.dir === 'contribute' ? 'Set aside' : 'Release'}
+              {move.dir === 'contribute' ? tr('Set aside') : tr('Release')}
             </Button>
           </>
         )}

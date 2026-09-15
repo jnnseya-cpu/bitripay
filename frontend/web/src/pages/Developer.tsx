@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -31,35 +32,35 @@ export function Developer() {
   if (!isMerchantClass(user?.role) && user?.role !== 'admin' && clientWorkspaces.length === 0)
     return (
       <Alert kind="info">
-        The developer portal is for merchant and developer accounts, and for developers invited into a client's organisation. <Link to="/app/merchant">Upgrade</Link> first, or ask your client to add
-        you under Command centre → Team with the developer role.
+        {tr("The developer portal is for merchant and developer accounts, and for developers invited into a client's organisation.")} <Link to="/app/merchant">{tr('Upgrade')}</Link> first, or ask your
+        client to add you under Command centre → Team with the developer role.
       </Alert>
     );
   const allTypes: string[] = types.data?.data ?? types.data?.types ?? [];
   return (
     <div>
       <PageHeader
-        title="Developer portal"
+        title={tr('Developer portal')}
         subtitle={
           workspace
             ? `Working for ${workspace.name} as ${workspace.role.replace(/_/g, ' ')}: the keys, webhooks and events below belong to that organisation.`
             : clientWorkspaces.length && !isMerchantClass(user?.role)
               ? `Working for ${clientWorkspaces[0].name}: pick a client in the workspace selector at the top when you integrate several.`
-              : 'One integration, every eligible rail. Keys, webhooks, events, sandbox and docs.'
+              : tr('One integration, every eligible rail. Keys, webhooks, events, sandbox and docs.')
         }
         actions={
           <a className="btn secondary" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">
-            OpenAPI ↗
+            {tr('OpenAPI ↗')}
           </a>
         }
       />
       <Tabs
         tabs={[
-          { id: 'keys', label: 'API keys' },
-          { id: 'webhooks', label: 'Webhooks' },
-          { id: 'events', label: 'Events' },
-          { id: 'sandbox', label: 'Sandbox' },
-          { id: 'docs', label: 'Docs & SDKs' },
+          { id: 'keys', label: tr('API keys') },
+          { id: 'webhooks', label: tr('Webhooks') },
+          { id: 'events', label: tr('Events') },
+          { id: 'sandbox', label: tr('Sandbox') },
+          { id: 'docs', label: tr('Docs & SDKs') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -67,23 +68,23 @@ export function Developer() {
       {tab === 'keys' && (
         <div className="grid cols-2">
           <div className="card">
-            <h3>New key</h3>
+            <h3>{tr('New key')}</h3>
             <p className="small muted">
               <b>sk_</b> secret keys act for your whole account; <b>rk_</b> restricted keys carry only the scopes you tick; <b>pk_</b> publishable keys are safe in browsers and apps. Test keys only
               touch the sandbox.
             </p>
             <div className="grid cols-2">
-              <Field label="Label">
-                <Input value={key.label} onChange={(e) => setKey({ ...key, label: e.target.value })} placeholder="Shop backend" />
+              <Field label={tr('Label')}>
+                <Input value={key.label} onChange={(e) => setKey({ ...key, label: e.target.value })} placeholder={tr('Shop backend')} />
               </Field>
-              <Field label="Kind">
+              <Field label={tr('Kind')}>
                 <Select value={key.kind} onChange={(e) => setKey({ ...key, kind: e.target.value })}>
                   <option value="secret">secret (sk_)</option>
                   <option value="restricted">restricted (rk_)</option>
                   <option value="publishable">publishable (pk_)</option>
                 </Select>
               </Field>
-              <Field label="Mode">
+              <Field label={tr('Mode')}>
                 <Select value={key.mode} onChange={(e) => setKey({ ...key, mode: e.target.value })}>
                   <option value="test">test</option>
                   <option value="live">live</option>
@@ -91,7 +92,7 @@ export function Developer() {
               </Field>
             </div>
             {key.kind === 'restricted' && (
-              <Field label="Scopes">
+              <Field label={tr('Scopes')}>
                 <div className="row wrap">
                   {(scopes.data?.data ?? scopes.data?.scopes ?? []).map((s: string) => (
                     <Chip
@@ -117,10 +118,10 @@ export function Developer() {
               }
               disabled={key.label.length < 2}
             >
-              Create key
+              {tr('Create key')}
             </Button>
-            <Modal open={!!created} onClose={() => setCreated(null)} title="Your new key">
-              <Alert kind="warning">Copy it now — it is shown once.</Alert>
+            <Modal open={!!created} onClose={() => setCreated(null)} title={tr('Your new key')}>
+              <Alert kind="warning">{tr('Copy it now — it is shown once.')}</Alert>
               <div className="card soft compact mono small" style={{ wordBreak: 'break-all' }}>
                 {created?.secret ?? created?.key ?? created?.apiKey?.secret}
               </div>
@@ -130,8 +131,8 @@ export function Developer() {
             </Modal>
           </div>
           <div className="card">
-            <h3>Keys</h3>
-            {(keys.data?.data ?? keys.data?.items ?? []).length === 0 && <Empty icon="🔑" text="No keys yet" />}
+            <h3>{tr('Keys')}</h3>
+            {(keys.data?.data ?? keys.data?.items ?? []).length === 0 && <Empty icon="🔑" text={tr('No keys yet')} />}
             <div className="list">
               {(keys.data?.data ?? keys.data?.items ?? []).map((k: any) => (
                 <div key={k.id} className="list-item">
@@ -145,7 +146,7 @@ export function Developer() {
                     </div>
                   </div>
                   <Button size="sm" variant="ghost" onClick={() => api.del(`/api/v1/api_keys/${k.id}`).then(keys.reload).catch(err)}>
-                    Revoke
+                    {tr('Revoke')}
                   </Button>
                 </div>
               ))}
@@ -156,19 +157,20 @@ export function Developer() {
       {tab === 'webhooks' && (
         <div className="grid cols-2">
           <div className="card">
-            <h3>Endpoints</h3>
+            <h3>{tr('Endpoints')}</h3>
             <p className="small muted">
-              Every delivery carries <code>BitriPay-Signature</code> (HMAC, <code>t=…,v1=…</code>, 5-minute tolerance) and <code>BitriPay-Signature-Ed25519</code> (platform key from{' '}
+              {tr('Every delivery carries')} <code>{tr('BitriPay-Signature')}</code> (HMAC, <code>t=…,v1=…</code>, 5-minute tolerance) and <code>BitriPay-Signature-Ed25519</code> (platform key from{' '}
               <code>/v1/keys</code>). Retries: 10s, 30s, 2m, 10m, 30m, then every 2h for 24h; dead letters can be replayed here.
             </p>
             <p className="tiny muted" data-testid="standards">
-              Standards: the Ed25519 signature is <a href="https://www.rfc-editor.org/rfc/rfc8032">RFC 8032</a> over the raw body; HTTP semantics, status codes and idempotent methods follow{' '}
-              <a href="https://www.rfc-editor.org/rfc/rfc9110">RFC 9110</a>; bearer tokens issued to your users are JSON Web Tokens (<a href="https://www.rfc-editor.org/rfc/rfc7519">RFC 7519</a>).
+              {tr('Standards: the Ed25519 signature is')} <a href="https://www.rfc-editor.org/rfc/rfc8032">{tr('RFC 8032')}</a> over the raw body; HTTP semantics, status codes and idempotent methods
+              follow <a href="https://www.rfc-editor.org/rfc/rfc9110">{tr('RFC 9110')}</a>; bearer tokens issued to your users are JSON Web Tokens (
+              <a href="https://www.rfc-editor.org/rfc/rfc7519">{tr('RFC 7519')}</a>).
             </p>
             <Field label="URL">
               <Input value={ep.url} onChange={(e) => setEp({ ...ep, url: e.target.value })} placeholder="https://shop.example/webhooks/bitripay" />
             </Field>
-            <Field label="Events">
+            <Field label={tr('Events')}>
               <div className="row wrap">
                 {allTypes.map((t: string) => (
                   <Chip
@@ -193,10 +195,10 @@ export function Developer() {
               }
               disabled={!/^https?:\/\//.test(ep.url)}
             >
-              Add endpoint
+              {tr('Add endpoint')}
             </Button>
-            <Modal open={!!epSecret} onClose={() => setEpSecret(null)} title="Endpoint secret">
-              <Alert kind="warning">Store this signing secret now.</Alert>
+            <Modal open={!!epSecret} onClose={() => setEpSecret(null)} title={tr('Endpoint secret')}>
+              <Alert kind="warning">{tr('Store this signing secret now.')}</Alert>
               <div className="card soft compact mono small">{epSecret?.secret}</div>
               <CopyButton text={epSecret?.secret ?? ''} />
             </Modal>
@@ -216,11 +218,11 @@ export function Developer() {
                       onClick={() =>
                         api
                           .post(`/api/v1/webhook_endpoints/${e.id}/ping`, {})
-                          .then(() => toast('Ping sent', 'success'))
+                          .then(() => toast(tr('Ping sent'), 'success'))
                           .catch(err)
                       }
                     >
-                      Ping
+                      {tr('Ping')}
                     </Button>
                     <Button
                       size="sm"
@@ -232,10 +234,10 @@ export function Developer() {
                           .catch(err)
                       }
                     >
-                      Rotate
+                      {tr('Rotate')}
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => api.del(`/api/v1/webhook_endpoints/${e.id}`).then(endpoints.reload).catch(err)}>
-                      Delete
+                      {tr('Delete')}
                     </Button>
                   </div>
                 </div>
@@ -243,8 +245,8 @@ export function Developer() {
             </div>
           </div>
           <div className="card">
-            <h3>Deliveries</h3>
-            {(deliveries.data?.data ?? deliveries.data?.items ?? []).length === 0 && <Empty icon="📬" text="No deliveries yet" />}
+            <h3>{tr('Deliveries')}</h3>
+            {(deliveries.data?.data ?? deliveries.data?.items ?? []).length === 0 && <Empty icon="📬" text={tr('No deliveries yet')} />}
             <div className="list">
               {(deliveries.data?.data ?? deliveries.data?.items ?? []).map((d: any) => (
                 <div key={d.id} className="list-item">
@@ -263,13 +265,13 @@ export function Developer() {
                         api
                           .post(`/api/v1/webhook_deliveries/${d.id}/replay`, {})
                           .then(() => {
-                            toast('Replayed', 'success');
+                            toast(tr('Replayed'), 'success');
                             deliveries.reload();
                           })
                           .catch(err)
                       }
                     >
-                      Replay
+                      {tr('Replay')}
                     </Button>
                   )}
                 </div>
@@ -280,7 +282,7 @@ export function Developer() {
       )}
       {tab === 'events' && (
         <div className="card">
-          <h3>Events</h3>
+          <h3>{tr('Events')}</h3>
           <div className="list">
             {(events.data?.data ?? []).map((e: any) => (
               <div key={e.id} className="list-item">
@@ -296,21 +298,21 @@ export function Developer() {
                   onClick={() =>
                     api
                       .post(`/api/v1/events/${e.id}/replay`, {})
-                      .then(() => toast('Replayed to every endpoint', 'success'))
+                      .then(() => toast(tr('Replayed to every endpoint'), 'success'))
                       .catch(err)
                   }
                 >
-                  Replay
+                  {tr('Replay')}
                 </Button>
               </div>
             ))}
           </div>
-          {events.data?.data?.length === 0 && <Empty icon="⚡" text="No events yet" />}
+          {events.data?.data?.length === 0 && <Empty icon="⚡" text={tr('No events yet')} />}
         </div>
       )}
       {tab === 'sandbox' && (
         <div className="card">
-          <h3>Sandbox</h3>
+          <h3>{tr('Sandbox')}</h3>
           <p className="small muted">Test keys drive the real intent and attempt state machine against the simulator. These numbers force outcomes:</p>
           {(sandbox.data?.magic ?? sandbox.data?.outcomes ?? []).map((m: any) => (
             <KV key={m.msisdn ?? m.value} k={<span className="mono">{m.msisdn ?? m.value}</span>} v={m.outcome ?? m.description} />
@@ -372,46 +374,49 @@ function Docs() {
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h3>Installing BitriPay for your clients</h3>
+        <h3>{tr('Installing BitriPay for your clients')}</h3>
         <p className="small muted">
-          BitriPay holds the aggregator licence; you integrate it into your clients' shops, apps and billing systems. Each client is the merchant of record: their money settles to their own settlement
-          profile and their statements are theirs. You never hold their funds and never need their password.
+          {tr(
+            "BitriPay holds the aggregator licence; you integrate it into your clients' shops, apps and billing systems. Each client is the merchant of record: their money settles to their own settlement profile and their statements are theirs. You never hold their funds and never need their password.",
+          )}
         </p>
         <ol className="small">
           <li>
-            The client opens a merchant account (<Link to="/register?role=merchant">register</Link>, or you register it with their details and they take ownership by signing in).
+            {tr('The client opens a merchant account (')}
+            <Link to="/register?role=merchant">register</Link>, or you register it with their details and they take ownership by signing in).
           </li>
           <li>
-            The client adds you under <b>Command centre → Team</b> with the <b>developer</b> role: API keys, webhooks and payment creation, nothing on settlement or exports.
+            The client adds you under <b>{tr('Command centre → Team')}</b> with the <b>developer</b> role: API keys, webhooks and payment creation, nothing on settlement or exports.
           </li>
-          <li>Pick the client in the workspace selector at the top; the keys and webhooks you create here belong to that client.</li>
+          <li>{tr('Pick the client in the workspace selector at the top; the keys and webhooks you create here belong to that client.')}</li>
           <li>
             Integrate with the hosted checkout, the embedded widget (publishable key), the WooCommerce or Shopify plugin, or the SDKs below. Use a <b>test</b> key and the sandbox magic numbers until
             the client is verified.
           </li>
-          <li>Hand over: the client can revoke your membership at any time; the keys stay theirs and keep working.</li>
+          <li>{tr('Hand over: the client can revoke your membership at any time; the keys stay theirs and keep working.')}</li>
         </ol>
         <p className="small muted">
           Your own account can also hold a merchant organisation for products you sell yourself. Register it as a <Link to="/register?role=developer">developer account</Link>.
         </p>
       </div>
       <div className="card">
-        <h3>Connected accounts: onboard your customers by API</h3>
+        <h3>{tr('Connected accounts: onboard your customers by API')}</h3>
         <p className="small muted">
           For platforms, marketplaces, billing systems and integrators with many customers. Create each customer's merchant account with one call, take their payments with your own key and the{' '}
-          <code>BitriPay-Account</code> header (every v1 operation), keep an application fee (a transparent split paid at capture), receive their events on your webhooks with <code>account</code>, and
-          hand the account over with a claim link. The customer is the merchant of record; BitriPay holds the aggregator licence. Scopes: <code>accounts:write</code>, <code>accounts:read</code>.
+          <code>{tr('BitriPay-Account')}</code> header (every v1 operation), keep an application fee (a transparent split paid at capture), receive their events on your webhooks with{' '}
+          <code>account</code>, and hand the account over with a claim link. The customer is the merchant of record; BitriPay holds the aggregator licence. Scopes: <code>accounts:write</code>,{' '}
+          <code>accounts:read</code>.
         </p>
         <pre className="code">{PLATFORM}</pre>
       </div>
       <div className="card">
-        <h3>Quick start</h3>
+        <h3>{tr('Quick start')}</h3>
         <ol className="small">
           <li>
             Create a <b>test</b> secret key under API keys.
           </li>
-          <li>Create a payment intent (amount in minor units) — you get a hosted checkout URL and a BitriQR payload.</li>
-          <li>Show the QR or redirect to the checkout; the customer pays over the eligible rail Smart Route picks.</li>
+          <li>{tr('Create a payment intent (amount in minor units) — you get a hosted checkout URL and a BitriQR payload.')}</li>
+          <li>{tr('Show the QR or redirect to the checkout; the customer pays over the eligible rail Smart Route picks.')}</li>
           <li>
             Listen to <code>payment_intent.succeeded</code> (verify both signatures), then <code>payment_intent.settled</code>.
           </li>
@@ -431,39 +436,40 @@ function Docs() {
         </pre>
         <div className="row">
           <a className="btn secondary" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">
-            OpenAPI 3.1
+            {tr('OpenAPI 3.1')}
           </a>
           <a className="btn ghost" href="/api/v1/keys" target="_blank" rel="noreferrer">
-            Key registry
+            {tr('Key registry')}
           </a>
           <a className="btn ghost" href="/api/v1/status" target="_blank" rel="noreferrer">
-            Status
+            {tr('Status')}
           </a>
         </div>
       </div>
       <div className="card">
-        <h3>Error catalogue</h3>
+        <h3>{tr('Error catalogue')}</h3>
         {errors.map(([k, v]) => (
           <KV key={k} k={<span className="mono">{k}</span>} v={v} />
         ))}
         <p className="small muted mt">
-          Every error body is <code>{'{ error: { code, bp, message, details } }'}</code>. Idempotency: send <code>Idempotency-Key</code> on every money-moving POST; a replay returns the same object
-          (200), a reuse with a different body is refused (422).
+          {tr('Every error body is')} <code>{'{ error: { code, bp, message, details } }'}</code>. Idempotency: send <code>{tr('Idempotency-Key')}</code> on every money-moving POST; a replay returns
+          the same object (200), a reuse with a different body is refused (422).
         </p>
-        <h3 className="mt">Signatures and tokens</h3>
+        <h3 className="mt">{tr('Signatures and tokens')}</h3>
         <p className="small">
-          HTTP semantics, status codes and idempotent methods follow <b>RFC 9110</b>; bearer tokens are JSON Web Tokens (<b>RFC 7519</b>) carrying the key's scopes and tenant; webhook and QR
-          signatures use Ed25519 (<b>RFC 8032</b>) with the platform public key published at <code>/v1/keys</code> and your merchant key in the BitriQR registry. Verify both webhook signatures; never
-          trust a redirect or a success screen as proof of payment – wait for <code>payment_intent.settled</code>.
+          {tr('HTTP semantics, status codes and idempotent methods follow')} <b>{tr('RFC 9110')}</b>; bearer tokens are JSON Web Tokens (<b>{tr('RFC 7519')}</b>) carrying the key's scopes and tenant;
+          webhook and QR signatures use Ed25519 (<b>{tr('RFC 8032')}</b>) with the platform public key published at <code>/v1/keys</code> and your merchant key in the BitriQR registry. Verify both
+          webhook signatures; never trust a redirect or a success screen as proof of payment – wait for <code>payment_intent.settled</code>.
         </p>
-        <h3 className="mt">Objects</h3>
+        <h3 className="mt">{tr('Objects')}</h3>
         <p className="small">
           payment_intents · checkout_sessions · payment_links · qr_codes · locations · refunds · verifications · payouts · balance · webhook_endpoints · events · settlement_profiles ·
           settlement_cycles · disputes · offline · diaspora · payments (national switch)
         </p>
         <p className="tiny muted">
-          <b>payments</b> (national switch, DRC): domestic interoperability payments are routed through the Switch Monétique National under <b>Instruction n°58</b> of the Banque Centrale du Congo.
-          BitriPay initiates, orchestrates, normalises and reports; licensed institutions hold and settle the funds. Track them under <Link to="/app/merchant/switch">National switch</Link>.
+          <b>payments</b> (national switch, DRC): domestic interoperability payments are routed through the Switch Monétique National under <b>{tr('Instruction n°58')}</b> of the Banque Centrale du
+          Congo. BitriPay initiates, orchestrates, normalises and reports; licensed institutions hold and settle the funds. Track them under{' '}
+          <Link to="/app/merchant/switch">{tr('National switch')}</Link>.
         </p>
       </div>
     </div>

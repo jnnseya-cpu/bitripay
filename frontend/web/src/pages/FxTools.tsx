@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, Field, Input, KV, PageHeader, PinModal, Select, StatusBadge, Tabs, useAsync } from '../components/ui';
 
 /** Rates & forwards: rate alerts, auto-convert rules (on receipt / sweep) and forwards that lock today's rate for a later date. */
@@ -24,7 +24,7 @@ export function FxTools() {
       .post('/api/fx-tools/alerts', { ...alert, targetRate: Number(alert.targetRate) })
       .then(() => {
         view.reload();
-        toast('Alert set', 'success');
+        toast(tr('Alert set'), 'success');
       })
       .catch(err);
   const submitRule = (p: string) => {
@@ -42,7 +42,7 @@ export function FxTools() {
       .then(() => {
         setPin(null);
         view.reload();
-        toast('Rule saved', 'success');
+        toast(tr('Rule saved'), 'success');
       })
       .catch(err)
       .finally(() => setBusy(false));
@@ -56,7 +56,7 @@ export function FxTools() {
         setPin(null);
         setQuote(null);
         view.reload();
-        toast('Rate locked', 'success');
+        toast(tr('Rate locked'), 'success');
       })
       .catch(err)
       .finally(() => setBusy(false));
@@ -68,7 +68,10 @@ export function FxTools() {
       .catch(err);
   return (
     <div>
-      <PageHeader title={t('nav.fxTools')} subtitle="Watch a rate, convert automatically on your own terms, or lock today's rate for a date you choose. Nothing converts without a rule you created." />
+      <PageHeader
+        title={t('nav.fxTools')}
+        subtitle={tr("Watch a rate, convert automatically on your own terms, or lock today's rate for a date you choose. Nothing converts without a rule you created.")}
+      />
       <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
         {(view.data?.rates ?? []).slice(0, 8).map((r: any) => (
           <Chip key={`${r.from}${r.to}`}>
@@ -78,9 +81,9 @@ export function FxTools() {
       </div>
       <Tabs
         tabs={[
-          { id: 'alerts', label: 'Rate alerts' },
-          { id: 'rules', label: 'Auto-convert' },
-          { id: 'forwards', label: 'Forwards' },
+          { id: 'alerts', label: tr('Rate alerts') },
+          { id: 'rules', label: tr('Auto-convert') },
+          { id: 'forwards', label: tr('Forwards') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -88,7 +91,7 @@ export function FxTools() {
       {tab === 'alerts' && (
         <div className="grid cols-2">
           <div className="card">
-            <h3>New alert</h3>
+            <h3>{tr('New alert')}</h3>
             <div className="grid cols-2">
               <Field label="From">
                 <Select value={alert.baseCurrency} onChange={(e) => setAlert({ ...alert, baseCurrency: e.target.value })}>
@@ -104,23 +107,23 @@ export function FxTools() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Tell me when the reference rate is">
+              <Field label={tr('Tell me when the reference rate is')}>
                 <Select value={alert.direction} onChange={(e) => setAlert({ ...alert, direction: e.target.value })}>
                   <option value="above">at or above</option>
                   <option value="below">at or below</option>
                 </Select>
               </Field>
-              <Field label="Target rate" hint={rate(alert.baseCurrency, alert.quoteCurrency) ? `now ${rate(alert.baseCurrency, alert.quoteCurrency).midRate.toFixed(4)}` : undefined}>
+              <Field label={tr('Target rate')} hint={rate(alert.baseCurrency, alert.quoteCurrency) ? `now ${rate(alert.baseCurrency, alert.quoteCurrency).midRate.toFixed(4)}` : undefined}>
                 <Input inputMode="decimal" value={alert.targetRate} onChange={(e) => setAlert({ ...alert, targetRate: e.target.value })} />
               </Field>
             </div>
             <Button onClick={addAlert} disabled={!alert.targetRate}>
-              Set alert
+              {tr('Set alert')}
             </Button>
           </div>
           <div className="card">
-            <h3>Alerts</h3>
-            {(view.data?.alerts ?? []).length === 0 && <Empty icon="🔔" text="No alert yet." />}
+            <h3>{tr('Alerts')}</h3>
+            {(view.data?.alerts ?? []).length === 0 && <Empty icon="🔔" text={tr('No alert yet.')} />}
             {(view.data?.alerts ?? []).map((a: any) => (
               <div key={a.id} className="list-item">
                 <div className="flex1">
@@ -149,7 +152,7 @@ export function FxTools() {
                         .catch(err)
                     }
                   >
-                    Remove
+                    {tr('Remove')}
                   </Button>
                 )}
               </div>
@@ -160,7 +163,7 @@ export function FxTools() {
       {tab === 'rules' && (
         <div className="grid cols-2">
           <div className="card">
-            <h3>New rule</h3>
+            <h3>{tr('New rule')}</h3>
             <div className="grid cols-2">
               <Field label="Convert from">
                 <Select value={rule.fromCurrency} onChange={(e) => setRule({ ...rule, fromCurrency: e.target.value })}>
@@ -169,21 +172,21 @@ export function FxTools() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Into">
+              <Field label={tr('Into')}>
                 <Select value={rule.toCurrency} onChange={(e) => setRule({ ...rule, toCurrency: e.target.value })}>
                   {currencies.map((c) => (
                     <option key={c}>{c}</option>
                   ))}
                 </Select>
               </Field>
-              <Field label="When">
+              <Field label={tr('When')}>
                 <Select value={rule.kind} onChange={(e) => setRule({ ...rule, kind: e.target.value })}>
                   <option value="on_receipt">money arrives (convert a share)</option>
                   <option value="sweep">the balance is above an amount to keep (hourly sweep)</option>
                 </Select>
               </Field>
               {rule.kind === 'on_receipt' ? (
-                <Field label="Share of each receipt (%)">
+                <Field label={tr('Share of each receipt (%)')}>
                   <Input inputMode="decimal" value={rule.share} onChange={(e) => setRule({ ...rule, share: e.target.value })} />
                 </Field>
               ) : (
@@ -191,15 +194,15 @@ export function FxTools() {
                   <Input inputMode="decimal" value={rule.keep} onChange={(e) => setRule({ ...rule, keep: e.target.value })} placeholder="20.00" />
                 </Field>
               )}
-              <Field label="Only if the rate is at least (optional)" hint="Below this the rule waits and tells you why.">
+              <Field label={tr('Only if the rate is at least (optional)')} hint={tr('Below this the rule waits and tells you why.')}>
                 <Input inputMode="decimal" value={rule.minRate} onChange={(e) => setRule({ ...rule, minRate: e.target.value })} />
               </Field>
             </div>
-            <Button onClick={() => setPin('rule')}>Save rule</Button>
+            <Button onClick={() => setPin('rule')}>{tr('Save rule')}</Button>
           </div>
           <div className="card">
-            <h3>Rules</h3>
-            {(view.data?.rules ?? []).length === 0 && <Empty icon="🔁" text="No rule yet." />}
+            <h3>{tr('Rules')}</h3>
+            {(view.data?.rules ?? []).length === 0 && <Empty icon="🔁" text={tr('No rule yet.')} />}
             {(view.data?.rules ?? []).map((r: any) => (
               <div key={r.id} className="list-item" style={{ display: 'block' }}>
                 <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -214,10 +217,10 @@ export function FxTools() {
                 </div>
                 <div className="row" style={{ gap: 6, marginTop: 6 }}>
                   <Button size="sm" variant="secondary" onClick={() => act(`/api/fx-tools/rules/${r.id}/${r.status === 'ACTIVE' ? 'pause' : 'resume'}`)}>
-                    {r.status === 'ACTIVE' ? 'Pause' : 'Resume'}
+                    {r.status === 'ACTIVE' ? tr('Pause') : tr('Resume')}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => act(`/api/fx-tools/rules/${r.id}/delete`)}>
-                    Delete
+                    {tr('Delete')}
                   </Button>
                 </div>
               </div>
@@ -228,8 +231,8 @@ export function FxTools() {
       {tab === 'forwards' && (
         <div className="grid cols-2">
           <div className="card">
-            <h3>Lock a rate</h3>
-            {view.data?.forwardSettings && !view.data.forwardSettings.enabled && <Alert kind="warning">Forwards are paused by the platform right now.</Alert>}
+            <h3>{tr('Lock a rate')}</h3>
+            {view.data?.forwardSettings && !view.data.forwardSettings.enabled && <Alert kind="warning">{tr('Forwards are paused by the platform right now.')}</Alert>}
             <div className="grid cols-2">
               <Field label="From">
                 <Select value={fwd.fromCurrency} onChange={(e) => setFwd({ ...fwd, fromCurrency: e.target.value })}>
@@ -245,7 +248,7 @@ export function FxTools() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Amount">
+              <Field label={tr('Amount')}>
                 <Input inputMode="decimal" value={fwd.amount} onChange={(e) => setFwd({ ...fwd, amount: e.target.value })} />
               </Field>
               <Field label="Settle on" hint={view.data?.forwardSettings ? `up to ${view.data.forwardSettings.maxTenorDays} days ahead` : undefined}>
@@ -254,9 +257,9 @@ export function FxTools() {
             </div>
             <div className="row" style={{ gap: 8 }}>
               <Button variant="secondary" onClick={getQuote} disabled={!fwd.amount || !fwd.settleOn}>
-                Quote
+                {tr('Quote')}
               </Button>
-              {quote && <Button onClick={() => setPin('forward')}>Lock {quote.rate.toFixed(4)}</Button>}
+              {quote && <Button onClick={() => setPin('forward')}>{tr('Lock {0}', { 0: quote.rate.toFixed(4) })}</Button>}
             </div>
             {quote && (
               <Alert kind="info">
@@ -268,8 +271,8 @@ export function FxTools() {
             )}
           </div>
           <div className="card">
-            <h3>Forwards</h3>
-            {(view.data?.forwards ?? []).length === 0 && <Empty icon="📅" text="No forward yet." />}
+            <h3>{tr('Forwards')}</h3>
+            {(view.data?.forwards ?? []).length === 0 && <Empty icon="📅" text={tr('No forward yet.')} />}
             {(view.data?.forwards ?? []).map((f: any) => (
               <div key={f.id} className="list-item" style={{ display: 'block' }}>
                 <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -284,10 +287,10 @@ export function FxTools() {
                 {f.status === 'LOCKED' && (
                   <div className="row" style={{ gap: 6, marginTop: 6 }}>
                     <Button size="sm" onClick={() => act(`/api/fx-tools/forwards/${f.id}/settle`)}>
-                      Settle now
+                      {tr('Settle now')}
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => act(`/api/fx-tools/forwards/${f.id}/cancel`)}>
-                      Cancel
+                      {tr('Cancel')}
                     </Button>
                   </div>
                 )}
@@ -301,7 +304,7 @@ export function FxTools() {
         onClose={() => setPin(null)}
         loading={busy}
         onSubmit={(p) => (pin === 'rule' ? submitRule(p) : lock(p))}
-        title={pin === 'rule' ? 'Confirm the standing instruction' : 'Lock this rate'}
+        title={pin === 'rule' ? tr('Confirm the standing instruction') : tr('Lock this rate')}
         summary={
           pin === 'rule'
             ? `${rule.fromCurrency} → ${rule.toCurrency}, ${rule.kind === 'on_receipt' ? `${rule.share}% of each receipt` : `sweep above ${rule.keep || '0'}`}`

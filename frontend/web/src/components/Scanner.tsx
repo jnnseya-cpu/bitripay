@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
 
 /** Camera QR scanner built on html5-qrcode; falls back to file upload on devices without camera access. */
@@ -52,7 +53,8 @@ export function Scanner({ onScan, active = true }: { onScan: (text: string) => v
       <div id={id.current} className="scanner" />
       {error && (
         <div className="alert warning mt">
-          Camera unavailable ({error}). You can upload a QR image instead:
+          {tr('Camera unavailable (')}
+          {error}). You can upload a QR image instead:
           <input
             type="file"
             accept="image/*"
@@ -65,7 +67,7 @@ export function Scanner({ onScan, active = true }: { onScan: (text: string) => v
                 const text = await s.scanFile(file, false);
                 onScan(text);
               } catch {
-                setError('Could not read a QR code from that image');
+                setError(tr('Could not read a QR code from that image'));
               }
             }}
           />

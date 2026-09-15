@@ -69,6 +69,7 @@ import { recentSms, smsHandle } from '../../services/channels/sms';
 import { getChannelSettings } from '../../services/settings';
 import { getKey, listKeys, revokeKey } from '../../services/keys';
 import { draftArticle, keywordIdeas, auditPost, socialPack, listRuns, agentStatus, outreachCandidates } from '../../services/seoAgent';
+import { translationStatus, translateMissing } from '../../services/translationEngine';
 import { getSeoSettings, getAssistSettings } from '../../services/settings';
 import { buildStatement, statementCsv, statementPdf, listStatements } from '../../services/statements';
 import {
@@ -1530,6 +1531,16 @@ adminRouter.delete('/languages/:code', requirePermission('cms'), (req, res) => {
   res.json({ ok: true });
 });
 adminRouter.get('/translations/:lang', requirePermission('cms'), (req, res) => res.json({ lang: String(req.params.lang), overrides: getTranslationOverrides(String(req.params.lang)) }));
+/** Phrase coverage of a language and the engine that fills what is missing (stored as overrides, editable by hand). */
+adminRouter.get('/translations/:lang/status', requirePermission('cms'), (req, res) => res.json(translationStatus(String(req.params.lang))));
+adminRouter.post(
+  '/translations/:lang/translate',
+  requirePermission('cms'),
+  wrap(async (req, res) => {
+    const body = validate(z.object({ limit: z.number().int().positive().max(2000).optional() }), req.body ?? {});
+    res.json(await translateMissing(String(req.params.lang), req.user!.id, { limit: body.limit }));
+  }),
+);
 adminRouter.put('/translations/:lang', requirePermission('cms'), (req, res) => {
   const body = validate(z.record(z.string()), req.body?.overrides ?? req.body);
   setTranslationOverrides(String(req.params.lang), body);

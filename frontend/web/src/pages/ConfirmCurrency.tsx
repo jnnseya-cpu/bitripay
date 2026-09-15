@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Alert, Button, KV, Loading } from '../components/ui';
@@ -47,15 +48,15 @@ export function ConfirmCurrency() {
   return (
     <div className="auth-page">
       <div className="card" style={{ maxWidth: 520, margin: '40px auto' }}>
-        <h2>Confirm your payout currency</h2>
+        <h2>{tr('Confirm your payout currency')}</h2>
         {done ? (
           <Alert kind={done.stage === 'FAILED' ? 'warning' : 'success'}>
             {done.stage === 'FAILED'
-              ? 'You declined. The sender keeps the money and can resend in your local currency.'
+              ? tr('You declined. The sender keeps the money and can resend in your local currency.')
               : `Thank you – the payout will be made in ${done.currency}. Stage: ${done.stage.replace(/_/g, ' ').toLowerCase()}.`}
           </Alert>
         ) : view.confirmedAt ? (
-          <Alert kind="info">This transfer was already confirmed.</Alert>
+          <Alert kind="info">{tr('This transfer was already confirmed.')}</Alert>
         ) : (
           <>
             <p className="muted">{view.sender.name} is sending you money. This corridor requires you to confirm the currency you will receive before the payout is executed.</p>
@@ -72,17 +73,17 @@ export function ConfirmCurrency() {
                   </button>
                 ))}
               </div>
-              {choice !== view.currency && <div className="tiny muted mt-sm">The transfer will be re-quoted in {choice} at the current disclosed rate.</div>}
+              {choice !== view.currency && <div className="tiny muted mt-sm">{tr('The transfer will be re-quoted in {0} at the current disclosed rate.', { 0: choice })}</div>}
             </div>
             <div className="row mt">
               <Button loading={busy} onClick={() => decide(true)}>
-                Confirm {choice}
+                {tr('Confirm {0}', { 0: choice })}
               </Button>
               <Button variant="ghost" disabled={busy} onClick={() => decide(false)}>
-                Decline
+                {tr('Decline')}
               </Button>
             </div>
-            <p className="tiny muted mt">Nothing is paid out until you confirm. Your choice is recorded in the immutable transfer log.</p>
+            <p className="tiny muted mt">{tr('Nothing is paid out until you confirm. Your choice is recorded in the immutable transfer log.')}</p>
           </>
         )}
       </div>

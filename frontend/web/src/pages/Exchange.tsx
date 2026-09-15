@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, AmountInput, Button, Field, KV, PageHeader, PinModal, RouteDisclosure, Select, useDebounce } from '../components/ui';
 import { currencyFlag } from '@bitripay/shared';
 
@@ -29,7 +29,7 @@ export function Exchange() {
     setError(null);
     try {
       await api.post('/api/wallets/exchange', { from, to, amount, pin: pin || undefined, quoteId: quote?.fx?.quoteId ?? null });
-      toast('Exchange completed', 'success');
+      toast(tr('Exchange completed'), 'success');
       setAmount('');
       setPinOpen(false);
       refreshWallets();
@@ -49,7 +49,7 @@ export function Exchange() {
   };
   return (
     <div>
-      <PageHeader title={t('nav.exchange')} subtitle="Switch between currencies. The reference rate, its source and time, and our markup are shown before you confirm." />
+      <PageHeader title={t('nav.exchange')} subtitle={tr('Switch between currencies. The reference rate, its source and time, and our markup are shown before you confirm.')} />
       <div className="grid cols-2">
         <div className="card">
           {error && <Alert kind="error">{error}</Alert>}
@@ -98,11 +98,11 @@ export function Exchange() {
           )}
           {quote?.fx && <RouteDisclosure fx={quote.fx} />}
           <Button block size="lg" disabled={!quote} onClick={() => setPinOpen(true)}>
-            Exchange
+            {tr('Exchange')}
           </Button>
         </div>
         <div className="card">
-          <h3>My wallets</h3>
+          <h3>{tr('My wallets')}</h3>
           <div className="list">
             {wallets.map((w) => (
               <div key={w.id} className="list-item">
@@ -115,10 +115,10 @@ export function Exchange() {
             ))}
           </div>
           <div className="divider" />
-          <Field label="Add a currency wallet">
+          <Field label={tr('Add a currency wallet')}>
             <div className="row">
               <Select value={newCur} onChange={(e) => setNewCur(e.target.value)}>
-                <option value="">Choose…</option>
+                <option value="">{tr('Choose…')}</option>
                 {(config?.currencies ?? [])
                   .filter((c) => !wallets.some((w) => w.currency === c.code))
                   .map((c) => (
@@ -128,11 +128,13 @@ export function Exchange() {
                   ))}
               </Select>
               <Button variant="secondary" onClick={addWallet} disabled={!newCur}>
-                Add
+                {tr('Add')}
               </Button>
             </div>
           </Field>
-          <h4 className="mt">Reference rates (vs {config?.baseCurrency})</h4>
+          <h4 className="mt">
+            {tr('Reference rates (vs')} {config?.baseCurrency})
+          </h4>
           <div className="row wrap">
             {(config?.currencies ?? []).slice(0, 12).map((c) => (
               <span key={c.code} className="chip">

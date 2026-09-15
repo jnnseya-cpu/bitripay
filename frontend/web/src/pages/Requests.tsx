@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, AmountInput, Avatar, Button, CopyButton, Empty, Field, Input, Modal, PageHeader, PinModal, QrImage, Select, StatusBadge, Tabs, useAsync } from '../components/ui';
 import type { PaymentRequest } from '@bitripay/shared';
 
@@ -45,7 +45,7 @@ export function Requests() {
     setLoading(true);
     try {
       await api.post(`/api/payment-requests/${payCode.code}/pay`, { pin });
-      toast('Paid', 'success');
+      toast(tr('Paid'), 'success');
       setPayCode(null);
       incoming.reload();
       refreshWallets();
@@ -72,7 +72,7 @@ export function Requests() {
     <div>
       <PageHeader
         title={t('nav.requests')}
-        subtitle="Request money from other users and create shareable payment links"
+        subtitle={tr('Request money from other users and create shareable payment links')}
         actions={
           <>
             <Button
@@ -82,7 +82,7 @@ export function Requests() {
                 setCreateOpen('request');
               }}
             >
-              🙋 Request money
+              {tr('🙋 Request money')}
             </Button>
             <Button
               onClick={() => {
@@ -90,16 +90,16 @@ export function Requests() {
                 setCreateOpen('link');
               }}
             >
-              🔗 New payment link
+              {tr('🔗 New payment link')}
             </Button>
           </>
         }
       />
       <Tabs
         tabs={[
-          { id: 'incoming', label: 'Requests to pay' },
-          { id: 'requests', label: 'My requests' },
-          { id: 'links', label: 'My payment links' },
+          { id: 'incoming', label: tr('Requests to pay') },
+          { id: 'requests', label: tr('My requests') },
+          { id: 'links', label: tr('My payment links') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -123,17 +123,17 @@ export function Requests() {
               {tab === 'incoming' && r.status === 'open' && (
                 <>
                   <Button size="sm" onClick={() => setPayCode(r)}>
-                    Pay
+                    {tr('Pay')}
                   </Button>
                   <Button size="sm" variant="secondary" onClick={() => decline(r.code)}>
-                    Decline
+                    {tr('Decline')}
                   </Button>
                 </>
               )}
               {tab !== 'incoming' && (
                 <>
                   <Button size="sm" variant="secondary" onClick={() => setCreated(r)}>
-                    View
+                    {tr('View')}
                   </Button>
                   {r.status === 'open' && (
                     <Button size="sm" variant="ghost" onClick={() => cancel(r.code)}>
@@ -147,14 +147,14 @@ export function Requests() {
         </div>
       </div>
 
-      <Modal open={!!createOpen} onClose={() => setCreateOpen(null)} title={createOpen === 'link' ? 'New payment link' : 'Request money'}>
+      <Modal open={!!createOpen} onClose={() => setCreateOpen(null)} title={createOpen === 'link' ? tr('New payment link') : tr('Request money')}>
         {error && <Alert kind="error">{error}</Alert>}
         {createOpen === 'request' && (
-          <Field label="From (@tag, email or phone)">
+          <Field label={tr('From (@tag, email or phone)')}>
             <Input value={form.payer} onChange={(e) => setForm({ ...form, payer: e.target.value })} autoFocus />
           </Field>
         )}
-        <Field label={t('common.amount')} hint={createOpen === 'link' ? 'Leave empty to let the payer choose the amount' : undefined}>
+        <Field label={t('common.amount')} hint={createOpen === 'link' ? tr('Leave empty to let the payer choose the amount') : undefined}>
           <AmountInput
             amount={form.amount}
             currency={form.currency}
@@ -163,24 +163,24 @@ export function Requests() {
             currencies={(config?.currencies ?? []).map((c) => c.code)}
           />
         </Field>
-        <Field label="Description">
-          <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Invoice #12, dinner, …" />
+        <Field label={tr('Description')}>
+          <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder={tr('Invoice #12, dinner, …')} />
         </Field>
-        <Field label="Expires in (hours, optional)">
+        <Field label={tr('Expires in (hours, optional)')}>
           <Select value={form.expires} onChange={(e) => setForm({ ...form, expires: e.target.value })}>
-            <option value="">Never</option>
-            <option value="1">1 hour</option>
-            <option value="24">24 hours</option>
-            <option value="168">7 days</option>
-            <option value="720">30 days</option>
+            <option value="">{tr('Never')}</option>
+            <option value="1">{tr('1 hour')}</option>
+            <option value="24">{tr('24 hours')}</option>
+            <option value="168">{tr('7 days')}</option>
+            <option value="720">{tr('30 days')}</option>
           </Select>
         </Field>
         <Button block loading={loading} onClick={create} disabled={createOpen === 'request' && (!form.amount || !form.payer)}>
-          {createOpen === 'link' ? 'Create link' : 'Send request'}
+          {createOpen === 'link' ? tr('Create link') : tr('Send request')}
         </Button>
       </Modal>
 
-      <Modal open={!!created} onClose={() => setCreated(null)} title={created?.kind === 'request' ? 'Money request' : 'Payment link'}>
+      <Modal open={!!created} onClose={() => setCreated(null)} title={created?.kind === 'request' ? tr('Money request') : tr('Payment link')}>
         {created && (
           <div className="center">
             <QrImage value={created.link!} size={220} />
@@ -190,12 +190,12 @@ export function Requests() {
               {created.link}
             </div>
             <div className="row mt" style={{ justifyContent: 'center' }}>
-              <CopyButton text={created.link!} label="Copy link" />
+              <CopyButton text={created.link!} label={tr('Copy link')} />
               <Link className="btn secondary sm" to={`/pay/${created.code}`} target="_blank">
-                Open checkout
+                {tr('Open checkout')}
               </Link>
               <a className="btn secondary sm" href={`/api/qr/image.svg?data=${encodeURIComponent(created.link!)}`} download>
-                QR SVG
+                {tr('QR SVG')}
               </a>
             </div>
             <div className="mt">
@@ -212,7 +212,7 @@ export function Requests() {
         summary={
           payCode && (
             <p>
-              Pay {money(payCode.amount ?? 0, payCode.currency)} to {payCode.requester?.fullName}
+              {tr('Pay')} {money(payCode.amount ?? 0, payCode.currency)} to {payCode.requester?.fullName}
             </p>
           )
         }

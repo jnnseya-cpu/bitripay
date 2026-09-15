@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, AmountInput, Avatar, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, StatusBadge, useAsync, useDebounce } from '../components/ui';
 import type { PublicUser } from '@bitripay/shared';
 
@@ -38,7 +38,7 @@ export function Agents() {
       setResult(r.request);
       setPinOpen(false);
       requests.reload();
-      toast('Cash-out code created – show it to the agent', 'success');
+      toast(tr('Cash-out code created – show it to the agent'), 'success');
     } catch (err) {
       setError((err as Error).message);
       setPinOpen(false);
@@ -49,13 +49,13 @@ export function Agents() {
 
   return (
     <div>
-      <PageHeader title={t('nav.agents')} subtitle="Deposit or withdraw cash with a BitriPay agent near you" />
+      <PageHeader title={t('nav.agents')} subtitle={tr('Deposit or withdraw cash with a BitriPay agent near you')} />
       <div className="grid cols-2">
         <div className="card">
-          <Field label="Find an agent">
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, business or @tag" />
+          <Field label={tr('Find an agent')}>
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('Search by name, business or @tag')} />
           </Field>
-          {agents.data?.items.length === 0 && <Empty icon="🏪" text="No agents found" />}
+          {agents.data?.items.length === 0 && <Empty icon="🏪" text={tr('No agents found')} />}
           <div className="list">
             {agents.data?.items.map((a) => (
               <div key={a.id} className={`list-item clickable`} onClick={() => setSelected(a)}>
@@ -67,7 +67,7 @@ export function Agents() {
                   </div>
                 </div>
                 <Button size="sm" variant={selected?.id === a.id ? undefined : 'secondary'}>
-                  Select
+                  {tr('Select')}
                 </Button>
               </div>
             ))}
@@ -79,7 +79,7 @@ export function Agents() {
           </div>
         </div>
         <div className="card">
-          <h3>Withdraw cash (cash-out)</h3>
+          <h3>{tr('Withdraw cash (cash-out)')}</h3>
           {error && <Alert kind="error">{error}</Alert>}
           {selected ? (
             <div className="list-item card soft compact mb">
@@ -90,15 +90,15 @@ export function Agents() {
               </div>
             </div>
           ) : (
-            <p className="muted small">Select an agent from the list first.</p>
+            <p className="muted small">{tr('Select an agent from the list first.')}</p>
           )}
           <Field label={t('common.amount')}>
             <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} big />
           </Field>
           <Button block disabled={!selected || !amount} onClick={() => setPinOpen(true)}>
-            Create cash-out code
+            {tr('Create cash-out code')}
           </Button>
-          <h3 className="mt">My cash requests</h3>
+          <h3 className="mt">{tr('My cash requests')}</h3>
           {requests.data?.items.length === 0 && <Empty icon="💵" />}
           <div className="list">
             {requests.data?.items.map((r) => (
@@ -129,16 +129,16 @@ export function Agents() {
         loading={loading}
         summary={<KV k={`Cash out at ${selected?.businessName || selected?.fullName}`} v={`${amount} ${cur}`} />}
       />
-      <Modal open={!!result} onClose={() => setResult(null)} title="Show this code to the agent">
+      <Modal open={!!result} onClose={() => setResult(null)} title={tr('Show this code to the agent')}>
         {result && (
           <div className="center">
             <div style={{ fontSize: '2.4rem', letterSpacing: '0.2em', fontWeight: 800 }} className="mono">
               {result.code}
             </div>
             <p className="muted small">
-              {money(result.amount, result.currency)} + fee {money(result.fee, result.currency)} · expires {new Date(result.expiresAt).toLocaleTimeString()}
+              {money(result.amount, result.currency)} {tr('+ fee')} {money(result.fee, result.currency)} · expires {new Date(result.expiresAt).toLocaleTimeString()}
             </p>
-            <p className="small">The agent enters this code to hand you the cash. Funds leave your wallet only when they confirm.</p>
+            <p className="small">{tr('The agent enters this code to hand you the cash. Funds leave your wallet only when they confirm.')}</p>
           </div>
         )}
       </Modal>

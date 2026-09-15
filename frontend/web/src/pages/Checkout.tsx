@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, Avatar, Button, Field, Input, KV, Loading, PinModal, QrImage, StatusBadge, Tabs } from '../components/ui';
 import { CardForm, type CardValues } from '../components/CardForm';
 import { PaymentStatus, type PaymentView } from './AddMoney';
@@ -91,7 +91,7 @@ export function Checkout() {
       <div className="auth-page">
         <div className="card">
           <Alert kind="error">{error}</Alert>
-          <Link to="/">Go to BitriPay</Link>
+          <Link to="/">{tr('Go to BitriPay')}</Link>
         </div>
       </div>
     );
@@ -233,7 +233,7 @@ export function Checkout() {
   return (
     <div className="auth-page" style={{ alignItems: 'flex-start', paddingTop: embedded ? 12 : 40 }}>
       {embedded && (
-        <button type="button" className="btn ghost sm" style={{ position: 'absolute', top: 8, right: 8 }} onClick={() => notifyParent('closed')} aria-label="Close checkout">
+        <button type="button" className="btn ghost sm" style={{ position: 'absolute', top: 8, right: 8 }} onClick={() => notifyParent('closed')} aria-label={tr('Close checkout')}>
           ✕
         </button>
       )}
@@ -261,33 +261,35 @@ export function Checkout() {
             {pr.expiresAt && <KV k="Expires" v={new Date(pr.expiresAt).toLocaleString()} />}
             <div className="center mt">
               <QrImage value={pr.link!} size={160} />
-              <div className="tiny muted mt-sm">Scan with the BitriPay app</div>
+              <div className="tiny muted mt-sm">{tr('Scan with the BitriPay app')}</div>
             </div>
           </div>
           <div className="card">
             {done || pr.status === 'paid' ? (
               <div className="center">
                 <div style={{ fontSize: '4rem' }}>✅</div>
-                <h2>Payment complete</h2>
-                <p className="muted">Thank you! {merchant.businessName || merchant.fullName} has received your payment.</p>
+                <h2>{tr('Payment complete')}</h2>
+                <p className="muted">
+                  {tr('Thank you!')} {merchant.businessName || merchant.fullName} has received your payment.
+                </p>
                 {successUrl && (
                   <a className="btn block" href={successUrl}>
-                    Return to merchant
+                    {tr('Return to merchant')}
                   </a>
                 )}
                 {!successUrl && user && (
                   <Button block variant="secondary" onClick={() => nav('/app')}>
-                    Back to BitriPay
+                    {tr('Back to BitriPay')}
                   </Button>
                 )}
               </div>
             ) : pr.status !== 'open' ? (
               <Alert kind="warning">
-                This payment request is {pr.status}.
+                {tr('This payment request is')} {pr.status}.
                 {pr.cancelUrl && (
                   <>
                     {' '}
-                    <a href={pr.cancelUrl}>Back to merchant</a>
+                    <a href={pr.cancelUrl}>{tr('Back to merchant')}</a>
                   </>
                 )}
               </Alert>
@@ -350,60 +352,62 @@ export function Checkout() {
                           setPinOpen(true);
                         }}
                       >
-                        Pay {fixed ? money(pr.amount!) : ''} from wallet
+                        {tr('Pay')} {fixed ? money(pr.amount!) : ''} from wallet
                       </Button>
                     </>
                   ) : (
                     <div className="center">
-                      <p className="muted">Sign in to pay from your BitriPay wallet.</p>
+                      <p className="muted">{tr('Sign in to pay from your BitriPay wallet.')}</p>
                       <Link className="btn block" to={`/login?next=${encodeURIComponent(window.location.pathname)}`}>
                         Sign in
                       </Link>
                       <p className="small mt-sm">
-                        <Link to={`/register?next=${encodeURIComponent(window.location.pathname)}`}>Create an account</Link>
+                        <Link to={`/register?next=${encodeURIComponent(window.location.pathname)}`}>{tr('Create an account')}</Link>
                       </p>
                     </div>
                   ))}
                 {(method === 'card' || method === 'virtual_card') && (
                   <>
-                    {!fixed && <Alert kind="warning">Open-amount requests can only be paid from a BitriPay wallet.</Alert>}
-                    {method === 'virtual_card' && <Alert kind="info">Enter the details of your BitriPay virtual card (starts with 6273 11).</Alert>}
+                    {!fixed && <Alert kind="warning">{tr('Open-amount requests can only be paid from a BitriPay wallet.')}</Alert>}
+                    {method === 'virtual_card' && <Alert kind="info">{tr('Enter the details of your BitriPay virtual card (starts with 6273 11).')}</Alert>}
                     <CardForm value={card} onChange={setCard} />
-                    <Field label="Email for receipt">
+                    <Field label={tr('Email for receipt')}>
                       <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                     </Field>
                     <Button block size="lg" loading={loading} disabled={!fixed || card.number.length < 12} onClick={startExternal}>
-                      {user ? '🔐 Confirm and pay' : 'Pay'} {money(pr.amount ?? 0)}
+                      {user ? tr('🔐 Confirm and pay') : tr('Pay')} {money(pr.amount ?? 0)}
                     </Button>
                   </>
                 )}
                 {method === 'mobile_money' && (
                   <>
                     <OperatorPicker value={operatorId} onChange={setOperatorId} country={opCountry} onCountry={setOpCountry} />
-                    <Field label="Mobile money number">
+                    <Field label={tr('Mobile money number')}>
                       <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+233…" />
                     </Field>
-                    <Field label="Email for receipt">
+                    <Field label={tr('Email for receipt')}>
                       <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                     </Field>
                     <Button block size="lg" loading={loading} disabled={!fixed || !phone} onClick={startExternal}>
-                      {user ? '🔐 Confirm and pay' : 'Pay'} by mobile money
+                      {user ? tr('🔐 Confirm and pay') : tr('Pay')} by mobile money
                     </Button>
                   </>
                 )}
                 {method === 'bank' && (
                   <>
-                    <Field label="Email for receipt">
+                    <Field label={tr('Email for receipt')}>
                       <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                     </Field>
                     <Button block size="lg" loading={loading} disabled={!fixed} onClick={startExternal}>
-                      Get bank transfer details
+                      {tr('Get bank transfer details')}
                     </Button>
                   </>
                 )}
                 <p className="tiny muted center mt">
-                  🔒 Secured by BitriPay. Card payments are processed by a licensed processor; mobile money and bank payments are confirmed from the operator or bank before the merchant is credited.{' '}
-                  {pr.cancelUrl && <a href={pr.cancelUrl}>Cancel and return</a>}
+                  {tr(
+                    '🔒 Secured by BitriPay. Card payments are processed by a licensed processor; mobile money and bank payments are confirmed from the operator or bank before the merchant is credited.',
+                  )}{' '}
+                  {pr.cancelUrl && <a href={pr.cancelUrl}>{tr('Cancel and return')}</a>}
                 </p>
               </>
             )}
@@ -415,7 +419,7 @@ export function Checkout() {
         onClose={() => setPinOpen(false)}
         onSubmit={(pin) => (pinFor === 'wallet' ? payWallet(pin) : pinFor === 'authenticate' ? authenticate(pin) : payExternal(pin))}
         loading={loading}
-        title="Authorise this payment"
+        title={tr('Authorise this payment')}
         summary={<KV k={`Pay ${merchant.businessName || merchant.fullName}`} v={fixed ? money(pr.amount!) : `${amount} ${cur.code}`} />}
       />
     </div>

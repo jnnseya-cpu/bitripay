@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { API_BASE, api, getToken } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Field, Input, KV, PageHeader, Select, useAsync } from '../components/ui';
@@ -55,11 +56,11 @@ export function Statements() {
 
   return (
     <div>
-      <PageHeader title="Account statements" subtitle="Numbered, hashed statements generated from the immutable ledger. Download as PDF or CSV for your bank, accountant or regulator." />
+      <PageHeader title={tr('Account statements')} subtitle={tr('Numbered, hashed statements generated from the immutable ledger. Download as PDF or CSV for your bank, accountant or regulator.')} />
       <div className="grid cols-3">
         <div className="card" style={{ gridColumn: 'span 2' }}>
           <div className="grid cols-3">
-            <Field label="Account">
+            <Field label={tr('Account')}>
               <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
                 {wallets.map((w) => (
                   <option key={w.id} value={w.currency}>
@@ -77,23 +78,23 @@ export function Statements() {
           </div>
           <div className="row wrap mb">
             <Button variant="ghost" size="sm" onClick={() => quick(1)}>
-              Last month
+              {tr('Last month')}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => quick(3)}>
-              Last 3 months
+              {tr('Last 3 months')}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => quick(12)}>
-              Last 12 months
+              {tr('Last 12 months')}
             </Button>
             <span style={{ flex: 1 }} />
             <Button loading={loading} onClick={generate}>
-              Generate statement
+              {tr('Generate statement')}
             </Button>
             <Button variant="secondary" onClick={() => download('pdf')}>
-              ⬇ PDF
+              {tr('⬇ PDF')}
             </Button>
             <Button variant="secondary" onClick={() => download('csv')}>
-              ⬇ CSV
+              {tr('⬇ CSV')}
             </Button>
           </div>
           {statement && (
@@ -125,19 +126,19 @@ export function Statements() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Reference</th>
-                      <th>Description</th>
-                      <th className="right">Debit</th>
-                      <th className="right">Credit</th>
-                      <th className="right">Balance</th>
+                      <th>{tr('Date')}</th>
+                      <th>{tr('Reference')}</th>
+                      <th>{tr('Description')}</th>
+                      <th className="right">{tr('Debit')}</th>
+                      <th className="right">{tr('Credit')}</th>
+                      <th className="right">{tr('Balance')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {statement.lines.length === 0 && (
                       <tr>
                         <td colSpan={6} className="muted center">
-                          No transactions in this period.
+                          {tr('No transactions in this period.')}
                         </td>
                       </tr>
                     )}
@@ -161,7 +162,7 @@ export function Statements() {
               </div>
               {(statement.promo.movements.length > 0 || statement.promo.closing > 0) && (
                 <div className="card soft compact mt">
-                  <div className="small bold">Promotional credit (not money – covers BitriPay fees only)</div>
+                  <div className="small bold">{tr('Promotional credit (not money – covers BitriPay fees only)')}</div>
                   {statement.promo.movements.map((m: any, i: number) => (
                     <KV key={i} k={`${m.date.slice(0, 10)} · ${m.description}`} v={money(m.amount, currency)} />
                   ))}
@@ -172,8 +173,8 @@ export function Statements() {
           )}
         </div>
         <div className="card">
-          <h3>Generated statements</h3>
-          <p className="tiny muted">Every statement is numbered and its hash is registered; anyone holding a copy can verify it without seeing your data.</p>
+          <h3>{tr('Generated statements')}</h3>
+          <p className="tiny muted">{tr('Every statement is numbered and its hash is registered; anyone holding a copy can verify it without seeing your data.')}</p>
           {(history.data?.items ?? []).slice(0, 15).map((s: any) => (
             <div key={s.id} className="list-item">
               <div>
@@ -187,7 +188,7 @@ export function Statements() {
               </a>
             </div>
           ))}
-          {history.data && history.data.items.length === 0 && <div className="muted tiny">None yet.</div>}
+          {history.data && history.data.items.length === 0 && <div className="muted tiny">{tr('None yet.')}</div>}
         </div>
       </div>
     </div>

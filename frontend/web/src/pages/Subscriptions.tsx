@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Button, Chip, Empty, Field, Input, KV, PageHeader, PinModal, StatusBadge, useAsync } from '../components/ui';
 
 /** Subscriptions you pay from your wallet: look up a merchant plan by code, confirm the mandate, follow invoices, cancel. */
@@ -38,21 +38,21 @@ export function Subscriptions() {
       .post(`/api/billing/subscriptions/${id}/cancel`, {})
       .then(() => {
         view.reload();
-        toast('Cancelled at the end of the period', 'success');
+        toast(tr('Cancelled at the end of the period'), 'success');
       })
       .catch(err);
   const every = (p: any) => `${p.intervalCount > 1 ? `${p.intervalCount} ` : ''}${p.interval}${p.intervalCount > 1 ? 's' : ''}`;
   return (
     <div>
-      <PageHeader title={t('nav.subscriptions')} subtitle="Plans you pay from your BitriPay balance. Each charge shows up as an ordinary merchant payment with its invoice number." />
+      <PageHeader title={t('nav.subscriptions')} subtitle={tr('Plans you pay from your BitriPay balance. Each charge shows up as an ordinary merchant payment with its invoice number.')} />
       <div className="grid cols-2">
         <div className="card">
-          <h3>Add a subscription</h3>
-          <Field label="Plan code from the merchant">
+          <h3>{tr('Add a subscription')}</h3>
+          <Field label={tr('Plan code from the merchant')}>
             <div className="row" style={{ gap: 8 }}>
               <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="home-20-mbps-a1b2" />
               <Button variant="secondary" onClick={lookup} disabled={!code.trim()}>
-                Look up
+                {tr('Look up')}
               </Button>
             </div>
           </Field>
@@ -64,14 +64,14 @@ export function Subscriptions() {
               {plan.usageUnit && <KV k="Usage" v={`${money(plan.usagePriceMinor, plan.currency)} per ${plan.usageUnit}, billed with the period`} />}
               {plan.trialDays > 0 && <KV k="Trial" v={`${plan.trialDays} days free`} />}
               <Button onClick={() => setPin(true)} disabled={plan.status !== 'ACTIVE'}>
-                Subscribe
+                {tr('Subscribe')}
               </Button>
             </div>
           )}
         </div>
         <div className="card">
-          <h3>Your subscriptions</h3>
-          {(view.data?.items ?? []).length === 0 && <Empty icon="🔄" text="No subscription yet." />}
+          <h3>{tr('Your subscriptions')}</h3>
+          {(view.data?.items ?? []).length === 0 && <Empty icon="🔄" text={tr('No subscription yet.')} />}
           {(view.data?.items ?? []).map((s: any) => (
             <div key={s.id} className="list-item" style={{ display: 'block' }}>
               <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -85,12 +85,12 @@ export function Subscriptions() {
               </div>
               {['ACTIVE', 'TRIALING', 'PAST_DUE'].includes(s.status) && !s.cancelAtPeriodEnd && (
                 <Button size="sm" variant="ghost" onClick={() => cancel(s.id)}>
-                  Cancel
+                  {tr('Cancel')}
                 </Button>
               )}
             </div>
           ))}
-          <h4 style={{ marginTop: 16 }}>Invoices</h4>
+          <h4 style={{ marginTop: 16 }}>{tr('Invoices')}</h4>
           {(view.data?.invoices ?? []).map((i: any) => (
             <div key={i.id} className="list-item">
               <div className="flex1">
@@ -112,7 +112,7 @@ export function Subscriptions() {
         onClose={() => setPin(false)}
         loading={busy}
         onSubmit={subscribe}
-        title="Confirm the mandate"
+        title={tr('Confirm the mandate')}
         summary={plan ? `${plan.name}: ${money(plan.amountMinor, plan.currency)} every ${every(plan)} from your ${plan.currency} balance until you cancel.` : ''}
       />
     </div>

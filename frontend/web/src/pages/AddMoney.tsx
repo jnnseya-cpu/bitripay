@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, AmountInput, Button, Empty, Field, Input, KV, PageHeader, PinModal, RouteDisclosure, Select, StageTimeline, StatusBadge, Tabs, useAsync } from '../components/ui';
 import { CardForm, type CardValues } from '../components/CardForm';
 import { StripePayment } from '../components/StripePayment';
@@ -93,7 +93,7 @@ export function AddMoney() {
         const r = await api.get<{ payment: PaymentView }>(`/api/deposits/${payment.id}`);
         if (r.payment.stage !== payment.stage) setPayment(r.payment);
         if (r.payment.status === 'succeeded' && payment.status !== 'succeeded') {
-          toast('Money added to your wallet', 'success');
+          toast(tr('Money added to your wallet'), 'success');
           refreshWallets();
         }
       },
@@ -113,7 +113,7 @@ export function AddMoney() {
     setPayment(r.payment);
     if (r.declaration) setDeclaration(r.declaration);
     if (r.payment.status === 'succeeded') {
-      toast('Money added to your wallet', 'success');
+      toast(tr('Money added to your wallet'), 'success');
       refreshWallets();
       cards.reload();
     } else if (r.payment.next?.type === 'redirect' && r.payment.next.url) {
@@ -167,7 +167,7 @@ export function AddMoney() {
     if (!payment) return;
     const r = await api.post<{ payment: PaymentView }>(`/api/deposits/${payment.id}/sent`, { reference: proof || undefined });
     setPayment(r.payment);
-    toast('Thanks – we will credit your wallet as soon as the payment is independently confirmed', 'success');
+    toast(tr('Thanks – we will credit your wallet as soon as the payment is independently confirmed'), 'success');
   };
 
   const methodLabels: Record<string, string> = { card: t('addMoney.card'), mobile_money: t('addMoney.mobileMoney'), bank: t('addMoney.bank') };
@@ -177,7 +177,7 @@ export function AddMoney() {
     <div>
       <PageHeader
         title={t('addMoney.title')}
-        subtitle="Fund your wallet with a card, mobile money, bank transfer or cash at an agent. External payments are credited only after they are independently confirmed."
+        subtitle={tr('Fund your wallet with a card, mobile money, bank transfer or cash at an agent. External payments are credited only after they are independently confirmed.')}
       />
       <div className="grid cols-3">
         <div className="card" style={{ gridColumn: 'span 2' }}>
@@ -215,9 +215,11 @@ export function AddMoney() {
                   }}
                 />
               </Field>
-              {options.data && options.data.methods.length === 0 && <Alert kind="warning">No payment gateway is configured for {cur}. Ask an admin to enable one, or use an agent.</Alert>}
+              {options.data && options.data.methods.length === 0 && (
+                <Alert kind="warning">{tr('No payment gateway is configured for {0}. Ask an admin to enable one, or use an agent.', { 0: cur })}</Alert>
+              )}
               {opt && opt.gateways.length > 1 && (
-                <Field label="Provider">
+                <Field label={tr('Provider')}>
                   <Select value={gw?.id ?? ''} onChange={(e) => setGateway(e.target.value)}>
                     {opt.gateways.map((g) => (
                       <option key={g.id} value={g.id}>
@@ -230,7 +232,7 @@ export function AddMoney() {
               {method === 'card' && (
                 <>
                   {cards.data && cards.data.items.length > 0 && (
-                    <Field label="Saved cards">
+                    <Field label={tr('Saved cards')}>
                       <div className="row wrap">
                         {cards.data.items
                           .filter((c) => c.provider === gw?.provider)
@@ -243,15 +245,15 @@ export function AddMoney() {
                     </Field>
                   )}
                   {!savedCardId && gw?.provider !== 'stripe' && <CardForm value={card} onChange={setCard} />}
-                  {!savedCardId && gw?.provider === 'stripe' && <Alert kind="info">You'll enter your card securely on the next step (Stripe).</Alert>}
+                  {!savedCardId && gw?.provider === 'stripe' && <Alert kind="info">{tr("You'll enter your card securely on the next step (Stripe).")}</Alert>}
                   {!savedCardId && (
                     <label className="checkbox mb">
-                      <input type="checkbox" checked={saveCard} onChange={(e) => setSaveCard(e.target.checked)} /> Save this card for next time (tokenised by the processor – we never store the number
-                      or CVC)
+                      <input type="checkbox" checked={saveCard} onChange={(e) => setSaveCard(e.target.checked)} />{' '}
+                      {tr('Save this card for next time (tokenised by the processor – we never store the number or CVC)')}
                     </label>
                   )}
                   {gw?.provider === 'sandbox' && (
-                    <div className="alert info small">Sandbox processor: use 4242 4242 4242 4242 (any future expiry, any CVC). Cards ending 0002 are declined. No real money moves.</div>
+                    <div className="alert info small">{tr('Sandbox processor: use 4242 4242 4242 4242 (any future expiry, any CVC). Cards ending 0002 are declined. No real money moves.')}</div>
                   )}
                 </>
               )}
@@ -266,14 +268,16 @@ export function AddMoney() {
                       if ((config?.currencies ?? []).some((x) => x.code === c)) setCur(c);
                     }}
                   />
-                  <Field label="Your mobile money number" hint="The number you will pay from – it is matched against the operator's receipt">
+                  <Field label={tr('Your mobile money number')} hint={tr("The number you will pay from – it is matched against the operator's receipt")}>
                     <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+233…" />
                   </Field>
                 </>
               )}
               {method === 'bank' && (
                 <Alert kind="info">
-                  You'll receive bank details and a reference. Your wallet is credited only after the transfer is independently confirmed (bank notification or a verifier checking the statement).
+                  {tr(
+                    "You'll receive bank details and a reference. Your wallet is credited only after the transfer is independently confirmed (bank notification or a verifier checking the statement).",
+                  )}
                 </Alert>
               )}
               {amount && opt && (
@@ -282,18 +286,18 @@ export function AddMoney() {
                 </div>
               )}
               <Button block size="lg" loading={loading} disabled={!amount || !opt || (method === 'mobile_money' && !phone)} onClick={() => setPinOpen(true)}>
-                🔐 Confirm and add {amount ? `${amount} ${cur}` : 'money'}
+                {tr('🔐 Confirm and add')} {amount ? `${amount} ${cur}` : 'money'}
               </Button>
               {config?.modules.agents !== false && (
                 <p className="center small muted mt">
-                  Prefer cash? <Link to="/app/agents">Find an agent near you</Link> for a cash-in.
+                  {tr('Prefer cash?')} <Link to="/app/agents">{tr('Find an agent near you')}</Link> for a cash-in.
                 </p>
               )}
             </>
           )}
         </div>
         <div className="card">
-          <h3>Recent deposits</h3>
+          <h3>{tr('Recent deposits')}</h3>
           {history.data?.items.length === 0 && <Empty icon="💳" />}
           <div className="list">
             {history.data?.items.map((p) => (
@@ -315,7 +319,7 @@ export function AddMoney() {
         onClose={() => setPinOpen(false)}
         onSubmit={needsAuth ? authenticate : submit}
         loading={loading}
-        title="Authorise this payment"
+        title={tr('Authorise this payment')}
         summary={<KV k={`Add money via ${methodLabels[method]}`} v={payment ? money(payment.amount, payment.currency) : `${amount} ${cur}`} />}
       />
     </div>
@@ -343,7 +347,7 @@ export function OperatorPicker({
   return (
     <>
       <div className="grid cols-2">
-        <Field label="Country">
+        <Field label={tr('Country')}>
           <Select
             value={country}
             onChange={(e) => {
@@ -351,7 +355,7 @@ export function OperatorPicker({
               onChange('');
             }}
           >
-            <option value="">All countries</option>
+            <option value="">{tr('All countries')}</option>
             {(config?.countries ?? [])
               .filter((c) => countriesWithOps.has(c.code))
               .map((c) => (
@@ -362,12 +366,12 @@ export function OperatorPicker({
           </Select>
         </Field>
         <Field
-          label="Mobile money operator"
+          label={tr('Mobile money operator')}
           hint={
             value && list.find((o) => o.id === value)?.directRail
-              ? 'Direct rail: you pay from your own mobile money app with a reference; confirmed from the operator receipt'
+              ? tr('Direct rail: you pay from your own mobile money app with a reference; confirmed from the operator receipt')
               : value
-                ? 'Routed through a connected gateway or the sandbox'
+                ? tr('Routed through a connected gateway or the sandbox')
                 : undefined
           }
         >
@@ -379,7 +383,7 @@ export function OperatorPicker({
               if (o && onCurrency) onCurrency(o.currency);
             }}
           >
-            <option value="">Choose operator…</option>
+            <option value="">{tr('Choose operator…')}</option>
             {list.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name} · {o.country} ({o.currency})
@@ -396,7 +400,7 @@ export function OperatorPicker({
               <span className="chip" style={{ background: o.color, color: '#fff' }}>
                 {o.brand}
               </span>
-              {o.ussd && <span className="chip">USSD {o.ussd}</span>}
+              {o.ussd && <span className="chip">{tr('USSD {0}', { 0: o.ussd })}</span>}
               <span className="chip">{o.currency}</span>
               {o.directRail && <span className="chip success">direct rail · verified from receipt</span>}
             </div>
@@ -449,7 +453,7 @@ export function PaymentStatus({
       {payment.failureReason && <Alert kind="error">{payment.failureReason}</Alert>}
       {payment.stage === 'AUTHENTICATION_REQUIRED' && onAuthenticate && (
         <Button block className="mt" onClick={onAuthenticate}>
-          🔐 Confirm with biometrics or PIN
+          {tr('🔐 Confirm with biometrics or PIN')}
         </Button>
       )}
       {open && payment.next?.type === 'prompt' && (
@@ -462,7 +466,7 @@ export function PaymentStatus({
       )}
       {open && payment.next?.type === 'redirect' && payment.next.url && (
         <a className="btn block" href={payment.next.url}>
-          Continue to {payment.gatewayName}
+          {tr('Continue to {0}', { 0: payment.gatewayName })}
         </a>
       )}
       {open && payment.next?.type === 'bank_instructions' && (
@@ -480,30 +484,30 @@ export function PaymentStatus({
           {payment.stage === 'INSTRUCTION_ISSUED' && setProof && onSent && (
             <div className="mt">
               <Field
-                label={payment.method === 'mobile_money' ? 'Transaction ID from your mobile money receipt (optional)' : 'Bank reference (optional)'}
-                hint="Supporting note only – settlement is based on the operator/bank confirmation, never on a typed reference or screenshot"
+                label={payment.method === 'mobile_money' ? tr('Transaction ID from your mobile money receipt (optional)') : tr('Bank reference (optional)')}
+                hint={tr('Supporting note only – settlement is based on the operator/bank confirmation, never on a typed reference or screenshot')}
               >
                 <div className="row">
-                  <Input value={proof} onChange={(e) => setProof(e.target.value)} placeholder={payment.method === 'mobile_money' ? 'e.g. QX7A1B2C3D' : 'Bank reference number'} />
+                  <Input value={proof} onChange={(e) => setProof(e.target.value)} placeholder={payment.method === 'mobile_money' ? 'e.g. QX7A1B2C3D' : tr('Bank reference number')} />
                   <Button variant="secondary" onClick={onSent}>
-                    I have sent the money
+                    {tr('I have sent the money')}
                   </Button>
                 </div>
               </Field>
             </div>
           )}
-          {payment.stage === 'PAYMENT_SENT' && <Alert kind="warning">Waiting for independent confirmation. Nothing has been credited yet.</Alert>}
+          {payment.stage === 'PAYMENT_SENT' && <Alert kind="warning">{tr('Waiting for independent confirmation. Nothing has been credited yet.')}</Alert>}
           {['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE'].includes(payment.stage ?? '') && (
-            <Alert kind="warning">A verifier is reviewing this payment. You will be notified once it is confirmed or rejected; nothing is credited until then.</Alert>
+            <Alert kind="warning">{tr('A verifier is reviewing this payment. You will be notified once it is confirmed or rejected; nothing is credited until then.')}</Alert>
           )}
           {payment.expiresAt && payment.stage === 'INSTRUCTION_ISSUED' && (
-            <div className="tiny muted mt-sm">Pay before {new Date(payment.expiresAt).toLocaleString()} – unconfirmed intents expire automatically.</div>
+            <div className="tiny muted mt-sm">{tr('Pay before {0} – unconfirmed intents expire automatically.', { 0: new Date(payment.expiresAt).toLocaleString() })}</div>
           )}
         </div>
       )}
       <RouteDisclosure declaration={declaration} />
       <Button block variant="secondary" className="mt" onClick={onDone}>
-        {open ? 'Back' : 'Done'}
+        {open ? tr('Back') : tr('Done')}
       </Button>
     </div>
   );

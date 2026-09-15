@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Avatar, Button, Empty, Input, KV, Loading, PageHeader, Select, StatusBadge, TxRow, useAsync, useDebounce } from '../components/ui';
 import { TRANSACTION_TYPES, TRANSACTION_TYPE_LABELS, type Transaction, type PublicUser, type Sale, currencyFlag } from '@bitripay/shared';
 import { SaleReceipt } from './Merchant';
@@ -20,12 +20,12 @@ export function Transactions() {
   const pages = data.data ? Math.max(1, Math.ceil(data.data.total / data.data.pageSize)) : 1;
   return (
     <div>
-      <PageHeader title={t('nav.transactions')} subtitle="Detailed log of every movement on your wallets" />
+      <PageHeader title={t('nav.transactions')} subtitle={tr('Detailed log of every movement on your wallets')} />
       <div className="card">
         <div className="row wrap mb">
           <Input placeholder={t('common.search')} value={filter.search} onChange={(e) => setFilter({ ...filter, search: e.target.value, page: 1 })} style={{ maxWidth: 220 }} />
           <Select value={filter.direction} onChange={(e) => setFilter({ ...filter, direction: e.target.value, page: 1 })} style={{ width: 130 }}>
-            <option value="">In & out</option>
+            <option value="">{tr('In & out')}</option>
             <option value="in">{t('tx.in')}</option>
             <option value="out">{t('tx.out')}</option>
           </Select>
@@ -89,7 +89,7 @@ export function TransactionDetail() {
     return (
       <div className="card">
         <Empty icon="❓" text={data.error} />
-        <Link to="/app/transactions">Back</Link>
+        <Link to="/app/transactions">{tr('Back')}</Link>
       </div>
     );
   if (!data.data) return <Loading />;
@@ -103,7 +103,7 @@ export function TransactionDetail() {
         subtitle={tx.reference}
         actions={
           <Link to="/app/transactions" className="btn secondary">
-            ← All transactions
+            {tr('← All transactions')}
           </Link>
         }
       />
@@ -153,7 +153,7 @@ export function TransactionDetail() {
       </div>
       {user && data.data.entries.length > 0 && (
         <div className="card mt">
-          <h4>Ledger entries</h4>
+          <h4>{tr('Ledger entries')}</h4>
           {data.data.entries.map((e, i) => (
             <KV key={i} k={`${e.direction} · balance after ${money(e.balanceAfter, tx.currency)}`} v={money(e.amount, tx.currency)} />
           ))}
@@ -164,11 +164,11 @@ export function TransactionDetail() {
       </p>
       <div className="row mt">
         <Button variant="secondary" onClick={() => window.print()}>
-          Print receipt
+          {tr('Print receipt')}
         </Button>
         {receiver && tx.direction === 'out' && (
           <Link className="btn ghost" to={`/app/send?to=${receiver.tag}`}>
-            Send again
+            {tr('Send again')}
           </Link>
         )}
       </div>

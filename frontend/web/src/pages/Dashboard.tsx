@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { PageHeader, TxRow, Empty, useAsync, QrImage } from '../components/ui';
 import type { Transaction } from '@bitripay/shared';
@@ -64,11 +64,11 @@ export function Dashboard() {
           {wallets[0]?.classification && (
             <div className="tiny mt-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>
               {wallets[0].classification.class === 'sandbox'
-                ? '🧪 Sandbox balances – no real-world value.'
+                ? tr('🧪 Sandbox balances – no real-world value.')
                 : `${wallets[0].classification.label} · issued by ${wallets[0].classification.issuer} · ${wallets[0].classification.backing}.`}
-              {wallets.some((w) => (w.promoBalance ?? 0) > 0) ? ' Promotional credit covers BitriPay fees only and cannot be withdrawn.' : ''}{' '}
+              {wallets.some((w) => (w.promoBalance ?? 0) > 0) ? tr('Promotional credit covers BitriPay fees only and cannot be withdrawn.') : ''}{' '}
               <Link to="/app/statements" style={{ color: '#fff', textDecoration: 'underline' }}>
-                Statements →
+                {tr('Statements →')}
               </Link>
             </div>
           )}
@@ -76,7 +76,7 @@ export function Dashboard() {
         <div className="card center">
           <QrImage value={`${config?.webUrl ?? ''}/q?v=1&t=${isMerchantClass(user?.role) ? 'm' : user?.role === 'agent' ? 'ag' : 'u'}&id=${user?.tag}`} size={140} />
           <div className="small muted mt-sm">
-            Your receive code · <Link to="/app/receive">enlarge</Link>
+            {tr('Your receive code ·')} <Link to="/app/receive">enlarge</Link>
           </div>
         </div>
       </div>
@@ -141,7 +141,7 @@ export function Dashboard() {
       </div>
       {user?.kycStatus !== 'verified' && m.kyc !== false && (
         <div className="alert warning mt">
-          Unverified accounts have lower limits. <Link to="/app/settings?tab=kyc">Complete identity verification</Link> to unlock higher limits and more virtual cards.
+          {tr('Unverified accounts have lower limits.')} <Link to="/app/settings?tab=kyc">{tr('Complete identity verification')}</Link> to unlock higher limits and more virtual cards.
         </div>
       )}
     </div>

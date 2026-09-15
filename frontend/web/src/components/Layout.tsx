@@ -2,7 +2,7 @@ import { useState, type ReactNode, useEffect } from 'react';
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import { ErrorBoundary } from './ErrorBoundary';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr, useTrKey } from '../lib/i18n';
 import { Avatar } from './ui';
 import { api } from '../lib/api';
 import { onPwaChange, pwaState } from '../lib/pwa';
@@ -34,6 +34,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const t = useT();
   const nav = useNavigate();
   const location = useLocation();
+  const trKey = useTrKey();
   const [open, setOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const m = config?.modules ?? {};
@@ -88,7 +89,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className="app-shell">
       {open && <div className="backdrop" onClick={() => setOpen(false)} />}
       <aside className={`sidebar ${open ? 'open' : ''}`}>
-        <Link to="/app" className="brand" style={{ color: 'inherit' }} aria-label="BitriPay">
+        <Link to="/app" className="brand" style={{ color: 'inherit' }} aria-label={tr('BitriPay')}>
           <img className="brand-img swap" src="/brand/logo.svg" alt="BitriPay" width={140} height={34} />
         </Link>
         {renderItems(main)}
@@ -114,9 +115,9 @@ export function Layout({ children }: { children: ReactNode }) {
             {renderItems([{ to: '/app/agent', key: 'nav.agentTools', ico: '🏪' }])}
           </>
         )}
-        <div className="nav-section">Services</div>
+        <div className="nav-section">{tr('Services')}</div>
         {renderItems(services)}
-        <div className="nav-section">Account</div>
+        <div className="nav-section">{tr('Account')}</div>
         {renderItems(account)}
         <div style={{ flex: 1 }} />
         <button
@@ -134,12 +135,12 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="main">
         <header className="topbar">
           <div className="row">
-            <button className="btn secondary icon menu-btn" onClick={() => setOpen(true)} aria-label="Menu">
+            <button className="btn secondary icon menu-btn" onClick={() => setOpen(true)} aria-label={tr('Menu')}>
               ☰
             </button>
             {user?.kycStatus !== 'verified' && has('kyc') && (
               <Link to="/app/settings?tab=kyc" className="chip warning hide-mobile" style={{ textDecoration: 'none' }}>
-                {user?.kycStatus === 'pending' ? 'KYC under review' : 'Verify your identity →'}
+                {user?.kycStatus === 'pending' ? tr('KYC under review') : tr('Verify your identity →')}
               </Link>
             )}
           </div>
@@ -163,18 +164,18 @@ export function Layout({ children }: { children: ReactNode }) {
                 ))}
               </select>
             )}
-            <select className="input" style={{ width: 'auto', padding: '6px 8px' }} value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Language">
+            <select className="input" style={{ width: 'auto', padding: '6px 8px' }} value={lang} onChange={(e) => setLang(e.target.value)} aria-label={tr('Language')}>
               {(config?.languages ?? [{ code: 'en', nativeName: 'English' }]).map((l) => (
                 <option key={l.code} value={l.code}>
                   {l.nativeName}
                 </option>
               ))}
             </select>
-            <button className="btn secondary icon" onClick={toggleTheme} aria-label="Toggle theme">
+            <button className="btn secondary icon" onClick={toggleTheme} aria-label={tr('Toggle theme')}>
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
             <div style={{ position: 'relative' }}>
-              <button className="btn secondary icon" onClick={() => setNotifOpen((o) => !o)} aria-label="Notifications">
+              <button className="btn secondary icon" onClick={() => setNotifOpen((o) => !o)} aria-label={tr('Notifications')}>
                 🔔
                 {unread > 0 && (
                   <span className="chip danger" style={{ position: 'absolute', top: -6, right: -6, padding: '0 6px' }}>
@@ -185,12 +186,12 @@ export function Layout({ children }: { children: ReactNode }) {
               {notifOpen && (
                 <div className="card" style={{ position: 'absolute', right: 0, top: 44, width: 340, maxHeight: 420, overflowY: 'auto', zIndex: 30, padding: 12 }}>
                   <div className="card-title">
-                    <h4 style={{ margin: 0 }}>Notifications</h4>
+                    <h4 style={{ margin: 0 }}>{tr('Notifications')}</h4>
                     <button className="btn ghost sm" onClick={() => api.post('/api/account/notifications/read').then(refreshWallets)}>
-                      Mark all read
+                      {tr('Mark all read')}
                     </button>
                   </div>
-                  {notifications.length === 0 && <div className="muted small">No notifications</div>}
+                  {notifications.length === 0 && <div className="muted small">{tr('No notifications')}</div>}
                   {notifications.slice(0, 20).map((n) => (
                     <div key={n.id} className="list-item" style={{ opacity: n.read ? 0.7 : 1 }}>
                       <div className="flex1">
@@ -211,7 +212,9 @@ export function Layout({ children }: { children: ReactNode }) {
         </header>
         <main className="content">
           <OfflineBanner />
-          <ErrorBoundary resetKey={location.pathname}>{children}</ErrorBoundary>
+          <ErrorBoundary key={trKey} resetKey={location.pathname}>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

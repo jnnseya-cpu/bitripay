@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, AmountInput, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, TxRow, useAsync } from '../components/ui';
 import type { BankAccount, Transaction } from '@bitripay/shared';
 import { currencyFlag } from '@bitripay/shared';
@@ -48,7 +48,7 @@ export function Withdraw() {
     try {
       const destination = dest === 'mobile_money' ? { method: 'mobile_money', operatorId, phone, name: recipientName || null } : { method: 'bank', bankAccountId: bankId || eligible[0]?.id };
       const r = await api.post<{ transaction: Transaction }>('/api/withdrawals', { amount, currency: cur, destination, pin });
-      toast('Withdrawal requested', 'success');
+      toast(tr('Withdrawal requested'), 'success');
       refreshWallets();
       nav(`/app/transactions/${r.transaction.id}`);
     } catch (err) {
@@ -67,7 +67,7 @@ export function Withdraw() {
       setPinOpen(false);
       setAddOpen(false);
       accounts.reload();
-      toast('Bank account added', 'success');
+      toast(tr('Bank account added'), 'success');
     } catch (err) {
       toast((err as Error).message, 'error');
     }
@@ -77,7 +77,7 @@ export function Withdraw() {
     <div>
       <PageHeader
         title={t('withdraw.title')}
-        subtitle="Send wallet funds to your bank account or to any mobile money number in the world. Prefer cash? Use an agent."
+        subtitle={tr('Send wallet funds to your bank account or to any mobile money number in the world. Prefer cash? Use an agent.')}
         actions={
           <Button
             variant="secondary"
@@ -86,7 +86,7 @@ export function Withdraw() {
               setAddOpen(true);
             }}
           >
-            + Add bank account
+            {tr('+ Add bank account')}
           </Button>
         }
       />
@@ -108,10 +108,10 @@ export function Withdraw() {
           <Field label="Pay out to">
             <div className="pill-tabs">
               <button type="button" className={`tab ${dest === 'bank' ? 'active' : ''}`} onClick={() => setDest('bank')}>
-                🏦 Bank account
+                {tr('🏦 Bank account')}
               </button>
               <button type="button" className={`tab ${dest === 'mobile_money' ? 'active' : ''}`} onClick={() => setDest('mobile_money')}>
-                📱 Mobile money (any operator)
+                {tr('📱 Mobile money (any operator)')}
               </button>
             </div>
           </Field>
@@ -119,19 +119,19 @@ export function Withdraw() {
             <>
               <OperatorPicker value={operatorId} onChange={setOperatorId} country={opCountry} onCountry={setOpCountry} />
               <div className="grid cols-2">
-                <Field label="Mobile money number">
+                <Field label={tr('Mobile money number')}>
                   <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+2547…" />
                 </Field>
-                <Field label="Recipient name (optional)">
+                <Field label={tr('Recipient name (optional)')}>
                   <Input value={recipientName} onChange={(e) => setRecipientName(e.target.value)} />
                 </Field>
               </div>
             </>
           )}
           {dest === 'bank' && (
-            <Field label="Bank account">
+            <Field label={tr('Bank account')}>
               {eligible.length === 0 ? (
-                <Alert kind="warning">No {cur} bank account saved yet. Add one to continue.</Alert>
+                <Alert kind="warning">{tr('No {0} bank account saved yet. Add one to continue.', { 0: cur })}</Alert>
               ) : (
                 <Select value={bankId || eligible[0].id} onChange={(e) => setBankId(e.target.value)}>
                   {eligible.map((a) => (
@@ -158,15 +158,15 @@ export function Withdraw() {
               setPinOpen(true);
             }}
           >
-            🔐 Confirm and withdraw
+            {tr('🔐 Confirm and withdraw')}
           </Button>
           <p className="small muted mt">
-            Bank withdrawals and mobile money payouts (to any operator worldwide) are reviewed and paid out by our team or a local agent, usually within one business day.
+            {tr('Bank withdrawals and mobile money payouts (to any operator worldwide) are reviewed and paid out by our team or a local agent, usually within one business day.')}
           </p>
         </div>
         <div className="card">
-          <h3>Bank accounts</h3>
-          {accounts.data?.items.length === 0 && <Empty icon="🏦" text="No bank accounts yet" />}
+          <h3>{tr('Bank accounts')}</h3>
+          {accounts.data?.items.length === 0 && <Empty icon="🏦" text={tr('No bank accounts yet')} />}
           <div className="list">
             {accounts.data?.items.map((a) => (
               <div key={a.id} className="list-item">
@@ -179,12 +179,12 @@ export function Withdraw() {
                   </div>
                 </div>
                 <Button size="sm" variant="ghost" onClick={() => api.del(`/api/bank-accounts/${a.id}`).then(accounts.reload)}>
-                  Remove
+                  {tr('Remove')}
                 </Button>
               </div>
             ))}
           </div>
-          <h3 className="mt">Recent withdrawals</h3>
+          <h3 className="mt">{tr('Recent withdrawals')}</h3>
           <div className="list">
             {history.data?.items.length === 0 && <Empty icon="🏦" />}
             {history.data?.items.map((tx) => (
@@ -200,14 +200,14 @@ export function Withdraw() {
         loading={loading}
         summary={<KV k="Withdraw" v={`${amount} ${cur}`} />}
       />
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add bank account">
-        <Field label="Bank name">
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title={tr('Add bank account')}>
+        <Field label={tr('Bank name')}>
           <Input value={bank.bankName} onChange={(e) => setBank({ ...bank, bankName: e.target.value })} />
         </Field>
-        <Field label="Account holder name">
+        <Field label={tr('Account holder name')}>
           <Input value={bank.accountName} onChange={(e) => setBank({ ...bank, accountName: e.target.value })} />
         </Field>
-        <Field label="Account number / IBAN">
+        <Field label={tr('Account number / IBAN')}>
           <Input value={bank.accountNumber} onChange={(e) => setBank({ ...bank, accountNumber: e.target.value })} />
         </Field>
         <div className="grid cols-2">
@@ -220,7 +220,7 @@ export function Withdraw() {
               ))}
             </Select>
           </Field>
-          <Field label="Country">
+          <Field label={tr('Country')}>
             <Select value={bank.country} onChange={(e) => setBank({ ...bank, country: e.target.value })}>
               <option value="">—</option>
               {(config?.countries ?? []).map((c) => (
@@ -231,7 +231,7 @@ export function Withdraw() {
             </Select>
           </Field>
         </div>
-        <Field label="SWIFT / routing (optional)">
+        <Field label={tr('SWIFT / routing (optional)')}>
           <Input value={bank.swift} onChange={(e) => setBank({ ...bank, swift: e.target.value })} />
         </Field>
         <Button

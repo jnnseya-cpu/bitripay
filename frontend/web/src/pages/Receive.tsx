@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { AmountInput, Button, CopyButton, Field, Input, PageHeader, QrImage } from '../components/ui';
 
 export function Receive() {
@@ -24,7 +24,7 @@ export function Receive() {
       .catch(() => setData(null));
   }, [amount, cur, note]);
   const share = () => {
-    if (navigator.share && data) navigator.share({ title: 'Pay me on BitriPay', text: `Pay @${user?.tag} on BitriPay`, url: data.content }).catch(() => {});
+    if (navigator.share && data) navigator.share({ title: tr('Pay me on BitriPay'), text: `Pay @${user?.tag} on BitriPay`, url: data.content }).catch(() => {});
   };
   return (
     <div style={{ maxWidth: 720 }}>
@@ -41,8 +41,8 @@ export function Receive() {
             </div>
           )}
           <div className="row mt" style={{ justifyContent: 'center' }}>
-            {data && <CopyButton text={data.content} label="Copy link" />}
-            {data && <CopyButton text={`@${user?.tag}`} label="Copy @tag" />}
+            {data && <CopyButton text={data.content} label={tr('Copy link')} />}
+            {data && <CopyButton text={`@${user?.tag}`} label={tr('Copy @tag')} />}
             {typeof navigator.share === 'function' && (
               <Button variant="secondary" size="sm" onClick={share}>
                 {t('common.share')}
@@ -50,21 +50,21 @@ export function Receive() {
             )}
             {data && (
               <a className="btn secondary sm" href={`/api/qr/image.svg?data=${encodeURIComponent(data.content)}`} download={`bitripay-${user?.tag}.svg`}>
-                Download
+                {tr('Download')}
               </a>
             )}
           </div>
         </div>
         <div className="card">
           <h3>{t('receive.requestAmount')}</h3>
-          <p className="muted small">Optional – the payer will see these pre-filled.</p>
+          <p className="muted small">{tr('Optional – the payer will see these pre-filled.')}</p>
           <Field label={t('common.amount')}>
             <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} currencies={(config?.currencies ?? []).map((c) => c.code)} />
           </Field>
           <Field label={t('common.note')}>
             <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={120} />
           </Field>
-          <div className="alert info small">Anyone can pay this code with the BitriPay app or by opening the link in a browser.</div>
+          <div className="alert info small">{tr('Anyone can pay this code with the BitriPay app or by opening the link in a browser.')}</div>
         </div>
       </div>
     </div>

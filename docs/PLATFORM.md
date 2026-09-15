@@ -487,6 +487,14 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
   (`?currency=`) → most-used wallet → IP country (CDF in the DRC, GBP, EUR in the euro area, the ISO currency
   elsewhere) → browser hint (`x-currency`) → USD. Only enabled languages and currencies are ever returned. Launch
   languages Lingala, Kikongo, Tshiluba, Amharic, Hausa, Yoruba and Igbo are registered in the CMS language list.
+- **Whole-app translation** (`frontend/web/src/lib/tr.ts`, `shared/core/src/locales/phrases/`): besides the keyed
+  dictionaries (`nav.*`, `settings.*`…), every sentence the web app shows goes through `tr('English phrase')`;
+  `scripts/i18n-extract.mjs --write` converts new JSX text, text props, option labels and toasts and regenerates the
+  phrase catalogue (`PHRASES`, 1 076 phrases). French is hand-written for every phrase (`phrases/fr.ts`, enforced by
+  the shared tests); Lingala, Kikongo and Tshiluba fall back to French, the others to English until translated. The
+  console (Languages) shows the coverage per language and **Translate missing phrases** runs the platform model on
+  what is missing only (`services/translationEngine.ts`: placeholders and product names preserved or the phrase is
+  refused), storing the result as overrides that administrators correct by hand; the apps merge overrides at runtime.
 - **Acceptance tests** (`src/tests/acceptance.test.ts`): 3 000 randomised postings (with cross-currency legs and
   refused overdrafts) leave every currency zero-sum and every wallet equal to its derived balance; fifty offline
   promises settle in order with the failing one restoring the payer's balance and a replayed nonce refused; the locale

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { toMinor, fromMinor, formatMoney, convertMinor, applyBps } from './money.ts';
 import { encodeQr, decodeQr, encodeQrLink } from './qr.ts';
 import { luhnCheck, luhnCheckDigit, detectCardBrand, isExpiryValid } from './cards.ts';
+import { PHRASES } from './locales/phrases/catalogue.ts';
+import { frPhrases } from './locales/phrases/fr.ts';
 import { normalizePhone, nationalSignificant, samePhone } from './phone.ts';
 import { en } from './locales/en.ts';
 import { fr } from './locales/fr.ts';
@@ -102,4 +104,19 @@ test('phone normalisation is shared and prefix-tolerant', () => {
   assert.ok(samePhone('+243812345678', '0812345678'));
   assert.ok(!samePhone('+243812345678', '+243812345679'));
   assert.ok(!samePhone(null, '0812345678'));
+});
+
+test('the French phrase pack translates every phrase of the web app and keeps the placeholders', () => {
+  assert.ok(PHRASES.length > 900, `catalogue has ${PHRASES.length} phrases`);
+  const placeholders = (s: string) => (s.match(/\{\d+\}/g) ?? []).sort().join(',');
+  for (const p of PHRASES) {
+    assert.ok(frPhrases[p] && frPhrases[p].trim().length > 0, `fr lacks "${p}"`);
+    assert.equal(placeholders(frPhrases[p]), placeholders(p), `fr placeholders differ for "${p}"`);
+  }
+  assert.equal(new Set(PHRASES).size, PHRASES.length, 'catalogue has no duplicate');
+  assert.equal(frPhrases['Add money'], 'Ajouter des fonds');
+  assert.equal(frPhrases['No user found for "{0}"'].split('{0}').join('x'), 'Aucun utilisateur trouvé pour « x »');
+  // nothing in the pack is left in English by accident (a few identical technical strings are expected)
+  const identical = PHRASES.filter((p) => frPhrases[p] === p && /\s/.test(p) && !/^(GET|POST) |RFC|OpenAPI|Idempotency|BitriPay-/.test(p));
+  assert.ok(identical.length < 20, `untranslated: ${identical.join(' | ')}`); // proper nouns, store names and technical labels stay as they are
 });

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Alert, AmountInput, Avatar, Button, Empty, Field, Input, KV, PageHeader, PinModal, RouteDisclosure, RouteTimeline, Select, StatusBadge, Tabs, useAsync, useDebounce } from '../components/ui';
 import { CardForm, type CardValues } from '../components/CardForm';
 import { OperatorPicker, PaymentStatus, type PaymentView } from './AddMoney';
@@ -152,7 +152,7 @@ export function MoveMoney() {
       setPinOpen(false);
       refreshWallets();
       history.reload();
-      if (r.route.status === 'completed') toast('Money delivered', 'success');
+      if (r.route.status === 'completed') toast(tr('Money delivered'), 'success');
       else if (r.route.payment?.next?.type === 'redirect' && r.route.payment.next.url) window.location.href = r.route.payment.next.url;
     } catch (err) {
       setError((err as Error).message);
@@ -168,8 +168,10 @@ export function MoveMoney() {
   return (
     <div>
       <PageHeader
-        title="Move money"
-        subtitle="Fund from a card, bank, mobile money or your wallet and deliver to a wallet, QR code, bank account, mobile money number or agent. The BitriPay ledger coordinates both legs; external legs move only through your own bank, operator or a licensed processor and are credited or paid out after independent confirmation."
+        title={tr('Move money')}
+        subtitle={tr(
+          'Fund from a card, bank, mobile money or your wallet and deliver to a wallet, QR code, bank account, mobile money number or agent. The BitriPay ledger coordinates both legs; external legs move only through your own bank, operator or a licensed processor and are credited or paid out after independent confirmation.',
+        )}
       />
       <div className="grid cols-3">
         <div className="card" style={{ gridColumn: 'span 2' }}>
@@ -216,7 +218,9 @@ export function MoveMoney() {
               )}
               {route.payout && (
                 <div className="card soft compact mt">
-                  <div className="small bold">Local payout · {route.payout.stageLabel ?? route.payout.stage.toLowerCase().replace(/_/g, ' ')}</div>
+                  <div className="small bold">
+                    {tr('Local payout ·')} {route.payout.stageLabel ?? route.payout.stage.toLowerCase().replace(/_/g, ' ')}
+                  </div>
                   <KV k="To" v={`${route.payout.operatorName ?? route.payout.rail} · ${route.payout.recipientMasked ?? ''}${route.payout.recipientName ? ` · ${route.payout.recipientName}` : ''}`} />
                   <KV k="Reference" v={<span className="mono">{route.payout.reference}</span>} />
                   {route.payout.externalRef && <KV k="Operator confirmation" v={<span className="mono">{route.payout.externalRef}</span>} />}
@@ -228,23 +232,23 @@ export function MoveMoney() {
                   <PaymentStatus payment={route.payment as PaymentView} onDone={() => {}} />
                 </div>
               )}
-              {route.stage === 'BIOMETRIC_APPROVAL_REQUIRED' && <Alert kind="warning">This transfer was not authorised. Start again and confirm with biometrics or your PIN.</Alert>}
+              {route.stage === 'BIOMETRIC_APPROVAL_REQUIRED' && <Alert kind="warning">{tr('This transfer was not authorised. Start again and confirm with biometrics or your PIN.')}</Alert>}
               {route.stage === 'AWAITING_CONFIRMATION' && route.consent && (
                 <Alert kind="warning">
-                  The recipient must confirm receiving <b>{route.targetCurrency}</b> before the payout is executed. Share this link with them:{' '}
+                  {tr('The recipient must confirm receiving')} <b>{route.targetCurrency}</b> before the payout is executed. Share this link with them:{' '}
                   <a href={route.consent.url} target="_blank" rel="noreferrer">
                     {route.consent.url}
                   </a>
                 </Alert>
               )}
-              {route.confirmationMethod && <div className="tiny muted center mt-sm">Settled on {route.confirmationMethod.replace(/_/g, ' ').toLowerCase()}</div>}
+              {route.confirmationMethod && <div className="tiny muted center mt-sm">{tr('Settled on {0}', { 0: route.confirmationMethod.replace(/_/g, ' ').toLowerCase() })}</div>}
               {route.stage === 'INSUFFICIENT_LIQUIDITY' && (
                 <Alert kind="warning">
-                  No prefunded local account can pay this right now. Your funds are held safely; the payout resumes automatically once liquidity is available, or you can cancel for a refund.
+                  {tr('No prefunded local account can pay this right now. Your funds are held safely; the payout resumes automatically once liquidity is available, or you can cancel for a refund.')}
                 </Alert>
               )}
-              {route.stage === 'MANUAL_REVIEW' && <Alert kind="warning">A verifier is reviewing this transfer before the local payout is released. Nothing has been paid out yet.</Alert>}
-              {route.stage === 'PAYOUT_SENT' && <Alert kind="info">The local payout is being executed from the payout account right now. It can no longer be recalled.</Alert>}
+              {route.stage === 'MANUAL_REVIEW' && <Alert kind="warning">{tr('A verifier is reviewing this transfer before the local payout is released. Nothing has been paid out yet.')}</Alert>}
+              {route.stage === 'PAYOUT_SENT' && <Alert kind="info">{tr('The local payout is being executed from the payout account right now. It can no longer be recalled.')}</Alert>}
               {route.destinationDetails?.cashOutCode && (
                 <Alert kind="success">
                   Cash-out code for the agent: <b className="mono">{route.destinationDetails.cashOutCode}</b>
@@ -259,7 +263,7 @@ export function MoveMoney() {
                     setError(null);
                   }}
                 >
-                  New transfer
+                  {tr('New transfer')}
                 </Button>
                 {['FUNDED', 'FAILED', 'INSUFFICIENT_LIQUIDITY'].includes(route.stage) && (
                   <Button
@@ -270,7 +274,7 @@ export function MoveMoney() {
                         .catch((e) => setError(e.message))
                     }
                   >
-                    Retry payout
+                    {tr('Retry payout')}
                   </Button>
                 )}
                 {['FUNDED', 'PAYOUT_ROUTED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED'].includes(route.stage) && (
@@ -281,12 +285,12 @@ export function MoveMoney() {
                       setPinOpen(true);
                     }}
                   >
-                    Cancel & refund
+                    {tr('Cancel & refund')}
                   </Button>
                 )}
                 {route.payoutTransactionId && (
                   <Button variant="ghost" onClick={() => nav(`/app/transactions/${route.payoutTransactionId}`)}>
-                    View transaction
+                    {tr('View transaction')}
                   </Button>
                 )}
                 <Button
@@ -301,7 +305,7 @@ export function MoveMoney() {
                     })
                   }
                 >
-                  Receipt
+                  {tr('Receipt')}
                 </Button>
               </div>
             </div>
@@ -323,12 +327,12 @@ export function MoveMoney() {
                       if ((config?.currencies ?? []).some((x) => x.code === c)) setCur(c);
                     }}
                   />
-                  <Field label="Your mobile money number">
+                  <Field label={tr('Your mobile money number')}>
                     <Input value={srcOp.phone} onChange={(e) => setSrcOp({ ...srcOp, phone: e.target.value })} />
                   </Field>
                 </>
               )}
-              {source === 'bank' && <Alert kind="info">You'll get bank details and a reference; the transfer continues automatically once the deposit is confirmed.</Alert>}
+              {source === 'bank' && <Alert kind="info">{tr("You'll get bank details and a reference; the transfer continues automatically once the deposit is confirmed.")}</Alert>}
               <Field label={t('common.amount')} hint={source === 'wallet' && wallet ? `${t('common.balance')}: ${money(wallet.balance, wallet.currency)}` : undefined}>
                 <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} big currencies={(config?.currencies ?? []).map((c) => c.code)} />
               </Field>
@@ -336,12 +340,12 @@ export function MoveMoney() {
                 <Tabs pills tabs={(Object.keys(destLabels) as Dest[]).map((k) => ({ id: k, label: destLabels[k] }))} value={dest} onChange={(v) => setDest(v as Dest)} />
               </Field>
               {dest === 'wallet' && (
-                <Field label="Recipient (@tag, email or phone)">
+                <Field label={tr('Recipient (@tag, email or phone)')}>
                   <Input value={to} onChange={(e) => setTo(e.target.value)} placeholder="@alice" />
                 </Field>
               )}
               {dest === 'qr' && (
-                <Field label="QR content or payment link" hint="Paste the link from a payment request or a scanned QR code">
+                <Field label={tr('QR content or payment link')} hint={tr('Paste the link from a payment request or a scanned QR code')}>
                   <Input value={qr} onChange={(e) => setQr(e.target.value)} placeholder="https://…/pay/CODE or bitripay://pay?…" />
                 </Field>
               )}
@@ -354,10 +358,10 @@ export function MoveMoney() {
                     onCountry={(c) => setDstOp((s) => ({ ...s, country: c }))}
                   />
                   <div className="grid cols-2">
-                    <Field label="Recipient mobile money number">
+                    <Field label={tr('Recipient mobile money number')}>
                       <Input value={dstOp.phone} onChange={(e) => setDstOp({ ...dstOp, phone: e.target.value })} />
                     </Field>
-                    <Field label="Recipient name">
+                    <Field label={tr('Recipient name')}>
                       <Input value={dstOp.name} onChange={(e) => setDstOp({ ...dstOp, name: e.target.value })} />
                     </Field>
                   </div>
@@ -366,9 +370,9 @@ export function MoveMoney() {
               {dest === 'bank' && (
                 <>
                   {accounts.data && accounts.data.items.length > 0 && (
-                    <Field label="My saved bank accounts">
+                    <Field label={tr('My saved bank accounts')}>
                       <Select value={bank.bankAccountId} onChange={(e) => setBank({ ...bank, bankAccountId: e.target.value })}>
-                        <option value="">Enter another account…</option>
+                        <option value="">{tr('Enter another account…')}</option>
                         {accounts.data.items.map((a) => (
                           <option key={a.id} value={a.id}>
                             {a.bankName} · {a.accountName} · {a.currency}
@@ -379,16 +383,16 @@ export function MoveMoney() {
                   )}
                   {!bank.bankAccountId && (
                     <div className="grid cols-2">
-                      <Field label="Bank name">
+                      <Field label={tr('Bank name')}>
                         <Input value={bank.bankName} onChange={(e) => setBank({ ...bank, bankName: e.target.value })} />
                       </Field>
-                      <Field label="Account holder">
+                      <Field label={tr('Account holder')}>
                         <Input value={bank.accountName} onChange={(e) => setBank({ ...bank, accountName: e.target.value })} />
                       </Field>
-                      <Field label="Account number / IBAN">
+                      <Field label={tr('Account number / IBAN')}>
                         <Input value={bank.accountNumber} onChange={(e) => setBank({ ...bank, accountNumber: e.target.value })} />
                       </Field>
-                      <Field label="Country">
+                      <Field label={tr('Country')}>
                         <Select value={bank.country} onChange={(e) => setBank({ ...bank, country: e.target.value })}>
                           <option value="">—</option>
                           {(config?.countries ?? []).map((c) => (
@@ -403,7 +407,7 @@ export function MoveMoney() {
                 </>
               )}
               {dest === 'agent' && (
-                <Field label="Agent (@tag)">
+                <Field label={tr('Agent (@tag)')}>
                   <Input value={agent} onChange={(e) => setAgent(e.target.value)} placeholder="@kwameagent" />
                 </Field>
               )}
@@ -436,7 +440,7 @@ export function MoveMoney() {
                     </div>
                   ) : (
                     <Select value={target} onChange={(e) => setTarget(e.target.value)}>
-                      <option value="">Same as sent ({cur})</option>
+                      <option value="">{tr('Same as sent ({0})', { 0: cur })}</option>
                       {(config?.currencies ?? []).map((c) => (
                         <option key={c.code} value={c.code}>
                           {currencyFlag(c.code)} {c.code} – {c.name}
@@ -496,7 +500,7 @@ export function MoveMoney() {
                     />
                   )}
                   {preview.quote.recipientConsentRequired && (
-                    <Alert kind="warning">The recipient must confirm receiving {preview.quote.targetCurrency} before the payout is executed. You will get a link to share.</Alert>
+                    <Alert kind="warning">{tr('The recipient must confirm receiving {0} before the payout is executed. You will get a link to share.', { 0: preview.quote.targetCurrency })}</Alert>
                   )}
                   {preview.quote.corridor && (
                     <KV
@@ -513,7 +517,7 @@ export function MoveMoney() {
                     />
                   )}
                   {preview.quote.fx && !preview.quote.fx.guaranteed && preview.quote.fx.sourceCurrency !== preview.quote.fx.targetCurrency && (
-                    <div className="tiny muted">Indicative rate ({preview.quote.fx.providerLabel}). The amount received may differ.</div>
+                    <div className="tiny muted">{tr('Indicative rate ({0}). The amount received may differ.', { 0: preview.quote.fx.providerLabel })}</div>
                   )}
                   <div className="tiny muted mt-sm">
                     <b>Payout:</b> {preview.quote.payoutConditions}
@@ -524,7 +528,7 @@ export function MoveMoney() {
                 </div>
               )}
               {preview?.quote?.sourceOfFundsRequired && (
-                <Field label="Source of funds (required for this amount)" hint="e.g. salary, business income, savings, sale of property">
+                <Field label={tr('Source of funds (required for this amount)')} hint="e.g. salary, business income, savings, sale of property">
                   <Input value={sourceOfFunds} onChange={(e) => setSourceOfFunds(e.target.value)} />
                 </Field>
               )}
@@ -547,7 +551,7 @@ export function MoveMoney() {
           )}
         </div>
         <div className="card">
-          <h3>Recent movements</h3>
+          <h3>{tr('Recent movements')}</h3>
           {history.data?.items.length === 0 && <Empty icon="🔀" />}
           <div className="list">
             {history.data?.items.slice(0, 12).map((r) => (
@@ -569,7 +573,7 @@ export function MoveMoney() {
         onClose={() => setPinOpen(false)}
         onSubmit={(pin) => (pinFor === 'cancel' ? cancel(pin) : submit(pin))}
         loading={loading}
-        title={pinFor === 'cancel' ? 'Confirm cancellation' : 'Authorise this transfer'}
+        title={pinFor === 'cancel' ? tr('Confirm cancellation') : tr('Authorise this transfer')}
         summary={
           pinFor === 'cancel' && route ? (
             <KV k="Cancel transfer" v={money(route.amount, route.currency)} />

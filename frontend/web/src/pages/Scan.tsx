@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, useParams, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Scanner } from '../components/Scanner';
 import { Alert, AmountInput, Avatar, Button, Field, Input, KV, Loading, PageHeader, PinModal, StatusBadge } from '../components/ui';
 import { decodeQr, toMinor, type PaymentRequest, type PublicUser, type Transaction } from '@bitripay/shared';
@@ -86,10 +86,10 @@ export function Scan() {
       {error && <Alert kind="error">{error}</Alert>}
       {queued && (
         <Alert kind="warning">
-          <b>Offline payment queued</b> · {queued.amountMinor / 100} {queued.currency} to {queued.merchantName} · <span className="mono tiny">{queued.state}</span>
+          <b>{tr('Offline payment queued')}</b> · {queued.amountMinor / 100} {queued.currency} to {queued.merchantName} · <span className="mono tiny">{queued.state}</span>
           <div className="tiny muted">{PENDING_CONFIRMATION_TEXT}</div>{' '}
           <Button size="sm" variant="secondary" onClick={syncNow} disabled={!navigator.onLine}>
-            Sync now
+            {tr('Sync now')}
           </Button>
         </Alert>
       )}
@@ -103,7 +103,7 @@ export function Scan() {
             <div className="row">
               <Input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="bitripay://pay?… or https://…/pay/CODE or @tag" />
               <Button type="button" onClick={() => manual && resolve(manual)}>
-                Go
+                {tr('Go')}
               </Button>
             </div>
           </Field>
@@ -157,16 +157,16 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
           <Avatar user={target} />
           <div>
             <div className="main-text">{target.businessName || target.fullName}</div>
-            <div className="sub-text">Agent · @{target.tag}</div>
+            <div className="sub-text">{tr('Agent · @{0}', { 0: target.tag })}</div>
           </div>
         </div>
-        <p className="muted small">Agents let you deposit cash into your wallet or withdraw cash. Choose what you'd like to do.</p>
+        <p className="muted small">{tr("Agents let you deposit cash into your wallet or withdraw cash. Choose what you'd like to do.")}</p>
         <div className="row wrap">
           <Link className="btn" to={`/app/agents?agent=${target.tag}&action=cashout`}>
-            Withdraw cash (cash-out)
+            {tr('Withdraw cash (cash-out)')}
           </Link>
           <Link className="btn secondary" to={`/app/send?to=${target.tag}`}>
-            Send money to agent
+            {tr('Send money to agent')}
           </Link>
           {onBack && (
             <Button variant="ghost" onClick={onBack}>
@@ -196,7 +196,7 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
         tx = r.transaction;
       }
       await refreshWallets();
-      toast('Payment successful', 'success');
+      toast(tr('Payment successful'), 'success');
       nav(`/app/transactions/${tx.id}`);
     } catch (err) {
       setError((err as Error).message);
@@ -229,9 +229,9 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
               {trust && (
                 <span
                   className={`chip ${trust === 'verified' ? 'success' : 'warning'}`}
-                  title={trust === 'verified' ? 'Signed by the merchant key registered with BitriPay' : 'Unsigned code: check the name before paying'}
+                  title={trust === 'verified' ? tr('Signed by the merchant key registered with BitriPay') : tr('Unsigned code: check the name before paying')}
                 >
-                  {trust === 'verified' ? '✓ Verified merchant' : 'Unverified code'}
+                  {trust === 'verified' ? tr('✓ Verified merchant') : tr('Unverified code')}
                 </span>
               )}
               {location && (
@@ -245,8 +245,8 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
           )}
         </div>
       </div>
-      {isPr && pr!.status !== 'open' && <Alert kind="warning">This payment request is {pr!.status}.</Alert>}
-      {target.id === user?.id && <Alert kind="warning">This is your own code.</Alert>}
+      {isPr && pr!.status !== 'open' && <Alert kind="warning">{tr('This payment request is {0}.', { 0: pr!.status })}</Alert>}
+      {target.id === user?.id && <Alert kind="warning">{tr('This is your own code.')}</Alert>}
       <Field label={t('common.amount')} hint={wallet ? `${t('common.balance')}: ${money(wallet.balance, wallet.currency)}` : undefined}>
         <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} big disabled={!!fixedAmount} currencies={isPr || isBq ? [cur] : undefined} />
       </Field>
@@ -261,7 +261,7 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
       )}
       <div className="row">
         <Button size="lg" className="flex1" disabled={minor <= 0 || !wallet || wallet.balance < total || (isPr && pr!.status !== 'open') || target.id === user?.id} onClick={() => setPinOpen(true)}>
-          Pay {minor > 0 ? money(total, cur) : ''}
+          {tr('Pay')} {minor > 0 ? money(total, cur) : ''}
         </Button>
         {onBack && (
           <Button variant="secondary" onClick={onBack}>
@@ -286,7 +286,7 @@ export function QrLanding() {
     if (loading) return;
     const payload = tag ? { type: 'u' as const, id: tag } : code ? { type: 'bq' as const, id: code } : decodeQr(window.location.href);
     if (!payload) {
-      setError('Invalid QR link');
+      setError(tr('Invalid QR link'));
       return;
     }
     if (payload.type === 'pr') {
@@ -307,7 +307,7 @@ export function QrLanding() {
       <div className="auth-page">
         <div className="card">
           <Alert kind="error">{error}</Alert>
-          <Link to="/">Home</Link>
+          <Link to="/">{tr('Home')}</Link>
         </div>
       </div>
     );

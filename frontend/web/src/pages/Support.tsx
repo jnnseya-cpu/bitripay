@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { Button, Empty, Field, Input, Modal, PageHeader, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
 
 export function Support() {
@@ -10,8 +10,12 @@ export function Support() {
   const [tab, setTab] = useState<'chat' | 'tickets'>(config?.modules.liveChat !== false ? 'chat' : 'tickets');
   return (
     <div>
-      <PageHeader title={t('nav.support')} subtitle="We're here to help – chat with us live or open a ticket" />
-      <Tabs tabs={[...(config?.modules.liveChat !== false ? [{ id: 'chat', label: 'Live chat' }] : []), { id: 'tickets', label: 'Support tickets' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <PageHeader title={t('nav.support')} subtitle={tr("We're here to help – chat with us live or open a ticket")} />
+      <Tabs
+        tabs={[...(config?.modules.liveChat !== false ? [{ id: 'chat', label: tr('Live chat') }] : []), { id: 'tickets', label: tr('Support tickets') }]}
+        value={tab}
+        onChange={(v) => setTab(v as any)}
+      />
       {tab === 'chat' ? <LiveChat /> : <Tickets />}
     </div>
   );
@@ -43,7 +47,7 @@ function LiveChat() {
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', height: 520 }}>
       <div style={{ flex: 1, overflowY: 'auto' }} className="col">
-        {msgs.length === 0 && <Empty icon="💬" text="Start a conversation with our support team" />}
+        {msgs.length === 0 && <Empty icon="💬" text={tr('Start a conversation with our support team')} />}
         {msgs.map((m) => (
           <div
             key={m.id}
@@ -57,7 +61,7 @@ function LiveChat() {
             }}
           >
             <div className="tiny bold" style={{ opacity: 0.8 }}>
-              {m.isAdmin ? 'Support' : user?.fullName}
+              {m.isAdmin ? tr('Support') : user?.fullName}
             </div>
             <div className="small">{m.body}</div>
             <div className="tiny" style={{ opacity: 0.7 }}>
@@ -74,8 +78,8 @@ function LiveChat() {
           send();
         }}
       >
-        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" />
-        <Button>Send</Button>
+        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={tr('Type a message…')} />
+        <Button>{tr('Send')}</Button>
       </form>
     </div>
   );
@@ -102,9 +106,9 @@ function Tickets() {
     <div className="grid cols-2">
       <div className="card">
         <div className="card-title">
-          <h3>My tickets</h3>
+          <h3>{tr('My tickets')}</h3>
           <Button size="sm" onClick={() => setOpen(true)}>
-            + New ticket
+            {tr('+ New ticket')}
           </Button>
         </div>
         {tickets.data?.items.length === 0 && <Empty icon="🎫" />}
@@ -133,7 +137,7 @@ function Tickets() {
               {sel.messages?.map((m: any) => (
                 <div key={m.id} className="card soft compact">
                   <div className="tiny bold">
-                    {m.isAdmin ? 'Support' : 'You'} · {new Date(m.createdAt).toLocaleString()}
+                    {m.isAdmin ? tr('Support') : tr('You')} · {new Date(m.createdAt).toLocaleString()}
                   </div>
                   <div className="small" style={{ whiteSpace: 'pre-wrap' }}>
                     {m.body}
@@ -153,9 +157,9 @@ function Tickets() {
                   });
                 }}
               >
-                <Textarea value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Write a reply…" />
+                <Textarea value={reply} onChange={(e) => setReply(e.target.value)} placeholder={tr('Write a reply…')} />
                 <div className="row mt-sm">
-                  <Button disabled={!reply.trim()}>Reply</Button>
+                  <Button disabled={!reply.trim()}>{tr('Reply')}</Button>
                   <Button
                     type="button"
                     variant="ghost"
@@ -166,41 +170,41 @@ function Tickets() {
                       })
                     }
                   >
-                    Close ticket
+                    {tr('Close ticket')}
                   </Button>
                 </div>
               </form>
             )}
           </>
         ) : (
-          <Empty icon="🎫" text="Select a ticket to view the conversation" />
+          <Empty icon="🎫" text={tr('Select a ticket to view the conversation')} />
         )}
       </div>
-      <Modal open={open} onClose={() => setOpen(false)} title="New support ticket">
-        <Field label="Subject">
+      <Modal open={open} onClose={() => setOpen(false)} title={tr('New support ticket')}>
+        <Field label={tr('Subject')}>
           <Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
         </Field>
         <div className="grid cols-2">
-          <Field label="Category">
+          <Field label={tr('Category')}>
             <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {['general', 'payments', 'kyc', 'withdrawals', 'merchant', 'agent', 'security', 'other'].map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Priority">
+          <Field label={tr('Priority')}>
             <Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-              <option value="low">Low</option>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
+              <option value="low">{tr('Low')}</option>
+              <option value="normal">{tr('Normal')}</option>
+              <option value="high">{tr('High')}</option>
             </Select>
           </Field>
         </div>
-        <Field label="Describe the issue">
+        <Field label={tr('Describe the issue')}>
           <Textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
         </Field>
         <Button block onClick={create} disabled={form.subject.length < 3 || form.body.length < 3}>
-          Submit
+          {tr('Submit')}
         </Button>
       </Modal>
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { Link } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -28,36 +29,36 @@ export function MerchantCentre() {
   if (!merchantClass && user?.role !== 'admin' && !org.data?.membership)
     return (
       <Alert kind="info">
-        Upgrade to a merchant account under <Link to="/app/merchant">Merchant</Link> to use the command centre.
+        Upgrade to a merchant account under <Link to="/app/merchant">{tr('Merchant')}</Link> to use the command centre.
       </Alert>
     );
   const open = (disputes.data?.data ?? []).filter((d: any) => ['OPEN', 'EVIDENCE_REQUESTED', 'UNDER_REVIEW'].includes(d.status));
   return (
     <div>
       <PageHeader
-        title="Command centre"
-        subtitle="What you can spend, what is on its way, what needs your attention"
+        title={tr('Command centre')}
+        subtitle={tr('What you can spend, what is on its way, what needs your attention')}
         actions={
           <>
             <Link className="btn" to="/app/merchant/qr">
-              🔳 QR centre
+              {tr('🔳 QR centre')}
             </Link>
             <Link className="btn secondary" to="/app/merchant/developer">
-              🧑‍💻 Developer
+              {tr('🧑‍💻 Developer')}
             </Link>
           </>
         }
       />
       <Tabs
         tabs={[
-          { id: 'overview', label: 'Overview' },
-          { id: 'settlement', label: 'Settlement' },
+          { id: 'overview', label: tr('Overview') },
+          { id: 'settlement', label: tr('Settlement') },
           { id: 'disputes', label: `Disputes${open.length ? ` (${open.length})` : ''}` },
-          { id: 'fees', label: 'My fees' },
-          { id: 'payouts', label: 'Bulk payouts' },
-          { id: 'plans', label: 'Plans & billing' },
-          { id: 'offline', label: 'Offline kit' },
-          { id: 'team', label: 'Team & business units' },
+          { id: 'fees', label: tr('My fees') },
+          { id: 'payouts', label: tr('Bulk payouts') },
+          { id: 'plans', label: tr('Plans & billing') },
+          { id: 'offline', label: tr('Offline kit') },
+          { id: 'team', label: tr('Team & business units') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -68,7 +69,7 @@ export function MerchantCentre() {
             {(balance.data?.data ?? []).map((b: any) => (
               <div className="card" key={b.currency}>
                 <div className="stat">
-                  <span className="label">Available · {b.currency}</span>
+                  <span className="label">{tr('Available · {0}', { 0: b.currency })}</span>
                   <span className="value">{money(b.available, b.currency)}</span>
                   <span className="small muted">balance {money(b.balance, b.currency)}</span>
                 </div>
@@ -83,13 +84,13 @@ export function MerchantCentre() {
             ))}
             {balance.data?.data?.length === 0 && (
               <div className="card">
-                <Empty icon="💼" text="No wallet yet" />
+                <Empty icon="💼" text={tr('No wallet yet')} />
               </div>
             )}
           </div>
           <div className="grid cols-3 mt">
             <div className="card">
-              <h3>Next settlements</h3>
+              <h3>{tr('Next settlements')}</h3>
               {(calendar.data?.upcoming ?? []).map((u: any) => (
                 <KV
                   key={u.profileId}
@@ -103,12 +104,12 @@ export function MerchantCentre() {
                   }
                 />
               ))}
-              {calendar.data?.upcoming?.length === 0 && <p className="small muted">No settlement profile yet — payments stay in your wallet. Set one under Settlement.</p>}
+              {calendar.data?.upcoming?.length === 0 && <p className="small muted">{tr('No settlement profile yet — payments stay in your wallet. Set one under Settlement.')}</p>}
               {calendar.data?.obligations?.cycles?.length > 0 && <Alert kind="info">{calendar.data.obligations.cycles.length} closed cycle(s) awaiting payout.</Alert>}
             </div>
             <div className="card">
-              <h3>Needs attention</h3>
-              {open.length === 0 && <p className="small muted">No open disputes.</p>}
+              <h3>{tr('Needs attention')}</h3>
+              {open.length === 0 && <p className="small muted">{tr('No open disputes.')}</p>}
               {open.slice(0, 5).map((d: any) => (
                 <div key={d.id} className="list-item">
                   <div className="flex1">
@@ -122,7 +123,7 @@ export function MerchantCentre() {
               ))}
             </div>
             <div className="card">
-              <h3>Verification level</h3>
+              <h3>{tr('Verification level')}</h3>
               {verification.data && (
                 <>
                   <div className="value" style={{ fontSize: 20 }}>
@@ -130,15 +131,19 @@ export function MerchantCentre() {
                   </div>
                   {verification.data.limits ? (
                     <p className="small muted">
-                      Per transaction {verification.data.limits.perTransaction} · daily {verification.data.limits.daily} · monthly {verification.data.limits.monthly} (base minor units)
+                      {tr('Per transaction {0} · daily {1} · monthly {2} (base minor units)', {
+                        0: verification.data.limits.perTransaction,
+                        1: verification.data.limits.daily,
+                        2: verification.data.limits.monthly,
+                      })}
                     </p>
                   ) : (
-                    <p className="small muted">Legacy limits apply.</p>
+                    <p className="small muted">{tr('Legacy limits apply.')}</p>
                   )}
                   <p className="small">{verification.data.next}</p>
                   <KV k="Business (KYB)" v={<StatusBadge status={verification.data.kybStatus} />} />
                   <Link className="btn secondary" to="/app/settings?tab=kyc">
-                    Verification →
+                    {tr('Verification →')}
                   </Link>
                 </>
               )}
@@ -150,7 +155,7 @@ export function MerchantCentre() {
       {tab === 'disputes' && <Disputes disputes={disputes} money={money} toast={toast} />}
       {tab === 'fees' && (
         <div className="card">
-          <p className="small muted">The fee rules that apply to your account right now (merchant &gt; tier &gt; country &gt; platform). Fixed parts are in base-currency minor units.</p>
+          <p className="small muted">{tr('The fee rules that apply to your account right now (merchant &gt; tier &gt; country &gt; platform). Fixed parts are in base-currency minor units.')}</p>
           {fees.data?.tier && (
             <Alert kind="success">
               You are on the <b>{fees.data.tier}</b> tier.
@@ -208,7 +213,7 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
     api
       .post('/api/v1/settlement_profiles', form)
       .then(() => {
-        toast('Settlement profile saved', 'success');
+        toast(tr('Settlement profile saved'), 'success');
         calendar.reload();
       })
       .catch(err);
@@ -223,36 +228,36 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h3>Settlement profile</h3>
-        <p className="small muted">When your collections are paid out, where, and the minimum. T+1 means the day after the cut-off. Destination changes cool off for 24 hours.</p>
+        <h3>{tr('Settlement profile')}</h3>
+        <p className="small muted">{tr('When your collections are paid out, where, and the minimum. T+1 means the day after the cut-off. Destination changes cool off for 24 hours.')}</p>
         <div className="grid cols-2">
-          <Field label="Currency">
+          <Field label={tr('Currency')}>
             <Select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
               {currencies.map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Schedule">
+          <Field label={tr('Schedule')}>
             <Select value={form.schedule} onChange={(e) => setForm({ ...form, schedule: e.target.value })}>
               {['T0', 'T1', 'T2', 'weekly', 'manual'].map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Cut-off hour (UTC)">
+          <Field label={tr('Cut-off hour (UTC)')}>
             <Input type="number" min={0} max={23} value={form.cutoff_hour_utc} onChange={(e) => setForm({ ...form, cutoff_hour_utc: Number(e.target.value) })} />
           </Field>
-          <Field label="Minimum (minor units)">
+          <Field label={tr('Minimum (minor units)')}>
             <Input type="number" min={0} value={form.min_amount} onChange={(e) => setForm({ ...form, min_amount: Number(e.target.value) })} />
           </Field>
         </div>
-        <Field label="Destination">
+        <Field label={tr('Destination')}>
           <Select
             value={form.destination.method === 'bank' ? form.destination.bankAccountId : 'wallet'}
             onChange={(e) => setForm({ ...form, destination: e.target.value === 'wallet' ? { method: 'wallet' } : { method: 'bank', bankAccountId: e.target.value } })}
           >
-            <option value="wallet">Keep in my wallet</option>
+            <option value="wallet">{tr('Keep in my wallet')}</option>
             {(banks.data?.items ?? []).map((b: any) => (
               <option key={b.id} value={b.id}>
                 {b.bankName} •••• {String(b.accountNumber).slice(-4)} ({b.currency})
@@ -261,37 +266,37 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
           </Select>
         </Field>
         <label className="checkbox mb">
-          <input type="checkbox" checked={!!form.auto} onChange={(e) => setForm({ ...form, auto: e.target.checked })} /> Run automatically at the cut-off
+          <input type="checkbox" checked={!!form.auto} onChange={(e) => setForm({ ...form, auto: e.target.checked })} /> {tr('Run automatically at the cut-off')}
         </label>
         <div className="grid cols-2">
-          <Field label="Paid out in" hint="Collections in another currency are converted at the platform rate; the margin is disclosed on every statement.">
+          <Field label="Paid out in" hint={tr('Collections in another currency are converted at the platform rate; the margin is disclosed on every statement.')}>
             <Select value={form.settlement_currency} onChange={(e) => setForm({ ...form, settlement_currency: e.target.value })}>
               {currencies.map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Conversion">
+          <Field label={tr('Conversion')}>
             <label className="checkbox">
               <input type="checkbox" checked={!!form.auto_convert} disabled={form.settlement_currency === form.currency} onChange={(e) => setForm({ ...form, auto_convert: e.target.checked })} />{' '}
               {form.settlement_currency === form.currency
-                ? 'Same currency — nothing to convert'
+                ? tr('Same currency — nothing to convert')
                 : form.auto_convert
-                  ? 'Convert automatically when the cycle closes'
-                  : 'Convert only when the cycle is paid'}
+                  ? tr('Convert automatically when the cycle closes')
+                  : tr('Convert only when the cycle is paid')}
             </label>
           </Field>
         </div>
         <div className="row">
-          <Button onClick={save}>Save profile</Button>
+          <Button onClick={save}>{tr('Save profile')}</Button>
           <Button variant="secondary" onClick={() => close(form.currency, false)}>
-            Close cycle now
+            {tr('Close cycle now')}
           </Button>
           <Button variant="ghost" onClick={() => close(form.currency, true)}>
-            Close & pay
+            {tr('Close & pay')}
           </Button>
         </div>
-        <h4 className="mt">Profiles</h4>
+        <h4 className="mt">{tr('Profiles')}</h4>
         {(calendar.data?.profiles ?? []).map((p: any) => (
           <div key={p.id} className="list-item">
             <div className="flex1">
@@ -306,14 +311,14 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
               </div>
             </div>
             <Button size="sm" variant="ghost" onClick={() => loadPreview(p.id)}>
-              Preview
+              {tr('Preview')}
             </Button>
           </div>
         ))}
         {preview && (
           <div className="card mt">
             <h4>
-              Next cycle · {preview.collectionCurrency}
+              {tr('Next cycle ·')} {preview.collectionCurrency}
               {preview.settlementCurrency !== preview.collectionCurrency ? ` → ${preview.settlementCurrency}` : ''}
             </h4>
             <p className="small muted">
@@ -337,21 +342,23 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
                 <KV k="Margin" v={`${preview.settlement.conversion.marginBps} bps (${pct(preview.settlement.conversion.marginBps)})`} />
                 <KV k={`Paid in ${preview.settlementCurrency}`} v={<b>{preview.settlement.formatted}</b>} />
                 <p className="small muted">
-                  Converted {preview.settlement.convertsAt === 'close' ? 'when the cycle closes' : 'when the cycle is paid'}; the exchange is posted in your ledger with this rate.
+                  {tr('Converted')} {preview.settlement.convertsAt === 'close' ? 'when the cycle closes' : 'when the cycle is paid'}; the exchange is posted in your ledger with this rate.
                 </p>
               </>
             ) : (
-              preview.settlementCurrency !== preview.collectionCurrency && <p className="small muted">The conversion into {preview.settlementCurrency} is quoted once there is something to settle.</p>
+              preview.settlementCurrency !== preview.collectionCurrency && (
+                <p className="small muted">{tr('The conversion into {0} is quoted once there is something to settle.', { 0: preview.settlementCurrency })}</p>
+              )
             )}
             <Button size="sm" variant="ghost" onClick={() => setPreview(null)}>
-              Close preview
+              {tr('Close preview')}
             </Button>
           </div>
         )}
       </div>
       <div className="card">
-        <h3>Cycles & statements</h3>
-        {(calendar.data?.recent ?? []).length === 0 && <Empty icon="📅" text="No cycles yet" />}
+        <h3>{tr('Cycles & statements')}</h3>
+        {(calendar.data?.recent ?? []).length === 0 && <Empty icon="📅" text={tr('No cycles yet')} />}
         <div className="list">
           {(calendar.data?.recent ?? []).map((c: any) => (
             <div key={c.id} className="list-item">
@@ -370,10 +377,10 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
               <StatusBadge status={c.status} />
               <div className="row">
                 <Button size="sm" variant="ghost" onClick={() => api.get(`/api/v1/settlements/${c.id}`).then(setDetail).catch(err)}>
-                  Detail
+                  {tr('Detail')}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => api.get(`/api/v1/settlement_cycles/${c.id}/statement`).then(setStatement).catch(err)}>
-                  Statement
+                  {tr('Statement')}
                 </Button>
                 <a className="btn ghost sm" href={`/api/v1/settlement_cycles/${c.id}/statement?format=csv`} target="_blank" rel="noreferrer">
                   CSV
@@ -388,13 +395,13 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
                       api
                         .post(`/api/v1/settlement_cycles/${c.id}/pay`, {})
                         .then(() => {
-                          toast('Payout requested', 'success');
+                          toast(tr('Payout requested'), 'success');
                           calendar.reload();
                         })
                         .catch(err)
                     }
                   >
-                    Pay
+                    {tr('Pay')}
                   </Button>
                 )}
               </div>
@@ -484,7 +491,7 @@ function Disputes({ disputes, money, toast }: { disputes: any; money: (m: number
     api
       .post(`/api/v1/disputes/${sel}/respond`, { response: text })
       .then(() => {
-        toast('Response sent', 'success');
+        toast(tr('Response sent'), 'success');
         setText('');
         disputes.reload();
       })
@@ -492,14 +499,14 @@ function Disputes({ disputes, money, toast }: { disputes: any; money: (m: number
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h3>Disputes</h3>
+        <h3>{tr('Disputes')}</h3>
         <p className="small muted">
           Response windows:{' '}
           {Object.entries(disputes.data?.settings?.responseDays ?? {})
             .map(([k, v]) => `${k} ${v}d`)
             .join(' · ')}
         </p>
-        {(disputes.data?.data ?? []).length === 0 && <Empty icon="⚖️" text="No disputes" />}
+        {(disputes.data?.data ?? []).length === 0 && <Empty icon="⚖️" text={tr('No disputes')} />}
         <div className="list">
           {(disputes.data?.data ?? []).map((d: any) => (
             <div key={d.id} className="list-item" onClick={() => setSel(d.id)} style={{ cursor: 'pointer' }}>
@@ -517,7 +524,7 @@ function Disputes({ disputes, money, toast }: { disputes: any; money: (m: number
         </div>
       </div>
       <div className="card">
-        {!detail.data && <Empty icon="📂" text="Select a dispute" />}
+        {!detail.data && <Empty icon="📂" text={tr('Select a dispute')} />}
         {detail.data && (
           <>
             <h3>
@@ -527,7 +534,7 @@ function Disputes({ disputes, money, toast }: { disputes: any; money: (m: number
             <KV k="Opened by" v={detail.data.openedBy} />
             <KV k="Deadline" v={new Date(detail.data.deadlineAt).toLocaleString()} />
             {detail.data.decision && <KV k="Decision" v={`${detail.data.decision}: ${detail.data.decisionReason ?? ''}`} />}
-            <h4 className="mt">Evidence</h4>
+            <h4 className="mt">{tr('Evidence')}</h4>
             {detail.data.evidence.map((e: any, i: number) => (
               <div key={i} className="card soft compact small">
                 <b>{e.role}</b> · {new Date(e.at).toLocaleString()}
@@ -538,15 +545,15 @@ function Disputes({ disputes, money, toast }: { disputes: any; money: (m: number
             ))}
             {['OPEN', 'EVIDENCE_REQUESTED'].includes(detail.data.status) && (
               <>
-                <Field label="Your response">
-                  <Textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="What happened, with delivery proof, invoice numbers, signatures…" />
+                <Field label={tr('Your response')}>
+                  <Textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder={tr('What happened, with delivery proof, invoice numbers, signatures…')} />
                 </Field>
                 <Button onClick={respond} disabled={text.length < 5}>
-                  Send response
+                  {tr('Send response')}
                 </Button>
               </>
             )}
-            <h4 className="mt">Chronology</h4>
+            <h4 className="mt">{tr('Chronology')}</h4>
             <div className="list">
               {(detail.data.chronology ?? []).map((e: any, i: number) => (
                 <div key={i} className="list-item">
@@ -616,33 +623,34 @@ function OfflineKit({ toast, err }: { toast: any; err: (e: any) => void }) {
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h3>Offline acceptance</h3>
+        <h3>{tr('Offline acceptance')}</h3>
         <p className="small muted">
           When the network is down this device shows signed offline codes and customers' phones sign a promise. Money moves only when either side is back online and the platform confirms; nothing is
           final before that. Ceiling per payment: {settings.data?.maxPerPromiseBase} base minor units; device keys last {settings.data ? Math.round(settings.data.promiseValidityHours) : 72} hours.
         </p>
-        {!local.supported && <Alert kind="warning">This browser cannot generate the device key (Ed25519 WebCrypto). Use a recent Chrome, Edge, Safari or the mobile app.</Alert>}
+        {!local.supported && <Alert kind="warning">{tr('This browser cannot generate the device key (Ed25519 WebCrypto). Use a recent Chrome, Edge, Safari or the mobile app.')}</Alert>}
         <KV k="This device" v={local.deviceId ? <span className="mono small">{local.deviceId}</span> : <span className="muted">not provisioned</span>} />
         <KV k="Key" v={local.keyId ? <span className="mono small">{local.keyId}</span> : '—'} />
         <KV k="Offline codes stored" v={local.nonces} />
         <KV k="Promises waiting to sync" v={local.queued} />
         <div className="row mt">
           <Button onClick={provision} disabled={!local.supported}>
-            {local.deviceId ? 'Renew device key' : 'Provision this device'}
+            {local.deviceId ? tr('Renew device key') : tr('Provision this device')}
           </Button>
           <Button variant="secondary" onClick={prefetch} disabled={!local.deviceId}>
-            Prefetch codes
+            {tr('Prefetch codes')}
           </Button>
           <Button variant="ghost" onClick={sync} disabled={!local.queued}>
-            Sync now
+            {tr('Sync now')}
           </Button>
         </div>
         <p className="small mt">
-          Offline codes are issued from the <Link to="/app/merchant/qr">QR centre</Link> (“Offline code”) and customers pay them from <Link to="/app/scan">Scan</Link> even without signal.
+          Offline codes are issued from the <Link to="/app/merchant/qr">{tr('QR centre')}</Link> (“Offline code”) and customers pay them from <Link to="/app/scan">{tr('Scan')}</Link> even without
+          signal.
         </p>
       </div>
       <div className="card">
-        <h3>Devices & recent promises</h3>
+        <h3>{tr('Devices & recent promises')}</h3>
         {(devices.data?.data ?? []).map((d: any) => (
           <KV
             key={d.deviceId}
@@ -670,7 +678,7 @@ function OfflineKit({ toast, err }: { toast: any; err: (e: any) => void }) {
             </div>
           ))}
         </div>
-        {promises.data?.data?.length === 0 && <Empty icon="📡" text="No offline promises yet" />}
+        {promises.data?.data?.length === 0 && <Empty icon="📡" text={tr('No offline promises yet')} />}
       </div>
     </div>
   );
@@ -700,7 +708,7 @@ function BulkPayouts({
   const [busy, setBusy] = useState(false);
   const load = (id: string) => api.get<any>(`/api/v1/payouts/batches/${id}`).then(setSelected).catch(err);
   const upload = () => {
-    if (!csv.trim()) return toast('Paste or load a CSV first', 'error');
+    if (!csv.trim()) return toast(tr('Paste or load a CSV first'), 'error');
     setBusy(true);
     api
       .post<any>('/api/v1/payouts/batches', { currency, csv, reference: reference || null, skip_invalid: skipInvalid })
@@ -744,13 +752,13 @@ function BulkPayouts({
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h3>New batch</h3>
+        <h3>{tr('New batch')}</h3>
         <p className="sub-text">
           One row per payment. Columns: {columns.data?.columns?.join(', ') ?? '…'}. Up to {columns.data?.max_rows ?? 5000} rows. Every row is checked before you approve; nothing moves until you
           confirm with your PIN.
         </p>
         <div className="grid cols-2">
-          <Field label="Currency">
+          <Field label={tr('Currency')}>
             <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
               {currencies.map((c) => (
                 <option key={c} value={c}>
@@ -759,7 +767,7 @@ function BulkPayouts({
               ))}
             </Select>
           </Field>
-          <Field label="Reference">
+          <Field label={tr('Reference')}>
             <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="PAYROLL-09" />
           </Field>
         </div>
@@ -769,14 +777,14 @@ function BulkPayouts({
         <div className="row" style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <input type="file" accept=".csv,text/csv" onChange={(e) => file(e.target.files?.[0] ?? null)} />
           <label className="row" style={{ gap: 6, alignItems: 'center' }}>
-            <input type="checkbox" checked={skipInvalid} onChange={(e) => setSkipInvalid(e.target.checked)} /> Skip invalid rows
+            <input type="checkbox" checked={skipInvalid} onChange={(e) => setSkipInvalid(e.target.checked)} /> {tr('Skip invalid rows')}
           </label>
           <Button loading={busy} onClick={upload}>
-            Validate batch
+            {tr('Validate batch')}
           </Button>
         </div>
-        <h4 style={{ marginTop: 16 }}>Batches</h4>
-        {(batches.data?.data ?? []).length === 0 && <Empty icon="📑" text="No batch yet." />}
+        <h4 style={{ marginTop: 16 }}>{tr('Batches')}</h4>
+        {(batches.data?.data ?? []).length === 0 && <Empty icon="📑" text={tr('No batch yet.')} />}
         {(batches.data?.data ?? []).map((x: any) => (
           <div key={x.id} className="list-item clickable" onClick={() => load(x.id)}>
             <div className="flex1">
@@ -794,7 +802,7 @@ function BulkPayouts({
         ))}
       </div>
       <div className="card">
-        {!b && <Empty icon="🧾" text="Select a batch to see its rows." />}
+        {!b && <Empty icon="🧾" text={tr('Select a batch to see its rows.')} />}
         {b && (
           <>
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -804,12 +812,12 @@ function BulkPayouts({
               <div className="row" style={{ gap: 6 }}>
                 {b.status === 'PENDING_APPROVAL' && (
                   <Button size="sm" onClick={() => setPinFor(b.id)} disabled={readiness?.blockedByInvalidRows || (readiness?.shortfallMinor ?? 0) > 0}>
-                    Approve & pay
+                    {tr('Approve & pay')}
                   </Button>
                 )}
                 {b.status === 'PENDING_APPROVAL' && (
                   <Button size="sm" variant="ghost" onClick={() => cancel(b.id)}>
-                    Cancel
+                    {tr('Cancel')}
                   </Button>
                 )}
               </div>
@@ -821,16 +829,16 @@ function BulkPayouts({
               <KV k="Approval" v={b.approvalMethod ? `${b.approvalMethod.replace('_', ' ')} · ${new Date(b.approvedAt).toLocaleString()}` : 'pending'} />
             </div>
             {readiness?.blockedByInvalidRows && <Alert kind="warning">{readiness.invalidRows} row(s) are invalid. Fix the file, or upload again with "Skip invalid rows".</Alert>}
-            {(readiness?.shortfallMinor ?? 0) > 0 && <Alert kind="error">Available balance is {money(readiness.shortfallMinor, b.currency)} short of the total with fees.</Alert>}
+            {(readiness?.shortfallMinor ?? 0) > 0 && <Alert kind="error">{tr('Available balance is {0} short of the total with fees.', { 0: money(readiness.shortfallMinor, b.currency) })}</Alert>}
             <div style={{ overflowX: 'auto' }}>
               <table className="table">
                 <thead>
                   <tr>
                     <th>#</th>
                     <th>To</th>
-                    <th>Amount</th>
-                    <th>Ref</th>
-                    <th>Status</th>
+                    <th>{tr('Amount')}</th>
+                    <th>{tr('Ref')}</th>
+                    <th>{tr('Status')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -870,7 +878,7 @@ function BulkPayouts({
         onClose={() => setPinFor(null)}
         onSubmit={approve}
         loading={busy}
-        title="Approve and pay this batch"
+        title={tr('Approve and pay this batch')}
         summary={b ? `${b.validRows} payments · ${money(b.totalMinor + b.feeMinor, b.currency)} including fees. Rows run in order; a failed row never blocks the next.` : ''}
       />
     </div>
@@ -930,29 +938,29 @@ function Plans({
       .then(() => {
         subs.reload();
         setUsage({ ...usage, [id]: '' });
-        toast('Usage recorded', 'success');
+        toast(tr('Usage recorded'), 'success');
       })
       .catch(err);
   const ov = subs.data?.overview;
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h3>New plan</h3>
+        <h3>{tr('New plan')}</h3>
         <div className="grid cols-2">
-          <Field label="Name">
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Home 20 Mbps" />
+          <Field label={tr('Name')}>
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={tr('Home 20 Mbps')} />
           </Field>
-          <Field label="Currency">
+          <Field label={tr('Currency')}>
             <Select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
               {currencies.map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Price per period">
+          <Field label={tr('Price per period')}>
             <Input inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="10.00" />
           </Field>
-          <Field label="Every">
+          <Field label={tr('Every')}>
             <Select value={form.interval} onChange={(e) => setForm({ ...form, interval: e.target.value })}>
               <option value="day">day</option>
               <option value="week">week</option>
@@ -960,29 +968,29 @@ function Plans({
               <option value="year">year</option>
             </Select>
           </Field>
-          <Field label="Trial days">
+          <Field label={tr('Trial days')}>
             <Input inputMode="numeric" value={form.trialDays} onChange={(e) => setForm({ ...form, trialDays: e.target.value })} />
           </Field>
-          <Field label="Tax (basis points)" hint="1600 = 16%">
+          <Field label={tr('Tax (basis points)')} hint="1600 = 16%">
             <Input inputMode="numeric" value={form.taxBps} onChange={(e) => setForm({ ...form, taxBps: e.target.value })} />
           </Field>
-          <Field label="Tax label">
+          <Field label={tr('Tax label')}>
             <Input value={form.taxLabel} onChange={(e) => setForm({ ...form, taxLabel: e.target.value })} placeholder="VAT" />
           </Field>
-          <Field label="Metered unit (optional)">
+          <Field label={tr('Metered unit (optional)')}>
             <Input value={form.usageUnit} onChange={(e) => setForm({ ...form, usageUnit: e.target.value })} placeholder="GB" />
           </Field>
-          <Field label="Price per unit">
+          <Field label={tr('Price per unit')}>
             <Input inputMode="decimal" value={form.usagePrice} onChange={(e) => setForm({ ...form, usagePrice: e.target.value })} placeholder="0.50" />
           </Field>
         </div>
-        <Field label="Description">
+        <Field label={tr('Description')}>
           <Textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
         </Field>
         <Button onClick={create} disabled={!form.name || !form.amount}>
-          Create plan
+          {tr('Create plan')}
         </Button>
-        <h4 style={{ marginTop: 16 }}>Plans</h4>
+        <h4 style={{ marginTop: 16 }}>{tr('Plans')}</h4>
         {(plans.data?.data ?? []).map((p: any) => (
           <div key={p.id} className="list-item">
             <div className="flex1">
@@ -1006,13 +1014,13 @@ function Plans({
                   .catch(err)
               }
             >
-              Archive
+              {tr('Archive')}
             </Button>
           </div>
         ))}
       </div>
       <div className="card">
-        <h3>Subscriptions</h3>
+        <h3>{tr('Subscriptions')}</h3>
         {ov && (
           <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
             {Object.entries(ov.byStatus).map(([k, v]) => (
@@ -1022,17 +1030,15 @@ function Plans({
             ))}
             {ov.monthlyRecurring.map((m: any) => (
               <Chip key={m.currency} kind="success">
-                MRR {money(m.minor, m.currency)}
+                {tr('MRR {0}', { 0: money(m.minor, m.currency) })}
               </Chip>
             ))}
             {ov.collected30d.map((c: any) => (
-              <Chip key={c.currency}>
-                30d {money(c.minor, c.currency)} · {c.invoices} inv.
-              </Chip>
+              <Chip key={c.currency}>{tr('30d {0} · {1} inv.', { 0: money(c.minor, c.currency), 1: c.invoices })}</Chip>
             ))}
           </div>
         )}
-        {(subs.data?.data ?? []).length === 0 && <Empty icon="🔄" text="No subscriber yet. Share a plan code." />}
+        {(subs.data?.data ?? []).length === 0 && <Empty icon="🔄" text={tr('No subscriber yet. Share a plan code.')} />}
         {(subs.data?.data ?? []).map((s: any) => (
           <div key={s.id} className="list-item" style={{ display: 'block' }}>
             <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -1050,7 +1056,7 @@ function Plans({
               <div className="row" style={{ gap: 6, marginTop: 6 }}>
                 <Input inputMode="numeric" style={{ maxWidth: 120 }} value={usage[s.id] ?? ''} onChange={(e) => setUsage({ ...usage, [s.id]: e.target.value })} placeholder={s.plan.usageUnit} />
                 <Button size="sm" variant="secondary" onClick={() => record(s.id)} disabled={!usage[s.id]}>
-                  Record usage
+                  {tr('Record usage')}
                 </Button>
               </div>
             )}
