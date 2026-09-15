@@ -173,6 +173,7 @@ export function Landing() {
     image: '/screens/web-dashboard-classes.png',
     jsonLd: [{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: FAQ.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) }],
   });
+  const [menuOpen, setMenuOpen] = useState(false);
   const currencies = config?.currencies?.length ?? 0;
   const languages = config?.languages?.length ?? 0;
   const countries = (config as any)?.countries?.length ?? 0;
@@ -211,7 +212,32 @@ export function Landing() {
                 </Link>
               </>
             )}
+            {/* Phones: the text links above are hidden below 720px, so the same destinations open from this menu. */}
+            <button type="button" className="lp-btn ghost lp-menu-btn" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" aria-expanded={menuOpen} aria-controls="lp-menu">
+              {menuOpen ? '✕' : '☰'}
+            </button>
           </nav>
+          {menuOpen && (
+            <div id="lp-menu" className="lp-menu-sheet" onClick={() => setMenuOpen(false)}>
+              <a href="/how-it-works">How it works</a>
+              <a href="/developers">Developers</a>
+              <a href="/blog">Blog</a>
+              <a href="/about">About</a>
+              <a href="/legal/fees">Fees</a>
+              {user ? (
+                <Link to="/app" className="lp-menu-cta">
+                  Open app
+                </Link>
+              ) : (
+                <>
+                  <Link to="/login">Sign in</Link>
+                  <Link to="/register" className="lp-menu-cta">
+                    Open an account
+                  </Link>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </header>
 

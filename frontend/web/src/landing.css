@@ -140,9 +140,53 @@
   border-color: var(--lp-line);
   color: var(--lp-ink);
 }
+.lp-menu-btn {
+  display: none;
+  padding: 8px 12px;
+  font-size: 18px;
+  line-height: 1;
+}
+.lp-menu-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  margin: 0 0 12px;
+  background: var(--lp-paper-2);
+  color: var(--lp-ink);
+  border: 1px solid var(--lp-line);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(10, 10, 40, 0.25);
+}
+.lp-menu-sheet a {
+  display: block;
+  padding: 12px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 16px;
+}
+.lp-menu-sheet a:hover {
+  background: var(--lp-paper);
+}
+.lp-menu-sheet a.lp-menu-cta {
+  margin-top: 6px;
+  text-align: center;
+  background: var(--lp-forest);
+  color: var(--lp-on-forest);
+}
 @media (max-width: 720px) {
   .lp-nav nav a.hide-sm {
     display: none;
+  }
+  .lp-menu-btn {
+    display: inline-flex;
+  }
+  .lp-nav .lp-wrap {
+    flex-wrap: wrap;
+  }
+  .lp-menu-sheet {
+    width: 100%;
   }
 }
 /* hero */
