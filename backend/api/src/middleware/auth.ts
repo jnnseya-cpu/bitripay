@@ -49,8 +49,13 @@ const under = (path: string, prefixes: readonly string[]) => prefixes.some((p) =
  */
 export function resolveOrganisationContext(req: Request, user: UserRow): UserRow {
   if (user.role === 'admin') return user;
+  const header = req.headers['x-organisation-id'];
+  const requested = typeof header === 'string' && header ? header : null;
   if (req.authVia === 'api_key' || isMerchantRole(user.role) || user.role === 'agent') {
     const own = findOrganisationForOwner(user.id);
+    // An owner acts for its own organisation unless the session explicitly picks another workspace it belongs to
+    // (a developer account integrating several clients); API keys always act for the organisation that issued them.
+    if (req.authVia === 'jwt' && requested && own?.id !== requested) return actAsMember(req, user, resolveMembership(user, requested, 'any'));
     if (own) {
       req.organisation = own;
       req.organisationRole = 'owner';
@@ -61,8 +66,11 @@ export function resolveOrganisationContext(req: Request, user: UserRow): UserRow
   const path = (req.originalUrl || req.url || '').split('?')[0];
   const surface = under(path, MERCHANT_SURFACES) ? 'merchant' : under(path, AGENT_SURFACES) ? 'agent' : under(path, SHARED_SURFACES) ? 'any' : null;
   if (!surface) return user;
-  const header = req.headers['x-organisation-id'];
-  const membership = resolveMembership(user, typeof header === 'string' && header ? header : null, surface);
+  return actAsMember(req, user, resolveMembership(user, requested, surface));
+}
+
+/** Runs the request as the organisation's owner account with the person kept as `req.actor`; the person stays themselves when the owner is unavailable. */
+function actAsMember(req: Request, user: UserRow, membership: ReturnType<typeof resolveMembership>): UserRow {
   if (!membership) return user;
   const principal = findUserById(membership.organisation.owner_user_id);
   if (!principal || principal.status !== 'active') return user;

@@ -21,6 +21,8 @@ export const sw: Record<string, string> = {
   'nav.support': 'Msaada',
   'nav.settings': 'Mipangilio',
   'nav.merchant': 'Zana za mfanyabiashara',
+  'nav.workspace': 'Eneo la kazi',
+  'nav.workspaceAuto': 'otomatiki',
   'nav.agentTools': 'Zana za wakala',
   'nav.logout': 'Ondoka',
   'common.amount': 'Kiasi',

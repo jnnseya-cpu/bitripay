@@ -37,6 +37,8 @@ export const ln: Record<string, string> = {
   'nav.assist': 'Centre ya commande',
   'nav.settings': 'Ba paramètres',
   'nav.merchant': 'Bisaleli ya mombongo',
+  'nav.workspace': 'Esika ya mosala',
+  'nav.workspaceAuto': 'yango moko',
   'nav.agentTools': 'Bisaleli ya agent',
   'nav.centre': 'Centre ya commande',
   'nav.qrCentre': 'Centre QR',

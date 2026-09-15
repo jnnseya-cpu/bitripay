@@ -39,6 +39,10 @@ describe('public site', () => {
       expect(r.text).toContain('href="/developers"');
     }
     const dev = await request(app).get('/developers');
+    expect(dev.text).toContain('href="/register?role=developer"');
+    expect(dev.text).toContain('Install BitriPay for your clients');
+    const start = await request(app).get('/get-started');
+    expect(start.text).toContain('I build software for others');
     expect(dev.text).toContain('/payment_intents');
     expect(dev.text).toContain('payment_intents:write');
     expect(dev.text).toContain('+243000000501');
@@ -150,17 +154,14 @@ describe('content agent and editing', () => {
     expect(rule.status).toBe(200);
     const page = await request(app).get('/blog/moto-taxi-riders-collect-fares-without-cash');
     expect(page.text).toContain(`href="/blog/${created.body.post.slug}"`);
-    const bl = await request(app)
-      .put('/api/admin/seo/backlinks/new')
-      .set(admin.auth)
-      .send({
-        direction: 'partner',
-        sourceUrl: 'https://partner-directory.example/fintech',
-        targetUrl: 'https://www.bitripay.com/',
-        anchor: 'BitriPay',
-        status: 'pending',
-        notes: 'Listing requested',
-      });
+    const bl = await request(app).put('/api/admin/seo/backlinks/new').set(admin.auth).send({
+      direction: 'partner',
+      sourceUrl: 'https://partner-directory.example/fintech',
+      targetUrl: 'https://www.bitripay.com/',
+      anchor: 'BitriPay',
+      status: 'pending',
+      notes: 'Listing requested',
+    });
     expect(bl.status).toBe(200);
     expect(bl.body.backlink.sourceDomain).toBe('partner-directory.example');
     const settings = await request(app)

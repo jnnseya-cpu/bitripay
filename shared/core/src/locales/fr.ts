@@ -21,6 +21,8 @@ export const fr: Record<string, string> = {
   'nav.support': 'Assistance',
   'nav.settings': 'Paramètres',
   'nav.merchant': 'Outils marchand',
+  'nav.workspace': 'Espace de travail',
+  'nav.workspaceAuto': 'automatique',
   'nav.centre': 'Centre de commande',
   'nav.qrCentre': 'Centre QR',
   'nav.developer': 'Portail développeur',

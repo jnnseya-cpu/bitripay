@@ -37,6 +37,8 @@ export const kg: Record<string, string> = {
   'nav.assist': 'Centre ya commande',
   'nav.settings': 'Ba paramètres',
   'nav.merchant': 'Bisadilu ya mumbongo',
+  'nav.workspace': 'Kisika kia kisalu',
+  'nav.workspaceAuto': 'yau mosi',
   'nav.agentTools': 'Bisadilu ya agent',
   'nav.centre': 'Centre ya commande',
   'nav.qrCentre': 'Centre QR',

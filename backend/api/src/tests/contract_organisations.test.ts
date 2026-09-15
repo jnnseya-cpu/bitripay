@@ -248,6 +248,42 @@ describe('members and the permission matrix', () => {
     expect(devRefund.body.error.code).toBe('org_permission_denied');
   });
 
+  it('one developer integrates several clients: keys are created in each client workspace and stay with the client after removal', async () => {
+    const dev = await registerUser(app, { role: 'developer', businessName: 'Kin Software' });
+    const clientA = await registerUser(app, { role: 'merchant', businessName: 'Client A' });
+    const clientB = await registerUser(app, { role: 'ngo', businessName: 'Client B' });
+    for (const client of [clientA, clientB]) {
+      const res = await request(app).post('/api/organisations/members').set(client.auth).send({ identifier: dev.user.email, role: 'developer' });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+    }
+    const session = await request(app).get('/api/auth/me').set(dev.auth);
+    expect(session.body.memberships.map((m: any) => [m.name, m.role, m.owner])).toEqual([
+      ['Kin Software', 'owner', true],
+      ['Client A', 'developer', false],
+      ['Client B', 'developer', false],
+    ]);
+    const orgA = session.body.memberships[1].organisationId;
+    const orgB = session.body.memberships[2].organisationId;
+    // Without a workspace header a developer account acts for its own organisation; the header selects a client.
+    const own = await request(app).post('/api/v1/api_keys').set(dev.auth).send({ label: 'my product', mode: 'test' });
+    expect(own.status, JSON.stringify(own.body)).toBe(201);
+    const forA = await request(app).post('/api/v1/api_keys').set(dev.auth).set('X-Organisation-Id', orgA).send({ label: 'shop integration', mode: 'test' });
+    expect(forA.status, JSON.stringify(forA.body)).toBe(201);
+    const forB = await request(app).post('/api/v1/api_keys').set(dev.auth).set('X-Organisation-Id', orgB).send({ label: 'donations page', mode: 'test' });
+    expect(forB.status, JSON.stringify(forB.body)).toBe(201);
+    expect((await request(app).get('/api/v1/api_keys').set(dev.auth)).body.data.map((k: any) => k.label)).toEqual(['my product']);
+    expect((await request(app).get('/api/v1/api_keys').set(clientA.auth)).body.data.map((k: any) => k.label)).toEqual(['shop integration']);
+    expect((await request(app).get('/api/v1/api_keys').set(clientB.auth)).body.data.map((k: any) => k.label)).toEqual(['donations page']);
+    // The client's key is the client's: an intent created with it belongs to client A, not to the developer.
+    const pi = await request(app).post('/api/v1/payment_intents').set('Authorization', `Bearer ${forA.body.secret}`).send({ currency: 'USD', amount_minor: 2500 });
+    expect(pi.status, JSON.stringify(pi.body)).toBe(201);
+    expect(getIntentRow(pi.body.id)!.merchant_user_id).toBe(clientA.user.id);
+    // Hand-over: client A removes the developer; the key keeps working and the developer can no longer reach that workspace.
+    expect((await request(app).delete(`/api/organisations/members/${dev.user.id}`).set(clientA.auth)).status).toBe(200);
+    expect((await request(app).get('/api/v1/api_keys').set(dev.auth).set('X-Organisation-Id', orgA)).status).toBe(403);
+    expect((await request(app).post('/api/v1/payment_intents').set('Authorization', `Bearer ${forA.body.secret}`).send({ currency: 'USD', amount_minor: 100 })).status).toBe(201);
+  });
+
   it('roles change and members are removed; the owner is immutable; administrators manage members', async () => {
     const m = await registerUser(app, { role: 'merchant', businessName: 'Team Co', country: 'CD' });
     const person = await invite(m, 'read_only');

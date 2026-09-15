@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AppConfig, User, Wallet, Notification, CurrencyInfo, Country, MembershipSummary } from '@bitripay/shared';
 import { armAlerts, ringForNew } from './alerts';
-import { api, getToken, setToken } from './api';
+import { api, getToken, setToken, getOrganisation, setOrganisation } from './api';
 import { formatMoney as fmt } from '@bitripay/shared';
 
 export interface FullConfig extends AppConfig {
@@ -20,6 +20,9 @@ interface Store {
   user: User | null;
   /** Organisations this person can act for with their own login (own shop or agent counter, or invited as a member). */
   memberships: MembershipSummary[];
+  /** The workspace chosen when the person belongs to several (null = the API's default: their own, else the first membership of the surface's kind). */
+  organisationId: string | null;
+  setOrganisation: (id: string | null) => void;
   wallets: Wallet[];
   notifications: Notification[];
   unread: number;
@@ -47,6 +50,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<FullConfig | null>(null);
   const [user, setUserState] = useState<User | null>(null);
   const [memberships, setMemberships] = useState<MembershipSummary[]>([]);
+  const [organisationId, setOrganisationId] = useState<string | null>(() => getOrganisation());
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
@@ -81,6 +85,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const me = await api.get<{ user: User; memberships?: MembershipSummary[] }>('/api/auth/me');
         setUserState(me.user);
         setMemberships(me.memberships ?? []);
+        // a remembered workspace the person no longer belongs to is forgotten
+        if (getOrganisation() && !(me.memberships ?? []).some((m) => m.organisationId === getOrganisation())) {
+          setOrganisation(null);
+          setOrganisationId(null);
+        }
         await refreshWallets();
         api
           .get<{ items: unknown[] }>('/api/account/passkeys')
@@ -130,6 +139,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       config,
       user,
       memberships,
+      organisationId,
+      setOrganisation: (id) => {
+        setOrganisation(id);
+        setOrganisationId(id);
+        window.dispatchEvent(new Event('bitripay:organisation'));
+      },
       wallets,
       notifications,
       unread,
@@ -151,6 +166,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       logout: () => {
         setToken(null);
+        setOrganisation(null);
+        setOrganisationId(null);
         setUserState(null);
         setMemberships([]);
         setWallets([]);
@@ -167,7 +184,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       hasPasskeys,
       setHasPasskeys,
     }),
-    [config, user, memberships, wallets, notifications, unread, loading, currency, money, refresh, refreshWallets, theme, lang, toast, toasts, hasPasskeys],
+    [config, user, memberships, organisationId, wallets, notifications, unread, loading, currency, money, refresh, refreshWallets, theme, lang, toast, toasts, hasPasskeys],
   );
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

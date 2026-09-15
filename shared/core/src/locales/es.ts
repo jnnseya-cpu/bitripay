@@ -21,6 +21,8 @@ export const es: Record<string, string> = {
   'nav.support': 'Soporte',
   'nav.settings': 'Ajustes',
   'nav.merchant': 'Herramientas de comercio',
+  'nav.workspace': 'Espacio de trabajo',
+  'nav.workspaceAuto': 'automático',
   'nav.agentTools': 'Herramientas de agente',
   'nav.logout': 'Cerrar sesión',
   'common.amount': 'Importe',

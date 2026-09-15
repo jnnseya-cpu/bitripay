@@ -952,6 +952,20 @@ per surface; `X-Organisation-Id` still selects one explicitly.
 Platform administrators are individual console accounts with their own permission sets, PIN and 2FA; personal
 customer accounts own no organisation and cannot be shared.
 
+#### Workspaces and developers who integrate several clients
+
+`X-Organisation-Id` is the **workspace** header. A session that belongs to several organisations (its own shop or
+counter plus the organisations it was invited to) picks one with it; without it the API acts for the caller's own
+organisation, else the first membership of the surface's kind. Owner accounts honour the header too, so a
+**developer account** (merchant-class, with its own sandbox and keys) integrates several clients: each client opens a
+merchant-class account, adds the developer under Command centre → Team with the `developer` role, and the developer
+creates that client's keys and webhooks in that client's workspace. Keys belong to the organisation that issued
+them and act for it (an API key never switches workspace); a client can remove the developer at any time and its
+keys keep working. The web app remembers the chosen workspace (`bitripay.organisation` in local storage, a selector
+in the top bar when the person has more than one membership) and sends the header on every call; the developer
+portal is open to invited developers and shows which client it is working for. The public `/developers` page and
+`/get-started` carry the developer sign-up (`/register?role=developer`) and the client-install steps.
+
 
 `requireOrgPermission(...)` guards the sensitive v1 routes: intent / checkout / link / money-request creation
 (`payments:create`), refunds (`refunds:issue`; a member without `refunds:unrestricted` may refund at most the

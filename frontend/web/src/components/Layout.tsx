@@ -29,7 +29,7 @@ function OfflineBanner() {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { user, memberships, config, logout, theme, toggleTheme, unread, notifications, lang, setLang, refreshWallets } = useStore();
+  const { user, memberships, organisationId, setOrganisation, config, logout, theme, toggleTheme, unread, notifications, lang, setLang, refreshWallets } = useStore();
   const t = useT();
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
@@ -140,6 +140,25 @@ export function Layout({ children }: { children: ReactNode }) {
             )}
           </div>
           <div className="row">
+            {memberships.length > 1 && (
+              <select
+                className="input hide-mobile"
+                style={{ width: 'auto', padding: '6px 8px', maxWidth: 220 }}
+                value={organisationId ?? ''}
+                onChange={(e) => setOrganisation(e.target.value || null)}
+                aria-label={t('nav.workspace')}
+                title={t('nav.workspace')}
+              >
+                <option value="">
+                  {t('nav.workspace')}: {t('nav.workspaceAuto')}
+                </option>
+                {memberships.map((m) => (
+                  <option key={m.organisationId} value={m.organisationId}>
+                    {m.name} · {m.role.replace(/_/g, ' ')}
+                  </option>
+                ))}
+              </select>
+            )}
             <select className="input" style={{ width: 'auto', padding: '6px 8px' }} value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Language">
               {(config?.languages ?? [{ code: 'en', nativeName: 'English' }]).map((l) => (
                 <option key={l.code} value={l.code}>

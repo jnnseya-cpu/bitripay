@@ -329,7 +329,11 @@ export function developersPage(): string {
   const top = featured.map((p) => rows.filter((r) => r.path === p)).flat();
   const base = `${config.apiUrl}/v1`;
   const body = `${hero('Three calls. One coffee.', `Connect your shop, your billing system or your institution to BitriPay: create an intent, let the customer pay over the rail Smart Route picks, receive a signed webhook. A key-authenticated REST API with ${rows.length} documented operations, idempotent money movement and a sandbox that runs the same state machine as production.`)}
-<section class="sect"><div class="steps">
+<section class="sect">${ctaRow([
+    { href: '/register?role=developer', label: 'Create a developer account', primary: true },
+    { href: '/login', label: 'Sign in to the developer portal' },
+    { href: '/v1/openapi.json', label: 'OpenAPI document' },
+  ])}<div class="steps">
 <div class="step"><b>1 · Get a key</b><h3>Sign in → Developer portal → Create key</h3><p>Secret keys (sk_) carry every scope, restricted keys (rk_) only the scopes you list, publishable keys (pk_) can only start a payment. The secret is shown once.</p></div>
 <div class="step"><b>2 · Authenticate</b><h3>Bearer on every request</h3><p><code>Authorization: Bearer sk_test_…</code> — test keys hit the sandbox, live keys the real rails, on the same base URL. Send <code>Idempotency-Key</code> on every money-moving POST.</p></div>
 <div class="step"><b>3 · Call the engine</b><h3>Intent → checkout → webhook</h3><p>Create a payment intent, redirect to its checkout URL or show its BitriQR, then act on <code>payment_intent.succeeded</code> and <code>payment_intent.settled</code> after verifying the signatures.</p></div>
@@ -350,9 +354,15 @@ curl -X POST ${escapeHtml(base)}/payment_intents \\
 <div class="tile"><h3>1 · Hosted checkout (recommended)</h3><p>Create an intent or a checkout session and redirect to its URL. BitriPay renders the operators, the reference, the QR and the confirmation step, then returns the customer to your success URL and sends the webhook.</p></div>
 <div class="tile"><h3>2 · Embedded widget</h3><p>Load the checkout script with a publishable key and mount the panel in your page; the browser can start a payment but never read your data. WooCommerce and Shopify plugins ship in the repository.</p></div>
 </div></section>
+<section class="sect"><h2>Install BitriPay for your clients</h2><p class="lead">BitriPay holds the aggregator licence; you integrate it into your clients' websites, apps, billing and institutional systems. Each client is the merchant of record: their money settles to their own account, their statements are theirs, and you never hold their funds or their password.</p><div class="steps">
+<div class="step"><b>1 · The client opens a merchant account</b><h3>Or you open it with their details</h3><p>Every business, NGO, institution or government body you integrate registers as a merchant-class account and passes business verification as its volume grows.</p></div>
+<div class="step"><b>2 · The client adds you to its team</b><h3>Command centre → Team → developer role</h3><p>You sign in with your own credentials and act for the client with the developer role: API keys, webhooks and payment creation — nothing on settlement, payouts or customer exports. Every action is written to the client's audit trail under your name.</p></div>
+<div class="step"><b>3 · Integrate and hand over</b><h3>Keys per client, sandbox first</h3><p>Pick the client in the workspace selector, create its test key, integrate with the hosted checkout, the embedded widget, the WooCommerce or Shopify plugin or an SDK, then switch to a live key. The client can remove you at any time; its keys stay its own.</p></div>
+</div></section>
 <section class="sect"><h2>Sandbox magic numbers</h2><p class="lead">With a test key, these MSISDNs drive an intent through the real attempt machine so you can test every outcome without an operator.</p><div class="table-wrap"><table class="grid"><tr><th>Number</th><th>Outcome</th><th>What happens</th></tr>${SANDBOX_MAGIC_MSISDNS.map((m) => `<tr><td><code>${escapeHtml(m.msisdn)}</code></td><td>${escapeHtml(m.outcome)}</td><td>${escapeHtml(m.behaviour)}</td></tr>`).join('')}</table></div></section>
 <section class="sect"><h2>Everything else in the catalogue</h2>${table(rows.filter((r) => !featured.includes(r.path)))}${ctaRow([
-    { href: '/register?role=merchant', label: 'Create a merchant account', primary: true },
+    { href: '/register?role=developer', label: 'Create a developer account', primary: true },
+    { href: '/register?role=merchant', label: 'Create a merchant account' },
     { href: '/v1/openapi.json', label: 'OpenAPI document' },
     { href: '/contact', label: 'Ask a question' },
   ])}</section>`;
@@ -370,13 +380,19 @@ curl -X POST ${escapeHtml(base)}/payment_intents \\
 
 // ---------------------------------------------------------------------------------------------------------------- get started
 export function getStartedPage(): string {
-  const body = `${hero('Get started', 'Three ways in, one account. Pick the one that fits; you can add the others later from your settings.')}
+  const body = `${hero('Get started', 'Four ways in, one account. Pick the one that fits; you can add the others later from your settings.')}
 <section class="sect"><div class="tiles">
 <div class="tile"><span class="ico">👤</span><h3>I want to pay and get paid</h3><ol><li>Open an account with your phone number; confirm the code.</li><li>Set your transaction PIN and, if you like, a passkey.</li><li>Add money by mobile money, bank, card or at an agent.</li><li>Scan, send, request, pay bills, top up, save.</li></ol>${ctaRow([{ href: '/register', label: 'Open a personal account', primary: true }])}</div>
 <div class="tile"><span class="ico">🏪</span><h3>I run a business</h3><ol><li>Register as a merchant with your business name.</li><li>Print your QR, create payment links, set your settlement profile.</li><li>Complete business verification (KYB) as your volume grows.</li><li>Connect your systems with an API key and webhooks.</li></ol>${ctaRow(
     [
       { href: '/register?role=merchant', label: 'Open a merchant account', primary: true },
       { href: '/developers', label: 'Developers' },
+    ],
+  )}</div>
+<div class="tile"><span class="ico">🧑‍💻</span><h3>I build software for others</h3><ol><li>Open a developer account; it comes with a sandbox and test keys.</li><li>Your clients open merchant accounts and add you to their team with the developer role.</li><li>Create each client's keys and webhooks in its workspace; integrate with checkout, widget, plugins or SDKs.</li><li>Go live with a live key once the client is verified; the client can remove you at any time.</li></ol>${ctaRow(
+    [
+      { href: '/register?role=developer', label: 'Open a developer account', primary: true },
+      { href: '/developers', label: 'API reference' },
     ],
   )}</div>
 <div class="tile"><span class="ico">🤝</span><h3>I want to be an agent</h3><ol><li>Register as an agent with your shop details.</li><li>Pass identity verification and agent due diligence.</li><li>Fund your float; start cash-in and cash-out with one-time codes.</li><li>Earn the commission of every completed operation; read your monthly statement.</li></ol>${ctaRow([{ href: '/register?role=agent', label: 'Apply as an agent', primary: true }])}</div>
@@ -518,7 +534,7 @@ export const PRODUCT_PAGES: { path: string; title: string; note: string }[] = [
   { path: '/industries', title: 'Industries', note: 'markets, transport, utilities, telecom, e-commerce, schools, government, diaspora, agents' },
   { path: '/enterprise', title: 'Enterprise groups', note: 'organisations, roles, bulk payouts, settlement, integration, SLOs' },
   { path: '/developers', title: 'Developers', note: 'REST API, scopes, hosted and embedded checkout, sandbox, webhooks' },
-  { path: '/get-started', title: 'Get started', note: 'personal, merchant and agent onboarding' },
+  { path: '/get-started', title: 'Get started', note: 'personal, merchant, developer and agent onboarding' },
   { path: '/growth', title: 'Growth & influencers', note: 'referral rewards, partner attribution, merchant growth tools' },
   { path: '/policies', title: 'All policies', note: 'every legal document with its last update' },
   { path: '/status', title: 'Platform status', note: 'live operating mode, rails, integrity, service levels' },

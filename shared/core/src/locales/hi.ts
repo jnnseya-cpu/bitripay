@@ -21,6 +21,8 @@ export const hi: Record<string, string> = {
   'nav.support': 'सहायता',
   'nav.settings': 'सेटिंग्स',
   'nav.merchant': 'मर्चेंट टूल',
+  'nav.workspace': 'कार्यक्षेत्र',
+  'nav.workspaceAuto': 'स्वचालित',
   'nav.agentTools': 'एजेंट टूल',
   'nav.logout': 'साइन आउट',
   'common.amount': 'राशि',

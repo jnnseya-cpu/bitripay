@@ -21,6 +21,8 @@ export const ar: Record<string, string> = {
   'nav.support': 'الدعم',
   'nav.settings': 'الإعدادات',
   'nav.merchant': 'أدوات التاجر',
+  'nav.workspace': 'مساحة العمل',
+  'nav.workspaceAuto': 'تلقائي',
   'nav.agentTools': 'أدوات الوكيل',
   'nav.logout': 'تسجيل الخروج',
   'common.amount': 'المبلغ',

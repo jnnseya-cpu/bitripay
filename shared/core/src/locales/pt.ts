@@ -21,6 +21,8 @@ export const pt: Record<string, string> = {
   'nav.support': 'Suporte',
   'nav.settings': 'Definições',
   'nav.merchant': 'Ferramentas de comerciante',
+  'nav.workspace': 'Espaço de trabalho',
+  'nav.workspaceAuto': 'automático',
   'nav.agentTools': 'Ferramentas de agente',
   'nav.logout': 'Terminar sessão',
   'common.amount': 'Montante',

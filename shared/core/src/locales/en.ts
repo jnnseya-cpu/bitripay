@@ -32,6 +32,8 @@ export const en: Record<string, string> = {
   'nav.assist': 'Command centre',
   'nav.settings': 'Settings',
   'nav.merchant': 'Merchant tools',
+  'nav.workspace': 'Workspace',
+  'nav.workspaceAuto': 'automatic',
   'nav.agentTools': 'Agent tools',
   'nav.centre': 'Command centre',
   'nav.qrCentre': 'QR centre',

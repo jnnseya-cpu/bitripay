@@ -21,6 +21,8 @@ export const bn: Record<string, string> = {
   'nav.support': 'সহায়তা',
   'nav.settings': 'সেটিংস',
   'nav.merchant': 'মার্চেন্ট টুল',
+  'nav.workspace': 'ওয়ার্কস্পেস',
+  'nav.workspaceAuto': 'স্বয়ংক্রিয়',
   'nav.agentTools': 'এজেন্ট টুল',
   'nav.logout': 'সাইন আউট',
   'common.amount': 'পরিমাণ',

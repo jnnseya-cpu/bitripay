@@ -11,7 +11,10 @@ import { isMerchantClass } from '@bitripay/shared';
  * snippets and the BP error catalogue.
  */
 export function Developer() {
-  const { user, toast } = useStore();
+  const { user, memberships, organisationId, toast } = useStore();
+  // A developer invited into a client's organisation (role developer, or any role holding api_keys:manage) works here too.
+  const clientWorkspaces = memberships.filter((m) => m.kind !== 'agent' && !m.owner);
+  const workspace = memberships.find((m) => m.organisationId === organisationId) ?? null;
   const [tab, setTab] = useState<'keys' | 'webhooks' | 'events' | 'sandbox' | 'docs'>('keys');
   const keys = useAsync(() => api.get<any>('/api/v1/api_keys'), [tab]);
   const scopes = useAsync(() => api.get<any>('/api/v1/api_keys/scopes'), []);
@@ -25,10 +28,11 @@ export function Developer() {
   const [ep, setEp] = useState<any>({ url: '', events: ['payment_intent.succeeded', 'refund.succeeded'] });
   const [epSecret, setEpSecret] = useState<any>(null);
   const err = (e: any) => toast(e.message, 'error');
-  if (!isMerchantClass(user?.role) && user?.role !== 'admin')
+  if (!isMerchantClass(user?.role) && user?.role !== 'admin' && clientWorkspaces.length === 0)
     return (
       <Alert kind="info">
-        The developer portal is for merchant accounts. <Link to="/app/merchant">Upgrade</Link> first.
+        The developer portal is for merchant and developer accounts, and for developers invited into a client's organisation. <Link to="/app/merchant">Upgrade</Link> first, or ask your client to add
+        you under Command centre → Team with the developer role.
       </Alert>
     );
   const allTypes: string[] = types.data?.data ?? types.data?.types ?? [];
@@ -36,7 +40,13 @@ export function Developer() {
     <div>
       <PageHeader
         title="Developer portal"
-        subtitle="One integration, every eligible rail. Keys, webhooks, events, sandbox and docs."
+        subtitle={
+          workspace
+            ? `Working for ${workspace.name} as ${workspace.role.replace(/_/g, ' ')}: the keys, webhooks and events below belong to that organisation.`
+            : clientWorkspaces.length && !isMerchantClass(user?.role)
+              ? `Working for ${clientWorkspaces[0].name}: pick a client in the workspace selector at the top when you integrate several.`
+              : 'One integration, every eligible rail. Keys, webhooks, events, sandbox and docs.'
+        }
         actions={
           <a className="btn secondary" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">
             OpenAPI ↗
@@ -350,6 +360,30 @@ function Docs() {
   ];
   return (
     <div className="grid cols-2">
+      <div className="card">
+        <h3>Installing BitriPay for your clients</h3>
+        <p className="small muted">
+          BitriPay holds the aggregator licence; you integrate it into your clients' shops, apps and billing systems. Each client is the merchant of record: their money settles to their own settlement
+          profile and their statements are theirs. You never hold their funds and never need their password.
+        </p>
+        <ol className="small">
+          <li>
+            The client opens a merchant account (<Link to="/register?role=merchant">register</Link>, or you register it with their details and they take ownership by signing in).
+          </li>
+          <li>
+            The client adds you under <b>Command centre → Team</b> with the <b>developer</b> role: API keys, webhooks and payment creation, nothing on settlement or exports.
+          </li>
+          <li>Pick the client in the workspace selector at the top; the keys and webhooks you create here belong to that client.</li>
+          <li>
+            Integrate with the hosted checkout, the embedded widget (publishable key), the WooCommerce or Shopify plugin, or the SDKs below. Use a <b>test</b> key and the sandbox magic numbers until
+            the client is verified.
+          </li>
+          <li>Hand over: the client can revoke your membership at any time; the keys stay theirs and keep working.</li>
+        </ol>
+        <p className="small muted">
+          Your own account can also hold a merchant organisation for products you sell yourself. Register it as a <Link to="/register?role=developer">developer account</Link>.
+        </p>
+      </div>
       <div className="card">
         <h3>Quick start</h3>
         <ol className="small">

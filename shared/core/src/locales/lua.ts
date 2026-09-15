@@ -37,6 +37,8 @@ export const lua: Record<string, string> = {
   'nav.assist': 'Centre ya commande',
   'nav.settings': 'Ba paramètres',
   'nav.merchant': 'Bintu bia mudimu bua mungenda',
+  'nav.workspace': 'Muaba wa mudimu',
+  'nav.workspaceAuto': 'pa nkayende',
   'nav.agentTools': 'Bintu bia mudimu bua agent',
   'nav.centre': 'Centre ya commande',
   'nav.qrCentre': 'Centre QR',
