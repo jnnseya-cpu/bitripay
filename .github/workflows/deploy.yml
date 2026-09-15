@@ -28,6 +28,13 @@ on:
 concurrency:
   group: production-deploy
   cancel-in-progress: false
+# The reusable verify workflow runs CodeQL (security-events: write) and secret scanning; a caller must grant at least
+# what the called jobs ask for, otherwise the run fails at startup.
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+  packages: read
 jobs:
   verify:
     # a push to the default branch, a version tag, or a manual run; other branches are verified by the verify workflow alone

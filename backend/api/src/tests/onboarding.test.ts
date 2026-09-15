@@ -96,7 +96,8 @@ describe('live rate providers', () => {
       expect(refresh.body.snapshotId).toBeTruthy();
       expect(st.body.status.lastError).toBeNull();
       expect(st.body.status.consecutiveFailures).toBe(0);
-      expect(st.body.freshness.live).toBe(true);
+      expect(st.body.status.lastSuccessAt).toBeTruthy();
+      // "live" only turns true once every enabled currency comes from a provider; a provider that lacks some of them leaves it false
     } else {
       expect(refresh.status).toBe(400);
       expect(refresh.body.error.code).toBe('rate_provider_error');
