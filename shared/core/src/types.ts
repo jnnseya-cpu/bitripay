@@ -82,6 +82,31 @@ export interface Transaction {
   counterparty?: PublicUser | null;
 }
 
+/** One line of an itemised sale (point of sale): quantity × unit price in minor units, VAT applied on the subtotal. */
+export interface SaleItem {
+  description: string;
+  quantity: number;
+  /** Unit price in minor units of the request currency. */
+  unitPrice: number;
+  /** quantity × unitPrice in minor units. */
+  total: number;
+}
+
+/** Itemised sale behind a payment request: what the receipt prints and what the customer pays. */
+export interface Sale {
+  items: SaleItem[];
+  /** Sum of the lines, minor units. */
+  subtotal: number;
+  /** VAT rate applied, in percent (16 = 16 %). */
+  vatRate: number;
+  /** VAT amount, minor units. */
+  vat: number;
+  /** subtotal + vat, minor units: the amount charged. */
+  total: number;
+  /** Merchant tax identifier printed on the receipt, when set. */
+  taxId: string | null;
+}
+
 export interface PaymentRequest {
   id: string;
   code: string;
@@ -99,6 +124,8 @@ export interface PaymentRequest {
   successUrl?: string | null;
   cancelUrl?: string | null;
   metadata: Record<string, unknown>;
+  /** Itemised sale (point of sale) when the request was built from lines; the amount equals its total. */
+  sale?: Sale | null;
   createdAt: string;
   requester?: PublicUser;
   payer?: PublicUser | null;

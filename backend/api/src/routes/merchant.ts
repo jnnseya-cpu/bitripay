@@ -58,6 +58,8 @@ merchantRouter.put(
           .optional(),
         logoUrl: z.string().max(500_000).optional().nullable(),
         testMode: z.boolean().optional(),
+        vatRate: z.number().min(0).max(100).optional(),
+        taxId: z.string().max(60).optional().nullable(),
       }),
       req.body,
     );

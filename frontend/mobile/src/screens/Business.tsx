@@ -3,10 +3,10 @@ import { View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Screen, Card, Button, Input, Alert, T, KV, PinSheet, AmountInput, Row, Status, Tabs, Empty, useAsync, Avatar, Qr, Sheet, Chip } from '../components/ui';
+import { Screen, Card, Button, Input, Alert, T, KV, PinSheet, AmountInput, Row, Status, Tabs, Empty, useAsync, Avatar, Qr, Sheet, Chip, Select } from '../components/ui';
 import { Header } from '../components/Header';
 import { useNav } from '../navigation';
-import type { PaymentRequest, PublicUser } from '@bitripay/shared';
+import { toMinor, currencyLabel, type PaymentRequest, type PublicUser } from '@bitripay/shared';
 
 export function Merchant() {
   const { t, user, money, wallets, config } = useStore();
@@ -16,6 +16,33 @@ export function Merchant() {
   const [cur, setCur] = useState(wallets[0]?.currency || config?.baseCurrency || 'USD');
   const [desc, setDesc] = useState('');
   const [pr, setPr] = useState<PaymentRequest | null>(null);
+  const [mode, setMode] = useState<'items' | 'amount'>('items');
+  const [lines, setLines] = useState<{ description: string; quantity: string; unitPrice: string }[]>([{ description: '', quantity: '1', unitPrice: '' }]);
+  const [vatRate, setVatRate] = useState('');
+  const gw = useAsync(() => api.get<{ settings: { vatRate?: number; taxId?: string | null } }>('/api/merchant/gateway'), []);
+  useEffect(() => {
+    if (gw.data && vatRate === '') setVatRate(String(gw.data.settings.vatRate ?? 0));
+  }, [gw.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const decimals = (config?.currencies ?? []).find((c: any) => c.code === cur)?.decimals ?? 2;
+  const rate = Math.min(100, Math.max(0, Number(vatRate) || 0));
+  const preview = (() => {
+    const items = lines
+      .filter((l) => l.description.trim() && l.unitPrice)
+      .map((l) => {
+        let unit = 0;
+        try {
+          unit = toMinor(l.unitPrice, decimals);
+        } catch {
+          unit = 0;
+        }
+        const qty = Math.max(1, Math.floor(Number(l.quantity) || 1));
+        return { description: l.description.trim(), quantity: qty, unitPrice: l.unitPrice, total: qty * unit };
+      });
+    const subtotal = items.reduce((a, i) => a + i.total, 0);
+    const vat = Math.round((subtotal * rate) / 100);
+    return { items, subtotal, vat, total: subtotal + vat };
+  })();
+  const setLine = (i: number, patch: Partial<{ description: string; quantity: string; unitPrice: string }>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   useEffect(() => {
     if (!pr || pr.status !== 'open') return;
     const id = setInterval(() => api.get<{ paymentRequest: PaymentRequest }>(`/api/payment-requests/${pr.code}`).then((r) => setPr(r.paymentRequest)), 3000);
@@ -59,6 +86,21 @@ export function Merchant() {
               {pr.amount != null ? money(pr.amount, pr.currency) : 'Any amount'}
             </T>
             <T muted>{pr.description}</T>
+            {pr.sale && (
+              <View style={{ alignSelf: 'stretch' }}>
+                {pr.sale.items.map((it, i) => (
+                  <KV key={i} k={`${it.quantity} × ${it.description}`} v={money(it.total, pr.currency)} />
+                ))}
+                <KV k="Subtotal" v={money(pr.sale.subtotal, pr.currency)} />
+                <KV k={`VAT ${pr.sale.vatRate}%`} v={money(pr.sale.vat, pr.currency)} />
+                <KV k="Total" v={money(pr.sale.total, pr.currency)} />
+                {pr.sale.taxId && (
+                  <T muted size={11}>
+                    Tax ID {pr.sale.taxId}
+                  </T>
+                )}
+              </View>
+            )}
             <Status status={pr.status} />
             {pr.status === 'open' && (
               <T muted size={12}>
@@ -73,14 +115,71 @@ export function Merchant() {
           </View>
         ) : (
           <>
-            <AmountInput label={t('common.amount')} amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} currencies={(config?.currencies ?? []).map((c: any) => c.code)} />
-            <Input label="Description" value={desc} onChangeText={setDesc} placeholder="Table 4 · Order #1042" />
+            <Tabs
+              tabs={[
+                { id: 'items', label: 'Items & VAT' },
+                { id: 'amount', label: 'Amount only' },
+              ]}
+              value={mode}
+              onChange={(v) => setMode(v as 'items' | 'amount')}
+            />
+            {mode === 'items' ? (
+              <>
+                <Row>
+                  <View style={{ flex: 1 }}>
+                    <Select label="Currency" value={cur} onChange={setCur} options={(config?.currencies ?? []).map((c: any) => ({ value: c.code, label: `${currencyLabel(c.code)}` }))} />
+                  </View>
+                  <View style={{ width: 110 }}>
+                    <Input label="VAT %" value={vatRate} onChangeText={(v) => setVatRate(v.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" />
+                  </View>
+                </Row>
+                {lines.map((l, i) => (
+                  <Row key={i} style={{ alignItems: 'flex-end' }}>
+                    <View style={{ flex: 1 }}>
+                      <Input label={i === 0 ? 'Item' : undefined} value={l.description} onChangeText={(v) => setLine(i, { description: v })} placeholder={`Item ${i + 1}`} />
+                    </View>
+                    <View style={{ width: 56 }}>
+                      <Input label={i === 0 ? 'Qty' : undefined} value={l.quantity} onChangeText={(v) => setLine(i, { quantity: v.replace(/\D/g, '') })} keyboardType="number-pad" />
+                    </View>
+                    <View style={{ width: 96 }}>
+                      <Input
+                        label={i === 0 ? 'Unit' : undefined}
+                        value={l.unitPrice}
+                        onChangeText={(v) => setLine(i, { unitPrice: v.replace(/[^\d.]/g, '') })}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                      />
+                    </View>
+                    <Button title="✕" small variant="ghost" onPress={() => setLines((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : [{ description: '', quantity: '1', unitPrice: '' }]))} />
+                  </Row>
+                ))}
+                <Button title="+ Add a line" small variant="secondary" onPress={() => setLines((ls) => [...ls, { description: '', quantity: '1', unitPrice: '' }])} />
+                <KV k="Subtotal" v={money(preview.subtotal, cur)} />
+                <KV k={`VAT ${rate}%`} v={money(preview.vat, cur)} />
+                <KV k="Total to pay" v={money(preview.total, cur)} />
+              </>
+            ) : (
+              <AmountInput label={t('common.amount')} amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} currencies={(config?.currencies ?? []).map((c: any) => c.code)} />
+            )}
+            <Input label="Reference" value={desc} onChangeText={setDesc} placeholder="Table 4 · Order #1042" />
             <Button
-              title="Generate QR"
-              disabled={!amount}
+              title={mode === 'items' && preview.total > 0 ? `Generate QR · ${money(preview.total, cur)}` : 'Generate QR'}
+              disabled={mode === 'items' ? preview.items.length === 0 || preview.total <= 0 : !amount}
               onPress={() =>
                 api
-                  .post<{ paymentRequest: PaymentRequest }>('/api/payment-requests', { kind: 'qr', amount, currency: cur, description: desc || null, expiresInMinutes: 30 })
+                  .post<{ paymentRequest: PaymentRequest }>(
+                    '/api/payment-requests',
+                    mode === 'items'
+                      ? {
+                          kind: 'qr',
+                          currency: cur,
+                          description: desc || null,
+                          expiresInMinutes: 30,
+                          items: preview.items.map((i) => ({ description: i.description, quantity: i.quantity, unitPrice: i.unitPrice })),
+                          vatRate: rate,
+                        }
+                      : { kind: 'qr', amount, currency: cur, description: desc || null, expiresInMinutes: 30 },
+                  )
                   .then((r) => setPr(r.paymentRequest))
               }
             />

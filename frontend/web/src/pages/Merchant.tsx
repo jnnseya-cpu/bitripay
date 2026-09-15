@@ -6,8 +6,8 @@ import { Alert, AmountInput, Button, Chip, CopyButton, Empty, Field, Input, KV, 
 import { areaChart, donutChart, type AnalyticsSeries } from '@bitripay/charts';
 import { Chart } from '@bitripay/charts/react';
 import { tickMoney } from './Insights';
-import type { ApiKey, PaymentRequest, Transaction } from '@bitripay/shared';
-import { isMerchantClass, currencyFlag } from '@bitripay/shared';
+import type { ApiKey, PaymentRequest, Sale, Transaction } from '@bitripay/shared';
+import { isMerchantClass, currencyFlag, toMinor } from '@bitripay/shared';
 
 export function MerchantDashboard() {
   const { user, money, config } = useStore();
@@ -155,13 +155,100 @@ function Bars({ data }: { data: { label: string; value: number; currency: string
   );
 }
 
+type SaleLine = { description: string; quantity: string; unitPrice: string };
+const emptyLine = (): SaleLine => ({ description: '', quantity: '1', unitPrice: '' });
+
+/** Client-side preview of the sale; the API recomputes every figure from the lines and is the only source of the amount charged. */
+function previewSale(lines: SaleLine[], vatRate: number, decimals: number) {
+  const items = lines
+    .filter((l) => l.description.trim() && l.unitPrice)
+    .map((l) => {
+      let unit = 0;
+      try {
+        unit = toMinor(l.unitPrice, decimals);
+      } catch {
+        unit = 0;
+      }
+      const qty = Math.max(1, Math.floor(Number(l.quantity) || 1));
+      return { description: l.description.trim(), quantity: qty, unitPrice: unit, total: qty * unit };
+    });
+  const subtotal = items.reduce((s, i) => s + i.total, 0);
+  const vat = Math.round((subtotal * vatRate) / 100);
+  return { items, subtotal, vat, total: subtotal + vat };
+}
+
+/** Itemised receipt block: lines, subtotal, VAT and total; printed as the customer's receipt. */
+export function SaleReceipt({
+  sale,
+  currency,
+  money,
+  merchant,
+  reference,
+  paidAt,
+}: {
+  sale: Sale;
+  currency: string;
+  money: (n: number, c: string) => string;
+  merchant?: { businessName?: string | null; fullName?: string; tag?: string } | null;
+  reference?: string | null;
+  paidAt?: string | null;
+}) {
+  return (
+    <div className="sale-receipt">
+      {merchant && (
+        <div className="center mb">
+          <div className="bold">{merchant.businessName || merchant.fullName}</div>
+          {merchant.tag && <div className="tiny muted">@{merchant.tag}</div>}
+          {sale.taxId && <div className="tiny muted">Tax ID {sale.taxId}</div>}
+        </div>
+      )}
+      <table className="table sale-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th className="right">Qty</th>
+            <th className="right">Unit</th>
+            <th className="right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sale.items.map((it, i) => (
+            <tr key={i}>
+              <td>{it.description}</td>
+              <td className="right">{it.quantity}</td>
+              <td className="right">{money(it.unitPrice, currency)}</td>
+              <td className="right">{money(it.total, currency)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <KV k="Subtotal" v={money(sale.subtotal, currency)} />
+      <KV k={`VAT ${sale.vatRate}%`} v={money(sale.vat, currency)} />
+      <KV k={<b>Total</b>} v={<b>{money(sale.total, currency)}</b>} />
+      {(reference || paidAt) && (
+        <div className="tiny muted mt-sm">
+          {reference && <span className="mono">{reference}</span>}
+          {paidAt && <span> · {new Date(paidAt).toLocaleString()}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MerchantPos() {
-  const { money, wallets, config } = useStore();
+  const { money, wallets, config, user, toast } = useStore();
+  const [mode, setMode] = useState<'amount' | 'items'>('items');
   const [amount, setAmount] = useState('');
   const [cur, setCur] = useState(wallets[0]?.currency || config?.baseCurrency || 'USD');
   const [desc, setDesc] = useState('');
+  const [lines, setLines] = useState<SaleLine[]>([emptyLine()]);
+  const [vatRate, setVatRate] = useState<string>('');
   const [pr, setPr] = useState<PaymentRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const gw = useAsync(() => api.get<{ settings: { vatRate?: number; taxId?: string | null } }>('/api/merchant/gateway'), []);
+  useEffect(() => {
+    if (gw.data && vatRate === '') setVatRate(String(gw.data.settings.vatRate ?? 0));
+  }, [gw.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const requests = useAsync(() => api.get<{ items: PaymentRequest[] }>('/api/payment-requests?role=requester&pageSize=15'), [pr?.id]);
   useEffect(() => {
     if (!pr || pr.status !== 'open') return;
@@ -171,29 +258,126 @@ export function MerchantPos() {
     }, 3000);
     return () => clearInterval(timer);
   }, [pr]);
+  const decimals = config?.currencies?.find((c) => c.code === cur)?.decimals ?? 2;
+  const rate = Math.min(100, Math.max(0, Number(vatRate) || 0));
+  const preview = previewSale(lines, rate, decimals);
+  const setLine = (i: number, patch: Partial<SaleLine>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const create = async () => {
     setError(null);
     try {
-      const r = await api.post<{ paymentRequest: PaymentRequest }>('/api/payment-requests', { kind: 'qr', amount, currency: cur, description: desc || null, expiresInMinutes: 30 });
+      const body =
+        mode === 'items'
+          ? {
+              kind: 'qr',
+              currency: cur,
+              description: desc || null,
+              expiresInMinutes: 30,
+              items: lines
+                .filter((l) => l.description.trim() && l.unitPrice)
+                .map((l) => ({ description: l.description.trim(), quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)), unitPrice: l.unitPrice })),
+              vatRate: rate,
+            }
+          : { kind: 'qr', amount, currency: cur, description: desc || null, expiresInMinutes: 30 };
+      const r = await api.post<{ paymentRequest: PaymentRequest }>('/api/payment-requests', body);
       setPr(r.paymentRequest);
     } catch (err) {
       setError((err as Error).message);
     }
   };
+  const saveVatDefault = async () => {
+    try {
+      await api.put('/api/merchant/gateway', { vatRate: rate });
+      toast(`VAT ${rate}% saved as your default`, 'success');
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  };
+  const canCreate = mode === 'items' ? preview.items.length > 0 && preview.total > 0 : !!amount;
   return (
     <div>
-      <PageHeader title="Point of sale" subtitle="Enter an amount and let the customer scan the dynamic QR code" />
+      <PageHeader title="Point of sale" subtitle="Add the items sold, let VAT be added at your rate, and show the customer the QR code for the exact total" />
       <div className="grid cols-2">
-        <div className="card">
+        <div className="card no-print">
           {error && <Alert kind="error">{error}</Alert>}
-          <Field label="Amount">
-            <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} big currencies={(config?.currencies ?? []).map((c) => c.code)} />
-          </Field>
-          <Field label="Description (optional)">
+          <Tabs
+            pills
+            tabs={[
+              { id: 'items', label: 'Items & VAT' },
+              { id: 'amount', label: 'Amount only' },
+            ]}
+            value={mode}
+            onChange={(v) => setMode(v as 'amount' | 'items')}
+          />
+          {mode === 'items' ? (
+            <>
+              <div className="row wrap mt" style={{ alignItems: 'flex-end' }}>
+                <Field label="Currency">
+                  <Select value={cur} onChange={(e) => setCur(e.target.value)}>
+                    {(config?.currencies ?? []).map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {currencyFlag(c.code)} {c.code}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field
+                  label="VAT rate (%)"
+                  hint={gw.data?.settings.taxId ? `Tax ID ${gw.data.settings.taxId} is printed on the receipt` : 'Set your tax ID under Manage gateway to print it on receipts'}
+                >
+                  <div className="input-group">
+                    <input className="input" inputMode="decimal" value={vatRate} onChange={(e) => setVatRate(e.target.value.replace(/[^\d.]/g, ''))} style={{ width: 90 }} />
+                    <button type="button" className="addon" style={{ cursor: 'pointer' }} onClick={saveVatDefault} title="Save this rate as your default">
+                      Save
+                    </button>
+                  </div>
+                </Field>
+              </div>
+              <div className="sale-lines">
+                {lines.map((l, i) => (
+                  <div key={i} className="sale-line">
+                    <input className="input" placeholder={`Item ${i + 1}`} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} aria-label="Description" />
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={l.quantity}
+                      onChange={(e) => setLine(i, { quantity: e.target.value.replace(/\D/g, '') })}
+                      aria-label="Quantity"
+                      title="Quantity"
+                    />
+                    <input
+                      className="input"
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      value={l.unitPrice}
+                      onChange={(e) => setLine(i, { unitPrice: e.target.value.replace(/[^\d.]/g, '') })}
+                      aria-label="Unit price"
+                      title="Unit price"
+                    />
+                    <button type="button" className="btn ghost icon" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : [emptyLine()]))} aria-label="Remove line">
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <Button variant="secondary" size="sm" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
+                  + Add a line
+                </Button>
+              </div>
+              <div className="card soft compact mt">
+                <KV k="Subtotal" v={money(preview.subtotal, cur)} />
+                <KV k={`VAT ${rate}%`} v={money(preview.vat, cur)} />
+                <KV k={<b>Total to pay</b>} v={<b>{money(preview.total, cur)}</b>} />
+              </div>
+            </>
+          ) : (
+            <Field label="Amount">
+              <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} big currencies={(config?.currencies ?? []).map((c) => c.code)} />
+            </Field>
+          )}
+          <Field label="Reference (optional)">
             <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Table 4 · Order #1042" />
           </Field>
-          <Button block size="lg" onClick={create} disabled={!amount}>
-            Generate QR
+          <Button block size="lg" onClick={create} disabled={!canCreate}>
+            Generate QR{mode === 'items' && preview.total > 0 ? ` · ${money(preview.total, cur)}` : ''}
           </Button>
           <div className="divider" />
           <h4>Recent</h4>
@@ -202,7 +386,8 @@ export function MerchantPos() {
               <div key={r.id} className="list-item clickable" onClick={() => setPr(r)}>
                 <div className="flex1">
                   <div className="main-text">
-                    {r.amount != null ? money(r.amount, r.currency) : 'Open'} {r.description ? `· ${r.description}` : ''}
+                    {r.amount != null ? money(r.amount, r.currency) : 'Open'} {r.sale ? `· ${r.sale.items.length} item${r.sale.items.length > 1 ? 's' : ''}` : ''}{' '}
+                    {r.description ? `· ${r.description}` : ''}
                   </div>
                   <div className="sub-text">
                     {new Date(r.createdAt).toLocaleTimeString()} · {r.code}
@@ -213,12 +398,13 @@ export function MerchantPos() {
             ))}
           </div>
         </div>
-        <div className="card center">
+        <div className="card center print-area">
           {pr ? (
             <>
               {pr.status === 'paid' ? <div style={{ fontSize: '4rem' }}>✅</div> : <QrImage value={pr.link!} size={260} />}
               <h2 className="mt">{pr.amount != null ? money(pr.amount, pr.currency) : 'Any amount'}</h2>
               <p className="muted">{pr.description}</p>
+              {pr.sale && <SaleReceipt sale={pr.sale} currency={pr.currency} money={money} merchant={user} reference={pr.code} paidAt={pr.status === 'paid' ? new Date().toISOString() : null} />}
               <StatusBadge status={pr.status} />
               {pr.status === 'open' && (
                 <p className="small muted mt-sm">
@@ -226,8 +412,13 @@ export function MerchantPos() {
                 </p>
               )}
               {pr.status === 'paid' && <p className="small mt-sm">Paid by {pr.payer?.fullName ?? 'customer'}</p>}
-              <div className="row mt" style={{ justifyContent: 'center' }}>
+              <div className="row mt no-print" style={{ justifyContent: 'center' }}>
                 <CopyButton text={pr.link!} label="Copy link" />
+                {pr.sale && (
+                  <Button size="sm" variant="secondary" onClick={() => window.print()}>
+                    Print receipt
+                  </Button>
+                )}
                 <Button size="sm" variant="secondary" onClick={() => setPr(null)}>
                   New sale
                 </Button>
@@ -329,6 +520,18 @@ export function MerchantGateway() {
           <label className="checkbox mb">
             <input type="checkbox" checked={!!settings.testMode} onChange={(e) => setSettings({ ...settings, testMode: e.target.checked })} /> Show “test mode” badge on checkout
           </label>
+          <div className="grid cols-2">
+            <Field label="Default VAT rate (%)" hint="Added on itemised sales at the point of sale; change it per sale when needed">
+              <Input
+                inputMode="decimal"
+                value={settings.vatRate ?? 0}
+                onChange={(e) => setSettings({ ...settings, vatRate: Math.min(100, Math.max(0, Number(e.target.value.replace(/[^\d.]/g, '')) || 0)) })}
+              />
+            </Field>
+            <Field label="Tax identifier" hint="Printed on every itemised receipt (numéro impôt / TIN)">
+              <Input value={settings.taxId ?? ''} onChange={(e) => setSettings({ ...settings, taxId: e.target.value || null })} placeholder="A1234567X" />
+            </Field>
+          </div>
           <Button onClick={save}>Save settings</Button>
         </div>
       )}

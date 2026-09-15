@@ -238,6 +238,10 @@ export interface MerchantGatewaySettings {
   brandColor: string;
   logoUrl: string | null;
   testMode: boolean;
+  /** Default VAT rate for itemised sales, in percent (DRC: 16). */
+  vatRate: number;
+  /** Tax identifier printed on receipts (numéro impôt / TIN). */
+  taxId: string | null;
 }
 
 export const DEFAULT_GATEWAY_SETTINGS: MerchantGatewaySettings = {
@@ -249,6 +253,8 @@ export const DEFAULT_GATEWAY_SETTINGS: MerchantGatewaySettings = {
   brandColor: '#2563eb',
   logoUrl: null,
   testMode: false,
+  vatRate: 16,
+  taxId: null,
 };
 
 /** Fetch multiple users by id for enriching lists. */

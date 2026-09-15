@@ -1344,3 +1344,66 @@ th {
     max-width: 100%;
   }
 }
+
+/* Point of sale: item lines and the printable receipt */
+.sale-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sale-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px 110px 38px;
+  gap: 6px;
+  align-items: center;
+}
+.sale-line .input {
+  min-width: 0;
+}
+.sale-table th.right,
+.sale-table td.right,
+.right {
+  text-align: right;
+}
+.sale-receipt {
+  text-align: left;
+  width: 100%;
+  max-width: 420px;
+  margin: 12px auto 0;
+}
+.sale-receipt .table td,
+.sale-receipt .table th {
+  padding: 6px 4px;
+  font-size: 0.9rem;
+}
+@media (max-width: 480px) {
+  .sale-line {
+    grid-template-columns: minmax(0, 1fr) 54px 92px 34px;
+  }
+}
+@media print {
+  .sidebar,
+  .topbar,
+  .backdrop,
+  .no-print {
+    display: none !important;
+  }
+  .app-shell,
+  .main,
+  .content {
+    display: block;
+    padding: 0;
+    margin: 0;
+    max-width: none;
+  }
+  .card,
+  .print-area {
+    box-shadow: none;
+    border: 0;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+}

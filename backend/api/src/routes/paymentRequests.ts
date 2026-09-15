@@ -29,6 +29,13 @@ const createSchema = z.object({
   successUrl: redirectUrl.optional().nullable(),
   cancelUrl: redirectUrl.optional().nullable(),
   metadata: z.record(z.unknown()).optional(),
+  /** Point of sale: description lines with quantity and unit price (major units); VAT is added at `vatRate` percent. */
+  items: z
+    .array(z.object({ description: cleanText(120), quantity: z.number().int().positive().max(100000), unitPrice: z.string() }))
+    .max(100)
+    .optional()
+    .nullable(),
+  vatRate: z.number().min(0).max(100).optional().nullable(),
   allowedMethods: z.array(z.enum(['wallet', 'card', 'mobile_money', 'bank', 'virtual_card'])).optional(),
 });
 
@@ -41,6 +48,7 @@ paymentRequestsRouter.post(
       ...body,
       amount: body.amount ? toMinor(body.amount, cur.decimals) : null,
       currency: cur.code,
+      items: body.items?.map((l) => ({ description: l.description, quantity: l.quantity, unitPrice: toMinor(l.unitPrice, cur.decimals) })) ?? null,
     });
     const view = toPaymentRequest(row);
     res.status(201).json({ paymentRequest: view, qrImage: await qrDataUrl(view.link!) });

@@ -8,6 +8,7 @@ import { CardForm, type CardValues } from '../components/CardForm';
 import { PaymentStatus, type PaymentView } from './AddMoney';
 import { formatMoney, type PaymentRequest } from '@bitripay/shared';
 import { OperatorPicker } from './AddMoney';
+import { SaleReceipt } from './Merchant';
 
 /** Hosted checkout page for payment links, invoices and API-created requests (guest friendly). */
 export function Checkout() {
@@ -254,6 +255,7 @@ export function Checkout() {
               {fixed ? money(pr.amount!) : `Any amount (${cur.code})`}
             </h1>
             <p className="muted">{pr.description}</p>
+            {pr.sale && <SaleReceipt sale={pr.sale} currency={pr.currency} money={(n) => money(n)} />}
             <KV k="Reference" v={<span className="mono">{pr.code}</span>} />
             <KV k="Status" v={<StatusBadge status={pr.status} />} />
             {pr.expiresAt && <KV k="Expires" v={new Date(pr.expiresAt).toLocaleString()} />}

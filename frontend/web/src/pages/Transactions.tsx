@@ -4,7 +4,8 @@ import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Avatar, Button, Empty, Input, KV, Loading, PageHeader, Select, StatusBadge, TxRow, useAsync, useDebounce } from '../components/ui';
-import { TRANSACTION_TYPES, TRANSACTION_TYPE_LABELS, type Transaction, type PublicUser, currencyFlag } from '@bitripay/shared';
+import { TRANSACTION_TYPES, TRANSACTION_TYPE_LABELS, type Transaction, type PublicUser, type Sale, currencyFlag } from '@bitripay/shared';
+import { SaleReceipt } from './Merchant';
 
 export function Transactions() {
   const t = useT();
@@ -143,6 +144,7 @@ export function TransactionDetail() {
         {meta?.gateway && <KV k="Gateway" v={String(meta.gateway)} />}
         {meta?.providerRef && <KV k="Provider ref" v={<span className="mono small">{String(meta.providerRef)}</span>} />}
         {meta?.receiptNo && <KV k="Receipt" v={String(meta.receiptNo)} />}
+        {meta?.sale?.items && <SaleReceipt sale={meta.sale as Sale} currency={tx.currency} money={money} reference={String(meta.paymentRequestCode ?? '')} />}
         {meta?.rate && <KV k="Rate" v={String(meta.rate)} />}
         {meta?.reason && <KV k="Reason" v={String(meta.reason)} />}
         {meta?.bankAccount && <KV k="Bank" v={`${meta.bankAccount.bankName} •••• ${String(meta.bankAccount.accountNumber).slice(-4)}`} />}

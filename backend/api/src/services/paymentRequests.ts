@@ -2,7 +2,7 @@ import { getDb } from '../db';
 import { uuid, now, shortCode } from '../lib/ids';
 import { badRequest, conflict, forbidden, notFound, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
-import { formatMoney, type PaymentRequest } from '@bitripay/shared';
+import { formatMoney, type PaymentRequest, type Sale, type SaleItem } from '@bitripay/shared';
 import { getCurrency } from './currencies';
 import { calculateFee, enforceLimits, postTransaction, type TransactionRow } from './ledger';
 import { ensureWallet, getUserWallet } from './wallets';
@@ -55,6 +55,7 @@ export function toPaymentRequest(row: PaymentRequestRow, users?: Map<string, Ret
     successUrl: row.success_url,
     cancelUrl: row.cancel_url,
     metadata: parseJson(row.metadata, {}),
+    sale: saleOf(row),
     createdAt: row.created_at,
     requester,
     payer,
@@ -68,9 +69,46 @@ function effectiveStatus(row: PaymentRequestRow): PaymentRequest['status'] {
   return row.status;
 }
 
+export interface SaleLineInput {
+  description: string;
+  quantity: number;
+  /** Unit price in minor units. */
+  unitPrice: number;
+}
+
+/**
+ * Itemised sale: lines × quantity, VAT on the subtotal at the given rate (percent), total = the amount charged.
+ * Computed here, never trusted from a client, so the receipt and the ledger always agree.
+ */
+export function buildSale(lines: SaleLineInput[], vatRate: number, taxId: string | null): Sale {
+  if (!lines.length) throw badRequest('Add at least one line to the sale', 'sale_empty');
+  if (lines.length > 100) throw badRequest('A sale holds at most 100 lines', 'sale_too_long');
+  if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 100) throw badRequest('The VAT rate must be between 0 and 100 percent', 'invalid_vat_rate');
+  const items: SaleItem[] = lines.map((l, i) => {
+    const description = l.description.trim();
+    if (!description) throw badRequest(`Line ${i + 1} needs a description`, 'sale_line_description');
+    if (!Number.isInteger(l.quantity) || l.quantity <= 0 || l.quantity > 100000) throw badRequest(`Line ${i + 1}: quantity must be a whole number greater than zero`, 'sale_line_quantity');
+    if (!Number.isInteger(l.unitPrice) || l.unitPrice < 0) throw badRequest(`Line ${i + 1}: the unit price cannot be negative`, 'sale_line_price');
+    return { description: description.slice(0, 120), quantity: l.quantity, unitPrice: l.unitPrice, total: l.quantity * l.unitPrice };
+  });
+  const subtotal = items.reduce((sum, it) => sum + it.total, 0);
+  if (subtotal <= 0) throw badRequest('The sale total must be greater than zero', 'sale_total_zero');
+  const vat = Math.round((subtotal * vatRate) / 100);
+  return { items, subtotal, vatRate, vat, total: subtotal + vat, taxId: taxId?.trim() || null };
+}
+
+export function saleOf(row: Pick<PaymentRequestRow, 'metadata'>): Sale | null {
+  const sale = parseJson<{ sale?: Sale }>(row.metadata, {}).sale;
+  return sale && Array.isArray(sale.items) ? sale : null;
+}
+
 export interface CreatePaymentRequestInput {
   kind: PaymentRequest['kind'];
   amount?: number | null;
+  /** Itemised sale: when given, the amount is its total and the VAT rate defaults to the merchant's setting. */
+  items?: SaleLineInput[] | null;
+  /** VAT rate in percent for this sale; defaults to the requester's gateway setting. */
+  vatRate?: number | null;
   currency: string;
   description?: string | null;
   payer?: string | null;
@@ -96,6 +134,12 @@ export function createPaymentRequest(requester: UserRow, input: CreatePaymentReq
     payerId = payer.id;
   }
   ensureWallet(requester.id, currency.code);
+  let sale: Sale | null = null;
+  if (input.items?.length) {
+    const settings = getGatewaySettings(requester);
+    sale = buildSale(input.items, input.vatRate ?? settings.vatRate ?? 0, settings.taxId ?? null);
+    input = { ...input, amount: sale.total, metadata: { ...(input.metadata ?? {}), sale } };
+  } else if (input.vatRate != null && input.vatRate !== 0 && !input.amount) throw badRequest('A VAT rate applies to itemised sales; add the lines', 'sale_empty');
   const id = uuid();
   const code = shortCode(10);
   const expiresAt = input.expiresInMinutes ? new Date(Date.now() + input.expiresInMinutes * 60_000).toISOString() : input.kind === 'qr' ? new Date(Date.now() + 30 * 60_000).toISOString() : null;
