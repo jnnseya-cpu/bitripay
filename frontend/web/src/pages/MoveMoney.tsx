@@ -316,9 +316,9 @@ export function MoveMoney() {
                 <>
                   <OperatorPicker
                     value={srcOp.operatorId}
-                    onChange={(id) => setSrcOp({ ...srcOp, operatorId: id })}
+                    onChange={(id) => setSrcOp((s) => ({ ...s, operatorId: id }))}
                     country={srcOp.country}
-                    onCountry={(c) => setSrcOp({ ...srcOp, country: c })}
+                    onCountry={(c) => setSrcOp((s) => ({ ...s, country: c }))}
                     onCurrency={(c) => {
                       if ((config?.currencies ?? []).some((x) => x.code === c)) setCur(c);
                     }}
@@ -347,7 +347,12 @@ export function MoveMoney() {
               )}
               {dest === 'mobile_money' && (
                 <>
-                  <OperatorPicker value={dstOp.operatorId} onChange={(id) => setDstOp({ ...dstOp, operatorId: id })} country={dstOp.country} onCountry={(c) => setDstOp({ ...dstOp, country: c })} />
+                  <OperatorPicker
+                    value={dstOp.operatorId}
+                    onChange={(id) => setDstOp((s) => ({ ...s, operatorId: id }))}
+                    country={dstOp.country}
+                    onCountry={(c) => setDstOp((s) => ({ ...s, country: c }))}
+                  />
                   <div className="grid cols-2">
                     <Field label="Recipient mobile money number">
                       <Input value={dstOp.phone} onChange={(e) => setDstOp({ ...dstOp, phone: e.target.value })} />

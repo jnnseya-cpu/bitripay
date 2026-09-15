@@ -4,7 +4,7 @@ import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, TxRow, useAsync } from '../components/ui';
 import type { VirtualCard, Transaction } from '@bitripay/shared';
-import { currencyFlag } from '@bitripay/shared';
+import { currencyFlag, toMinor } from '@bitripay/shared';
 
 export function VirtualCards() {
   const t = useT();
@@ -18,6 +18,17 @@ export function VirtualCards() {
   const [selected, setSelected] = useState<VirtualCard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // A card is only ever loaded from the wallet of the same currency: nothing is created on the card itself.
+  const fundingWallet = wallets.find((w) => w.currency === (action?.type === 'issue' ? cur : action?.card?.currency));
+  const overWallet = (() => {
+    if (action?.type !== 'fund' || !amount) return false;
+    const decimals = config?.currencies?.find((c) => c.code === action.card?.currency)?.decimals ?? 2;
+    try {
+      return toMinor(amount, decimals) > (fundingWallet?.balance ?? 0);
+    } catch {
+      return false;
+    }
+  })();
   const txs = useAsync(() => (selected ? api.get<{ items: Transaction[] }>(`/api/virtual-cards/${selected.id}/transactions`) : Promise.resolve({ items: [] })), [selected?.id, cards.data]);
 
   const run = async (pin: string) => {
@@ -163,11 +174,23 @@ export function VirtualCards() {
             </Field>
           </>
         ) : (
-          <Field label={`${t('common.amount')} (${action?.card?.currency})`}>
+          <Field
+            label={`${t('common.amount')} (${action?.card?.currency})`}
+            hint={
+              action?.type === 'fund'
+                ? `Taken from your ${action.card?.currency} wallet · available ${money(fundingWallet?.balance ?? 0, action.card?.currency ?? 'USD')}`
+                : `Returned to your ${action?.card?.currency} wallet · on the card ${money(action?.card?.balance ?? 0, action?.card?.currency ?? 'USD')}`
+            }
+          >
             <Input className="amount-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} />
           </Field>
         )}
-        <PinInline onSubmit={run} loading={loading} disabled={action?.type !== 'issue' && !amount} />
+        {overWallet && (
+          <Alert kind="error">
+            Your {action?.card?.currency} wallet holds {money(fundingWallet?.balance ?? 0, action?.card?.currency ?? 'USD')}. Add money to the wallet first.
+          </Alert>
+        )}
+        <PinInline onSubmit={run} loading={loading} disabled={(action?.type !== 'issue' && !amount) || overWallet} />
       </Modal>
       <PinModal open={action?.type === 'reveal'} onClose={() => setAction(null)} onSubmit={run} loading={loading} title="Reveal card details" />
       <Modal open={!!revealed} onClose={() => setRevealed(null)} title="Card details">

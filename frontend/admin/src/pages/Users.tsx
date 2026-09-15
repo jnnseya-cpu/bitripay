@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, qs, API_BASE, getToken } from '../lib/api';
 import { useStore } from '../lib/store';
 import {
@@ -183,6 +183,7 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const detail = useAsync(() => api.get<any>(`/api/admin/users/${id}`), [id]);
   const [edit, setEdit] = useState<any>(null);
   const [adjust, setAdjust] = useState({ direction: 'credit', amount: '', currency: 'USD', reason: '' });
+  const [proposed, setProposed] = useState<string | null>(null);
   const [tab, setTab] = useState<'overview' | 'edit' | 'balance'>('overview');
   const today = new Date().toISOString().slice(0, 10);
   const [stmt, setStmt] = useState({ currency: 'USD', from: `${today.slice(0, 8)}01`, to: today });
@@ -239,8 +240,9 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
   };
   const doAdjust = async () => {
     try {
-      await api.post(`/api/admin/users/${id}/adjust`, adjust);
+      const r = await api.post<{ verification: { id: string } }>(`/api/admin/users/${id}/adjust`, adjust);
       toast('Issuance proposed – a second administrator with the issuance permission must approve it in the verification console', 'success');
+      setProposed(r.verification?.id ?? 'pending');
       setAdjust({ ...adjust, amount: '', reason: '' });
       detail.reload();
     } catch (err) {
@@ -441,8 +443,14 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                 <Input value={adjust.reason} onChange={(e) => setAdjust({ ...adjust, reason: e.target.value })} />
               </Field>
               <Button onClick={doAdjust} disabled={!adjust.amount || adjust.reason.length < 3}>
-                Apply adjustment
+                Propose adjustment
               </Button>
+              {proposed && (
+                <Alert kind="info">
+                  Waiting for approval. Nothing is credited yet: a <strong>different</strong> administrator with the issuance permission approves it under PIN step-up in the{' '}
+                  <Link to="/verification">Verification console</Link> (section "Awaiting a second approver"). The person who proposed it cannot approve it.
+                </Alert>
+              )}
               <div className="divider" />
               <h4>Balances, freezes & statements</h4>
               <Table

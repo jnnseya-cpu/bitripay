@@ -343,11 +343,63 @@ textarea {
   .grid.cols-2,
   .grid.cols-3,
   .grid.cols-4 {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr): a long reference, hash or address inside a card must wrap, never widen the column past the screen */
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .grid.cols-2 > *,
+  .grid.cols-3 > *,
+  .grid.cols-4 > * {
+    grid-column: auto !important;
+  }
+  .row:not(.nowrap) {
+    flex-wrap: wrap;
+  }
+  .row > .input,
+  .row > .btn,
+  .row > select,
+  .row > input {
+    max-width: 100%;
   }
   .hide-mobile {
     display: none !important;
   }
+}
+/* Everything fits the screen on phones and tablets: cards, key-value rows, codes and media wrap instead of overflowing. */
+.card,
+.grid > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.kv {
+  flex-wrap: wrap;
+}
+.kv .v {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+code,
+.mono,
+pre {
+  overflow-wrap: anywhere;
+}
+pre {
+  overflow-x: auto;
+  max-width: 100%;
+}
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+.pill-tabs {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.input-group .input {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .backdrop {
   position: fixed;
@@ -1089,12 +1141,18 @@ th {
 .auth-page {
   min-height: 100vh;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   padding: 20px;
 }
 .auth-card {
   width: 100%;
   max-width: 440px;
+  min-width: 0;
+  justify-self: center;
+}
+.auth-card .btn {
+  white-space: normal;
 }
 .md h1,
 .md h2,
