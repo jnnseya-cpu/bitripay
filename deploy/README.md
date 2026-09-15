@@ -209,20 +209,47 @@ administrator decisions under step-up because they carry regulatory responsibili
 `https://api.bitripay.com` (`eas build --profile production`); development builds keep the local servers from
 `app.json`. Register the production package names with the push service before the first store submission.
 
-## Deploying from GitHub
+## Deploying from GitHub (automatic)
 
-`.github/workflows/deploy.yml` deploys on a version tag (`git tag v1.0.0 && git push --tags`) or by hand from the
-Actions tab. It re-runs the full verification, then connects to the production host over SSH, checks out the tag and
-runs `npm run deploy`, and finally smokes `https://www.bitripay.com/`, `https://admin.bitripay.com/` and
-`https://api.bitripay.com/api/health`. Add these repository secrets once (Settings → Secrets → Actions):
+Two ways to keep the live site on the latest green commit. Use one; both call `npm run deploy` on the host and
+keep `deploy/.env.production` there, never in GitHub.
+
+### A. Push-based: GitHub Actions deploys over SSH
+
+`.github/workflows/deploy.yml` runs on **every push to the repository's default branch**, on a version tag
+(`git tag v1.0.0 && git push --tags`) and by hand from the Actions tab. It re-runs the full verification and only
+then connects to the host, checks out that exact commit, runs `npm run deploy` in the mode of the `DEPLOY_MODE`
+variable (default `shared-host`), and smokes `https://www.bitripay.com/`, `https://admin.bitripay.com/`,
+`https://api.bitripay.com/api/health` and the apex → www redirect. Until the secrets exist the job stops with a
+"Deployment not configured" warning and nothing is deployed.
+
+Add these once under **Settings → Secrets and variables → Actions**:
 
 | Secret | Value |
 | --- | --- |
 | `DEPLOY_HOST` | public address of the production host |
-| `DEPLOY_USER` | deploy user allowed to run Docker |
-| `DEPLOY_SSH_KEY` | private key of that user (the public key in its `~/.ssh/authorized_keys`) |
+| `DEPLOY_USER` | deploy user allowed to run Docker (`usermod -aG docker <user>`) |
+| `DEPLOY_SSH_KEY` | private key of that user; put the public key in its `~/.ssh/authorized_keys` on the host (`ssh-keygen -t ed25519 -f bitripay-deploy -N ''`) |
 | `DEPLOY_PATH` | optional, default `/opt/bitripay` |
 | `DEPLOY_PORT` | optional, default `22` |
 
-`deploy/.env.production` stays on the host. For hosts without git, `npm run release` packs every compiled layer
-(backend, web, admin, shared packages, deploy folder) into `release/bitripay-<version>-<sha>.tar.gz`.
+and the variable `DEPLOY_MODE` = `shared-host` or `dedicated` (Variables tab; default `shared-host`).
+
+### B. Pull-based: a timer on the host (no secrets in GitHub)
+
+On the host, from the checkout, as root:
+
+```bash
+bash deploy/install-auto-deploy.sh      # systemd timer: every 5 minutes runs deploy/auto-deploy.sh
+bash deploy/auto-deploy.sh --force      # deploy the current remote head right now
+tail -f /var/log/bitripay-auto-deploy.log
+```
+
+`deploy/auto-deploy.sh` fetches the followed branch (`AUTO_DEPLOY_BRANCH` in the env file, else the branch checked
+out), and deploys a new commit only when GitHub's `verify` workflow has completed successfully for it. A private
+repository needs `GITHUB_TOKEN` in the env file (fine-grained, "Actions: read") so the timer can read that status;
+without it nothing is deployed automatically and the log says why. A commit whose CI failed is skipped once and
+never retried; `--force` overrides the gate for an emergency.
+
+For hosts without git, `npm run release` packs every compiled layer (backend, web, admin, shared packages, deploy
+folder) into `release/bitripay-<version>-<sha>.tar.gz`.

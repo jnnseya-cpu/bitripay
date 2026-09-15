@@ -1,29 +1,60 @@
-# Production deployment of bitripay.com. Runs on a version tag (v1.2.3) or by hand from the Actions tab, after the
-# verify workflow passed on the same commit. It connects to the production host over SSH, pulls the tag and runs
-# `npm run deploy` there (deploy/.env.production lives on the host, never in GitHub).
-# Required repository secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY (private key of a deploy user that can run docker),
-# optional DEPLOY_PATH (default /opt/bitripay) and DEPLOY_PORT (default 22).
+# Production deployment of bitripay.com.
+#
+# Automatic: every push to the repository's default branch runs the full verification and, when it is green, deploys
+# that commit to the production host. Also on a version tag (v1.2.3) or by hand from the Actions tab.
+# The job connects to the host over SSH, checks out the commit and runs `npm run deploy` there
+# (deploy/.env.production lives on the host, never in GitHub), then smokes the three public host names.
+#
+# Repository secrets (Settings → Secrets and variables → Actions → Secrets):
+#   DEPLOY_HOST      public address of the production host
+#   DEPLOY_USER      deploy user allowed to run Docker
+#   DEPLOY_SSH_KEY   private key of that user (its public key in ~/.ssh/authorized_keys on the host)
+#   DEPLOY_PATH      optional, default /opt/bitripay
+#   DEPLOY_PORT      optional, default 22
+# Repository variable (… → Variables): DEPLOY_MODE = shared-host (default: the VPS also serves other sites, nothing binds
+# to 80/443) or dedicated (Caddy on 80/443).
+# Until the secrets exist the deploy job reports "not configured" and stops without failing, so CI stays honest.
 name: deploy
 on:
   push:
+    branches: ['**']
     tags: ['v*']
   workflow_dispatch:
     inputs:
       ref:
-        description: Branch, tag or commit to deploy
-        required: true
-        default: main
+        description: 'Branch, tag or commit to deploy (empty = the default branch)'
+        required: false
+        default: ''
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
 jobs:
   verify:
+    # a push to the default branch, a version tag, or a manual run; other branches are verified by the verify workflow alone
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v') || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     uses: ./.github/workflows/ci.yml
   deploy:
     needs: verify
     runs-on: ubuntu-latest
     environment: production
-    concurrency: production-deploy
     steps:
+      - name: Check that the deployment secrets exist
+        id: check
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$USER" ] || [ -z "$KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Deployment not configured::Add DEPLOY_HOST, DEPLOY_USER and DEPLOY_SSH_KEY under Settings → Secrets and variables → Actions, or install the pull-based timer on the host (deploy/install-auto-deploy.sh). Nothing was deployed."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.check.outputs.configured == 'true'
       - name: Deploy over SSH
+        if: steps.check.outputs.configured == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -34,17 +65,24 @@ jobs:
           script: |
             set -euo pipefail
             DEPLOY_PATH="${{ secrets.DEPLOY_PATH || '/opt/bitripay' }}"
-            REF="${{ github.event.inputs.ref || github.ref_name }}"
+            REF="${{ github.event.inputs.ref || github.sha }}"
+            export DEPLOY_MODE="${{ vars.DEPLOY_MODE || 'shared-host' }}"
             if [ ! -d "$DEPLOY_PATH/.git" ]; then git clone https://github.com/${{ github.repository }}.git "$DEPLOY_PATH"; fi
             cd "$DEPLOY_PATH"
-            git fetch --all --tags
+            git fetch --all --tags --prune
             git checkout --force "$REF"
             test -f deploy/.env.production || { echo "deploy/.env.production is missing on the host (copy deploy/.env.production.example)"; exit 1; }
+            echo "Deploying $(git rev-parse --short HEAD) in $DEPLOY_MODE mode"
             npm run deploy
       - name: Smoke the public endpoints
+        if: steps.check.outputs.configured == 'true'
         run: |
           for u in https://www.bitripay.com/ https://admin.bitripay.com/ https://api.bitripay.com/api/health; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$u" || true)
             echo "$u → $code"
             [ "$code" = "200" ] || exit 1
           done
+          # the apex must redirect to www
+          loc=$(curl -s -o /dev/null -w '%{redirect_url}' --max-time 20 https://bitripay.com/ || true)
+          echo "https://bitripay.com/ → $loc"
+          case "$loc" in https://www.bitripay.com/*) ;; *) echo "apex does not redirect to www"; exit 1 ;; esac

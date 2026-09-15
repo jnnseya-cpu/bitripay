@@ -87,12 +87,22 @@ describe('live rate providers', () => {
     expect(settings.body.app.rateProviderKey).toBe('••••••••');
     const { getDb } = await import('../db');
     expect(String((getDb().prepare("SELECT value FROM settings WHERE key = 'app'").get() as any).value)).not.toContain('secret-key-123');
-    // A live refresh attempt from this sandbox fails with an explanation and records the failure (network is blocked here).
+    // A live refresh records its outcome either way: without outbound network (this sandbox) the failure and its reason,
+    // with network (CI runners) a live versioned snapshot and a clean status.
     const refresh = await request(app).post('/api/admin/currencies/refresh').set(admin.auth).send({ provider: 'frankfurter' });
-    expect(refresh.status).toBe(400);
     const st = await request(app).get('/api/admin/currencies/rate-status').set(admin.auth);
-    expect(st.body.status.lastError).toBeTruthy();
-    expect(st.body.status.consecutiveFailures).toBeGreaterThan(0);
+    if (refresh.status === 200) {
+      expect(refresh.body.provider).toBe('frankfurter');
+      expect(refresh.body.snapshotId).toBeTruthy();
+      expect(st.body.status.lastError).toBeNull();
+      expect(st.body.status.consecutiveFailures).toBe(0);
+      expect(st.body.freshness.live).toBe(true);
+    } else {
+      expect(refresh.status).toBe(400);
+      expect(refresh.body.error.code).toBe('rate_provider_error');
+      expect(st.body.status.lastError).toBeTruthy();
+      expect(st.body.status.consecutiveFailures).toBeGreaterThan(0);
+    }
     // Manual versioned import: labelled non-live, never guaranteed, visible in the snapshot history.
     const imp = await request(app)
       .post('/api/admin/currencies/import')
