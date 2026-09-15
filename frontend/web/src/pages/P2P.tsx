@@ -4,7 +4,7 @@ import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, Avatar, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
-import { fromMinor } from '@bitripay/shared';
+import { fromMinor, currencyFlag } from '@bitripay/shared';
 
 export function P2P() {
   return (
@@ -96,7 +96,7 @@ function Marketplace() {
               <option value="">All currencies</option>
               {(config?.currencies ?? []).map((c) => (
                 <option key={c.code} value={c.code}>
-                  {c.code}
+                  {currencyFlag(c.code)} {c.code}
                 </option>
               ))}
             </Select>
@@ -234,7 +234,7 @@ function Marketplace() {
             <Select value={ad.currency} onChange={(e) => setAd({ ...ad, currency: e.target.value })}>
               {(config?.currencies ?? []).map((c) => (
                 <option key={c.code} value={c.code}>
-                  {c.code}
+                  {currencyFlag(c.code)} {c.code}
                 </option>
               ))}
             </Select>
@@ -243,7 +243,7 @@ function Marketplace() {
             <Select value={ad.priceCurrency} onChange={(e) => setAd({ ...ad, priceCurrency: e.target.value })}>
               {(config?.currencies ?? []).map((c) => (
                 <option key={c.code} value={c.code}>
-                  {c.code}
+                  {currencyFlag(c.code)} {c.code}
                 </option>
               ))}
             </Select>

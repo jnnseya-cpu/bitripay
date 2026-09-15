@@ -7,7 +7,7 @@ import { Screen, Card, Button, Input, Alert, T, KV, Row, Status, Tabs, Empty, us
 import { Header } from '../components/Header';
 import { useNav, type ScreenProps } from '../navigation';
 import { ringLoud, setLoudEnabled } from '../lib/alerts';
-import { TRANSACTION_TYPE_LABELS, type Transaction, type User } from '@bitripay/shared';
+import { TRANSACTION_TYPE_LABELS, type Transaction, type User, currencyLabel } from '@bitripay/shared';
 
 export function Activity() {
   const { t } = useStore();
@@ -136,6 +136,7 @@ export function Settings() {
         />
         <Button title={t('common.save')} onPress={save} />
       </Card>
+      <WalletPreferencesCard />
       <Card>
         <Select
           label={t('settings.language')}
@@ -649,5 +650,34 @@ export function Statements() {
         </Card>
       )}
     </Screen>
+  );
+}
+
+/** Main and alternative wallets: what pays by default and the second choice; both change at any time. */
+function WalletPreferencesCard() {
+  const { t, user, wallets, config, setUser, refreshWallets, toast } = useStore();
+  const codes = Array.from(new Set([...wallets.map((w) => w.currency), ...((config?.currencies ?? []) as { code: string }[]).map((c) => c.code)]));
+  const options = [{ value: '', label: '—' }, ...codes.map((c) => ({ value: c, label: currencyLabel(c) }))];
+  const save = async (patch: { main?: string | null; alternative?: string | null }) => {
+    try {
+      const r = await api.put<{ user: User }>('/api/wallets/preferences', patch);
+      setUser(r.user);
+      await refreshWallets();
+      toast(t('wallet.prefsSaved'), 'success');
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  };
+  return (
+    <Card>
+      <T bold size={16}>
+        {t('wallet.main')} / {t('wallet.alternative')}
+      </T>
+      <T muted size={12}>
+        {t('wallet.prefsHint')}
+      </T>
+      <Select label={t('wallet.main')} value={user?.mainCurrency ?? ''} onChange={(v) => save({ main: v || null })} options={options} />
+      <Select label={t('wallet.alternative')} value={user?.alternativeCurrency ?? ''} onChange={(v) => save({ alternative: v || null })} options={options} />
+    </Card>
   );
 }

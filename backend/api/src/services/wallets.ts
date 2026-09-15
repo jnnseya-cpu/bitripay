@@ -1,8 +1,10 @@
 import { getDb } from '../db';
+import { currencyFlag } from '@bitripay/shared';
 import { uuid, now } from '../lib/ids';
 import { badRequest, notFound } from '../lib/errors';
 import type { Wallet } from '@bitripay/shared';
 import { getCurrency } from './currencies';
+import { updateUser, type UserRow } from './users';
 import { classifyBalance } from './emoney';
 
 export interface WalletRow {
@@ -17,7 +19,7 @@ export interface WalletRow {
   frozen_by?: string | null;
 }
 
-export function toWallet(row: WalletRow, user?: { role: string } | null): Wallet {
+export function toWallet(row: WalletRow, user?: { role: string; main_currency?: string | null; alternative_currency?: string | null } | null): Wallet {
   const base: Wallet = {
     id: row.id,
     userId: row.user_id,
@@ -27,6 +29,8 @@ export function toWallet(row: WalletRow, user?: { role: string } | null): Wallet
     promoBalance: row.promo_balance ?? 0,
     frozen: !!row.frozen_at,
     frozenReason: row.frozen_reason ?? null,
+    flag: currencyFlag(row.currency),
+    role: user ? walletRole(row.currency, user) : null,
   };
   if (user) {
     try {
@@ -51,6 +55,31 @@ export function ensureWallet(userId: string, currency: string): WalletRow {
 
 export function listWallets(userId: string): WalletRow[] {
   return getDb().prepare('SELECT * FROM wallets WHERE user_id = ? ORDER BY created_at ASC').all(userId) as WalletRow[];
+}
+
+/** `main` / `alternative` from the person's preferences, else null. */
+export function walletRole(currency: string, user: { main_currency?: string | null; alternative_currency?: string | null }): 'main' | 'alternative' | null {
+  if (user.main_currency === currency) return 'main';
+  if (user.alternative_currency === currency) return 'alternative';
+  return null;
+}
+
+/** Wallets in the order the apps show and pick them: main first, alternative second, then the others by age. */
+export function listWalletsOrdered(user: { id: string; main_currency?: string | null; alternative_currency?: string | null }): WalletRow[] {
+  const rank = (w: WalletRow) => (w.currency === user.main_currency ? 0 : w.currency === user.alternative_currency ? 1 : 2);
+  return listWallets(user.id).sort((a, b) => rank(a) - rank(b) || a.created_at.localeCompare(b.created_at));
+}
+
+/**
+ * Sets the main and alternative wallets (both optional, never the same currency); a missing wallet is created so the
+ * choice is usable at once. Changeable at any time.
+ */
+export function setWalletPreferences(user: UserRow, prefs: { main?: string | null; alternative?: string | null }): UserRow {
+  const main = prefs.main === undefined ? (user.main_currency ?? null) : prefs.main ? getCurrency(prefs.main).code : null;
+  const alternative = prefs.alternative === undefined ? (user.alternative_currency ?? null) : prefs.alternative ? getCurrency(prefs.alternative).code : null;
+  if (main && alternative && main === alternative) throw badRequest('The main and alternative wallets must be different currencies', 'same_currency');
+  for (const c of [main, alternative]) if (c) ensureWallet(user.id, c);
+  return updateUser(user.id, { main_currency: main, alternative_currency: alternative } as any);
 }
 
 export function getWallet(id: string): WalletRow {

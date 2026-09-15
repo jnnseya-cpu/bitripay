@@ -4,7 +4,7 @@ import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Avatar, Button, Empty, Input, KV, Loading, PageHeader, Select, StatusBadge, TxRow, useAsync, useDebounce } from '../components/ui';
-import { TRANSACTION_TYPES, TRANSACTION_TYPE_LABELS, type Transaction, type PublicUser } from '@bitripay/shared';
+import { TRANSACTION_TYPES, TRANSACTION_TYPE_LABELS, type Transaction, type PublicUser, currencyFlag } from '@bitripay/shared';
 
 export function Transactions() {
   const t = useT();
@@ -48,7 +48,7 @@ export function Transactions() {
             <option value="">{t('common.all')}</option>
             {(config?.currencies ?? []).map((c) => (
               <option key={c.code} value={c.code}>
-                {c.code}
+                {currencyFlag(c.code)} {c.code}
               </option>
             ))}
           </Select>

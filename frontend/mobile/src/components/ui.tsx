@@ -5,7 +5,7 @@ import QRCodeSvg from 'react-native-qrcode-svg';
 import { useStore } from '../lib/store';
 import { light, darkTheme, type Theme } from '../lib/theme';
 import type { PublicUser, Transaction } from '@bitripay/shared';
-import { TRANSACTION_TYPE_LABELS } from '@bitripay/shared';
+import { TRANSACTION_TYPE_LABELS, currencyLabel } from '@bitripay/shared';
 
 export function useTheme(): Theme {
   const { dark } = useStore();
@@ -518,7 +518,7 @@ export function AmountInput({
           }}
         />
         <View style={{ width: 110 }}>
-          <Select value={currency} onChange={onCurrency} options={codes.map((c: string) => ({ value: c, label: c }))} />
+          <Select value={currency} onChange={onCurrency} options={codes.map((c: string) => ({ value: c, label: currencyLabel(c) }))} />
         </View>
       </View>
     </View>

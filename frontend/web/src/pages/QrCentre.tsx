@@ -6,7 +6,7 @@ import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, Field, Input, KV, Modal, PageHeader, QrImage, Select, StatusBadge, Tabs, useAsync } from '../components/ui';
 import { offlineDevice } from '../lib/offline';
-import { isMerchantClass } from '@bitripay/shared';
+import { isMerchantClass, currencyFlag } from '@bitripay/shared';
 
 /** The scannable content of a code, whichever view produced it (static code, dynamic intent, offline promise). */
 const payloadOf = (q: any): string => String(q.payload ?? q.qrPayload ?? q.uri ?? '');
@@ -280,7 +280,9 @@ export function QrCentre() {
               <Field label="Currency">
                 <Select value={offline.currency} onChange={(e) => setOffline({ ...offline, currency: e.target.value })}>
                   {(config?.currencies ?? []).map((c) => (
-                    <option key={c.code}>{c.code}</option>
+                    <option key={c.code} value={c.code}>
+                      {currencyFlag(c.code)} {c.code}
+                    </option>
                   ))}
                 </Select>
               </Field>

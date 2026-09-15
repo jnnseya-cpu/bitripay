@@ -25,6 +25,9 @@ export interface User extends PublicUser {
   referralCode: string;
   referredBy?: string | null;
   agentCommissionBps?: number | null;
+  /** Wallet preferences: the currency paid with by default and the alternative; both changeable at any time. */
+  mainCurrency?: string | null;
+  alternativeCurrency?: string | null;
   webhookUrl?: string | null;
   createdAt: string;
 }
@@ -37,6 +40,10 @@ export interface Wallet {
   createdAt: string;
   /** Promotional credit – a marketing liability that can cover fees; never withdrawable or transferable as money. */
   promoBalance?: number;
+  /** `main` is the wallet a person pays with by default, `alternative` the second choice; both chosen in preferences. */
+  role?: 'main' | 'alternative' | null;
+  /** Emoji flag of the currency's country (🇪🇺 for the euro). */
+  flag?: string;
   frozen?: boolean;
   frozenReason?: string | null;
   /** What this balance legally is (regulated e-money, merchant balance, agent float or sandbox money). */

@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, Field, Input, KV, Modal, PageHeader, Select, useAsync } from '../components/ui';
+import { currencyFlag } from '@bitripay/shared';
 
 /**
  * Savings: ring-fenced goals (holds on the wallet, never a separate balance), the automatic income anchor (10% minimum,
@@ -239,7 +240,7 @@ export function Savings() {
             <Select value={goalForm.currency} onChange={(e) => setGoalForm({ ...goalForm, currency: e.target.value })}>
               {wallets.map((w) => (
                 <option key={w.currency} value={w.currency}>
-                  {w.currency}
+                  {currencyFlag(w.currency)} {w.currency}
                 </option>
               ))}
             </Select>

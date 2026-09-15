@@ -4,6 +4,7 @@ import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, TxRow, useAsync } from '../components/ui';
 import type { VirtualCard, Transaction } from '@bitripay/shared';
+import { currencyFlag } from '@bitripay/shared';
 
 export function VirtualCards() {
   const t = useT();
@@ -143,7 +144,7 @@ export function VirtualCards() {
               <Select value={cur} onChange={(e) => setCur(e.target.value)}>
                 {(config?.currencies ?? []).map((c) => (
                   <option key={c.code} value={c.code}>
-                    {c.code}
+                    {currencyFlag(c.code)} {c.code}
                   </option>
                 ))}
               </Select>

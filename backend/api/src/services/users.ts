@@ -33,6 +33,8 @@ export interface UserRow {
   referral_code: string;
   referred_by: string | null;
   agent_commission_bps: number | null;
+  main_currency?: string | null;
+  alternative_currency?: string | null;
   webhook_url: string | null;
   webhook_secret: string | null;
   gateway_settings: string;
@@ -76,6 +78,8 @@ export function toUser(row: UserRow): User {
     referralCode: row.referral_code,
     referredBy: row.referred_by,
     agentCommissionBps: row.agent_commission_bps,
+    mainCurrency: row.main_currency ?? null,
+    alternativeCurrency: row.alternative_currency ?? null,
     webhookUrl: row.webhook_url,
     createdAt: row.created_at,
   };

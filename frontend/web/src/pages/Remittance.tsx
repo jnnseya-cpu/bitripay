@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, AmountInput, Button, Empty, Field, Input, KV, PageHeader, PinModal, Select, StatusBadge, Tabs, useAsync, useDebounce } from '../components/ui';
+import { currencyFlag } from '@bitripay/shared';
 
 type Method = 'wallet' | 'bank' | 'cash_pickup';
 
@@ -98,7 +99,7 @@ export function Remittance() {
               <Select value={to} onChange={(e) => setTo(e.target.value)}>
                 {(config?.currencies ?? []).map((c) => (
                   <option key={c.code} value={c.code}>
-                    {c.code} – {c.name}
+                    {currencyFlag(c.code)} {c.code} – {c.name}
                   </option>
                 ))}
               </Select>
@@ -150,7 +151,7 @@ export function Remittance() {
                 <option value="">—</option>
                 {(config?.countries ?? []).map((c) => (
                   <option key={c.code} value={c.code}>
-                    {c.name}
+                    {currencyFlag(c.code)} {c.name}
                   </option>
                 ))}
               </Select>

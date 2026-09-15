@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { api } from '../lib/api';
 import { PageHeader, TxRow, Empty, useAsync, QrImage } from '../components/ui';
 import type { Transaction } from '@bitripay/shared';
-import { convertMinor } from '@bitripay/shared';
+import { convertMinor, currencyFlag, type User } from '@bitripay/shared';
 import { isMerchantClass } from '@bitripay/shared';
 import { areaChart, donutChart, type AnalyticsSeries } from '@bitripay/charts';
 import { Chart } from '@bitripay/charts/react';
@@ -49,7 +50,8 @@ export function Dashboard() {
           <div className="row wrap mt-sm">
             {wallets.map((w) => (
               <span key={w.id} className={`chip ${w.frozen ? 'danger' : ''}`} title={w.classification?.label}>
-                {money(w.balance, w.currency)}
+                {w.flag ?? currencyFlag(w.currency)} {money(w.balance, w.currency)}
+                {w.role === 'main' ? ` · ${t('wallet.main')}` : w.role === 'alternative' ? ` · ${t('wallet.alternative')}` : ''}
                 {w.frozen ? ' · frozen' : ''}
                 {(w.promoBalance ?? 0) > 0 ? <span className="tiny muted"> +{money(w.promoBalance ?? 0, w.currency)} promo</span> : null}
               </span>
@@ -58,6 +60,7 @@ export function Dashboard() {
               + {t('nav.exchange')}
             </Link>
           </div>
+          <WalletPreferences />
           {wallets[0]?.classification && (
             <div className="tiny mt-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>
               {wallets[0].classification.class === 'sandbox'
@@ -141,6 +144,59 @@ export function Dashboard() {
           Unverified accounts have lower limits. <Link to="/app/settings?tab=kyc">Complete identity verification</Link> to unlock higher limits and more virtual cards.
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Main and alternative wallets: the main one is what every payment, transfer and QR uses unless the person picks
+ * another currency on the form; both can be changed here at any time, and a wallet is opened when needed.
+ */
+function WalletPreferences() {
+  const { user, wallets, config, setUser, refreshWallets, toast } = useStore();
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  const codes = Array.from(new Set([...wallets.map((w) => w.currency), ...(config?.currencies ?? []).map((c) => c.code)]));
+  const save = async (patch: { main?: string | null; alternative?: string | null }) => {
+    setBusy(true);
+    try {
+      const r = await api.put<{ user: User }>('/api/wallets/preferences', patch);
+      setUser(r.user);
+      await refreshWallets();
+      toast(t('wallet.prefsSaved'), 'success');
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="row wrap mt-sm" style={{ gap: 8, alignItems: 'center' }}>
+      <label className="tiny" style={{ color: 'rgba(255,255,255,0.85)' }}>
+        {t('wallet.main')}{' '}
+        <select className="input" style={{ width: 'auto', padding: '4px 8px' }} value={user?.mainCurrency ?? ''} disabled={busy} onChange={(e) => save({ main: e.target.value || null })}>
+          <option value="">—</option>
+          {codes.map((c) => (
+            <option key={c} value={c}>
+              {currencyFlag(c)} {c}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="tiny" style={{ color: 'rgba(255,255,255,0.85)' }}>
+        {t('wallet.alternative')}{' '}
+        <select className="input" style={{ width: 'auto', padding: '4px 8px' }} value={user?.alternativeCurrency ?? ''} disabled={busy} onChange={(e) => save({ alternative: e.target.value || null })}>
+          <option value="">—</option>
+          {codes.map((c) => (
+            <option key={c} value={c}>
+              {currencyFlag(c)} {c}
+            </option>
+          ))}
+        </select>
+      </label>
+      <span className="tiny" style={{ color: 'rgba(255,255,255,0.7)' }}>
+        {t('wallet.prefsHint')}
+      </span>
     </div>
   );
 }

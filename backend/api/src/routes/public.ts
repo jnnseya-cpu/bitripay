@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
 import { config } from '../config';
 import { listCurrencies, getBaseCurrency } from '../services/currencies';
+import { currencyFlag } from '@bitripay/shared';
 import { getAppSettings, getFees, getLimits, getReferralSettings, getSetting } from '../services/settings';
 import { getModules } from '../services/modules';
 import { getSiteSettings, listPages, getPage, submitContact, subscribeNewsletter, listLanguages, getTranslationOverrides } from '../services/cms';
@@ -28,7 +29,7 @@ publicRouter.get('/config', (_req, res) => {
   res.json({
     appName: config.appName,
     baseCurrency: getBaseCurrency().code,
-    currencies: listCurrencies(true),
+    currencies: listCurrencies(true).map((c) => ({ ...c, flag: currencyFlag(c.code) })),
     fees: getFees(),
     limits: getLimits(),
     features: {
@@ -76,7 +77,7 @@ publicRouter.post(
   }),
 );
 publicRouter.get('/mobile-money-operators', (req, res) => res.json({ items: listMomoOperators({ country: req.query.country ? String(req.query.country) : null }) }));
-publicRouter.get('/currencies', (req, res) => res.json({ items: listCurrencies(req.query.all !== '1') }));
+publicRouter.get('/currencies', (req, res) => res.json({ items: listCurrencies(req.query.all !== '1').map((c) => ({ ...c, flag: currencyFlag(c.code) })) }));
 publicRouter.get('/pages', (_req, res) => res.json({ items: listPages().map(({ content: _content, ...p }) => p) }));
 publicRouter.get('/pages/:slug', (req, res) => res.json(getPage(String(req.params.slug))));
 publicRouter.get('/translations/:lang', (req, res) => res.json({ lang: String(String(req.params.lang)), overrides: getTranslationOverrides(String(req.params.lang)) }));

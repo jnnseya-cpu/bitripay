@@ -5,7 +5,8 @@ import { listPromoCredits } from '../services/emoney';
 import { buildStatement, statementCsv, statementPdf, listStatements } from '../services/statements';
 import { audit } from '../services/audit';
 import { requireAuth } from '../middleware/auth';
-import { listWallets, toWallet, ensureWallet } from '../services/wallets';
+import { listWallets, listWalletsOrdered, setWalletPreferences, toWallet, ensureWallet } from '../services/wallets';
+import { toUser } from '../services/users';
 import { getTransaction, listTransactions, toTransaction, calculateFee } from '../services/ledger';
 import { exchange } from '../services/transfers';
 import { getCurrency, listCurrencies } from '../services/currencies';
@@ -19,7 +20,17 @@ import { getDb } from '../db';
 export const walletsRouter = Router();
 walletsRouter.use(requireAuth);
 
-walletsRouter.get('/', (req, res) => res.json({ items: listWallets(req.user!.id).map((w) => toWallet(w, req.user!)), promoCredits: listPromoCredits(req.user!.id) }));
+walletsRouter.get('/', (req, res) => res.json({ items: listWalletsOrdered(req.user!).map((w) => toWallet(w, req.user!)), promoCredits: listPromoCredits(req.user!.id) }));
+
+/** Main and alternative wallets: the currency paid with by default and the second choice; both change at any time. */
+walletsRouter.put('/preferences', (req, res) => {
+  const body = validate(z.object({ main: z.string().length(3).optional().nullable(), alternative: z.string().length(3).optional().nullable() }), req.body ?? {});
+  const user = setWalletPreferences(req.actor ?? req.user!, {
+    main: body.main === undefined ? undefined : (body.main?.toUpperCase() ?? null),
+    alternative: body.alternative === undefined ? undefined : (body.alternative?.toUpperCase() ?? null),
+  });
+  res.json({ user: toUser(user), items: listWalletsOrdered(user).map((w) => toWallet(w, user)) });
+});
 
 walletsRouter.post(
   '/',

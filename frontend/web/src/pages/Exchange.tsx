@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, AmountInput, Button, Field, KV, PageHeader, PinModal, RouteDisclosure, Select, useDebounce } from '../components/ui';
+import { currencyFlag } from '@bitripay/shared';
 
 export function Exchange() {
   const t = useT();
@@ -59,7 +60,7 @@ export function Exchange() {
             <Select value={to} onChange={(e) => setTo(e.target.value)}>
               {(config?.currencies ?? []).map((c) => (
                 <option key={c.code} value={c.code}>
-                  {c.code} – {c.name}
+                  {currencyFlag(c.code)} {c.code} – {c.name}
                 </option>
               ))}
             </Select>
@@ -122,7 +123,7 @@ export function Exchange() {
                   .filter((c) => !wallets.some((w) => w.currency === c.code))
                   .map((c) => (
                     <option key={c.code} value={c.code}>
-                      {c.code} – {c.name}
+                      {currencyFlag(c.code)} {c.code} – {c.name}
                     </option>
                   ))}
               </Select>

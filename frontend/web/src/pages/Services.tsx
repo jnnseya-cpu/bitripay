@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, StatusBadge, useAsync } from '../components/ui';
-import { fromMinor } from '@bitripay/shared';
+import { fromMinor, currencyFlag } from '@bitripay/shared';
 
 const CATEGORY_ICON: Record<string, string> = {
   electricity: '⚡',
@@ -142,7 +142,7 @@ function CountryPicker({ value, onChange }: { value: string; onChange: (v: strin
       <option value="">All countries</option>
       {(config?.countries ?? []).map((c) => (
         <option key={c.code} value={c.code}>
-          {c.name}
+          {currencyFlag(c.code)} {c.name}
         </option>
       ))}
     </Select>

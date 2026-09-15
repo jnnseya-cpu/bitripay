@@ -9,3 +9,4 @@ export * from './locales';
 export * from './mobileMoney';
 export * from './brand';
 export * from './phone';
+export * from './flags';

@@ -7,7 +7,7 @@ import { areaChart, donutChart, type AnalyticsSeries } from '@bitripay/charts';
 import { Chart } from '@bitripay/charts/react';
 import { tickMoney } from './Insights';
 import type { ApiKey, PaymentRequest, Transaction } from '@bitripay/shared';
-import { isMerchantClass } from '@bitripay/shared';
+import { isMerchantClass, currencyFlag } from '@bitripay/shared';
 
 export function MerchantDashboard() {
   const { user, money, config } = useStore();
@@ -307,7 +307,7 @@ export function MerchantGateway() {
                 <option value="">Keep in received currency</option>
                 {(config?.currencies ?? []).map((c) => (
                   <option key={c.code} value={c.code}>
-                    {c.code}
+                    {currencyFlag(c.code)} {c.code}
                   </option>
                 ))}
               </Select>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { API_BASE, api, getToken } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Field, Input, KV, PageHeader, Select, useAsync } from '../components/ui';
+import { currencyFlag } from '@bitripay/shared';
 
 /**
  * Bank-grade account statements: opening / closing balance, every ledger posting with running balance, holds,
@@ -62,7 +63,7 @@ export function Statements() {
               <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
                 {wallets.map((w) => (
                   <option key={w.id} value={w.currency}>
-                    {w.currency} · {money(w.balance, w.currency)}
+                    {currencyFlag(w.currency)} {w.currency} · {money(w.balance, w.currency)}
                   </option>
                 ))}
               </Select>

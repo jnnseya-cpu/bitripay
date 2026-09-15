@@ -6,6 +6,7 @@ import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Alert, Avatar, Button, Chip, CopyButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
 import type { User } from '@bitripay/shared';
+import { currencyFlag } from '@bitripay/shared';
 import { registerPasskey, passkeysSupported, biometricsAvailable } from '../lib/passkeys';
 
 export function Settings() {
@@ -89,7 +90,7 @@ function Profile() {
             <option value="">—</option>
             {(config?.countries ?? []).map((c) => (
               <option key={c.code} value={c.code}>
-                {c.name}
+                {currencyFlag(c.code)} {c.name}
               </option>
             ))}
           </Select>

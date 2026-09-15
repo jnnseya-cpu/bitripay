@@ -5,7 +5,7 @@ import { useStore } from '../lib/store';
 import { Screen, Card, T, Qr, TxRow, Empty, useAsync, useTheme, Avatar, Button, Row, Chip } from '../components/ui';
 import { Header } from '../components/Header';
 import { useNav } from '../navigation';
-import { convertMinor, type Transaction } from '@bitripay/shared';
+import { convertMinor, type Transaction, currencyFlag } from '@bitripay/shared';
 
 export function Home() {
   const { user, memberships, wallets, config, money, currency, t, unread } = useStore();
@@ -66,7 +66,10 @@ export function Home() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
           {wallets.map((w) => (
             <View key={w.id} style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
-              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>{money(w.balance, w.currency)}</Text>
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>
+                {w.flag ?? currencyFlag(w.currency)} {money(w.balance, w.currency)}
+                {w.role === 'main' ? ` · ${t('wallet.main')}` : w.role === 'alternative' ? ` · ${t('wallet.alternative')}` : ''}
+              </Text>
             </View>
           ))}
           <Pressable onPress={() => nav.navigate('Exchange')} style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>

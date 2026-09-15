@@ -7,6 +7,8 @@ export interface CurrencyInfo {
   rateToBase: number;
   enabled?: boolean;
   isBase?: boolean;
+  /** Emoji flag of the issuing country (🇪🇺 for the euro, a globe for shared currencies). */
+  flag?: string;
 }
 
 /** Currencies enabled by default on a fresh install (the full ISO 4217 list is in ALL_CURRENCIES; admins can enable more). */

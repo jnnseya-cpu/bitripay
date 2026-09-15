@@ -7,6 +7,7 @@ import { Alert, AmountInput, Button, Empty, Field, Input, KV, PageHeader, PinMod
 import { CardForm, type CardValues } from '../components/CardForm';
 import { StripePayment } from '../components/StripePayment';
 import type { SavedCard } from '@bitripay/shared';
+import { currencyFlag } from '@bitripay/shared';
 
 interface Operator {
   id: string;
@@ -355,7 +356,7 @@ export function OperatorPicker({
               .filter((c) => countriesWithOps.has(c.code))
               .map((c) => (
                 <option key={c.code} value={c.code}>
-                  {c.name}
+                  {currencyFlag(c.code)} {c.name}
                 </option>
               ))}
           </Select>
