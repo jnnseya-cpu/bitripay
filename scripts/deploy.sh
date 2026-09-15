@@ -70,7 +70,13 @@ if [ "$MODE" = shared-host ]; then
   API_PORT=$(grep -E '^BITRIPAY_API_PORT=' "$ENV_FILE" | cut -d= -f2); WEB_PORT=$(grep -E '^BITRIPAY_WEB_PORT=' "$ENV_FILE" | cut -d= -f2); ADMIN_PORT=$(grep -E '^BITRIPAY_ADMIN_PORT=' "$ENV_FILE" | cut -d= -f2)
   echo "Containers are up on localhost only: web 127.0.0.1:${WEB_PORT:-8080}, admin 127.0.0.1:${ADMIN_PORT:-8081}, API 127.0.0.1:${API_PORT:-4000}."
   if [ -n "${EDGE_NETWORK:-}" ]; then
-    echo "They also joined the Docker network $EDGE_NETWORK as bitripay-web, bitripay-admin and bitripay-api: append deploy/shared-host/Caddyfile.container.snippet (or the equivalent for your proxy container) and reload it."
+    echo "They also joined the Docker network $EDGE_NETWORK as bitripay-web, bitripay-admin and bitripay-api."
+    if [ "$(grep -E '^BITRIPAY_EDGE_AUTOCONFIG=' "$ENV_FILE" | cut -d= -f2)" = "0" ]; then
+      echo "BITRIPAY_EDGE_AUTOCONFIG=0: append deploy/shared-host/Caddyfile.container.snippet (or the equivalent for your proxy container) and reload it yourself."
+    else
+      # A Caddy container on that network is configured and reloaded here, so the four host names serve this deployment.
+      bash deploy/shared-host/apply-edge.sh || echo "Proxy configuration did not complete (see above); the containers are up, configure the proxy by hand: deploy/README.md, shared host table."
+    fi
   else
     echo "Point your existing web server at them: deploy/shared-host/nginx-bitripay.conf (or apache-bitripay.conf, Caddyfile.snippet), then certbot."
   fi
