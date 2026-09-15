@@ -1,6 +1,6 @@
 /* BitriPay service worker: caches the app shell and the last state so the app opens offline ("last synced …"),
  * never caches money-moving API responses, and syncs queued offline promises when the network is back. */
-const VERSION = 'bitripay-shell-v1';
+const VERSION = 'bitripay-shell-v2';
 const SHELL = ['/', '/app', '/manifest.webmanifest', '/favicon.svg'];
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -43,7 +43,20 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-  // app shell and static assets: cache first, refresh in the background
+  // Pages (navigations, and the server-rendered site: /developers, /legal/…, /blog/…, the app shell itself) are
+  // network first so a new deployment shows at once; the cached copy only serves when the network is down.
+  if (req.mode === 'navigate' || req.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res.ok && url.origin === self.location.origin) caches.open(VERSION).then((c) => c.put(req, res.clone()));
+          return res;
+        })
+        .catch(() => caches.match(req).then((hit) => hit || caches.match('/app').then((shell) => shell || caches.match('/')))),
+    );
+    return;
+  }
+  // hashed static assets: cache first, refresh in the background
   event.respondWith(
     caches.match(req).then((hit) => {
       const fetching = fetch(req)

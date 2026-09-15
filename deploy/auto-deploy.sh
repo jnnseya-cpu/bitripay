@@ -17,7 +17,14 @@ STATE=deploy/.auto-deploy.last
 exec 9>"$LOCK"; flock -n 9 || { echo "another deployment is running"; exit 0; }
 [ -f "$ENV_FILE" ] || { echo "Missing $ENV_FILE"; exit 1; }
 val() { grep -E "^$1=.+" "$ENV_FILE" | head -1 | cut -d= -f2- || true; }
-BRANCH="$(val AUTO_DEPLOY_BRANCH)"; [ -n "$BRANCH" ] || BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+BRANCH="$(val AUTO_DEPLOY_BRANCH)"
+if [ -z "$BRANCH" ]; then
+  BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+  # A detached checkout (an earlier deployment, a tag) follows the remote's default branch.
+  if [ "$BRANCH" = HEAD ]; then BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')"; fi
+  if [ -z "$BRANCH" ]; then BRANCH="$(git remote show origin 2>/dev/null | sed -n 's/^ *HEAD branch: //p')"; fi
+fi
+[ -n "$BRANCH" ] || { echo "Cannot tell which branch to follow: set AUTO_DEPLOY_BRANCH in $ENV_FILE"; exit 1; }
 export DEPLOY_MODE="$(val DEPLOY_MODE)"; [ -n "$DEPLOY_MODE" ] || export DEPLOY_MODE=shared-host
 TOKEN="$(val GITHUB_TOKEN)"
 REPO="$(git remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')"
@@ -45,7 +52,9 @@ if [ "$FORCE" = 0 ]; then
 fi
 
 echo "$(date -Is) deploying ${REMOTE:0:7} ($BRANCH) in $DEPLOY_MODE mode"
-git checkout --quiet --force "$REMOTE"
+# Stay on the branch (never a detached commit) so `git pull` and `npm run …` on the host keep working.
+git checkout --quiet --force -B "$BRANCH" "$REMOTE"
+git branch --quiet --set-upstream-to "origin/$BRANCH" "$BRANCH" 2>/dev/null || true
 npm run deploy
 echo "$REMOTE" > "$STATE"
 echo "$(date -Is) deployed ${REMOTE:0:7}"
