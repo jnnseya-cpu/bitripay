@@ -12,10 +12,9 @@ import { config } from '../../config';
 import { parseJson } from '../../lib/json';
 import { escapeHtml } from '../markdown';
 import { getSiteSettings } from '../cms';
-import { getSmtpSettings, sendEmail, sendSms } from '../messaging';
+import { getSmtpSettings, sendEmail, sendSms, smsProvider } from '../messaging';
 import { fillPlaceholders, renderTemplate, insertNotification, sendPush, registerTemplatedNotifyHandler } from '../notifications';
 import { deliverWhatsApp, getWhatsAppSettings, toWaId } from '../channels/whatsapp';
-import { getSetting } from '../settings';
 import { COMMS_CATEGORIES, COMMS_CHANNELS, COMMS_EVENTS, getCommsEvent, type CommsChannel, type CommsEvent } from './catalogue';
 
 export type DeliveryStatus = 'sent' | 'logged' | 'failed' | 'skipped_opted_out' | 'skipped_no_contact' | 'skipped_no_device';
@@ -154,13 +153,20 @@ You receive this because you have a ${escapeHtml(site.siteName)} account. Securi
 // ---------------------------------------------------------------- channel readiness
 export function channelStatus(): Record<CommsChannel, { wired: boolean; detail: string }> {
   const smtp = getSmtpSettings();
-  const sms = getSetting<{ provider?: string; twilioSid?: string; twilioToken?: string; twilioFrom?: string }>('sms', {});
-  const twilio = !!((sms.twilioSid || config.sms.twilioSid) && (sms.twilioToken || config.sms.twilioToken) && (sms.twilioFrom || config.sms.twilioFrom));
+  const smsCfg = smsProvider();
+  const smsWired = (smsCfg.provider === 'twilio' && !!smsCfg.twilio) || (smsCfg.provider === 'africastalking' && !!smsCfg.africasTalking);
+  const smsDetail = smsWired
+    ? smsCfg.provider === 'twilio'
+      ? 'Twilio'
+      : `Africa's Talking (${smsCfg.africasTalking!.username === 'sandbox' ? 'sandbox' : 'live'}${smsCfg.africasTalking!.from ? `, sender ${smsCfg.africasTalking!.from}` : ''})`
+    : smsCfg.provider === 'console'
+      ? 'No SMS provider selected: SMS are logged, not sent'
+      : `${smsCfg.provider}: credentials missing, SMS are logged, not sent`;
   const wa = getWhatsAppSettings();
   return {
     email: { wired: !!smtp.host, detail: smtp.host ? `SMTP ${smtp.host}:${smtp.port} as ${smtp.from}` : 'No SMTP host: emails are logged, not sent' },
     inapp: { wired: true, detail: 'Notification centre in the web app and phone app' },
-    sms: { wired: twilio, detail: twilio ? 'Twilio' : 'No Twilio credentials: SMS are logged, not sent' },
+    sms: { wired: smsWired, detail: smsDetail },
     push: { wired: true, detail: config.expoAccessToken ? 'Expo push service (access token set)' : 'Expo push service (no access token; fine for most volumes)' },
     whatsapp: { wired: !!(wa.accessToken && wa.phoneNumberId), detail: wa.accessToken && wa.phoneNumberId ? 'WhatsApp Cloud API' : 'Not connected: Admin → Channels → WhatsApp' },
   };

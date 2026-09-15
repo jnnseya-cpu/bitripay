@@ -34,7 +34,7 @@ export function Messaging() {
   useEffect(() => {
     if (settings.data) {
       setSmtp(settings.data.smtp);
-      setSms({ provider: 'console', twilioSid: '', twilioToken: '', twilioFrom: '', ...settings.data.sms });
+      setSms({ provider: 'console', twilioSid: '', twilioToken: '', twilioFrom: '', africasTalkingUsername: '', africasTalkingApiKey: '', africasTalkingFrom: '', ...settings.data.sms });
     }
   }, [settings.data]);
   const save = (key: string, value: unknown) =>
@@ -106,8 +106,22 @@ export function Messaging() {
               <Select value={sms.provider} onChange={(e) => setSms({ ...sms, provider: e.target.value })}>
                 <option value="console">Console (development)</option>
                 <option value="twilio">Twilio</option>
+                <option value="africastalking">Africa's Talking (Kinshasa and most African routes)</option>
               </Select>
             </Field>
+            {sms.provider === 'africastalking' && (
+              <div className="grid cols-3">
+                <Field label="Username" hint={`"sandbox" targets the Africa's Talking sandbox; your app username targets live routes`}>
+                  <Input value={sms.africasTalkingUsername} onChange={(e) => setSms({ ...sms, africasTalkingUsername: e.target.value })} />
+                </Field>
+                <Field label="API key">
+                  <Input type="password" value={sms.africasTalkingApiKey} onChange={(e) => setSms({ ...sms, africasTalkingApiKey: e.target.value })} />
+                </Field>
+                <Field label="Sender ID (optional)" hint="An approved alphanumeric sender such as BitriPay, or a short code; empty uses the shared sender">
+                  <Input value={sms.africasTalkingFrom} onChange={(e) => setSms({ ...sms, africasTalkingFrom: e.target.value })} />
+                </Field>
+              </div>
+            )}
             {sms.provider === 'twilio' && (
               <div className="grid cols-3">
                 <Field label="Account SID">

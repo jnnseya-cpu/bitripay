@@ -102,6 +102,10 @@ export const config = {
     twilioSid: env.TWILIO_ACCOUNT_SID || '',
     twilioToken: env.TWILIO_AUTH_TOKEN || '',
     twilioFrom: env.TWILIO_FROM || '',
+    /** Africa's Talking (Kinshasa and most African routes): username "sandbox" targets its sandbox host. */
+    africasTalkingUsername: env.AFRICASTALKING_USERNAME || '',
+    africasTalkingApiKey: env.AFRICASTALKING_API_KEY || '',
+    africasTalkingFrom: env.AFRICASTALKING_FROM || '',
   },
   expoAccessToken: env.EXPO_ACCESS_TOKEN || '',
   /** Server-side model key used by the assist runtime and the content agent when no encrypted key is stored in settings. */
