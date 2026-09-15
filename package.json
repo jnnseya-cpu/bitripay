@@ -32,6 +32,7 @@
     "deps:check": "knip",
     "go-live": "npm run go-live -w @bitripay/api",
     "demo-accounts": "bash scripts/demo-accounts.sh",
+    "payout-float": "bash scripts/payout-float.sh",
     "deploy": "bash scripts/deploy.sh",
     "release": "bash scripts/release.sh",
     "verify": "bash scripts/verify.sh",

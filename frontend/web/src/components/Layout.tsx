@@ -102,7 +102,9 @@ export function Layout({ children }: { children: ReactNode }) {
               { to: '/app/merchant/centre', key: 'nav.centre', ico: '🧭' },
               { to: '/app/merchant/qr', key: 'nav.qrCentre', ico: '🔳' },
               { to: '/app/merchant/developer', key: 'nav.developer', ico: '🧑‍💻' },
-              { to: '/app/merchant/switch', key: 'nav.switchPayments', ico: '🏦' },
+              // The national switch is operated by BitriPay under its aggregator licence: merchants reach every bank and
+              // telecom through the gateway and never see the switch itself; the page stays for platform staff.
+              ...(user?.role === 'admin' ? [{ to: '/app/merchant/switch', key: 'nav.switchPayments', ico: '🏦' }] : []),
             ])}
           </>
         )}

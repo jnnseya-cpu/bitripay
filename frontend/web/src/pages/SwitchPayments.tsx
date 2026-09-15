@@ -6,7 +6,6 @@ import { useT } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, KV, Modal, PageHeader, Select, StatusBadge, useAsync } from '../components/ui';
 import { SwitchMessage } from '../components/SwitchMessage';
 import { formatMoney } from '@bitripay/shared';
-import { isMerchantClass } from '@bitripay/shared';
 
 /** Payment states of the national switch (dossier §7): before emission, in flight, uncertain, terminal. */
 const STATES = ['RECEIVED', 'REQUIRES_ACTION', 'READY', 'DISPATCHING', 'PENDING', 'AUTHORIZED', 'UNKNOWN', 'COMPLETED', 'REJECTED', 'EXPIRED', 'CANCELLED'];
@@ -32,10 +31,13 @@ export function SwitchPayments() {
   const [selected, setSelected] = useState<any>(null);
   const list = useAsync(() => load<{ data: any[] }>(`/api/v1/payments${qs({ status: status || null, limit: 100 })}`), [status]);
   const timeline = useAsync(() => (selected ? load<any>(`/api/v1/payments/${selected.payment_id}/timeline`) : Promise.resolve(null)), [selected?.payment_id]);
-  if (!isMerchantClass(user?.role) && user?.role !== 'admin')
+  // Platform staff only: merchants and customers use the gateway (banks and mobile money are reached behind it) and
+  // the switch connection, its states and its interchange stay with BitriPay under the aggregator licence.
+  if (user?.role !== 'admin')
     return (
       <Alert kind="info">
-        National switch payments are created by merchant accounts through the partner API. <Link to="/app/merchant">Upgrade</Link> to accept them.
+        The national switch is operated by BitriPay. Your payments through banks and mobile money show under <Link to="/app/merchant">Merchant</Link> and{' '}
+        <Link to="/app/transactions">Transactions</Link>.
       </Alert>
     );
   const money = (a: { currency: string; value_minor: string } | null | undefined) => {

@@ -13,7 +13,8 @@
     "test": "vitest run",
     "docs:http": "tsx src/docs/httpFile.ts",
     "go-live": "tsx src/goLive.ts",
-    "demo-accounts": "tsx src/demoAccounts.ts"
+    "demo-accounts": "tsx src/demoAccounts.ts",
+    "payout-float": "tsx src/payoutFloat.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

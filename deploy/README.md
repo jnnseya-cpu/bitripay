@@ -205,6 +205,22 @@ Sandbox compliance mode only (the balances are an administrator issuance approve
 the four-eyes rule forbids once real money is in play). Running it again reports the existing accounts and adds
 nothing.
 
+## 5c. Payout float for a demonstration
+
+Transfers to mobile money are paid from your own prefunded SIM (no operator API). Until a prefunded payout account
+exists for the operator, a transfer waits at "Funded · waiting for liquidity" and the sender may cancel it. One
+command creates the payout account for a SIM and adds the float; transfers already waiting for that operator are
+re-queued at once and appear under Corridors, liquidity & payouts → Payout instructions:
+
+```bash
+npm run payout-float -- --operator orange_cd --msisdn +243990000001 --amount 1000000
+# amount in CDF (the operator's payout currency); optional: --currency, --country, --label "Orange Money DRC – SIM 1", --reference
+```
+
+Operator ids: `GET /api/mobile-money-operators?country=CD` (orange_cd, airtel_cd, vodacom_cd, africell_cd). Sandbox
+compliance mode only; a live prefund is a treasury movement made from the console under step-up. Running it again for
+the same operator and SIM only adds the requested float.
+
 ## 6. Operations
 
 - Logs: `docker compose --env-file deploy/.env.production -f deploy/docker-compose.prod.yml logs -f api`
