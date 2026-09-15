@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../lib/api';
 import { armAlerts, ringForNew } from '../lib/alerts';
-import { NavLink, Link, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
+import { ErrorBoundary } from './ErrorBoundary';
 import { useStore } from '../lib/store';
 import { Avatar } from './ui';
 
@@ -91,6 +92,7 @@ const NAV: { section: string; items: { to: string; label: string; ico: string; p
 export function Layout({ children }: { children: ReactNode }) {
   const { user, logout, theme, toggleTheme, can, config } = useStore();
   const nav = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   // Loud alerts for administrators: new maker-checker items, reconciliation breaches, corridor suspensions.
   useEffect(() => {
@@ -168,7 +170,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main className="content" style={{ maxWidth: 1400 }}>
-          {children}
+          <ErrorBoundary resetKey={location.pathname}>{children}</ErrorBoundary>
         </main>
       </div>
     </div>

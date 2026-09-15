@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
 
 /** Camera QR scanner built on html5-qrcode; falls back to file upload on devices without camera access. */
 export function Scanner({ onScan, active = true }: { onScan: (text: string) => void; active?: boolean }) {
@@ -28,10 +28,21 @@ export function Scanner({ onScan, active = true }: { onScan: (text: string) => v
     return () => {
       const s = instance.current;
       instance.current = null;
-      if (s) {
-        s.stop()
-          .then(() => s.clear())
-          .catch(() => {});
+      if (!s) return;
+      // html5-qrcode throws synchronously ("Cannot stop, scanner is not running or paused") when the camera never
+      // started (permission refused, no camera, page left before start resolved). A throw inside an effect cleanup
+      // unmounts the whole React tree, so every teardown step is guarded.
+      try {
+        const state = s.getState();
+        if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
+          s.stop()
+            .then(() => s.clear())
+            .catch(() => {});
+        } else {
+          s.clear();
+        }
+      } catch {
+        /* nothing to release */
       }
     };
   }, [active, onScan]);

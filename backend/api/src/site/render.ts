@@ -265,6 +265,62 @@ ${post.headings.length ? `<div class="tocbox"><b>In this article</b>${post.headi
   );
 }
 
+/** Public statement verification: what anyone holding a copy of a statement can check, without any personal data. */
+export function statementVerifyPage(
+  s: {
+    id: string;
+    number: string;
+    currency: string;
+    period: { from: string; to: string };
+    opening: number;
+    closing: number;
+    entryCount: number;
+    hash: string;
+    generatedAt: string;
+    holderRef: string;
+  } | null,
+  lookup: string,
+): string {
+  const seo = getSeoSettings();
+  const row = (k: string, v: string) =>
+    `<tr><th style="text-align:left;padding:8px 12px 8px 0;color:var(--muted);font-weight:500;white-space:nowrap;vertical-align:top">${k}</th><td style="padding:8px 0;font-weight:600;overflow-wrap:anywhere">${v}</td></tr>`;
+  const body = s
+    ? `
+<div class="breadcrumb"><a href="/">${escapeHtml(seo.siteName)}</a> / Statement verification</div>
+<article class="post"><div>
+<h1>Statement ${escapeHtml(s.number)} is registered</h1>
+<p class="notice" style="border-color:var(--accent-2)">✔ ${escapeHtml(seo.siteName)} issued a statement with this number on ${escapeHtml(fmtDate(s.generatedAt))}. Compare the SHA-256 hash below with the one printed in the footer of the PDF or CSV you were given: if they match, the document has not been altered.</p>
+<table style="border-collapse:collapse;width:100%;max-width:640px;font-size:15px">
+${row('Statement number', escapeHtml(s.number))}
+${row('Currency', escapeHtml(s.currency))}
+${row('Period', `${escapeHtml(s.period.from)} → ${escapeHtml(s.period.to)}`)}
+${row('Opening balance (minor units)', String(s.opening))}
+${row('Closing balance (minor units)', String(s.closing))}
+${row('Entries', String(s.entryCount))}
+${row('SHA-256', `<code>${escapeHtml(s.hash)}</code>`)}
+${row('Generated', escapeHtml(s.generatedAt))}
+${row('Holder reference', `<code>${escapeHtml(s.holderRef)}</code>`)}
+</table>
+<p class="notice" style="margin-top:20px">This page never shows the account holder's name, number or transactions. The holder can produce the full statement from their ${escapeHtml(seo.siteName)} account at any time.</p>
+<p style="margin-top:18px"><a class="cta" href="/login" style="background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600">Sign in to your statements</a></p>
+</div></article>`
+    : `
+<div class="breadcrumb"><a href="/">${escapeHtml(seo.siteName)}</a> / Statement verification</div>
+<article class="post"><div>
+<h1>No statement found</h1>
+<p class="notice" style="border-color:var(--amber)">Nothing is registered under <code>${escapeHtml(lookup)}</code>. Check the statement number (it looks like ST-00000012) or the verification link printed in the footer of the document.</p>
+</div></article>`;
+  return layout(
+    {
+      title: pageTitle(s ? `Statement ${s.number} verification` : 'Statement verification'),
+      description: 'Check that an account statement was issued by BitriPay and has not been altered, without seeing any personal data.',
+      path: `/api/statements/verify/${encodeURIComponent(lookup)}`,
+      noindex: true,
+    },
+    body,
+  );
+}
+
 export function legalPage(page: { slug: string; title: string; html: string; updatedAt: string }, kind: 'legal' | 'about' | 'contact'): string {
   const seo = getSeoSettings();
   const path = kind === 'legal' ? `/legal/${page.slug}` : `/${kind}`;

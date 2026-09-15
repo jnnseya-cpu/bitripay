@@ -3,13 +3,16 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { StoreProvider } from './lib/store';
 import { App } from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './theme.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <StoreProvider>
-        <App />
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
       </StoreProvider>
     </BrowserRouter>
   </React.StrictMode>,

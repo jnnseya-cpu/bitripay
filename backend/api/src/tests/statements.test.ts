@@ -48,6 +48,17 @@ describe('transaction statements', () => {
     expect(v.status).toBe(200);
     expect(v.body.statement.hash).toBe(st.hash);
     expect(v.body.statement.number).toBe(st.number);
+    // a phone or desktop browser following the verify link gets a readable page, not raw JSON
+    const page = await request(app).get(`/api/statements/verify/${st.number}`).set('Accept', 'text/html,application/xhtml+xml,*/*;q=0.8');
+    expect(page.status).toBe(200);
+    expect(page.headers['content-type']).toContain('text/html');
+    expect(page.text).toContain(`Statement ${st.number} is registered`);
+    expect(page.text).toContain(st.hash);
+    expect(page.text).not.toContain(a.user.fullName);
+    const missing = await request(app).get('/api/statements/verify/ST-99999999').set('Accept', 'text/html');
+    expect(missing.status).toBe(404);
+    expect(missing.text).toContain('No statement found');
+    expect((await request(app).get('/api/statements/verify/ST-99999999')).status).toBe(404);
     expect(JSON.stringify(v.body)).not.toContain(a.user.email);
     const list = await request(app).get('/api/wallets/statements').set(a.auth);
     expect(list.body.items.map((x: any) => x.number)).toContain(st.number);

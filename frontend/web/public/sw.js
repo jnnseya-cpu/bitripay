@@ -1,7 +1,7 @@
 /* BitriPay service worker: caches the app shell and the last state so the app opens offline ("last synced …"),
  * never caches money-moving API responses, and syncs queued offline promises when the network is back. */
-const VERSION = 'bitripay-shell-v2';
-const SHELL = ['/', '/app', '/manifest.webmanifest', '/favicon.svg'];
+const VERSION = 'bitripay-shell-v3';
+const SHELL = ['/', '/app', '/manifest.webmanifest', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png'];
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches

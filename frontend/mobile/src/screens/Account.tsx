@@ -196,7 +196,7 @@ export function Settings() {
 }
 
 export function Security() {
-  const { t, user, toast, refresh, biometrics, setBiometrics, biometricsAvailable, setUser } = useStore();
+  const { t, user, toast, refresh, biometrics, setBiometrics, biometricsAvailable, setUser, logout } = useStore();
   const [pw, setPw] = useState({ currentPassword: '', newPassword: '' });
   const [pin, setPin] = useState({ pin: '', currentPin: '' });
   const [setup, setSetup] = useState<{ qr: string; secret: string } | null>(null);
@@ -205,6 +205,9 @@ export function Security() {
   const [otpCode, setOtpCode] = useState('');
   const [bioPinOpen, setBioPinOpen] = useState(false);
   const [bioPin, setBioPin] = useState('');
+  const [closing, setClosing] = useState(false);
+  const [closeForm, setCloseForm] = useState({ password: '', pin: '', confirm: '', reason: '' });
+  const [blockers, setBlockers] = useState<{ code: string; detail: string }[]>([]);
   const run = (p: Promise<unknown>, msg: string) =>
     p
       .then(() => {
@@ -326,6 +329,59 @@ export function Security() {
         )}
         {user?.emailVerified && user?.phoneVerified && <T muted>All verified ✓</T>}
       </Card>
+      {user?.role !== 'admin' && (
+        <Card>
+          <T bold>Delete account</T>
+          <T muted size={12}>
+            Closes this account for good: name, email, phone and documents are removed and every session and key is revoked. Balances must be at zero first. Ledger history stays under a pseudonym for
+            the legal retention period.
+          </T>
+          <Button
+            title="Delete my account"
+            variant="danger"
+            onPress={() =>
+              api
+                .get<{ blockers: { code: string; detail: string }[] }>('/api/account/closure')
+                .then((r) => {
+                  setBlockers(r.blockers);
+                  setClosing(true);
+                })
+                .catch((e) => toast(e.message, 'error'))
+            }
+          />
+        </Card>
+      )}
+      <Sheet open={closing} onClose={() => setClosing(false)} title="Delete account">
+        {blockers.length > 0 && <Alert kind="warning" text={`Not yet possible: ${blockers.map((b) => b.detail).join('; ')}`} />}
+        <Input label="Password" value={closeForm.password} onChangeText={(v) => setCloseForm({ ...closeForm, password: v })} secureTextEntry />
+        {user?.hasPin && (
+          <Input
+            label={t('common.pin')}
+            value={closeForm.pin}
+            onChangeText={(v) => setCloseForm({ ...closeForm, pin: v.replace(/\D/g, '') })}
+            secureTextEntry
+            keyboardType="number-pad"
+            maxLength={6}
+          />
+        )}
+        <Input label="Why are you leaving? (optional)" value={closeForm.reason} onChangeText={(v) => setCloseForm({ ...closeForm, reason: v })} />
+        <Input label="Type CLOSE to confirm" value={closeForm.confirm} onChangeText={(v) => setCloseForm({ ...closeForm, confirm: v.toUpperCase() })} autoCapitalize="characters" />
+        <Button
+          title="Delete my account permanently"
+          variant="danger"
+          disabled={blockers.length > 0 || closeForm.confirm !== 'CLOSE' || !closeForm.password || (!!user?.hasPin && closeForm.pin.length < 4)}
+          onPress={() =>
+            api
+              .del('/api/account', { password: closeForm.password, pin: closeForm.pin || undefined, confirm: closeForm.confirm, reason: closeForm.reason || undefined })
+              .then(() => {
+                toast('Your account has been closed', 'success');
+                setClosing(false);
+                return logout();
+              })
+              .catch((e) => toast(e.message, 'error'))
+          }
+        />
+      </Sheet>
       <Sheet open={!!otp} onClose={() => setOtp(null)} title="Enter code">
         {otp && (
           <>

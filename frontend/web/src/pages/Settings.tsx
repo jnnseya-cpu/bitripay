@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { alertsEnabled, armAlerts, loudAlert, setAlertsEnabled } from '../lib/alerts';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -370,6 +370,73 @@ function Security() {
           </Button>
         </Modal>
       </div>
+      <DeleteAccount />
+    </div>
+  );
+}
+
+/** Right to erasure for every account holder except administrators: password, PIN and the word CLOSE, once nothing is outstanding. */
+function DeleteAccount() {
+  const { user, toast, logout } = useStore();
+  const nav = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ password: '', pin: '', confirm: '', reason: '' });
+  const [loading, setLoading] = useState(false);
+  const blockers = useAsync(() => (open ? api.get<{ blockers: { code: string; detail: string }[] }>('/api/account/closure') : Promise.resolve({ blockers: [] })), [open]);
+  if (!user || user.role === 'admin') return null;
+  const blocked = (blockers.data?.blockers ?? []).length > 0;
+  const submit = async () => {
+    setLoading(true);
+    try {
+      await api.del('/api/account', { password: form.password, pin: form.pin || undefined, confirm: form.confirm, reason: form.reason || undefined });
+      toast('Your account has been closed', 'success');
+      logout();
+      nav('/');
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <div className="card mt" style={{ borderColor: 'var(--danger)' }}>
+      <h4 style={{ marginTop: 0 }}>Delete account</h4>
+      <p className="small muted">
+        Closes this account for good: your name, email, phone and documents are removed, sessions and keys are revoked. Money must be at zero first (send it, withdraw it or move it to a card, then
+        unload the card). Ledger history stays under a pseudonym for the legal retention period.
+      </p>
+      <Button variant="danger" onClick={() => setOpen(true)}>
+        Delete my account
+      </Button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Delete account">
+        {blocked && (
+          <Alert kind="warning">
+            Not yet possible:
+            <ul style={{ margin: '6px 0 0 18px' }}>
+              {blockers.data!.blockers.map((b) => (
+                <li key={b.code + b.detail}>{b.detail}</li>
+              ))}
+            </ul>
+          </Alert>
+        )}
+        <Field label="Password">
+          <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="current-password" />
+        </Field>
+        {user.hasPin && (
+          <Field label="Transaction PIN">
+            <Input className="pin-input" type="password" inputMode="numeric" value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })} />
+          </Field>
+        )}
+        <Field label="Why are you leaving? (optional)">
+          <Input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+        </Field>
+        <Field label="Type CLOSE to confirm">
+          <Input value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value.toUpperCase() })} placeholder="CLOSE" />
+        </Field>
+        <Button block variant="danger" loading={loading} disabled={blocked || form.confirm !== 'CLOSE' || !form.password || (user.hasPin && form.pin.length < 4)} onClick={submit}>
+          Delete my account permanently
+        </Button>
+      </Modal>
     </div>
   );
 }

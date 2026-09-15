@@ -72,6 +72,10 @@ describe('account closure (right to erasure)', () => {
     expect((await request(app).get('/api/wallets').set(a.auth)).body.items[0].balance).toBe(0);
     const wrongPin = await request(app).delete('/api/account').set(a.auth).send({ password: 'Password123!', pin: '0000', confirm: 'CLOSE' });
     expect(wrongPin.status).toBe(403);
+    const admin = await adminToken(app);
+    const adminClose = await request(app).delete('/api/account').set(admin.auth).send({ password: 'Admin123!', pin: admin.pin, confirm: 'CLOSE' });
+    expect(adminClose.status).toBe(403);
+    expect(adminClose.body.error.code).toBe('admin_account');
     const closed = await request(app).delete('/api/account').set(a.auth).send({ password: 'Password123!', pin: '1234', confirm: 'CLOSE', reason: 'leaving' });
     expect(closed.status, JSON.stringify(closed.body)).toBe(200);
     const row = getDb().prepare('SELECT full_name, email, phone, tag, status, closed_at, password_hash FROM users WHERE id = ?').get(a.user.id) as any;

@@ -205,10 +205,12 @@ export function openTrade(user: UserRow, input: { adId: string; amount: number; 
   const priceAmount = priceFor(input.amount, rate, ad.currency, ad.price_currency);
   const id = uuid();
   const ts = now();
+  let reference = txReference('P2P');
+  while (db.prepare('SELECT 1 FROM p2p_trades WHERE reference = ?').get(reference)) reference = txReference('P2P');
   db.prepare(
     `INSERT INTO p2p_trades (id, reference, ad_id, buyer_id, seller_id, initiator_id, amount, currency, price_amount, price_currency, rate, payment_method, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'negotiating', ?, ?)`,
-  ).run(id, txReference('P2P'), ad.id, buyerId, sellerId, user.id, input.amount, ad.currency, priceAmount, ad.price_currency, rate, method === 'wallet' ? 'wallet' : 'external', ts, ts);
+  ).run(id, reference, ad.id, buyerId, sellerId, user.id, input.amount, ad.currency, priceAmount, ad.price_currency, rate, method === 'wallet' ? 'wallet' : 'external', ts, ts);
   db.prepare("INSERT INTO p2p_offers (id, trade_id, from_user_id, amount, rate, price_amount, message, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)").run(
     uuid(),
     id,

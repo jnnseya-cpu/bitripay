@@ -13,6 +13,8 @@ import { COUNTRIES } from '@bitripay/shared';
 import { rateLimit } from '../middleware/rateLimit';
 import { consentView, confirmPayoutCurrency } from '../services/routing';
 import { verifyStatement } from '../services/statements';
+import { statementVerifyPage } from '../site/render';
+import { AppError } from '../lib/errors';
 import { listOperators as listMomoOperators } from '../services/momo';
 import { localeFromRequest } from '../services/locale';
 import { optionalAuth } from '../middleware/auth';
@@ -64,7 +66,18 @@ publicRouter.get('/config', (_req, res) => {
 
 publicRouter.get('/countries', (_req, res) => res.json({ items: COUNTRIES }));
 /** Verify a statement's number and integrity hash (no personal data is returned). */
-publicRouter.get('/statements/verify/:id', rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'stmt' }), (req, res) => res.json({ statement: verifyStatement(String(req.params.id)) }));
+/** Anyone holding a statement can check it. A browser gets a readable page; API clients (no Accept header, or JSON first) get JSON. */
+publicRouter.get('/statements/verify/:id', rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'stmt' }), (req, res) => {
+  const id = String(req.params.id);
+  const wantsHtml = req.accepts(['json', 'html']) === 'html';
+  if (!wantsHtml) return res.json({ statement: verifyStatement(id) });
+  try {
+    return res.type('html').send(statementVerifyPage(verifyStatement(id), id));
+  } catch (err) {
+    if (err instanceof AppError && err.status === 404) return res.status(404).type('html').send(statementVerifyPage(null, id));
+    throw err;
+  }
+});
 /** Beneficiary currency confirmation (regulated corridors): the recipient opens the link, sees what is offered and confirms. */
 publicRouter.get('/routes/consent/:token', rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'consent' }), (req, res) => res.json(consentView(String(req.params.token))));
 publicRouter.post(

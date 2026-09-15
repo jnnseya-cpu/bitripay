@@ -1,5 +1,6 @@
 import { useState, type ReactNode, useEffect } from 'react';
-import { NavLink, Link, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
+import { ErrorBoundary } from './ErrorBoundary';
 import { useStore } from '../lib/store';
 import { useT } from '../lib/i18n';
 import { Avatar } from './ui';
@@ -32,6 +33,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, memberships, organisationId, setOrganisation, config, logout, theme, toggleTheme, unread, notifications, lang, setLang, refreshWallets } = useStore();
   const t = useT();
   const nav = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const m = config?.modules ?? {};
@@ -207,7 +209,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </header>
         <main className="content">
           <OfflineBanner />
-          {children}
+          <ErrorBoundary resetKey={location.pathname}>{children}</ErrorBoundary>
         </main>
       </div>
     </div>

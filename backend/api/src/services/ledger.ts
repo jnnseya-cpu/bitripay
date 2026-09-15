@@ -355,12 +355,16 @@ export function postTransaction(input: PostTransactionInput): TransactionRow {
     }
     const id = uuid();
     const ts = now();
+    // Six random symbols per day collide at scale (about one pair per 10 000 postings); the reference is a customer-facing
+    // unique key, so it is regenerated until free instead of failing the posting.
+    let reference = txReference();
+    while (db.prepare('SELECT 1 FROM transactions WHERE reference = ?').get(reference)) reference = txReference();
     db.prepare(
       `INSERT INTO transactions (id, reference, type, status, amount, fee, currency, receive_amount, receive_currency, sender_user_id, receiver_user_id, sender_wallet_id, receiver_wallet_id, note, metadata, idempotency_key, created_at, completed_at, issuance_authority)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
-      txReference(),
+      reference,
       input.type,
       status,
       input.amount,

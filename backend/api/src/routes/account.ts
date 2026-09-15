@@ -4,7 +4,7 @@ import { validate, wrap } from '../lib/http';
 import { requireAuth, twoFactorDeadline } from '../middleware/auth';
 import * as auth from '../services/auth';
 import { toUser, updateUser, normalizeTag, findUserByTag, findUserByIdentifier, toPublicUser } from '../services/users';
-import { badRequest, conflict } from '../lib/errors';
+import { badRequest, conflict, forbidden } from '../lib/errors';
 import { listNotifications, markRead, registerPushToken, removePushToken, unreadCount, setLoudAlerts } from '../services/notifications';
 import { referralStats } from '../services/referrals';
 import { poolsForOwner, listPromoCredits } from '../services/emoney';
@@ -172,6 +172,7 @@ accountRouter.delete(
   wrap(async (req, res) => {
     const body = validate(z.object({ password: z.string().min(1), pin: z.string().optional(), confirm: z.literal('CLOSE'), reason: z.string().max(300).optional() }), req.body);
     const user = req.actor ?? req.user!;
+    if (user.role === 'admin') throw forbidden('Administrator accounts are removed from the console by another administrator, not self-deleted', 'admin_account');
     if (user.password_hash && !verifyPassword(body.password, user.password_hash)) throw badRequest('Password is incorrect', 'invalid_password');
     auth.assertPin(user, body.pin, req);
     const closed = closeAccount(user, { type: 'user', id: user.id }, body.reason ?? 'account holder request');

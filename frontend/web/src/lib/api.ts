@@ -82,7 +82,7 @@ export const api = {
   post: <T>(path: string, body?: unknown, opts?: { token?: string | null }) => request<T>('POST', path, body ?? {}, opts),
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body ?? {}),
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body ?? {}),
-  del: <T>(path: string) => request<T>('DELETE', path),
+  del: <T>(path: string, body?: unknown) => request<T>('DELETE', path, body),
 };
 
 export function qs(params: Record<string, string | number | boolean | null | undefined>): string {
