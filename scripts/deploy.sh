@@ -10,9 +10,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ENV_FILE=deploy/.env.production
-MODE="${DEPLOY_MODE:-dedicated}"
-for arg in "$@"; do case "$arg" in --shared-host) MODE=shared-host ;; --dedicated) MODE=dedicated ;; esac; done
 [ -f "$ENV_FILE" ] || { echo "Missing $ENV_FILE (copy deploy/.env.production.example and fill it)"; exit 1; }
+# Mode: the flag, else DEPLOY_MODE in the environment, else DEPLOY_MODE in the env file, else dedicated.
+MODE="${DEPLOY_MODE:-$(grep -E '^DEPLOY_MODE=.+' "$ENV_FILE" | cut -d= -f2 || true)}"; MODE="${MODE:-dedicated}"
+for arg in "$@"; do case "$arg" in --shared-host) MODE=shared-host ;; --dedicated) MODE=dedicated ;; esac; done
 EXTRA_FILES=()
 if [ "$MODE" = shared-host ]; then
   COMPOSE_FILE=deploy/docker-compose.shared-host.yml
