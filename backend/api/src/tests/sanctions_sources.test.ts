@@ -96,6 +96,16 @@ describe('official sanctions lists', () => {
     expect(importSanctionsRows('un_consolidated', parseUnConsolidatedXml(UN), 'sample-2026-09-01', { type: 'system' }).replaced).toBe(4);
     expect(screenSanctions({ name: 'Ri Won Ho' } as any).some((h) => h.startsWith('sanctions:'))).toBe(true);
     expect(screenSanctions({ name: 'Mireille Kabongo' } as any).filter((h) => h.startsWith('sanctions:'))).toEqual([]);
+    // Whole words only: a listed name matches in any order, a short alias never matches inside an ordinary name.
+    const { addSanction } = await import('../services/risk');
+    addSanction('name', 'Kabila Joseph', 'whole-word test', null);
+    addSanction('name', 'Abu', 'short alias test', null);
+    addSanction('name', 'Es', 'two-letter alias test', null);
+    expect(screenSanctions({ name: 'Joseph Kabila Kabange' } as any)).toContain('sanctions:name:Kabila Joseph');
+    expect(screenSanctions({ name: 'Joseph Mbala' } as any).filter((h) => h.startsWith('sanctions:'))).toEqual([]);
+    expect(screenSanctions({ name: 'Client Test' } as any).filter((h) => h.startsWith('sanctions:'))).toEqual([]);
+    expect(screenSanctions({ name: 'Abubakar Client' } as any).filter((h) => h.startsWith('sanctions:'))).toEqual([]);
+    expect(screenSanctions({ name: 'Abu' } as any)).toContain('sanctions:name:Abu');
     const item = goLiveChecklist().items.find((i) => i.id === 'sanctions')!;
     expect(item.ok).toBe(true);
     expect(item.detail).toMatch(/UN Security Council consolidated list: 4/);

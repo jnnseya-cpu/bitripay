@@ -6,6 +6,7 @@
  * The contact details (phone or email) come from the operator; nothing is invented.
  */
 import { badRequest, notFound } from '../lib/errors';
+import { getDb } from '../db';
 import { hashPassword } from '../lib/password';
 import { randomBytes } from 'node:crypto';
 import { createUser, findUserByEmail, findUserByPhone, findUserByTag, getUserById, updateUser, type UserRow } from './users';
@@ -79,8 +80,23 @@ export function createDemoAccount(admin: UserRow, input: DemoAccountInput): Demo
   const businessName = input.role === 'customer' ? null : input.businessName?.trim() || d.businessName;
   const country = (input.country ?? 'CD').toUpperCase(); // the demonstration market, whatever the seed country of the environment
   const loginUrl = `${config.webUrl}/login`;
-  const existing = findUserByTag(tag) ?? (input.email ? findUserByEmail(input.email) : undefined) ?? (input.phone ? findUserByPhone(input.phone) : undefined);
+  let existing = findUserByTag(tag) ?? (input.email ? findUserByEmail(input.email) : undefined) ?? (input.phone ? findUserByPhone(input.phone) : undefined);
   if (existing) {
+    // A rerun repairs an account an earlier run left half-made (an interrupted funding, a placeholder contact): while
+    // the account has never transacted, its contact follows the operator's input and missing balances are funded.
+    const fresh = !getDb().prepare('SELECT 1 FROM transactions WHERE sender_user_id = ? LIMIT 1').get(existing.id); // never sent anything yet
+    if (fresh) {
+      const patch: Record<string, unknown> = {};
+      if (input.phone && existing.phone !== input.phone && !findUserByPhone(input.phone)) patch.phone = input.phone;
+      if (input.email && existing.email !== input.email && !findUserByEmail(input.email)) patch.email = input.email;
+      if (Object.keys(patch).length) existing = updateUser(existing.id, patch as any);
+      const funded = new Set(
+        listWallets(existing.id)
+          .filter((w) => w.balance > 0)
+          .map((w) => w.currency),
+      );
+      for (const [currency, amount] of Object.entries(d.funding)) if (!funded.has(currency)) fund(admin, existing.id, currency, amount);
+    }
     return {
       role: input.role,
       created: false,

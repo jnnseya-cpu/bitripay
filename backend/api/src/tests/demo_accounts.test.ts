@@ -67,6 +67,18 @@ describe('demonstration test accounts', () => {
     expect(usdBefore - usdAfter).toBeLessThanOrEqual(sent.amount + sent.fee);
   });
 
+  it('repairs a half-made account on rerun and refuses a placeholder phone number', () => {
+    const n = Math.floor(Math.random() * 1e6);
+    expect(() => createDemoAccounts([{ role: 'customer', phone: '+243XXXXXXXXX', tag: `ph${n}` }])).toThrow(/full phone number/);
+    // an account created without funding (an interrupted earlier run) is funded and re-contacted on the next run
+    const first = createDemoAccounts([{ role: 'agent', email: `first${n}@test.local`, tag: `repair${n}` }])[0];
+    getDb().prepare('UPDATE wallets SET balance = 0 WHERE user_id = ?').run(first.id);
+    const again = createDemoAccounts([{ role: 'agent', phone: `+24382${String(n).padStart(7, '0')}`, tag: `repair${n}` }])[0];
+    expect(again.created).toBe(false);
+    expect(again.phone).toBe(`+24382${String(n).padStart(7, '0')}`);
+    expect(again.balances.every((b) => b.balance > 0)).toBe(true);
+  });
+
   it('refuses without a contact and outside sandbox compliance mode', () => {
     expect(() => createDemoAccounts([{ role: 'customer', tag: 'nocontact' }])).toThrow(/phone number or email/);
     const before = getSetting<any>('compliance', { mode: 'sandbox' });

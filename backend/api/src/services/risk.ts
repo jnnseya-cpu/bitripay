@@ -106,9 +106,26 @@ export function deleteSanction(id: string) {
 }
 
 /**
- * Screen a party against the lists. Names match on normalized containment; phones on the last 9 digits.
- * Sanctions hits are `sanctions:*` (the policy blocks them); politically exposed persons are `pep:*` (raise the
- * score, enhanced due diligence, never a block by themselves).
+ * Whether a listed name matches a subject's name. Whole words only, in any order: a multi-word entry matches when every
+ * one of its words is a word of the subject's name ("Kabila Joseph" ↔ "Joseph Kabila Kabange"); a single-word entry
+ * (many official aliases are one word, some only two or three letters) matches only as a whole word of at least five
+ * letters, or the whole name. Substring matching is never used: with ~74 000 official entries it flagged ordinary
+ * names because a short alias happened to occur inside them.
+ */
+export function nameMatchesEntry(subjectNormalized: string, entryNormalized: string): boolean {
+  if (!subjectNormalized || !entryNormalized) return false;
+  if (subjectNormalized === entryNormalized) return true;
+  const words = entryNormalized.split(' ').filter((t) => t.length >= 2);
+  if (!words.length) return false;
+  const subjectWords = new Set(subjectNormalized.split(' '));
+  if (words.length === 1) return words[0].length >= 5 && subjectWords.has(words[0]);
+  return words.every((w) => subjectWords.has(w));
+}
+
+/**
+ * Screen a party against the lists. Names match on whole words (see nameMatchesEntry); phones on the national
+ * significant number. Sanctions hits are `sanctions:*` (the policy blocks them); politically exposed persons are
+ * `pep:*` (raise the score, enhanced due diligence, never a block by themselves).
  */
 export function screenSanctions(subject: RiskSubject | null | undefined): string[] {
   if (!subject) return [];
@@ -121,8 +138,8 @@ export function screenSanctions(subject: RiskSubject | null | undefined): string
   const email = subject.email?.trim().toLowerCase() ?? '';
   const country = subject.country?.trim().toLowerCase() ?? '';
   for (const r of rows) {
-    if (r.kind === 'name' && name && r.normalized && (name === r.normalized || name.includes(r.normalized))) hits.push(`sanctions:name:${r.value}`);
-    if (r.kind === 'pep' && name && r.normalized && (name === r.normalized || name.includes(r.normalized))) hits.push(`pep:name:${r.value}`);
+    if (r.kind === 'name' && name && nameMatchesEntry(name, r.normalized)) hits.push(`sanctions:name:${r.value}`);
+    if (r.kind === 'pep' && name && nameMatchesEntry(name, r.normalized)) hits.push(`pep:name:${r.value}`);
     if (r.kind === 'phone' && phone && r.normalized && phone === r.normalized) hits.push(`sanctions:phone:${r.value}`);
     if (r.kind === 'email' && email && email === r.normalized) hits.push(`sanctions:email:${r.value}`);
     if (r.kind === 'country' && country && country === r.normalized) hits.push(`sanctions:country:${r.value}`);

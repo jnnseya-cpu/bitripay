@@ -163,6 +163,7 @@ export function createUser(input: CreateUserInput): UserRow {
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phone);
   if (!email && !phone && !input.isSystem) throw badRequest('Email or phone number is required');
+  if (phone && phone.replace(/\D/g, '').length < 8) throw badRequest('Enter the full phone number with its country code (for example +243 81 000 0000)', 'invalid_phone');
   if (email && findUserByEmail(email)) throw conflict('An account with this email already exists', 'email_taken');
   if (phone && findUserByPhone(phone)) throw conflict('An account with this phone number already exists', 'phone_taken');
   let tag: string;
