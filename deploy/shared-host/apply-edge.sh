@@ -60,4 +60,11 @@ if [ "$web" = 200 ] && curl -sk --max-time 20 --resolve www.bitripay.com:443:127
 else
   echo "www.bitripay.com/developers does not show the new build yet: check 'docker logs $PROXY --tail 50' (certificate issue or DNS not pointing here)."
 fi
-getent hosts www.bitripay.com >/dev/null || echo "DNS: www.bitripay.com does not resolve from this machine; add the A record for www (same address as bitripay.com)."
+# DNS: every host name must point at this VPS, or Caddy cannot obtain its certificate and the browser shows an error.
+MY_IPS="$(hostname -I 2>/dev/null || true)"
+for h in bitripay.com www.bitripay.com admin.bitripay.com api.bitripay.com; do
+  ip=$(getent ahostsv4 "$h" 2>/dev/null | awk 'NR==1{print $1}')
+  if [ -z "$ip" ]; then echo "DNS: $h has no A record yet; add one pointing at this VPS (${MY_IPS:-see your provider}) and re-run this script."
+  elif [ -n "$MY_IPS" ] && ! echo " $MY_IPS " | grep -q " $ip "; then echo "DNS: $h resolves to $ip, which is not an address of this VPS ($MY_IPS); the proxy here cannot serve it."
+  fi
+done
