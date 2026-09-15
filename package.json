@@ -31,6 +31,7 @@
     "docs:http": "npm run docs:http -w @bitripay/api --silent > docs-api.http",
     "deps:check": "knip",
     "go-live": "npm run go-live -w @bitripay/api",
+    "demo-accounts": "bash scripts/demo-accounts.sh",
     "deploy": "bash scripts/deploy.sh",
     "release": "bash scripts/release.sh",
     "verify": "bash scripts/verify.sh",

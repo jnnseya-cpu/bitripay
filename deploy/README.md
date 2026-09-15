@@ -189,6 +189,22 @@ Outbound merchant webhooks are signed with `BitriPay-Signature` and the platform
    for (Bitcoin stays off until a country is flagged and a merchant opts in).
 6. Run `npm run go-live` again: when it prints READY the compliance mode can be switched to live.
 
+## 5b. Test accounts for a demonstration
+
+`npm run demo-accounts` creates a customer, a merchant and an agent on the running platform (inside the API
+container on a deployed host) with verified KYC, a transaction PIN, the merchant's organisation, the agent's team and
+sandbox balances in USD and CDF; it prints the sign-in details once. Give it the phone number or email of each person
+who will use the account during the test; nothing is invented:
+
+```bash
+npm run demo-accounts -- --customer +243810000000 --merchant +243820000000 --agent +243890000000
+# optional: --<role>-email owner@example.com, --merchant-business "Pharmacie …", --agent-business "…", --password …, --pin 1234
+```
+
+Sandbox compliance mode only (the balances are an administrator issuance approved by the same administrator, which
+the four-eyes rule forbids once real money is in play). Running it again reports the existing accounts and adds
+nothing.
+
 ## 6. Operations
 
 - Logs: `docker compose --env-file deploy/.env.production -f deploy/docker-compose.prod.yml logs -f api`

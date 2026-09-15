@@ -6,7 +6,7 @@
       "project": ["scripts/**/*.mjs"]
     },
     "backend/api": {
-      "entry": ["src/docs/httpFile.ts", "src/tests/**/*.test.ts"],
+      "entry": ["src/docs/httpFile.ts", "src/demoAccounts.ts", "src/tests/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "frontend/web": {
