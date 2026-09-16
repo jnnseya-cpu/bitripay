@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { validate, wrap } from '../../lib/http';
 import { requirePermission } from '../../middleware/permissions';
 import { audit } from '../../services/audit';
+import { assertPin } from '../../services/auth';
 import { notFound } from '../../lib/errors';
 import { findUserById } from '../../services/users';
 import { getSetting, setSetting } from '../../services/settings';
@@ -325,9 +326,14 @@ r.put('/kyc/users/:userId/tier', requirePermission('kyc'), (req, res) => {
   res.json(tierStatus(u as any));
 });
 r.get('/kyb', requirePermission('kyc'), (req, res) => res.json({ items: listKyb(req.query.status ? String(req.query.status) : null, Number(req.query.limit) || 100) }));
-r.get('/kyb/:id', requirePermission('kyc'), (req, res) => res.json(getKyb(String(req.params.id))));
+r.get('/kyb/:id', requirePermission('kyc'), (req, res) => {
+  audit(req.user!.id, 'kyb.dossier.read', 'kyb', String(req.params.id), {});
+  res.json(getKyb(String(req.params.id), true));
+});
+// The decision is a step-up action: the reviewing administrator confirms it with their transaction PIN (or a passkey step-up token).
 r.post('/kyb/:id/review', requirePermission('kyc'), (req, res) => {
-  const b = validate(z.object({ decision: z.enum(['verified', 'rejected']), note: z.string().max(500).optional().nullable() }), req.body);
+  const b = validate(z.object({ decision: z.enum(['verified', 'rejected']), note: z.string().max(500).optional().nullable(), pin: z.string().optional().nullable() }), req.body);
+  assertPin(req.user!, b.pin ?? undefined, req);
   const k = reviewKyb(String(req.params.id), req.user!.id, b.decision, b.note);
   audit(req.user!.id, `kyb.${b.decision}`, 'kyb', k.id, { note: b.note ?? null });
   res.json(k);

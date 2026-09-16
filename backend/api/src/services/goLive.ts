@@ -20,7 +20,7 @@ import { toBase } from './currencies';
 import { getOperatingState } from './guardian';
 import { listOperators } from './momo';
 import { listConnections } from './switch/connections';
-import { getModules } from './modules';
+import { getModules, aggregatorPerimeterApplied, AGGREGATOR_PERIMETER_OFF } from './modules';
 import { listAgents } from './agents';
 import { listSources } from './risk/compliance';
 
@@ -50,11 +50,18 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
   const payoutAccounts = listPayoutAccounts({ status: 'active' });
   const payoutDevices = listDevices().filter((d) => d.status === 'active' && d.kind === 'payout');
   const agents = listAgents();
+  // Aggregator perimeter (Instructions n°42 and n°58): while no e-money authorisation is recorded, every issuer and
+  // acquirer function must be off; the platform goes live as an aggregator through the certified switch connection only.
+  const perimeter = aggregatorPerimeterApplied(modules);
+  const issuerAuthorised = !!compliance.emoneyAuthorisationRef;
+  const acceptanceModules = (['qrPayments', 'paymentLinks', 'moneyRequests', 'merchantGateway'] as const).filter((m) => !modules[m]);
   const moneyMoveModules = (['transfers', 'qrPayments', 'remittance', 'agents', 'withdrawals'] as const).filter((m) => !modules[m]);
   items.push({
     id: 'digital_rail',
-    label: 'Money moves on the BitriPay digital rail (ledger, direct operator numbers, bank instructions, payout devices, agents) without any bank, mobile-money or BTCPay API',
-    ok: !!directMomo?.enabled && !!directBank?.enabled && moneyMoveModules.length === 0,
+    label: perimeter
+      ? 'Acceptance on (QR, payment links, requests, merchant gateway and API); issuer rails wait for the e-money authorisation'
+      : 'Money moves on the BitriPay digital rail (ledger, direct operator numbers, bank instructions, payout devices, agents) without any bank, mobile-money or BTCPay API',
+    ok: perimeter ? acceptanceModules.length === 0 : !!directMomo?.enabled && !!directBank?.enabled && moneyMoveModules.length === 0,
     blocking: true,
     detail: [
       `direct mobile money ${directMomo?.enabled ? 'on' : 'off'} (${collectionNumbers.length} collection number${collectionNumbers.length === 1 ? '' : 's'})`,
@@ -64,7 +71,44 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
       `${agents.length} active agent(s)`,
       moneyMoveModules.length ? `modules off: ${moneyMoveModules.join(', ')}` : 'transfers, QR, remittance, agents and withdrawals on',
     ].join(' · '),
-    fix: 'Deposit / payment gateways → enable "Mobile money (direct, all operators)" and "Bank transfer" (enter the account details); Modules → transfers, QR payments, remittance, agents, withdrawals on. Collection numbers, payout accounts and payout devices are enrolled in the console and the payout-device app, never through an operator API',
+    fix: perimeter
+      ? 'Modules → QR payments, payment links, money requests and merchant gateway on'
+      : 'Deposit / payment gateways → enable "Mobile money (direct, all operators)" and "Bank transfer" (enter the account details); Modules → transfers, QR payments, remittance, agents, withdrawals on. Collection numbers, payout accounts and payout devices are enrolled in the console and the payout-device app, never through an operator API',
+  });
+  const stillOn = AGGREGATOR_PERIMETER_OFF.filter((k) => modules[k] !== false);
+  items.push({
+    id: 'aggregator_perimeter',
+    label: 'Aggregator perimeter applied: issuer and acquirer functions off until an e-money authorisation is recorded (Instruction n°42, art. 37, 40, 42)',
+    ok: perimeter || issuerAuthorised,
+    blocking: true,
+    detail: issuerAuthorised
+      ? `E-money authorisation / licensed issuer recorded: ${compliance.emoneyAuthorisationRef}`
+      : perimeter
+        ? 'Perimeter in force: every issuer and acquirer function is off and refused by the API'
+        : `Still on: ${stillOn.join(', ')}`,
+    fix: 'Modules → Apply the aggregator perimeter (Instructions n°42 and n°58), or record the e-money authorisation reference under Controls → Compliance once it exists',
+  });
+  items.push({
+    id: 'bcc_authorisation',
+    label: 'Banque Centrale du Congo authorisation as prestataire de services connexes – agrégateur recorded (Instruction n°42, art. 9)',
+    ok: !!compliance.aggregatorAuthorisationRef && !!compliance.aggregatorAuthorisationDate,
+    blocking: true,
+    detail: compliance.aggregatorAuthorisationRef
+      ? `${compliance.aggregatorAuthorisationRef} (${compliance.aggregatorAuthorisationDate || 'date missing'})`
+      : 'No authorisation recorded: the request is under instruction',
+    fix: 'Controls → Compliance → enter the authorisation reference and date once the Banque Centrale has granted it',
+  });
+  items.push({
+    id: 'switch_membership',
+    label: 'Switch Monétique National participation recorded: indirect SAREC participation convention with a bank, GMIC membership, guarantee fund (Instruction n°58, art. 10, 12, 13)',
+    ok: !!compliance.sarecConventionBank && !!compliance.sarecConventionRef && !!compliance.gmicMembershipRef,
+    blocking: true,
+    detail: [
+      compliance.sarecConventionRef ? `SAREC convention ${compliance.sarecConventionRef} with ${compliance.sarecConventionBank || 'bank not named'}` : 'No SAREC convention',
+      compliance.gmicMembershipRef ? `GMIC ${compliance.gmicMembershipRef}` : 'No GMIC membership',
+      compliance.guaranteeFundRef ? `guarantee fund ${compliance.guaranteeFundRef}` : 'guarantee fund contribution not recorded',
+    ].join(' · '),
+    fix: 'Controls → Compliance → record the bank and reference of the SAREC convention, the GMIC membership and the guarantee fund contribution',
   });
   // A licensed card processor is the one external API in the model and it serves card acceptance only: the three items
   // below block when a processor is enabled and are satisfied ("cards not offered") when none is, because the digital
@@ -129,20 +173,23 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
   items.push({
     id: 'corridor_live',
     label: 'At least one corridor authorised (live) with complete regulatory arrangements',
-    ok: live.length > 0 && live.every((c) => c.readiness.ready),
-    blocking: true,
-    detail: live.length
-      ? live.map((c) => `${c.sourceCurrency}→${c.destCountry} ${c.destCurrency}${c.readiness.ready ? '' : ` (missing: ${c.readiness.missing.join(', ')})`}`).join(' · ')
-      : 'No live corridor',
+    ok: perimeter || (live.length > 0 && live.every((c) => c.readiness.ready)),
+    blocking: !perimeter,
+    detail:
+      (perimeter ? 'Not required in the aggregator perimeter (issuer phase) · ' : '') +
+      (live.length
+        ? live.map((c) => `${c.sourceCurrency}→${c.destCountry} ${c.destCurrency}${c.readiness.ready ? '' : ` (missing: ${c.readiness.missing.join(', ')})`}`).join(' · ')
+        : 'No live corridor'),
     fix: 'Corridors → Go live (regulator, licence, safeguarding, AML, partners, expiry)',
   });
   const accounts = payoutAccounts;
   items.push({
     id: 'liquidity',
     label: 'Every live corridor has a prefunded payout account',
-    ok: live.length > 0 && live.every((c) => accounts.some((a) => a.currency === c.destCurrency && (!c.operatorId || a.operatorId === c.operatorId) && a.balance > 0)),
-    blocking: true,
-    detail: accounts.map((a) => `${a.label}: ${a.balance} ${a.currency}`).join(' · ') || 'No active payout accounts',
+    ok: perimeter || (live.length > 0 && live.every((c) => accounts.some((a) => a.currency === c.destCurrency && (!c.operatorId || a.operatorId === c.operatorId) && a.balance > 0))),
+    blocking: !perimeter,
+    detail:
+      (perimeter ? 'Not required in the aggregator perimeter (issuer phase) · ' : '') + (accounts.map((a) => `${a.label}: ${a.balance} ${a.currency}`).join(' · ') || 'No active payout accounts'),
     fix: 'Corridors → Liquidity → create and prefund payout accounts',
   });
   const devices = payoutDevices;
@@ -161,20 +208,24 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
   items.push({
     id: 'emoney_issuer',
     label: 'E-money issuer programme (own authorisation or licensed partner) with safeguarding account for every enabled currency',
-    ok: enabledCurrencies.length > 0 && covered.length === enabledCurrencies.length,
-    blocking: true,
-    detail: programmes.length
-      ? programmes.map((p) => `${p.currency}/${p.jurisdiction}: ${p.issuerModel}${p.readiness.ready ? '' : ` (missing: ${p.readiness.missing.join(', ')})`}`).join(' · ')
-      : 'No issuer programme registered',
+    ok: perimeter || (enabledCurrencies.length > 0 && covered.length === enabledCurrencies.length),
+    blocking: !perimeter,
+    detail:
+      (perimeter ? 'Not required in the aggregator perimeter (issuer phase) · ' : '') +
+      (programmes.length
+        ? programmes.map((p) => `${p.currency}/${p.jurisdiction}: ${p.issuerModel}${p.readiness.ready ? '' : ` (missing: ${p.readiness.missing.join(', ')})`}`).join(' · ')
+        : 'No issuer programme registered'),
     fix: 'Gateway controls → E-money → register the authorised issuer, licence, regulator and safeguarding account per currency',
   });
   const positions = programmes.map((p) => p.position);
   items.push({
     id: 'emoney_reserves',
     label: 'Outstanding e-money fully backed by cleared safeguarded reserves (1:1)',
-    ok: programmes.length > 0 && positions.every((p) => p.coverage >= 0 && p.liabilities <= p.clearedReserves + p.pendingInflows),
-    blocking: true,
-    detail: programmes.map((p) => `${p.currency}: reserves ${p.position.clearedReserves}, outstanding ${p.position.liabilities}, headroom ${p.position.headroom}`).join(' · ') || 'n/a',
+    ok: perimeter || (programmes.length > 0 && positions.every((p) => p.coverage >= 0 && p.liabilities <= p.clearedReserves + p.pendingInflows)),
+    blocking: !perimeter,
+    detail:
+      (perimeter ? 'Not required in the aggregator perimeter (issuer phase) · ' : '') +
+      (programmes.map((p) => `${p.currency}: reserves ${p.position.clearedReserves}, outstanding ${p.position.liabilities}, headroom ${p.position.headroom}`).join(' · ') || 'n/a'),
     fix: 'Gateway controls → E-money → confirm reserve funding (maker-checker) until every currency is fully covered',
   });
   const sanctionSources = listSources().filter((x) => x.enabled);
@@ -264,12 +315,14 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
   const certified = connections.filter((c) => c.enabled && c.certification.status === 'CERTIFIED');
   items.push({
     id: 'switch',
-    label: 'National switch: certified adapter configured or connection kept in simulation',
-    ok: config.switch.adapterModule ? certified.length > 0 : true,
-    blocking: false,
+    label: perimeter
+      ? 'National switch connection certified (homologation): the aggregator goes live through the Switch Monétique National only'
+      : 'National switch: certified adapter configured or connection kept in simulation',
+    ok: perimeter ? certified.length > 0 : config.switch.adapterModule ? certified.length > 0 : true,
+    blocking: perimeter,
     detail: config.switch.adapterModule
       ? `${certified.length} certified connection(s) with adapter ${config.switch.adapterModule}`
-      : 'SWITCH_ADAPTER_MODULE not set: national routing stays in simulation until the official profile is delivered',
+      : `SWITCH_ADAPTER_MODULE not set: national routing stays in simulation until the official profile is delivered${perimeter ? '; certification with the Switch is required before going live as an aggregator' : ''}`,
     fix: 'After the official profile (BCC-04/06/13): SWITCH_ADAPTER_MODULE=/path/to/adapter.js, certificates in the vault, certification set to CERTIFIED by the approver',
   });
   items.push({
@@ -291,6 +344,9 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
   const readyForLive = items.filter((i) => i.blocking).every((i) => i.ok);
   const HREFS: Record<string, string> = {
     digital_rail: '/gateways',
+    aggregator_perimeter: '/modules',
+    bcc_authorisation: '/controls',
+    switch_membership: '/controls',
     processor: '/gateways',
     processor_live_keys: '/gateways',
     processor_webhooks: '/gateways',

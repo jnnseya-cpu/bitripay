@@ -247,7 +247,7 @@ describe('KYC tiers, KYB and per-country limits', () => {
       });
     expect(kyb.status, JSON.stringify(kyb.body)).toBe(201);
     expect(kyb.body.submission.status).toBe('pending');
-    const reviewed = await request(app).post(`/api/admin/risk/kyb/${kyb.body.submission.id}/review`).set(admin.auth).send({ decision: 'verified', note: 'Registry checked' });
+    const reviewed = await request(app).post(`/api/admin/risk/kyb/${kyb.body.submission.id}/review`).set(admin.auth).send({ decision: 'verified', note: 'Registry checked', pin: admin.pin });
     expect(reviewed.body.status).toBe('verified');
     expect((await request(app).get('/api/risk/verification').set(m.auth)).body.tier).toBe(4);
     expect((await request(app).get('/api/risk/verification').set(m.auth)).body.kybStatus).toBe('verified');

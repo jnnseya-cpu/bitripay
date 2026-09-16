@@ -12,7 +12,8 @@ import { badRequest, conflict, notFound, unprocessable } from '../../lib/errors'
 import { getSetting } from '../settings';
 import { toBase } from '../currencies';
 import { recordEvent, type Actor } from '../events';
-import { findUserById, updateUser, toPublicUser, type UserRow } from '../users';
+import { findUserById, updateUser, toPublicUser, MERCHANT_ROLES, type UserRow } from '../users';
+import { encrypt, decrypt } from '../../lib/crypto';
 import { notify } from '../notifications';
 import { publish } from '../bus';
 
@@ -270,9 +271,24 @@ export interface KybInput {
   expectedMonthlyVolume: number;
   licenceRef?: string | null;
   directors: { name: string; userId?: string | null; role?: string | null }[];
-  documents?: { kind: string; ref: string }[];
+  documents?: KybDocument[];
 }
-const toKyb = (r: any) => ({
+/** A dossier document: a reference (registry number, file name) and, when uploaded, the file itself sealed at rest (AES-256-GCM). */
+export interface KybDocument {
+  kind: string;
+  ref?: string | null;
+  data?: string | null;
+}
+const sealKybDocuments = (docs: KybDocument[] | undefined) => (docs ?? []).map((d) => ({ kind: d.kind, ref: d.ref ?? null, data: d.data ? encrypt(d.data) : null, sealed: !!d.data }));
+/** The review view carries the decrypted file (includeDocs); every other view only says whether a file was uploaded. */
+const openKybDocuments = (raw: unknown, includeDocs: boolean) =>
+  (parseJson<any[]>(raw as string, []) ?? []).map((d) => ({
+    kind: d.kind,
+    ref: d.ref ?? null,
+    hasFile: !!d.data,
+    ...(includeDocs && d.data ? { data: d.sealed ? decrypt(d.data) : d.data } : {}),
+  }));
+const toKyb = (r: any, includeDocs = false) => ({
   id: r.id,
   userId: r.user_id,
   legalName: r.legal_name,
@@ -283,7 +299,7 @@ const toKyb = (r: any) => ({
   expectedMonthlyVolume: r.expected_monthly_volume,
   licenceRef: r.licence_ref,
   directors: parseJson(r.directors, []),
-  documents: parseJson(r.documents, []),
+  documents: openKybDocuments(r.documents, includeDocs),
   status: r.status,
   note: r.note,
   reviewedBy: r.reviewed_by,
@@ -294,7 +310,8 @@ const toKyb = (r: any) => ({
 
 export function submitKyb(user: UserRow, input: KybInput) {
   const db = getDb();
-  if (user.role !== 'merchant' && user.role !== 'agent') throw badRequest('Only business accounts (merchants, agents) complete KYB', 'kyb_not_applicable');
+  if (!MERCHANT_ROLES.includes(user.role) && user.role !== 'agent')
+    throw badRequest('Only business accounts (merchants, corporates, NGOs, government entities, developers, agents) complete KYB', 'kyb_not_applicable');
   if ((user as any).kyb_status === 'verified') throw conflict('Your business is already verified', 'kyb_verified');
   if (db.prepare("SELECT 1 FROM kyb_submissions WHERE user_id = ? AND status = 'pending'").get(user.id)) throw conflict('A KYB submission is already under review', 'kyb_pending');
   if (!input.directors.length) throw badRequest('At least one director or beneficial owner is required', 'validation_error');
@@ -320,7 +337,7 @@ export function submitKyb(user: UserRow, input: KybInput) {
     Math.max(0, Math.round(input.expectedMonthlyVolume)),
     input.licenceRef ?? null,
     JSON.stringify(input.directors),
-    JSON.stringify(input.documents ?? []),
+    JSON.stringify(sealKybDocuments(input.documents)),
     'pending',
     now(),
   );
@@ -343,12 +360,12 @@ export function listKyb(status?: string | null, limit = 100) {
     getDb()
       .prepare(`SELECT * FROM kyb_submissions ${status ? 'WHERE status = ?' : ''} ORDER BY created_at DESC LIMIT ?`)
       .all(...(status ? [status] : []), limit) as any[]
-  ).map(toKyb);
+  ).map((r) => toKyb(r));
 }
-export function getKyb(id: string) {
+export function getKyb(id: string, includeDocs = false) {
   const r = getDb().prepare('SELECT * FROM kyb_submissions WHERE id = ?').get(id);
   if (!r) throw notFound('KYB submission not found', 'kyb_not_found');
-  return toKyb(r);
+  return toKyb(r, includeDocs);
 }
 export function reviewKyb(id: string, adminId: string, decision: 'verified' | 'rejected', note?: string | null) {
   const db = getDb();

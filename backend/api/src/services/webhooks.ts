@@ -26,11 +26,11 @@ import { getDb } from '../db';
 import { uuid, now, secretToken, shortCode } from '../lib/ids';
 import { hmacSha256, safeEqual, sha256, encrypt, decrypt } from '../lib/crypto';
 import { badRequest, notFound, conflict } from '../lib/errors';
-import { findUserById } from './users';
+import { findUserById, updateUser, type UserRow } from './users';
 import { config } from '../config';
 import { getWebhookSettings } from './settings';
 import { notify } from './notifications';
-import { platformSigningKey, signWithKey } from './keys';
+import { platformSigningKey, signWithKey, verifyWithKey } from './keys';
 import { parseJson } from '../lib/json';
 import { subscribe, type SettlementEventPayload } from './bus';
 
@@ -671,4 +671,106 @@ export function deliveryStats(userId: string, hours = 24) {
     )
     .get(userId, since) as any;
   return { hours, total: r.total ?? 0, succeeded: r.succeeded ?? 0, dead: r.dead ?? 0, pending: r.pending ?? 0 };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Webhook inbox: a built-in receiver. A merchant points an endpoint at its inbox URL and sees every real delivery with
+// its headers and the result of both signature checks, without any external receiver site. Nothing is executed on
+// receipt; the inbox only records. One inbox per account, created on first use.
+// ---------------------------------------------------------------------------------------------------------------------
+const INBOX_KEEP = 200;
+export function inboxIdFor(user: UserRow & { webhook_inbox_id?: string | null }): string {
+  if (user.webhook_inbox_id) return user.webhook_inbox_id;
+  const id = `wi_${secretToken(18)}`;
+  updateUser(user.id, { webhook_inbox_id: id } as any);
+  return id;
+}
+export const inboxUrl = (inboxId: string) => `${config.apiUrl}/api/v1/webhook_inbox/${inboxId}`;
+const inboxPath = (inboxId: string) => `/webhook_inbox/${inboxId}`;
+
+export interface InboxMessageView {
+  id: string;
+  endpointId: string | null;
+  deliveryId: string | null;
+  eventType: string | null;
+  headers: Record<string, string>;
+  body: string;
+  hmacValid: boolean | null;
+  ed25519Valid: boolean | null;
+  receivedAt: string;
+}
+const toInboxMessage = (r: any): InboxMessageView => ({
+  id: r.id,
+  endpointId: r.endpoint_id,
+  deliveryId: r.delivery_id,
+  eventType: r.event_type,
+  headers: parseJson(r.headers, {}),
+  body: r.body,
+  hmacValid: r.hmac_valid === null ? null : !!r.hmac_valid,
+  ed25519Valid: r.ed25519_valid === null ? null : !!r.ed25519_valid,
+  receivedAt: r.received_at,
+});
+
+/** Record one delivery that reached the inbox; both signatures are checked against the merchant's own endpoint secret and the platform key. */
+export function receiveInboxMessage(inboxId: string, rawHeaders: Record<string, unknown>, body: string): InboxMessageView {
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE webhook_inbox_id = ?').get(inboxId) as UserRow | undefined;
+  if (!user) throw notFound('Webhook inbox not found', 'inbox_not_found');
+  const headers: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rawHeaders)) {
+    const key = k.toLowerCase();
+    if (key.startsWith('bitripay-') || key.startsWith('x-bitripay-') || ['content-type', 'user-agent', 'content-length'].includes(key))
+      headers[key] = Array.isArray(v) ? v.join(', ') : String(v ?? '');
+  }
+  const endpoint = (db.prepare('SELECT * FROM webhook_endpoints WHERE user_id = ? ORDER BY created_at DESC').all(user.id) as any[]).find((e) => String(e.url).endsWith(inboxPath(inboxId)));
+  const sig = headers['bitripay-signature'] ?? headers['x-bitripay-signature'] ?? null;
+  const ed = headers['bitripay-signature-ed25519'] ?? null;
+  const deliveryId = headers['bitripay-delivery-id'] ?? headers['x-bitripay-delivery-id'] ?? null;
+  let hmacValid: boolean | null = null;
+  if (sig && endpoint) hmacValid = verifyWebhookSignature(decrypt(endpoint.secret_enc), body, sig);
+  else if (sig) hmacValid = false;
+  let ed25519Valid: boolean | null = null;
+  if (ed) {
+    const parts = Object.fromEntries(ed.split(',').map((kv) => kv.split('=') as [string, string]));
+    const t = Number(parts.t);
+    try {
+      ed25519Valid =
+        !!parts.keyId &&
+        !!t &&
+        !!parts.sig &&
+        !!deliveryId &&
+        verifyWithKey(parts.keyId, ed25519SigningString(t, deliveryId, endpoint?.url ?? inboxUrl(inboxId), body), Buffer.from(parts.sig, 'base64'));
+    } catch {
+      ed25519Valid = false;
+    }
+  }
+  let eventType: string | null = headers['bitripay-event'] ?? headers['x-bitripay-event'] ?? null;
+  if (!eventType) {
+    const parsed = parseJson<any>(body, null);
+    eventType = parsed && typeof parsed.type === 'string' ? parsed.type : null;
+  }
+  const id = `wim_${shortCode(14).toLowerCase()}`;
+  db.prepare('INSERT INTO webhook_inbox_messages (id, user_id, endpoint_id, delivery_id, event_type, headers, body, hmac_valid, ed25519_valid, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id,
+    user.id,
+    endpoint?.id ?? null,
+    deliveryId,
+    eventType,
+    JSON.stringify(headers),
+    body.slice(0, 64_000),
+    hmacValid === null ? null : hmacValid ? 1 : 0,
+    ed25519Valid === null ? null : ed25519Valid ? 1 : 0,
+    now(),
+  );
+  db.prepare(`DELETE FROM webhook_inbox_messages WHERE user_id = ? AND id NOT IN (SELECT id FROM webhook_inbox_messages WHERE user_id = ? ORDER BY received_at DESC LIMIT ${INBOX_KEEP})`).run(
+    user.id,
+    user.id,
+  );
+  return toInboxMessage(db.prepare('SELECT * FROM webhook_inbox_messages WHERE id = ?').get(id));
+}
+export function listInboxMessages(userId: string, limit = 50): InboxMessageView[] {
+  return (getDb().prepare('SELECT * FROM webhook_inbox_messages WHERE user_id = ? ORDER BY received_at DESC LIMIT ?').all(userId, limit) as any[]).map(toInboxMessage);
+}
+export function clearInbox(userId: string): number {
+  return Number(getDb().prepare('DELETE FROM webhook_inbox_messages WHERE user_id = ?').run(userId).changes);
 }

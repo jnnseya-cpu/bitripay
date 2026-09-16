@@ -15,6 +15,7 @@ import { tierStatus, activateTier1, submitKyb, latestKyb, getKycTierSettings, TI
 import { listDestinationChanges, revokeDestinationChange, getDestinationChange } from '../services/risk/accountProtection';
 import { floatForecast, computeTrustScore, latestTrustScore, requestFloat, listFloatRequests, onboardCustomer, dynamicCommissionBps, getAgentIntelSettings } from '../services/risk/agentIntel';
 import { forbidden } from '../lib/errors';
+import { MERCHANT_ROLES } from '../services/users';
 
 export const riskRouter = Router();
 riskRouter.use(requireAuth);
@@ -31,7 +32,7 @@ riskRouter.get('/verification', (req, res) => {
   });
 });
 riskRouter.post('/verification/tier1', writeLimit, (req, res) => res.json(tierStatus(activateTier1(req.user!) as any)));
-riskRouter.post('/kyb', ...[requireRole('merchant', 'agent')], writeLimit, (req, res) => {
+riskRouter.post('/kyb', ...[requireRole(...MERCHANT_ROLES, 'agent')], writeLimit, (req, res) => {
   const b = validate(
     z.object({
       legalName: z.string().min(2).max(160),
@@ -45,8 +46,13 @@ riskRouter.post('/kyb', ...[requireRole('merchant', 'agent')], writeLimit, (req,
         .array(z.object({ name: z.string().min(2).max(120), userId: z.string().optional().nullable(), role: z.string().max(60).optional().nullable() }))
         .min(1)
         .max(20),
+      /** Dossier documents (RCCM extract, national identification, statutes, director ID, proof of address): a reference and/or the file as a data URL (max 4 MB each). */
       documents: z
-        .array(z.object({ kind: z.string().max(40), ref: z.string().max(300) }))
+        .array(
+          z
+            .object({ kind: z.string().min(2).max(40), ref: z.string().max(300).optional().nullable(), data: z.string().max(4_000_000).optional().nullable() })
+            .refine((d) => !!(d.ref && d.ref.trim()) || !!d.data, { message: 'Each document needs a reference or a file' }),
+        )
         .max(20)
         .optional(),
     }),

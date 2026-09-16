@@ -20,13 +20,20 @@ const FX_FIELDS: [string, string, 'number' | 'boolean'][] = [
   ['maxRateAgeHours', 'Live rates older than this are stale (no guaranteed quotes, labelled)', 'number'],
   ['guaranteedQuotes', 'Offer guaranteed (locked) rates when a fresh live rate exists', 'boolean'],
 ];
-const COMPLIANCE_FIELDS: [string, string, 'number' | 'boolean' | 'mode'][] = [
+const COMPLIANCE_FIELDS: [string, string, 'number' | 'boolean' | 'mode' | 'text'][] = [
   ['mode', 'Compliance mode: sandbox (no live customer funds) or live (authorised corridors only)', 'mode'],
   ['cardPayoutHoldMinutes', 'Hold card-funded payouts this many minutes before execution (chargeback exposure)', 'number'],
   ['cardReviewAmount', 'Card-funded transfers at/above this base amount (minor units) need a verifier before payout', 'number'],
   ['sourceOfFundsThreshold', 'Senders must declare source of funds at/above this base amount (minor units)', 'number'],
   ['maxPayoutsPerRecipientPerDay', 'Abnormal pattern: max settled payouts to one recipient per day', 'number'],
   ['payoutClaimMinutes', 'Minutes a claimed payout may stay in progress before it returns to the queue', 'number'],
+  ['aggregatorAuthorisationRef', 'Banque Centrale du Congo authorisation as aggregator (Instruction n°42, art. 9): reference', 'text'],
+  ['aggregatorAuthorisationDate', 'Authorisation date (YYYY-MM-DD)', 'text'],
+  ['emoneyAuthorisationRef', 'E-money authorisation or licensed issuer operating issuer functions (empty keeps the aggregator perimeter mandatory)', 'text'],
+  ['sarecConventionBank', 'Bank of the indirect SAREC participation convention (Instruction n°58, art. 12)', 'text'],
+  ['sarecConventionRef', 'SAREC convention reference', 'text'],
+  ['gmicMembershipRef', 'GMIC membership reference (Instruction n°58, art. 10)', 'text'],
+  ['guaranteeFundRef', 'Guarantee fund contribution reference (Instruction n°58, art. 13)', 'text'],
 ];
 const RISK_FIELDS: [string, string, 'number' | 'boolean'][] = [
   ['maxTxPerHour', 'Velocity: transactions per hour before flagging', 'number'],
@@ -37,7 +44,19 @@ const RISK_FIELDS: [string, string, 'number' | 'boolean'][] = [
   ['blockScore', 'Outbound movements at/above this score are blocked', 'number'],
 ];
 
-function SettingsForm({ title, keyName, fields, initial, onSaved }: { title: string; keyName: string; fields: [string, string, 'number' | 'boolean' | 'mode'][]; initial: any; onSaved: () => void }) {
+function SettingsForm({
+  title,
+  keyName,
+  fields,
+  initial,
+  onSaved,
+}: {
+  title: string;
+  keyName: string;
+  fields: [string, string, 'number' | 'boolean' | 'mode' | 'text'][];
+  initial: any;
+  onSaved: () => void;
+}) {
   const { toast } = useStore();
   const [v, setV] = useState<any>(initial ?? {});
   useEffect(() => setV(initial ?? {}), [initial]);
@@ -53,6 +72,8 @@ function SettingsForm({ title, keyName, fields, initial, onSaved }: { title: str
               <option value="sandbox">sandbox – no live funds</option>
               <option value="live">live – authorised corridors only</option>
             </Select>
+          ) : type === 'text' ? (
+            <Input value={v[k] ?? ''} onChange={(e) => setV({ ...v, [k]: e.target.value })} style={{ maxWidth: 420 }} />
           ) : (
             <Input type="number" step="any" value={v[k] ?? ''} onChange={(e) => setV({ ...v, [k]: Number(e.target.value) })} style={{ maxWidth: 200 }} />
           )}

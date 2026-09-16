@@ -6,6 +6,8 @@ import { useStore } from '../lib/store';
 import { Alert, Button, Chip, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
 import { offlineDevice, offlineQueue } from '../lib/offline';
 import { OrganisationTeam } from '../components/OrganisationTeam';
+import { InstitutionSettlementAccount } from '../components/InstitutionSettlementAccount';
+import { KybDossier } from '../components/KybDossier';
 import { MERCHANT_CLASS_ROLES } from '@bitripay/shared';
 
 /**
@@ -15,7 +17,9 @@ import { MERCHANT_CLASS_ROLES } from '@bitripay/shared';
  */
 export function MerchantCentre() {
   const { user, money, toast, config } = useStore();
-  const [tab, setTab] = useState<'overview' | 'settlement' | 'disputes' | 'fees' | 'payouts' | 'plans' | 'offline' | 'team'>('overview');
+  const [tab, setTab] = useState<'overview' | 'kyb' | 'settlement' | 'disputes' | 'fees' | 'payouts' | 'plans' | 'offline' | 'team'>(
+    new URLSearchParams(window.location.search).get('tab') === 'kyb' ? 'kyb' : 'overview',
+  );
   const balance = useAsync(() => api.get<any>('/api/v1/balance'), [tab]);
   const calendar = useAsync(() => api.get<any>('/api/v1/settlement_calendar'), [tab]);
   const disputes = useAsync(() => api.get<any>('/api/v1/disputes'), [tab]);
@@ -54,6 +58,7 @@ export function MerchantCentre() {
       <Tabs
         tabs={[
           { id: 'overview', label: tr('Overview') },
+          { id: 'kyb', label: tr('Business verification (KYB)') },
           { id: 'settlement', label: tr('Settlement') },
           { id: 'disputes', label: `Disputes${open.length ? ` (${open.length})` : ''}` },
           { id: 'fees', label: tr('My fees') },
@@ -144,16 +149,27 @@ export function MerchantCentre() {
                   )}
                   <p className="small">{verification.data.next}</p>
                   <KV k={tr('Business (KYB)')} v={<StatusBadge status={verification.data.kybStatus} />} />
-                  <Link className="btn secondary" to="/app/settings?tab=kyc">
-                    {tr('Verification →')}
-                  </Link>
+                  <div className="row wrap">
+                    <Link className="btn secondary" to="/app/settings?tab=kyc">
+                      {tr('Verification →')}
+                    </Link>
+                    <Button variant="secondary" onClick={() => setTab('kyb')}>
+                      {tr('Business dossier (KYB) →')}
+                    </Button>
+                  </div>
                 </>
               )}
             </div>
           </div>
         </>
       )}
-      {tab === 'settlement' && <Settlement calendar={calendar} money={money} toast={toast} currencies={(config?.currencies ?? []).map((c) => c.code)} />}
+      {tab === 'kyb' && <KybDossier />}
+      {tab === 'settlement' && (
+        <>
+          <InstitutionSettlementAccount />
+          <Settlement calendar={calendar} money={money} toast={toast} currencies={(config?.currencies ?? []).map((c) => c.code)} />
+        </>
+      )}
       {tab === 'disputes' && <Disputes disputes={disputes} money={money} toast={toast} />}
       {tab === 'fees' && (
         <div className="card">

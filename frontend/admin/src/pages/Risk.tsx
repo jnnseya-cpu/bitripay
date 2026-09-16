@@ -3,7 +3,7 @@ import { countryLabel } from '@bitripay/shared';
 import { tr } from '../lib/i18n';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, PageHeader, Select, StatusBadge, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
+import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, StepUpButton, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
 
 /** Risk & compliance console: policy versions, fraud scores, compliance cases with SAR drafts, sanctions sources, KYC tiers & KYB, destination changes, agent intelligence. */
 export function Risk() {
@@ -515,6 +515,18 @@ function Sanctions({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
 function Kyc({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
   const tiers = useAsync(() => api.get<any>('/api/admin/risk/kyc/tiers'), []);
   const kyb = useAsync(() => api.get<any>('/api/admin/risk/kyb?status=pending'), []);
+  /** The dossier under review: full record with the sealed documents opened for this administrator (audited read). */
+  const [dossierId, setDossierId] = useState<string | null>(null);
+  const dossier = useAsync(() => (dossierId ? api.get<any>(`/api/admin/risk/kyb/${dossierId}`) : Promise.resolve(null)), [dossierId]);
+  const decide = (id: string, decision: 'verified' | 'rejected', pin: string, note?: string) =>
+    api
+      .post(`/api/admin/risk/kyb/${id}/review`, { decision, note: note || null, pin })
+      .then(() => {
+        ok(decision === 'verified' ? tr('Business verified (Tier 4)') : tr('Dossier rejected'));
+        setDossierId(null);
+        kyb.reload();
+      })
+      .catch(err);
   const [userTier, setUserTier] = useState({ userId: '', tier: 1, reason: '' });
   const [threshold, setThreshold] = useState<number | ''>('');
   return (
@@ -593,41 +605,60 @@ function Kyc({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
             <span className="tiny">{k.directors.map((d: any) => d.name).join(', ')}</span>,
             k.expectedMonthlyVolume,
             <div className="row">
-              <ConfirmButton
-                size="sm"
-                variant="success"
-                onConfirm={() =>
-                  api
-                    .post(`/api/admin/risk/kyb/${k.id}/review`, { decision: 'verified' })
-                    .then(() => {
-                      ok('Verified (Tier 4)');
-                      kyb.reload();
-                    })
-                    .catch(err)
-                }
-              >
-                {tr('Verify')}
-              </ConfirmButton>
-              <ConfirmButton
-                size="sm"
-                variant="danger"
-                prompt="Reason"
-                onConfirm={(n) =>
-                  api
-                    .post(`/api/admin/risk/kyb/${k.id}/review`, { decision: 'rejected', note: n })
-                    .then(() => {
-                      ok('Rejected');
-                      kyb.reload();
-                    })
-                    .catch(err)
-                }
-              >
+              <Button size="sm" variant="secondary" onClick={() => setDossierId(k.id)}>
+                {tr('Dossier')}
+              </Button>
+              <StepUpButton size="sm" variant="success" title={tr('Approve the business (Tier 4)')} onConfirm={(pin) => decide(k.id, 'verified', pin)}>
+                {tr('Approve')}
+              </StepUpButton>
+              <StepUpButton size="sm" variant="danger" title={tr('Reject the dossier')} prompt={tr('Reason')} onConfirm={(pin, n) => decide(k.id, 'rejected', pin, n)}>
                 {tr('Reject')}
-              </ConfirmButton>
+              </StepUpButton>
             </div>,
           ])}
           empty={tr('No pending KYB')}
         />
+        <Modal open={!!dossierId} onClose={() => setDossierId(null)} title={tr('KYB dossier')} wide>
+          {dossier.data && (
+            <>
+              <KV k={tr('Legal name')} v={dossier.data.legalName} />
+              <KV k={tr('Trade register (RCCM)')} v={dossier.data.registrationNumber} />
+              <KV k={tr('Country')} v={countryLabel(dossier.data.country)} />
+              <KV k={tr('Address')} v={dossier.data.address} />
+              <KV k={tr('Activity (MCC)')} v={dossier.data.mcc ?? '—'} />
+              <KV k={tr('Expected monthly volume')} v={dossier.data.expectedMonthlyVolume} />
+              <KV k={tr('Licence')} v={dossier.data.licenceRef ?? '—'} />
+              <KV k={tr('Account')} v={`${dossier.data.user?.fullName ?? ''} · ${dossier.data.user?.email ?? dossier.data.user?.phone ?? ''}`} />
+              <KV k={tr('Directors and beneficial owners')} v={(dossier.data.directors ?? []).map((d: any) => `${d.name}${d.role ? ` (${d.role})` : ''}`).join(', ')} />
+              <h4>{tr('Documents')}</h4>
+              {(dossier.data.documents ?? []).length === 0 && <p className="small muted">{tr('No document in the dossier')}</p>}
+              {(dossier.data.documents ?? []).map((d: any, i: number) => (
+                <div key={i} className="card soft compact">
+                  <b>{d.kind}</b> {d.ref ? <span className="small">· {d.ref}</span> : null}
+                  {d.data && String(d.data).startsWith('data:image') && (
+                    <img src={d.data} alt={d.kind} style={{ maxWidth: '100%', borderRadius: 8, border: '1px solid var(--border)', marginTop: 6 }} />
+                  )}
+                  {d.data && !String(d.data).startsWith('data:image') && (
+                    <div className="mt">
+                      <a className="btn secondary" href={d.data} download={`${d.kind}-${dossier.data.registrationNumber}`}>
+                        {tr('Open the file')}
+                      </a>
+                    </div>
+                  )}
+                  {!d.data && <span className="tiny muted"> · {tr('reference only, no file')}</span>}
+                </div>
+              ))}
+              <div className="row mt">
+                <StepUpButton variant="success" title={tr('Approve the business (Tier 4)')} onConfirm={(pin) => decide(dossier.data.id, 'verified', pin)}>
+                  {tr('Approve')}
+                </StepUpButton>
+                <StepUpButton variant="danger" title={tr('Reject the dossier')} prompt={tr('Reason')} onConfirm={(pin, n) => decide(dossier.data.id, 'rejected', pin, n)}>
+                  {tr('Reject')}
+                </StepUpButton>
+              </div>
+            </>
+          )}
+        </Modal>
       </div>
     </div>
   );

@@ -69,6 +69,35 @@ describe('aggregator perimeter switch', () => {
     const bill = await request(app).post('/api/bills').set(customer.auth).send({ billerId: billers.body.items[0].id, accountNumber: 'METER-0001', amount: '10.00', pin: '1234' });
     expect(bill.body.error.code).toBe('module_disabled');
 
+    // the go-live checklist follows the perimeter: issuer-phase items are not required, the regulatory records are
+    const gl = await request(app).get('/api/admin/go-live').set(admin.auth);
+    const item = (id: string) => gl.body.items.find((i: any) => i.id === id);
+    expect(item('aggregator_perimeter')).toMatchObject({ ok: true, blocking: true });
+    expect(item('bcc_authorisation')).toMatchObject({ ok: false, blocking: true });
+    expect(item('switch_membership')).toMatchObject({ ok: false, blocking: true });
+    expect(item('switch')).toMatchObject({ ok: false, blocking: true });
+    expect(item('corridor_live')).toMatchObject({ ok: true, blocking: false });
+    expect(item('emoney_issuer')).toMatchObject({ ok: true, blocking: false });
+    expect(item('digital_rail')).toMatchObject({ ok: true, blocking: true });
+    expect(gl.body.readyForLive).toBe(false);
+    const rec = await request(app)
+      .put('/api/admin/settings/compliance')
+      .set(admin.auth)
+      .send({
+        value: {
+          aggregatorAuthorisationRef: 'BCC/DSP/2026/0042',
+          aggregatorAuthorisationDate: '2026-10-01',
+          sarecConventionBank: 'Banque Demo',
+          sarecConventionRef: 'CONV-SAREC-001',
+          gmicMembershipRef: 'GMIC-2026-17',
+        },
+      });
+    expect(rec.status, JSON.stringify(rec.body)).toBe(200);
+    const gl2 = await request(app).get('/api/admin/go-live').set(admin.auth);
+    expect(gl2.body.items.find((i: any) => i.id === 'bcc_authorisation').ok).toBe(true);
+    expect(gl2.body.items.find((i: any) => i.id === 'switch_membership').ok).toBe(true);
+    expect(gl2.body.items.find((i: any) => i.id === 'switch').ok).toBe(false); // certification with the Switch still missing
+
     // acceptance stays on: a merchant payment request with items and VAT
     const sale = await request(app)
       .post('/api/payment-requests')
@@ -83,11 +112,25 @@ describe('QR intent settled through the national switch', () => {
     const merchant = await registerUser(app, { role: 'merchant', businessName: 'Kin Bakery', country: 'CD' });
     const key = await request(app).post('/api/v1/api_keys').set(merchant.auth).send({ label: 'switch', mode: 'test' });
     const auth = { Authorization: `Bearer ${key.body.secret}` };
-    const b = await request(app).post('/api/v1/beneficiary_bindings').set(auth).send({ participant_id: 'DEMO_MMO_B', account_token: 'acct-merchant-778899', account_name: 'Kin Bakery SARL' });
+    // the merchant declares its settlement account from the web app (session, no API key): Command centre → Settlement
+    const b = await request(app).post('/api/v1/beneficiary_bindings').set(merchant.auth).send({ participant_id: 'DEMO_MMO_B', account_token: 'acct-merchant-778899', account_name: 'Kin Bakery SARL' });
     expect(b.status, JSON.stringify(b.body)).toBe(201);
+    expect(b.body.status).toBe('PENDING');
+    const mine = await request(app).get('/api/v1/beneficiary_bindings').set(merchant.auth);
+    expect(mine.body.data.map((x: any) => x.id)).toContain(b.body.id);
+    // console: Switch → Settlement accounts lists it with the merchant and the institution named
+    const queue = await request(app).get('/api/admin/switch/bindings?status=pending').set(admin.auth);
+    const row = queue.body.items.find((x: any) => x.id === b.body.id);
+    expect(row.merchant.businessName).toBe('Kin Bakery');
+    expect(row.participantName).toContain('Demo Mobile Money B');
+    // four eyes: the verifier cannot activate; a second administrator with the approvals permission does
     await request(app).post(`/api/admin/switch/bindings/${b.body.id}/verify`).set(admin.auth).send({ method: 'institution_confirmation', reference: 'MMO-B-CONF-9' });
+    const self = await request(app).post(`/api/admin/switch/bindings/${b.body.id}/activate`).set(admin.auth);
+    expect(self.status).toBe(400);
+    expect(self.body.error.code).toBe('approver_required');
     const act = await request(app).post(`/api/admin/switch/bindings/${b.body.id}/activate`).set(checker.auth);
     expect(act.body.binding.status).toBe('ACTIVE');
+    expect((await request(app).get('/api/admin/switch/bindings?status=active').set(admin.auth)).body.items.some((x: any) => x.id === b.body.id)).toBe(true);
 
     // the merchant's QR code for a 250 000 CDF sale (signed EMVCo QR)
     const qr = await request(app)

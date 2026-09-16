@@ -12,7 +12,9 @@ import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader
  */
 export function SwitchConsole() {
   const { toast, money } = useStore();
-  const [tab, setTab] = useState<'national' | 'config' | 'pra' | 'connections' | 'participants' | 'policies' | 'payments' | 'messages' | 'recon' | 'rails' | 'incidents' | 'fees'>('national');
+  const [tab, setTab] = useState<'national' | 'config' | 'pra' | 'connections' | 'participants' | 'bindings' | 'policies' | 'payments' | 'messages' | 'recon' | 'rails' | 'incidents' | 'fees'>(
+    'national',
+  );
   const err = (e: any) => toast(e.message, 'error');
   const ok = (m: string) => toast(m, 'success');
   return (
@@ -28,6 +30,7 @@ export function SwitchConsole() {
           { id: 'pra', label: 'PRA' },
           { id: 'connections', label: tr('Connections') },
           { id: 'participants', label: tr('Participants') },
+          { id: 'bindings', label: tr('Settlement accounts') },
           { id: 'policies', label: tr('Routing policies') },
           { id: 'payments', label: tr('Payments') },
           { id: 'messages', label: tr('Inbox / outbox') },
@@ -44,6 +47,7 @@ export function SwitchConsole() {
       {tab === 'pra' && <Pra ok={ok} err={err} money={money} />}
       {tab === 'connections' && <Connections ok={ok} err={err} />}
       {tab === 'participants' && <Participants ok={ok} err={err} />}
+      {tab === 'bindings' && <Bindings ok={ok} err={err} />}
       {tab === 'policies' && <Policies ok={ok} err={err} />}
       {tab === 'payments' && <Payments ok={ok} err={err} money={money} />}
       {tab === 'messages' && <Messages ok={ok} err={err} />}
@@ -156,6 +160,163 @@ function Connections({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
               }
             >
               {tr('Record')}
+            </Button>
+          </>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+/**
+ * Settlement accounts declared by merchants at participating institutions (beneficiary bindings, CMP-02): operations
+ * verify each account with the institution, a different administrator activates it. The verifier, the requester and
+ * the approver can never be the same person.
+ */
+function Bindings({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
+  const [status, setStatus] = useState('');
+  const data = useAsync(() => api.get<any>(`/api/admin/switch/bindings${qs({ status: status || null })}`), [status]);
+  const [verify, setVerify] = useState<any>(null);
+  const [v, setV] = useState({ method: 'institution_confirmation', reference: '', note: '' });
+  const reload = () => data.reload();
+  return (
+    <div className="card">
+      <div className="row">
+        <h4 style={{ margin: 0 }}>{tr('Settlement accounts at participating institutions')}</h4>
+        <Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ marginLeft: 'auto', width: 180 }}>
+          <option value="">{tr('All statuses')}</option>
+          {['PENDING', 'VERIFIED', 'ACTIVE', 'SUSPENDED', 'SUPERSEDED'].map((x) => (
+            <option key={x} value={x}>
+              {x}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <p className="small muted">
+        {tr('Four eyes: the administrator who verifies the account with the institution cannot activate it; activation needs a second administrator with the approvals permission.')}
+      </p>
+      <Table
+        head={[tr('Merchant'), tr('Institution'), tr('Account'), tr('Status'), tr('Verification'), '']}
+        rows={(data.data?.items ?? []).map((b: any) => [
+          <b>
+            {b.merchant?.businessName ?? b.merchant?.name ?? b.merchantId}
+            <br />
+            <span className="tiny muted">{b.merchant?.name}</span>
+          </b>,
+          <span>
+            {b.participantName ?? b.participantId}
+            <br />
+            <span className="mono tiny">{b.participantId}</span>
+          </span>,
+          <span>
+            <span className="mono">{b.accountMasked}</span>
+            <br />
+            <span className="tiny">
+              {b.accountName} · v{b.version}
+            </span>
+            {b.replacesId && (
+              <span className="tiny muted">
+                {' '}
+                · {tr('replaces')} {b.replacesId}
+              </span>
+            )}
+          </span>,
+          <StatusBadge status={b.status} />,
+          <span className="tiny">
+            {b.verification?.method ? `${b.verification.method} · ${b.verification.reference}` : '—'}
+            {b.verification?.verifiedBy && (
+              <>
+                <br />
+                {tr('verified by')} {b.verification.verifiedBy}
+              </>
+            )}
+            {b.approvedBy && (
+              <>
+                <br />
+                {tr('activated by')} {b.approvedBy} {fmtDate(b.approvedAt)}
+              </>
+            )}
+          </span>,
+          <div className="row">
+            {b.status === 'PENDING' && (
+              <Button size="sm" onClick={() => setVerify(b)}>
+                {tr('Verify')}
+              </Button>
+            )}
+            {b.status === 'VERIFIED' && (
+              <ConfirmButton
+                size="sm"
+                variant="success"
+                onConfirm={() =>
+                  api
+                    .post(`/api/admin/switch/bindings/${b.id}/activate`, {})
+                    .then(() => {
+                      ok(tr('Activated'));
+                      reload();
+                    })
+                    .catch(err)
+                }
+              >
+                {tr('Activate')}
+              </ConfirmButton>
+            )}
+            {(b.status === 'ACTIVE' || b.status === 'VERIFIED' || b.status === 'PENDING') && (
+              <ConfirmButton
+                size="sm"
+                variant="danger"
+                prompt={tr('Reason')}
+                onConfirm={(r) =>
+                  api
+                    .post(`/api/admin/switch/bindings/${b.id}/suspend`, { reason: r || 'console' })
+                    .then(() => {
+                      ok(tr('Suspended'));
+                      reload();
+                    })
+                    .catch(err)
+                }
+              >
+                {tr('Suspend')}
+              </ConfirmButton>
+            )}
+          </div>,
+        ])}
+        empty={tr('No settlement account declared')}
+      />
+      <Modal open={!!verify} onClose={() => setVerify(null)} title={tr('Verify the account with the institution')}>
+        {verify && (
+          <>
+            <p className="small muted">
+              {verify.merchant?.businessName ?? verify.merchant?.name} · {verify.participantName ?? verify.participantId} · <span className="mono">{verify.accountMasked}</span> · {verify.accountName}
+            </p>
+            <Field label={tr('Method')}>
+              <Select value={v.method} onChange={(e) => setV({ ...v, method: e.target.value })}>
+                <option value="institution_confirmation">{tr('Written confirmation from the institution')}</option>
+                <option value="account_statement">{tr('Account statement in the merchant name')}</option>
+                <option value="penny_test">{tr('Test credit acknowledged by the institution')}</option>
+                <option value="registry_lookup">{tr('Institution account registry lookup')}</option>
+              </Select>
+            </Field>
+            <Field label={tr('Reference of the institution')}>
+              <Input value={v.reference} onChange={(e) => setV({ ...v, reference: e.target.value })} placeholder={tr('MMO-B-CONF-…')} />
+            </Field>
+            <Field label={tr('Note (optional)')}>
+              <Textarea rows={2} value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} />
+            </Field>
+            <Button
+              disabled={v.reference.trim().length < 2}
+              onClick={() =>
+                api
+                  .post(`/api/admin/switch/bindings/${verify.id}/verify`, { method: v.method, reference: v.reference.trim(), note: v.note.trim() || null })
+                  .then(() => {
+                    ok(tr('Verified; a second administrator can now activate it'));
+                    setVerify(null);
+                    setV({ method: 'institution_confirmation', reference: '', note: '' });
+                    reload();
+                  })
+                  .catch(err)
+              }
+            >
+              {tr('Record the verification')}
             </Button>
           </>
         )}

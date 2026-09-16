@@ -67,6 +67,7 @@ import {
   activateBinding,
   suspendBinding,
   getBinding,
+  listAllBindings,
   resolveLinkedOperation,
   nationalView,
   expirePayments,
@@ -376,6 +377,9 @@ r.post('/bindings/:id/suspend', requirePermission('compliance'), (req, res) => {
   audit(req.user!.id, 'switch.binding.suspend', 'beneficiary_binding', v.id, { reason: b.reason });
   res.json({ binding: v });
 });
+r.get('/bindings', requirePermission('switch'), (req, res) =>
+  res.json({ items: listAllBindings({ status: req.query.status ? String(req.query.status).toUpperCase() : null, limit: Number(req.query.limit) || 100 }) }),
+);
 r.get('/bindings/:id', requirePermission('switch'), (req, res) => res.json({ binding: getBinding(null, String(req.params.id)) }));
 r.post('/operations/:id/resolve', requirePermission('approvals'), (req, res) => {
   const b = validate(z.object({ outcome: z.enum(['SUCCEEDED', 'REJECTED']), evidenceRef: z.string().min(2) }), req.body);

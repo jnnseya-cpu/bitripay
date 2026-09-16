@@ -40,6 +40,8 @@ export interface UserRow {
   cover_version?: number | null;
   webhook_url: string | null;
   webhook_secret: string | null;
+  /** Built-in webhook receiver of the developer portal (migration 042); created on first use. */
+  webhook_inbox_id?: string | null;
   gateway_settings: string;
   language: string;
   is_system: number;

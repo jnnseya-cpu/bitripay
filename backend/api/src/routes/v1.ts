@@ -103,6 +103,11 @@ import {
   replayEvent,
   deliveryStats,
   webhookCatalogue,
+  receiveInboxMessage,
+  inboxIdFor,
+  inboxUrl,
+  listInboxMessages,
+  clearInbox,
 } from '../services/webhooks';
 import { listApiKeys, createApiKey, revokeApiKey, API_KEY_SCOPES } from '../services/merchant';
 import { availableBalance, heldByKind } from '../services/finops/holds';
@@ -898,6 +903,18 @@ v1Router.get('/events/:id', ...merchantOnly, requireScope('events:read', 'webhoo
 v1Router.post('/events/:id/replay', ...merchantOnly, requireScope('webhooks:manage'), writeLimit, (req, res) =>
   res.json({ data: replayEvent(req.user!.id, String(req.params.id), req.body?.endpoint_id ? String(req.body.endpoint_id) : null) }),
 );
+// Webhook inbox: the built-in receiver of the developer portal. Deliveries arrive unauthenticated (they are signed);
+// the merchant reads and clears the inbox with its session or a webhooks:manage key.
+v1Router.post('/webhook_inbox/:inboxId', publicLimit, (req, res) => {
+  const raw = (req as any).rawBody ? Buffer.from((req as any).rawBody).toString('utf8') : JSON.stringify(req.body ?? {});
+  const m = receiveInboxMessage(String(req.params.inboxId), req.headers as Record<string, unknown>, raw);
+  res.json({ received: true, id: m.id, hmac_valid: m.hmacValid, ed25519_valid: m.ed25519Valid });
+});
+v1Router.get('/webhook_inbox', ...merchantOnly, requireScope('webhooks:manage'), (req, res) => {
+  const inboxId = inboxIdFor(req.user!);
+  res.json({ inbox_id: inboxId, url: inboxUrl(inboxId), data: listInboxMessages(req.user!.id, Number(req.query.limit) || 50) });
+});
+v1Router.delete('/webhook_inbox', ...merchantOnly, requireScope('webhooks:manage'), writeLimit, (req, res) => res.json({ cleared: clearInbox(req.user!.id) }));
 v1Router.get('/webhook_deliveries', ...merchantOnly, requireScope('webhooks:manage'), (req, res) =>
   res.json({ data: listDeliveries(req.user!.id, { status: (req.query.status as any) ?? null, eventId: req.query.event ? String(req.query.event) : null, limit: Number(req.query.limit) || 50 }) }),
 );

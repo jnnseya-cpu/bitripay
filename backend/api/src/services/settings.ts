@@ -147,6 +147,16 @@ export interface ComplianceSettings {
   maxPayoutsPerRecipientPerDay: number;
   /** Minutes a claimed payout may stay in progress before it is released back to the queue. */
   payoutClaimMinutes: number;
+  /** Banque Centrale du Congo authorisation as prestataire de services connexes – agrégateur (Instruction n°42, art. 9): reference and date, empty until granted. */
+  aggregatorAuthorisationRef: string;
+  aggregatorAuthorisationDate: string;
+  /** E-money authorisation of a later phase, or the licensed issuer operating issuer functions on the platform; empty keeps the aggregator perimeter mandatory. */
+  emoneyAuthorisationRef: string;
+  /** Instruction n°58: indirect participation convention with a bank holding a SAREC settlement account (art. 12), GMIC membership (art. 10), guarantee fund contribution (art. 13). */
+  sarecConventionBank: string;
+  sarecConventionRef: string;
+  gmicMembershipRef: string;
+  guaranteeFundRef: string;
 }
 const DEFAULT_COMPLIANCE: ComplianceSettings = {
   mode: 'sandbox',
@@ -155,6 +165,13 @@ const DEFAULT_COMPLIANCE: ComplianceSettings = {
   sourceOfFundsThreshold: 500_000,
   maxPayoutsPerRecipientPerDay: 5,
   payoutClaimMinutes: 30,
+  aggregatorAuthorisationRef: '',
+  aggregatorAuthorisationDate: '',
+  emoneyAuthorisationRef: '',
+  sarecConventionBank: '',
+  sarecConventionRef: '',
+  gmicMembershipRef: '',
+  guaranteeFundRef: '',
 };
 
 export interface EmoneySettings {
@@ -481,7 +498,7 @@ export const getSecuritySettings = (): SecuritySettings => {
   const s = getSetting<Partial<SecuritySettings>>('security');
   return { ...DEFAULT_SECURITY, ...s, require2fa: { ...DEFAULT_SECURITY.require2fa, ...(s.require2fa ?? {}) } };
 };
-export const getComplianceSettings = () => getSetting<ComplianceSettings>('compliance');
+export const getComplianceSettings = (): ComplianceSettings => ({ ...DEFAULT_COMPLIANCE, ...getSetting<Partial<ComplianceSettings>>('compliance') });
 export const getEmoneySettings = () => getSetting<EmoneySettings>('emoney');
 export const getSeoSettings = () => getSetting<SeoSettings>('seo');
 export const getAssistSettings = () => {

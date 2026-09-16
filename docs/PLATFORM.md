@@ -820,6 +820,25 @@ The regulator materials (`docs/regulator/`) follow the same line: the deck lists
 is built but switched off, walks both instructions article by article, and the demonstration only exercises the
 perimeter.
 
+**Acceptor onboarding inside the perimeter (demonstration scene 2).** The merchant files its business dossier (KYB) from
+Command centre → "Business verification (KYB)": legal name, trade-register number (RCCM), activity, address, directors and
+beneficial owners, documents as references and/or files (`POST /api/risk/kyb`; files are sealed at rest with AES-256-GCM and
+only the console dossier view opens them, an audited read `kyb.dossier.read`). Every merchant-class role and agents may
+file. The console reviews it under Risk & compliance → "KYC tiers & KYB" → "Dossier", and the decision
+(`POST /api/admin/risk/kyb/:id/review`) is a step-up: the administrator's transaction PIN or a passkey step-up token is
+required. The merchant then declares its settlement account at a participating institution of the national switch
+(Command centre → Settlement, or Developer portal → "Settlement account": `POST /api/v1/beneficiary_bindings` with the
+session, no API key needed). Operations verify it with the institution under National switch → "Settlement accounts"
+(`GET /api/admin/switch/bindings`, verify with method and institution reference) and a *different* administrator with the
+approvals permission activates it (`approver_required` otherwise). BitriPay never holds the settled funds.
+
+**Webhook inbox (built-in receiver).** Developer portal → Webhooks shows the account's inbox URL
+(`GET /api/v1/webhook_inbox`, `…/api/v1/webhook_inbox/:inboxId` as the destination). A delivery that reaches it is stored
+with its BitriPay headers, its body and the result of both signature checks (HMAC with the endpoint secret, Ed25519 with the
+platform key); nothing is executed on receipt. It lets a developer, or the regulator during the demonstration, see real
+signed deliveries without any external receiver site. `DELETE /api/v1/webhook_inbox` clears it; 200 messages are kept per
+account (migration `042_webhook_inbox.sql`).
+
 ### Nothing depends on an external key, except the assistant
 
 Every movement of money and every message can run with **no provider API key at all**. The only

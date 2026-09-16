@@ -5,6 +5,7 @@ import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, CopyButton, Empty, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Tabs, useAsync } from '../components/ui';
 import { isMerchantClass } from '@bitripay/shared';
+import { InstitutionSettlementAccount } from '../components/InstitutionSettlementAccount';
 
 /**
  * Developer portal: scoped API keys (secret / restricted / publishable), webhook endpoints with dual signatures,
@@ -16,7 +17,7 @@ export function Developer() {
   // A developer invited into a client's organisation (role developer, or any role holding api_keys:manage) works here too.
   const clientWorkspaces = memberships.filter((m) => m.kind !== 'agent' && !m.owner);
   const workspace = memberships.find((m) => m.organisationId === organisationId) ?? null;
-  const [tab, setTab] = useState<'keys' | 'webhooks' | 'events' | 'sandbox' | 'docs'>('keys');
+  const [tab, setTab] = useState<'keys' | 'webhooks' | 'settlement' | 'events' | 'sandbox' | 'docs'>('keys');
   const keys = useAsync(() => api.get<any>('/api/v1/api_keys'), [tab]);
   const scopes = useAsync(() => api.get<any>('/api/v1/api_keys/scopes'), []);
   const endpoints = useAsync(() => api.get<any>('/api/v1/webhook_endpoints'), [tab]);
@@ -24,6 +25,8 @@ export function Developer() {
   const events = useAsync(() => (tab === 'events' ? api.get<any>('/api/v1/events?limit=50') : Promise.resolve(null)), [tab]);
   const deliveries = useAsync(() => (tab === 'webhooks' ? api.get<any>('/api/v1/webhook_deliveries?limit=50') : Promise.resolve(null)), [tab, endpoints.data]);
   const sandbox = useAsync(() => (tab === 'sandbox' ? api.get<any>('/api/v1/sandbox') : Promise.resolve(null)), [tab]);
+  /** Built-in receiver: real deliveries with their headers and signature checks, no external site needed. */
+  const inbox = useAsync(() => (tab === 'webhooks' ? api.get<any>('/api/v1/webhook_inbox') : Promise.resolve(null)), [tab]);
   const [key, setKey] = useState<any>({ label: '', kind: 'secret', mode: 'test', scopes: [] as string[] });
   const [created, setCreated] = useState<any>(null);
   const [ep, setEp] = useState<any>({ url: '', events: ['payment_intent.succeeded', 'refund.succeeded'] });
@@ -58,6 +61,7 @@ export function Developer() {
         tabs={[
           { id: 'keys', label: tr('API keys') },
           { id: 'webhooks', label: tr('Webhooks') },
+          { id: 'settlement', label: tr('Settlement account') },
           { id: 'events', label: tr('Events') },
           { id: 'sandbox', label: tr('Sandbox') },
           { id: 'docs', label: tr('Docs & SDKs') },
@@ -167,7 +171,8 @@ export function Developer() {
               follow <a href="https://www.rfc-editor.org/rfc/rfc9110">{tr('RFC 9110')}</a>; bearer tokens issued to your users are JSON Web Tokens (
               <a href="https://www.rfc-editor.org/rfc/rfc7519">{tr('RFC 7519')}</a>).
             </p>
-            <Field label="URL">
+            {endpoints.error && <Alert kind="error">{endpoints.error}</Alert>}
+            <Field label="URL" hint={tr('A public https:// address of your server; use the inbox on the right to try deliveries without one.')}>
               <Input value={ep.url} onChange={(e) => setEp({ ...ep, url: e.target.value })} placeholder="https://shop.example/webhooks/bitripay" />
             </Field>
             <Field label={tr('Events')}>
@@ -245,7 +250,67 @@ export function Developer() {
             </div>
           </div>
           <div className="card">
+            <h3>{tr('Webhook inbox (built-in receiver)')}</h3>
+            <p className="small muted">
+              {tr(
+                'Point an endpoint at this address and every delivery is recorded here with its headers and the result of both signature checks. Nothing runs on receipt: it only shows what your server would receive.',
+              )}
+            </p>
+            {inbox.error && <Alert kind="error">{inbox.error}</Alert>}
+            {inbox.data?.url && (
+              <>
+                <div className="card soft compact mono small" style={{ wordBreak: 'break-all' }}>
+                  {inbox.data.url}
+                </div>
+                <div className="row wrap mt">
+                  <CopyButton text={inbox.data.url} />
+                  <Button size="sm" variant="secondary" onClick={() => setEp({ ...ep, url: inbox.data.url })}>
+                    {tr('Use as endpoint URL')}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => inbox.reload()}>
+                    {tr('Refresh')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      api
+                        .del('/api/v1/webhook_inbox')
+                        .then(() => inbox.reload())
+                        .catch(err)
+                    }
+                  >
+                    {tr('Clear')}
+                  </Button>
+                </div>
+              </>
+            )}
+            <div className="list mt">
+              {(inbox.data?.data ?? []).map((m: any) => (
+                <details key={m.id} className="list-item" style={{ display: 'block' }}>
+                  <summary>
+                    <b>{m.eventType ?? '—'}</b> · {new Date(m.receivedAt).toLocaleString()}{' '}
+                    <Chip kind={m.hmacValid ? 'success' : m.hmacValid === false ? 'danger' : undefined}>
+                      {tr('HMAC')} {m.hmacValid ? '✓' : m.hmacValid === false ? '✗' : '–'}
+                    </Chip>{' '}
+                    <Chip kind={m.ed25519Valid ? 'success' : m.ed25519Valid === false ? 'danger' : undefined}>Ed25519 {m.ed25519Valid ? '✓' : m.ed25519Valid === false ? '✗' : '–'}</Chip>
+                  </summary>
+                  <pre className="mono tiny" style={{ whiteSpace: 'pre-wrap' }}>
+                    {Object.entries(m.headers ?? {})
+                      .map(([k, v]) => `${k}: ${v}`)
+                      .join('\n')}
+                  </pre>
+                  <pre className="mono tiny" style={{ whiteSpace: 'pre-wrap' }}>
+                    {m.body}
+                  </pre>
+                </details>
+              ))}
+            </div>
+            {inbox.data && inbox.data.data?.length === 0 && <Empty icon="📥" text={tr('No delivery received yet')} />}
+          </div>
+          <div className="card">
             <h3>{tr('Deliveries')}</h3>
+            {deliveries.error && <Alert kind="error">{deliveries.error}</Alert>}
             {(deliveries.data?.data ?? deliveries.data?.items ?? []).length === 0 && <Empty icon="📬" text={tr('No deliveries yet')} />}
             <div className="list">
               {(deliveries.data?.data ?? deliveries.data?.items ?? []).map((d: any) => (
@@ -280,6 +345,7 @@ export function Developer() {
           </div>
         </div>
       )}
+      {tab === 'settlement' && <InstitutionSettlementAccount />}
       {tab === 'events' && (
         <div className="card">
           <h3>{tr('Events')}</h3>

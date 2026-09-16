@@ -228,6 +228,24 @@ export function getBinding(merchantUserId: string | null, id: string): BindingVi
   if (!r || (merchantUserId && r.merchant_user_id !== merchantUserId)) throw new AppError(404, 'RESOURCE_NOT_FOUND', 'Beneficiary binding not found');
   return toBinding(r);
 }
+/** Console view: every merchant's settlement-account declaration with the merchant and institution named, newest first. */
+export function listAllBindings(
+  filter: { status?: string | null; limit?: number } = {},
+): (BindingView & { merchant: { id: string; name: string; businessName: string | null } | null; participantName: string | null })[] {
+  const rows = getDb()
+    .prepare(`SELECT * FROM beneficiary_bindings ${filter.status ? 'WHERE status = ?' : ''} ORDER BY created_at DESC LIMIT ?`)
+    .all(...(filter.status ? [filter.status] : []), filter.limit ?? 100) as any[];
+  return rows.map((r) => {
+    const u = findUserById(r.merchant_user_id) as any;
+    let participantName: string | null = null;
+    try {
+      participantName = getParticipant(r.participant_id).name;
+    } catch {
+      participantName = null;
+    }
+    return { ...toBinding(r), merchant: u ? { id: u.id, name: u.full_name, businessName: u.business_name ?? null } : null, participantName };
+  });
+}
 export function listBindings(merchantUserId: string): BindingView[] {
   return (getDb().prepare('SELECT * FROM beneficiary_bindings WHERE merchant_user_id = ? ORDER BY created_at DESC').all(merchantUserId) as any[]).map(toBinding);
 }
