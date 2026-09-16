@@ -345,8 +345,8 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
   const HREFS: Record<string, string> = {
     digital_rail: '/gateways',
     aggregator_perimeter: '/modules',
-    bcc_authorisation: '/controls',
-    switch_membership: '/controls',
+    bcc_authorisation: '/controls?tab=controls',
+    switch_membership: '/controls?tab=controls',
     processor: '/gateways',
     processor_live_keys: '/gateways',
     processor_webhooks: '/gateways',

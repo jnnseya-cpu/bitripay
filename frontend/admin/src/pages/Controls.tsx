@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { countryLabel } from '@bitripay/shared';
 import { tr } from '../lib/i18n';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, ConfirmButton, Field, Input, PageHeader, Select, Switch, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
@@ -253,7 +253,16 @@ function GoLiveProfileBox({ onApplied }: { onApplied: () => void }) {
 /** Gateway controls: lifecycle/evidence thresholds, FX disclosure policy, fraud & sanctions, reconciliation and the declared route catalogue. */
 export function Controls() {
   const { toast } = useStore();
-  const [tab, setTab] = useState<'golive' | 'controls' | 'capabilities' | 'sanctions' | 'reconcile' | 'catalog' | 'events' | 'emoney'>('golive');
+  type Tab = 'golive' | 'controls' | 'capabilities' | 'sanctions' | 'reconcile' | 'catalog' | 'events' | 'emoney';
+  const TABS: Tab[] = ['golive', 'controls', 'capabilities', 'sanctions', 'reconcile', 'catalog', 'events', 'emoney'];
+  const [params] = useSearchParams();
+  const wanted = params.get('tab') as Tab | null;
+  const [tab, setTab] = useState<Tab>(wanted && TABS.includes(wanted) ? wanted : 'golive');
+  // The go-live checklist's "Open" links point at a tab of this same page: follow the query string when it changes.
+  useEffect(() => {
+    if (wanted && TABS.includes(wanted)) setTab(wanted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- TABS is a constant
+  }, [wanted]);
   const golive = useAsync(() => (tab === 'golive' ? api.get<any>('/api/admin/go-live') : Promise.resolve(null)), [tab]);
   const emoney = useAsync(() => (tab === 'emoney' ? api.get<any>('/api/admin/emoney?pageSize=100') : Promise.resolve(null)), [tab]);
   const settings = useAsync(() => api.get<any>('/api/admin/settings'), []);
