@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { countryLabel } from '@bitripay/shared';
 import { tr } from '../lib/i18n';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -120,7 +121,7 @@ function CapabilityMatrixEditor() {
       <Table
         head={[tr('Country'), tr('Phase'), ...(matrix.data?.methods ?? []).map((m: any) => m.label), tr('Ceiling / tx (minor)')]}
         rows={rows.map((c: any) => [
-          <b>{c.country}</b>,
+          <b>{countryLabel(c.country)}</b>,
           <Chip kind={c.licencePhase === 'full' ? 'success' : 'warning'}>{c.licencePhase}</Chip>,
           ...c.methods.map((m: any) => (
             <div key={m.method}>

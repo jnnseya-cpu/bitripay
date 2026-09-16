@@ -353,7 +353,7 @@ export function OperatorPicker({
           const o = items.find((x) => x.id === id);
           if (o && onCurrency) onCurrency(o.currency);
         }}
-        options={[{ value: '', label: tr('Choose operator…') }, ...items.map((o) => ({ value: o.id, label: `${o.name} · ${o.country} (${o.currency})` }))]}
+        options={[{ value: '', label: tr('Choose operator…') }, ...items.map((o) => ({ value: o.id, label: `${o.name} · ${countryLabel(o.country)} (${o.currency})` }))]}
       />
       {sel && (
         <Row style={{ flexWrap: 'wrap' }}>
@@ -655,7 +655,7 @@ export function Agents({ route }: ScreenProps<'Agents'>) {
               <View>
                 <T bold>{a.businessName || a.fullName}</T>
                 <T muted size={12}>
-                  @{a.tag} · {a.country ?? ''} · {(a.commissionBps / 100).toFixed(2)}%
+                  @{a.tag} · {countryLabel(a.country)} · {(a.commissionBps / 100).toFixed(2)}%
                 </T>
               </View>
             </Row>

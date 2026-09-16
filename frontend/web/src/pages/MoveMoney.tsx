@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { countryLabel } from '@bitripay/shared';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -195,9 +196,9 @@ export function MoveMoney() {
                 {route.corridor && (
                   <div className="mt-sm">
                     {route.corridor.status === 'live' ? (
-                      <span className="chip success">authorised corridor · {route.corridor.destCountry}</span>
+                      <span className="chip success">authorised corridor · {countryLabel(route.corridor.destCountry)}</span>
                     ) : (
-                      <span className="chip warning">sandbox corridor · {route.corridor.destCountry} · no real funds</span>
+                      <span className="chip warning">sandbox corridor · {countryLabel(route.corridor.destCountry)} · no real funds</span>
                     )}
                   </div>
                 )}
@@ -507,10 +508,10 @@ export function MoveMoney() {
                       k={tr('Corridor')}
                       v={
                         preview.quote.corridor.status === 'live' ? (
-                          <span className="chip success">authorised · {preview.quote.corridor.destCountry}</span>
+                          <span className="chip success">authorised · {countryLabel(preview.quote.corridor.destCountry)}</span>
                         ) : (
                           <span className="chip warning">
-                            {preview.quote.corridor.status} · {preview.quote.corridor.destCountry} · sandbox only, no real funds
+                            {preview.quote.corridor.status} · {countryLabel(preview.quote.corridor.destCountry)} · sandbox only, no real funds
                           </span>
                         )
                       }

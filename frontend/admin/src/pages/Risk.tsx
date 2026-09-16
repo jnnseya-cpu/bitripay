@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { countryLabel } from '@bitripay/shared';
 import { tr } from '../lib/i18n';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -728,7 +729,7 @@ function AgentIntel({ ok, err, money }: { ok: (m: string) => void; err: (e: any)
                 {a.name}
                 <br />
                 <span className="tiny muted">
-                  @{a.tag} · {a.country}
+                  @{a.tag} · {countryLabel(a.country)}
                 </span>
               </b>,
               <span>

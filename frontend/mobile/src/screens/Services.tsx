@@ -386,7 +386,7 @@ export function Topup() {
       <Header title={t('nav.topup')} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         {ops.data?.items.map((o) => (
-          <Tile key={o.id} label={o.name} sub={`${o.country} · ${o.currency}`} color={o.color} selected={sel?.id === o.id} onPress={() => setSel(o)} />
+          <Tile key={o.id} label={o.name} sub={`${countryLabel(o.country)} · ${o.currency}`} color={o.color} selected={sel?.id === o.id} onPress={() => setSel(o)} />
         ))}
       </View>
       {sel && (

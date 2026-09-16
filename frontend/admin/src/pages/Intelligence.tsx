@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { countryLabel } from '@bitripay/shared';
 import { tr } from '../lib/i18n';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -417,7 +418,7 @@ function Diaspora({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
               {i.name}
               <br />
               <span className="tiny muted">
-                {i.registryRef ?? ''} · {i.country}
+                {i.registryRef ?? ''} · {countryLabel(i.country)}
               </span>
             </b>,
             i.kind,

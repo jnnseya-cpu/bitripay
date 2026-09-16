@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { countryLabel } from '@bitripay/shared';
 import { tr } from '../lib/i18n';
 import { Linking, Share, View } from 'react-native';
 import { api } from '../lib/api';
@@ -158,7 +159,11 @@ export function Move() {
           )}
           {route.corridor && (
             <Chip
-              label={route.corridor.status === 'live' ? `authorised corridor · ${route.corridor.destCountry}` : `sandbox corridor · ${route.corridor.destCountry} · no real funds`}
+              label={
+                route.corridor.status === 'live'
+                  ? `authorised corridor · ${countryLabel(route.corridor.destCountry)}`
+                  : `sandbox corridor · ${countryLabel(route.corridor.destCountry)} · no real funds`
+              }
               kind={route.corridor.status === 'live' ? 'success' : undefined}
             />
           )}
@@ -293,7 +298,7 @@ export function Move() {
               {preview.quote.recipientConsentRequired && <Alert kind="warning" text={`The recipient must confirm receiving ${preview.quote.targetCurrency} before the payout is executed.`} />}
               {preview.quote.corridor && (
                 <T size={11} muted>
-                  {preview.quote.corridor.status === 'live' ? tr('Authorised corridor') : tr('Sandbox corridor – no real funds')} · {preview.quote.corridor.destCountry}
+                  {preview.quote.corridor.status === 'live' ? tr('Authorised corridor') : tr('Sandbox corridor – no real funds')} · {countryLabel(preview.quote.corridor.destCountry)}
                 </T>
               )}
               <T size={11} muted>

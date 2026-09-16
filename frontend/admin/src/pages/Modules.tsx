@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { countryLabel } from '@bitripay/shared';
 import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -85,6 +86,15 @@ export function Modules() {
                 placeholder={tr('US,GB,NG')}
               />
             </Field>
+            {(countries.countries ?? []).length > 0 && (
+              <div className="small" style={{ marginBottom: 6 }}>
+                {(countries.countries as string[]).map((c) => (
+                  <span key={c} className="chip" style={{ marginRight: 4 }}>
+                    {countryLabel(c, config?.countries?.find((x: { code: string; name: string }) => x.code === c)?.name)}
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="small muted">{(config?.countries ?? []).length} countries available. Restriction applies at registration based on the selected country.</div>
           </div>
           <Alert kind="info">
