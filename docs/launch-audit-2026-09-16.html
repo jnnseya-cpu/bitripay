@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BitriPay Launch Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--paper:#f7f8fb;--card:#ffffff;--ink:#14213d;--muted:#6b7690;--line:#d8dde8;--navy:#0b2a6f;--gold:#f5b31c;--gold-ink:#7a5200;--soft-gold:#fff5d6;--green:#0b6e4f;--green-bg:#e3f4ec;--red:#b42318;--red-bg:#fbe9e7;--amber:#8a5a00;--amber-bg:#fff1cc;--grey-bg:#eceff4;--blue-bg:#e6edfb;--sans:"IBM Plex Sans",system-ui,sans-serif;--serif:"IBM Plex Serif",Georgia,serif;--mono:"IBM Plex Mono",ui-monospace,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#0d1324;--card:#141c33;--ink:#e9edf6;--muted:#8e99b3;--line:#2a3350;--navy:#8fb0ff;--gold:#f5b31c;--gold-ink:#ffd377;--soft-gold:#3a2e12;--green:#4fc39a;--green-bg:#123527;--red:#ff8a80;--red-bg:#3b1a17;--amber:#ffcf6b;--amber-bg:#3a2e12;--grey-bg:#1c2440;--blue-bg:#1a2749}}
+:root[data-theme="dark"]{--paper:#0d1324;--card:#141c33;--ink:#e9edf6;--muted:#8e99b3;--line:#2a3350;--navy:#8fb0ff;--gold:#f5b31c;--gold-ink:#ffd377;--soft-gold:#3a2e12;--green:#4fc39a;--green-bg:#123527;--red:#ff8a80;--red-bg:#3b1a17;--amber:#ffcf6b;--amber-bg:#3a2e12;--grey-bg:#1c2440;--blue-bg:#1a2749}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;padding-block:0 64px;padding-inline:16px}
+main{max-width:960px;margin:0 auto}
+header.masthead{border-bottom:3px solid var(--gold);padding-block:28px 18px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
+.brand{font-family:var(--serif);font-weight:600;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--navy)}
+h1{font-family:var(--serif);font-weight:600;font-size:clamp(26px,4vw,36px);line-height:1.15;margin:6px 0 0;text-wrap:balance}
+.meta{font-family:var(--mono);font-size:12px;color:var(--muted);display:grid;gap:3px;text-align:right}
+@media (max-width:600px){.meta{text-align:left}}
+.verdict{margin-top:24px;border:1px solid var(--line);border-left:8px solid var(--red);background:var(--card);padding:18px 20px;display:grid;grid-template-columns:auto 1fr;gap:12px 24px;align-items:start}
+@media (max-width:600px){.verdict{grid-template-columns:1fr}}
+.verdict .big{font-family:var(--serif);font-size:38px;font-weight:600;color:var(--red);line-height:1;padding-top:4px}
+.verdict .score{font-family:var(--mono);font-size:13px;color:var(--muted);margin-top:6px}
+.verdict p{margin:0}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;font-size:14px}
+.kv dt{color:var(--muted);font-weight:500}
+.kv dd{margin:0}
+@media (max-width:600px){.kv{grid-template-columns:1fr}.kv dt{margin-top:6px}}
+nav.toc{margin-top:28px;border:1px solid var(--line);background:var(--card);padding:14px 18px;columns:2;column-gap:28px;font-size:13.5px}
+@media (max-width:600px){nav.toc{columns:1}}
+nav.toc a{display:block;color:var(--ink);text-decoration:none;padding:2px 0;break-inside:avoid}
+nav.toc a span{font-family:var(--mono);color:var(--muted);margin-right:8px;font-size:12px}
+nav.toc a:hover{color:var(--navy)}
+section{margin-top:44px}
+h2{font-family:var(--serif);font-weight:600;font-size:23px;margin:0 0 6px;padding-top:10px;border-top:1px solid var(--line);text-wrap:balance}
+h2 .num{font-family:var(--mono);font-size:13px;color:var(--gold-ink);display:block;letter-spacing:.06em;margin-bottom:4px}
+h3{font-family:var(--sans);font-weight:600;font-size:16px;margin:22px 0 6px}
+p{max-width:72ch}
+ul,ol{padding-left:22px;max-width:80ch}
+li{margin:3px 0}
+.lead{font-size:16px}
+.note{border-left:4px solid var(--gold);background:var(--soft-gold);padding:10px 14px;margin:14px 0;font-size:14px;max-width:none}
+.tablewrap{overflow-x:auto;margin:12px 0;border:1px solid var(--line);background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{background:var(--grey-bg);font-weight:600;font-size:12.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip{display:inline-block;font-family:var(--mono);font-size:11.5px;font-weight:500;letter-spacing:.04em;padding:2px 8px;border-radius:3px;white-space:nowrap}
+.PASS,.FIXED,.GO{background:var(--green-bg);color:var(--green)}
+.FAIL,.NOGO,.P0,.P1{background:var(--red-bg);color:var(--red)}
+.PARTIAL,.P2,.COND{background:var(--amber-bg);color:var(--amber)}
+.BLOCKED,.NT,.P3,.P4,.OPEN{background:var(--grey-bg);color:var(--muted)}
+.INFO{background:var(--blue-bg);color:var(--navy)}
+code,.mono{font-family:var(--mono);font-size:12.5px}
+code{background:var(--grey-bg);padding:1px 5px;border-radius:3px}
+pre{font-family:var(--mono);font-size:12px;background:var(--grey-bg);border:1px solid var(--line);padding:10px 12px;overflow-x:auto;margin:8px 0;line-height:1.45}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:12px 0}
+.tile{border:1px solid var(--line);background:var(--card);padding:12px 14px}
+.tile .label{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.tile .value{font-family:var(--serif);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
+.tile .sub{font-size:12.5px;color:var(--muted)}
+.defect{border:1px solid var(--line);background:var(--card);padding:12px 16px;margin:12px 0}
+.defect h4{margin:0 0 6px;font-size:15px;font-family:var(--sans)}
+.defect dl{display:grid;grid-template-columns:max-content 1fr;gap:3px 14px;font-size:13.5px;margin:0}
+.defect dt{color:var(--muted)}
+.defect dd{margin:0}
+@media (max-width:600px){.defect dl{grid-template-columns:1fr}}
+.final{margin-top:36px;border:2px solid var(--red);background:var(--card);padding:22px 24px}
+.final p.statement{font-family:var(--serif);font-size:22px;font-weight:600;color:var(--red);margin:0 0 10px;max-width:none}
+footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);font-family:var(--mono)}
+a{color:var(--navy)}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media print{body{padding:0}nav.toc{display:none}section{break-inside:auto}h2{break-after:avoid}.tablewrap{overflow:visible}}
+</style>
+</head>
+<body>
+<main>
+<header class="masthead">
+  <div>
+    <div class="brand">BitriPay · NSEYA GROUPE SARL</div>
+    <h1>Production launch hard-reality audit</h1>
+  </div>
+  <div class="meta">
+    <span>Branch claude/magical-franklin-pa55pn</span>
+    <span>Release candidate e041116</span>
+    <span>Audit period 15–16 September 2026 (UTC)</span>
+    <span>Author: Claude Code session, on the founder's instruction</span>
+  </div>
+</header>
+<div class="verdict" role="region" aria-label="Executive verdict">
+  <div><div class="big">NO-GO</div><div class="score">public launch · score 64 / 100</div></div>
+  <div>
+    <p class="lead"><strong>This release is not approved for public launch.</strong> The demonstration for the Banque Centrale du Congo on 17 September 2026 is not a launch: it runs on a sandbox switch connection, under the aggregator perimeter, with fictitious institutions and demo accounts. The evidence below supports that showing, under the conditions in section 16, and nothing more.</p>
+    <p style="margin-top:8px;font-size:13.5px;color:var(--muted)">Default verdict is NO-GO. It stands because four mandatory gates are not proven: backup restoration, rollback, load under launch conditions, and alerting. None of these is a code defect. Each is an untested operation. Two P1 items are operational and sit with the founder (second administrator with a PIN, two-factor on both console accounts).</p>
+  </div>
+</div>
+
+<nav class="toc" aria-label="Sections">
+<a href="#s1"><span>01</span>Executive verdict</a><a href="#s2"><span>02</span>Immediate launch blockers</a><a href="#s3"><span>03</span>Mandatory launch-gate results</a><a href="#s4"><span>04</span>Testing coverage</a><a href="#s5"><span>05</span>Architecture and dependency findings</a><a href="#s6"><span>06</span>Security findings</a><a href="#s7"><span>07</span>Functional and UX findings</a><a href="#s8"><span>08</span>Data and database findings</a><a href="#s9"><span>09</span>Payment and financial findings</a><a href="#s10"><span>10</span>AI and agent findings</a><a href="#s11"><span>11</span>Performance findings</a><a href="#s12"><span>12</span>Observability and incident-response findings</a><a href="#s13"><span>13</span>Fixes implemented</a><a href="#s14"><span>14</span>Unresolved risks</a><a href="#s15"><span>15</span>Required pre-launch action plan</a><a href="#s16"><span>16</span>Launch configuration</a><a href="#s17"><span>17</span>Final launch decision</a>
+</nav>
+
+<section id="s1">
+<h2><span class="num">SECTION 1</span>Executive verdict</h2>
+<dl class="kv">
+<dt>Final verdict</dt><dd><span class="chip NOGO">NO-GO</span> for public launch. No CONDITIONAL GO: the score is below 82 and two P1 items are open.</dd>
+<dt>Launch confidence score</dt><dd>64 / 100 (weighted model in section 3; a score cannot override a failed gate).</dd>
+<dt>Release candidate</dt><dd><code>e041116</code> on <code>claude/magical-franklin-pa55pn</code> (pushed 16 Sept 2026 17:57 UTC; carries <code>1ad7b48</code> and the sign-out fix D-10). <code>1ad7b48</code> is CI-green (run 79); run 80 for <code>e041116</code> was in progress when this report was written. Production reported <code>c49faf7</code> in the founder's deploy log; the deploy timer only moves to a head that CI has passed.</dd>
+<dt>Tested environment</dt><dd>Local stack built from the candidate: API on port 4000 (SQLite, production-mode boot check in verify), web on 5173, console on 5174, headless Chromium (Playwright) at desktop size. Production hosts <code>api/www/admin.bitripay.com</code> were <strong>not reachable</strong> from the audit environment (outbound proxy returned 403 for every probe); deployed configuration was inspected from <code>deploy/Caddyfile</code>, <code>deploy/docker-compose.prod.yml</code> and the founder's pasted deploy log only.</dd>
+<dt>Test period</dt><dd>15–16 September 2026 (UTC). Final automated run 16 Sept 17:07–17:33 UTC.</dd>
+<dt>Overall risk level</dt><dd><strong>High</strong> for a public launch; <strong>moderate</strong> for the sandbox demonstration.</dd>
+<dt>Hard-reality conclusion</dt><dd>The code path the demonstration follows has been executed end to end by a script that clicks the French interface: 41 steps, 40 passed on the sixth run, and the one failure (a webhook subscription created before the fix) was corrected and re-proven through the API. The API refuses cross-tenant reads, role escalation, mass assignment, replayed idempotency keys with different bodies, malformed and oversized bodies, forged webhook signatures, duplicate refunds and parallel double-payment of one intent. What has never been exercised is the operations side: nobody has restored a backup, rolled a deployment back, alerted on a failure, or pushed launch-level load through the production shape. Until those four are done and written down, the platform is a demonstrable product, not a launched one.</dd>
+</dl>
+</section>
+
+<section id="s2">
+<h2><span class="num">SECTION 2</span>Immediate launch blockers</h2>
+<p>Blockers for a public launch. None blocks the sandbox demonstration except B-04, which the founder must do on the production console before the session.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>ID</th><th>Severity</th><th>Area</th><th>Defect</th><th>User / business impact</th><th>Evidence</th><th>Required correction</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>B-01</td><td><span class="chip P1">P1</span></td><td>Data recovery</td><td>Backup restoration has never been executed. A nightly <code>sqlite3 .backup</code> exists (30-day retention) but no restore drill.</td><td>An unrestorable backup equals no backup; a disk loss would lose every ledger row.</td><td><code>deploy/docker-compose.prod.yml</code> lines 71–82; <code>deploy/README.md</code> line 228; no drill record anywhere.</td><td>Restore last night's file into a scratch container, boot the API against it, run the Guardian check, record the date and result.</td><td><span class="chip OPEN">OPEN</span></td></tr>
+<tr><td>B-02</td><td><span class="chip P1">P1</span></td><td>Deployment</td><td>Rollback untested. <code>auto-deploy.sh</code> only moves forward to the CI-green head; going back means a manual checkout and rebuild.</td><td>A bad deploy stays live until someone works it out by hand.</td><td><code>deploy/auto-deploy.sh</code> line 56 (<code>git checkout --force -B</code>); no rollback section in the runbook.</td><td>Document and execute one rollback (<code>auto-deploy.sh --force</code> at a pinned earlier commit), time it, record it.</td><td><span class="chip OPEN">OPEN</span></td></tr>
+<tr><td>B-03</td><td><span class="chip P1">P1</span></td><td>Performance</td><td>No load test against the production shape. The only concurrency evidence is a unit test posting 10 000 transfers into an in-memory SQLite.</td><td>Unknown breaking point; a modest campaign could saturate the single API container.</td><td><code>acceptance_scale.test.ts</code> line 19; no k6/autocannon run; production unreachable from here.</td><td>Run a 15-minute mixed load (intents, checkout, webhooks) against a staging copy on the VPS; record p50/p95/p99 and error rate.</td><td><span class="chip NT">NOT TESTED</span></td></tr>
+<tr><td>B-04</td><td><span class="chip P1">P1</span></td><td>Console access</td><td>Production has one administrator and 2FA is not enabled on it. Four-eyes actions (settlement-account activation) cannot complete with one account.</td><td>Single point of compromise for the console; the demonstration's scene 2.5 fails with one admin.</td><td>Founder's deploy log; <code>twoFactorDeadline()</code> in <code>middleware/auth.ts</code> enforces 2FA only after a grace period when the policy is on.</td><td>Create the second administrator, set both PINs, enable 2FA on both, set <code>require2fa.admin</code> in Controls.</td><td><span class="chip OPEN">OPEN (founder)</span></td></tr>
+<tr><td>B-05</td><td><span class="chip P2">P2</span></td><td>Observability</td><td>No alert has ever fired in production. Guardian notifies administrators in-app; there is no out-of-band channel and no test of it.</td><td>A halted platform at 03:00 is noticed when someone logs in.</td><td><code>services/guardian.ts</code> line 40 (in-app notify only); no alert test record.</td><td>Route Guardian and health failures to the support inbox (support@bitripay.com is the only mailbox) and trigger one on purpose.</td><td><span class="chip OPEN">OPEN</span></td></tr>
+<tr><td>B-06</td><td><span class="chip P2">P2</span></td><td>Release traceability</td><td>Deployed build (<code>c49faf7</code>) is behind the tested build (<code>e041116</code>): three fixes the demonstration depends on are not yet on the VPS.</td><td>The run-of-show describes clicks that the deployed console does not have yet (simulator seeding button, checklist Open link, Webhooks tab fix).</td><td>Deploy log pasted by the founder; CI runs 77–79 green; run 80 in progress for <code>e041116</code>.</td><td>Wait for CI to pass <code>e041116</code>, then <code>bash deploy/auto-deploy.sh --force</code> on the VPS and hard-reload each device (PWA cache).</td><td><span class="chip OPEN">OPEN (founder)</span></td></tr>
+<tr><td>B-07</td><td><span class="chip P2">P2</span></td><td>Web security</td><td>API reflects any <code>Origin</code> in <code>Access-Control-Allow-Origin</code>.</td><td>Any site can call the API from a browser with a token it already holds. Tokens are bearer, never cookies, so no ambient-credential attack; but the design needs a written acceptance.</td><td>Security check 3: <code>ACAO=https://evil.example</code>.</td><td>Either allow-list <code>www/admin.bitripay.com</code> plus registered merchant checkout domains, or sign a risk acceptance.</td><td><span class="chip PARTIAL">ACCEPTED, UNSIGNED</span></td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s3">
+<h2><span class="num">SECTION 3</span>Mandatory launch-gate results</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Gate</th><th>Status</th><th>Evidence</th><th>Remaining risk</th></tr></thead>
+<tbody>
+<tr><td>1 · Build integrity</td><td><span class="chip PASS">PASS</span></td><td><code>scripts/verify.sh</code> on the candidate: lint (0 errors, 1 pre-existing warning in payout-device), prettier, shared build + tests, API typecheck + build, 58 test files / 370 tests passed in 401 s, production-mode boot answered <code>/api/health</code>, web + admin typecheck + build. CI run 79 green on <code>1ad7b48</code>; run 80 (<code>e041116</code>) in progress.</td><td>Mobile (Expo) typecheck skipped in the local run (<code>SKIP_MOBILE=1</code>); CI runs it. Knip unused-export check not run locally.</td></tr>
+<tr><td>2 · Critical functionality</td><td><span class="chip PASS">PASS</span></td><td>Walkthrough run 6: 40 / 41 clicks passed (onboarding, KYB, settlement account four-eyes, POS sale paid through the switch, webhooks, refund, API key, hosted checkout, sanctions refusal, suspension, Guardian, export, incidents). Step 4.3 failed on a pre-fix subscription; fixed (default events) and re-proven by API in 5 s.</td><td>UI retest of step 4.3 after the fix was not re-run in the browser; the API path was. Agent role has no click-through (out of the demonstration perimeter).</td></tr>
+<tr><td>3 · Security</td><td><span class="chip PARTIAL">PARTIAL</span></td><td>30 adversarial checks over four passes: 401/403 on every role boundary, IDOR on intents/bindings/keys, mass assignment, idempotency conflict 409, malformed 400, 13 MB → 413, negative/huge amounts, brute force 429 after 11, OTP 429, identical login errors, forged webhook signatures flagged, 6 parallel payments → exactly 1 success, duplicate refund refused, issuer routes 422 under the perimeter, XSS stored as data.</td><td>B-07 CORS; no CSP on API-served pages; production headers unverified from here (Caddy config sets HSTS, nosniff, frame options, referrer policy). Logout revocation and suspension: sign-out did not revoke the token (D-10, fixed, re-proven: reuse 401); suspension refused with 403 <code>account_suspended</code>.</td></tr>
+<tr><td>4 · Data integrity</td><td><span class="chip FAIL">FAIL</span></td><td>Ledger writes transactional (better-sqlite3 transactions; 10 000-transfer zero-sum test); 43 migrations apply on a fresh boot in every test and in the production-mode boot check; tenant isolation proven by IDOR checks and <code>contract_organisations.test.ts</code>.</td><td><strong>Backup restoration never proven (B-01).</strong> Gate fails on that criterion alone.</td></tr>
+<tr><td>5 · Financial integrity</td><td><span class="chip PASS">PASS</span></td><td>Amount is server-controlled (client-set balance/state refused: <code>acceptance_scale.test.ts</code> line 74); webhooks HMAC + Ed25519 signed with delivery ids, replay-checked at the inbox; entitlements/fees reconcile (aggregation fee accrued at completion, reversed on refund, Guardian 0 findings after every flow); duplicate payment and duplicate refund refused.</td><td>Reconciliation against a real switch file has never happened (no live switch membership).</td></tr>
+<tr><td>6 · Performance</td><td><span class="chip NT">NOT TESTED</span></td><td>No launch-load run (B-03).</td><td>Unknown p95 and breaking point.</td></tr>
+<tr><td>7 · Reliability</td><td><span class="chip FAIL">FAIL</span></td><td>Bounded retries (webhooks 8 tries / 24 h; payouts 3; dispatcher lease); Guardian halts payments on invariant breach instead of cascading; rails fail closed (simulation refusal, module_disabled).</td><td><strong>Rollback untested (B-02).</strong></td></tr>
+<tr><td>8 · Observability</td><td><span class="chip FAIL">FAIL</span></td><td>Every request carries a correlation id; audit log with actor and reason; hash-chained event log; SLO page; Guardian check on demand; incidents register.</td><td><strong>Alerts never tested (B-05)</strong>; incident owners not named in a document.</td></tr>
+<tr><td>9 · Privacy and compliance</td><td><span class="chip PARTIAL">PARTIAL</span></td><td>Account closure with anonymisation exists (password + PIN + CLOSE); KYB files sealed AES-256-GCM; perimeter of Instructions n°42/58 enforced server-side (16 issuer functions off, 422 <code>module_disabled</code>); sanctions screening on directors; regulatory export with manifest.</td><td>Deletion was not exercised in this audit (unit-tested only); no data-retention schedule document; privacy policy text not compared line by line with behaviour.</td></tr>
+<tr><td>10 · Operational readiness</td><td><span class="chip PARTIAL">PARTIAL</span></td><td>Support inbox exists (support@bitripay.com); incidents register in the console; deploy runbook (<code>deploy/README.md</code>); domains, VPS and GitHub under the founder's accounts.</td><td>No written incident process with named owners; release/rollback authority is implicit (the founder).</td></tr>
+</tbody></table></div>
+<h3>Score</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Category</th><th class="num">Weight</th><th class="num">Score</th><th>Basis</th></tr></thead>
+<tbody>
+<tr><td>Architecture and build integrity</td><td class="num">10 %</td><td class="num">85</td><td>Green verify and CI; deployed build lags (B-06)</td></tr>
+<tr><td>Core functional reliability</td><td class="num">15 %</td><td class="num">80</td><td>40/41 clicks; 370 unit tests; one UI retest not repeated</td></tr>
+<tr><td>Authentication and authorisation</td><td class="num">12 %</td><td class="num">78</td><td>All boundary checks pass; production 2FA off (B-04)</td></tr>
+<tr><td>Application and infrastructure security</td><td class="num">15 %</td><td class="num">65</td><td>CORS open, no CSP, production headers unverified</td></tr>
+<tr><td>Data integrity and recovery</td><td class="num">10 %</td><td class="num">55</td><td>Integrity strong; restore never done</td></tr>
+<tr><td>Payment and financial controls</td><td class="num">8 %</td><td class="num">85</td><td>Idempotency, concurrency, refunds, fees, Guardian all proven</td></tr>
+<tr><td>Performance and scalability</td><td class="num">8 %</td><td class="num">30</td><td>Unit-level only</td></tr>
+<tr><td>AI safety and reliability</td><td class="num">5 %</td><td class="num">25</td><td>Not exercised in this audit (section 10)</td></tr>
+<tr><td>Privacy and compliance</td><td class="num">5 %</td><td class="num">70</td><td>Perimeter and sealing proven; deletion not exercised</td></tr>
+<tr><td>Observability and incident response</td><td class="num">5 %</td><td class="num">45</td><td>Traceable; no tested alert</td></tr>
+<tr><td>Deployment and rollback</td><td class="num">4 %</td><td class="num">45</td><td>Forward deploy proven by the founder's log; rollback not</td></tr>
+<tr><td>Accessibility and cross-device quality</td><td class="num">3 %</td><td class="num">30</td><td>Desktop Chromium only</td></tr>
+<tr><td><strong>Weighted total</strong></td><td class="num"></td><td class="num"><strong>64</strong></td><td>Below the 82 needed for CONDITIONAL GO</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s4">
+<h2><span class="num">SECTION 4</span>Testing coverage</h2>
+<div class="grid2">
+<div class="tile"><div class="label">Automated unit and contract tests</div><div class="value">370</div><div class="sub">58 files, all passed, 401 s (API); shared core, BitriQR and sdk-node suites also green</div></div>
+<div class="tile"><div class="label">Demonstration walkthrough (browser clicks)</div><div class="value">40 / 41</div><div class="sub">run 6; 1 failed then fixed and re-proven by API</div></div>
+<div class="tile"><div class="label">Adversarial API checks</div><div class="value">30</div><div class="sub">27 pass · 1 fail, accepted unsigned (CORS) · 2 partial (CSP, SSRF) · one defect found and fixed (D-10)</div></div>
+<div class="tile"><div class="label">Not tested</div><div class="value">7 areas</div><div class="sub">load, restore, rollback, alerts, browsers, devices, production headers</div></div>
+</div>
+<div class="tablewrap"><table>
+<thead><tr><th>Measure</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Total test cases (this audit)</td><td>370 automated + 41 walkthrough + 30 security = 441</td></tr>
+<tr><td>Passed</td><td>370 + 40 + 27</td></tr>
+<tr><td>Failed</td><td>1 walkthrough (fixed, API-retested) + 1 accepted (CORS) and 2 partial (CSP, SSRF guard not exercisable locally) security (section 6)</td></tr>
+<tr><td>Blocked</td><td>4 security checks blocked by the auth rate limiter after the brute-force check, then cleared and re-run; production probes blocked by the audit environment's outbound proxy (403)</td></tr>
+<tr><td>Not tested</td><td>Load and latency; backup restore; rollback; alert delivery; Firefox/Safari/Edge; Android/iOS devices and the Expo app; production HTTP headers; account deletion end to end; AI assistant behaviour under prompt injection</td></tr>
+<tr><td>Automated coverage</td><td>API routes under contract tests (v1 gateway, admin, switch, finops, risk, KYB, webhooks, perimeter, scale); walkthrough scripted in Playwright (repeatable)</td></tr>
+<tr><td>Manual coverage</td><td>Founder's own clicks on production (reported defects that drove this audit: webhooks tab, scene 2/3/5 items, checklist Open link)</td></tr>
+<tr><td>Critical journey coverage</td><td>Register → KYB → settlement account (four eyes) → POS sale → switch payment → webhook → refund → API key → hosted checkout → sanctions refusal → suspension → Guardian → export → incident: all clicked</td></tr>
+<tr><td>API coverage</td><td>OpenAPI lists 100 paths; the walkthrough and security scripts hit 34 distinct paths directly; the rest are covered by the unit suites</td></tr>
+<tr><td>Role coverage</td><td>Customer, merchant (two tenants), administrator ×2 (maker/checker): tested. Agent: unit tests only. Organisation members: unit tests only.</td></tr>
+<tr><td>Browser / device coverage</td><td>Chromium headless, 1280×900. Nothing else.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s5">
+<h2><span class="num">SECTION 5</span>Architecture and dependency findings</h2>
+<h3>Architecture summary</h3>
+<p>One Node/Express 5 API in TypeScript on a single SQLite file (better-sqlite3, WAL, 43 migrations applied at boot), serving the partner API, the console API, server-rendered site and Lite pages. Two static React/Vite front ends (web for customers and acceptors, console for administrators) and an Expo mobile app share <code>@bitripay/shared</code>. Production is three containers plus Caddy on one Hostinger VPS, pulled by a systemd timer every five minutes when GitHub CI is green for the branch head.</p>
+<h3>Critical dependencies</h3>
+<ul>
+<li>SQLite on a Docker volume: the only datastore, the only ledger. No replica.</li>
+<li>Caddy: TLS, HSTS, routing. Certificates from Let's Encrypt.</li>
+<li>GitHub Actions: gate for every deploy (the timer refuses a red head).</li>
+<li>Official sanctions feeds (OFAC ×2, OFSI, UN, EU): fetched daily by the API. From CI and from this audit environment every fetch returned HTTP 403 (proxy); <code>docs/VERIFICATION.md</code> records a successful fetch from the VPS. Screening degrades to the last imported version, never to "no screening".</li>
+<li>Anthropic API for the assistant and content agent only; every payment path works without it.</li>
+</ul>
+<h3>Single points of failure</h3>
+<ul>
+<li>The VPS itself (API, database, proxy, backups on the same host).</li>
+<li>The one administrator account (B-04).</li>
+<li>The in-memory rate limiter and dispatcher lease: correct for one instance, not for two (documented in <code>middleware/rateLimit.ts</code>).</li>
+</ul>
+<h3>Undocumented components</h3>
+<ul>
+<li>None found that carry money. The demo-account script wrote its database at the repository root when run from there; fixed this audit (D-09).</li>
+</ul>
+<h3>Infrastructure risks</h3>
+<ul>
+<li>Backups live on the same disk as the database (volume <code>backups</code>); no off-host copy.</li>
+<li>PWA bundles cache: each device needs a hard reload after a deploy (seen twice by the founder).</li>
+</ul>
+</section>
+<section id="s6">
+<h2><span class="num">SECTION 6</span>Security findings</h2>
+<p>Every check ran against the local API built from the candidate, as an unauthenticated caller, a customer, two merchants (tenants A and B) and two administrators. Evidence strings are the API's own answers.</p>
+<h3>P1</h3>
+<ul><li>None open in code. B-04 (single administrator, no 2FA on production) is an operational P1 and sits with the founder.</li></ul>
+<h3>P2</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Finding</th><th>Reproduction evidence</th><th>Remediation status</th></tr></thead>
+<tbody>
+<tr><td>CORS reflects any origin on the API</td><td><code>GET /api/health</code> with <code>Origin: https://evil.example</code> → <code>Access-Control-Allow-Origin: https://evil.example</code></td><td><span class="chip PARTIAL">ACCEPTED, UNSIGNED</span> Bearer tokens only, no cookies, merchant checkout widgets embed from arbitrary domains. Needs a written risk acceptance or an allow-list (B-07).</td></tr>
+<tr><td>No <code>Content-Security-Policy</code> on API-served HTML (hosted checkout, Lite, site pages)</td><td>Header set: nosniff, X-Frame-Options DENY on <code>/api</code>, Referrer-Policy, Permissions-Policy, COOP. Missing: CSP, CORP, HSTS (HSTS is added by Caddy in production).</td><td><span class="chip OPEN">OPEN</span> Add a CSP to the SSR pages (nonce for the inline checkout script). Not a blocker: React escapes at render (check 28) and the pages carry no third-party script.</td></tr>
+</tbody></table></div>
+<h3>P3</h3>
+<ul>
+<li>Webhook SSRF guard could not be exercised locally: the dev server refuses <code>http://169.254.169.254</code> with 400 <code>invalid_webhook_url</code> already; the private-range refusal in <code>assertSafeDestination</code> is covered by unit tests, not by this run. <span class="chip PARTIAL">PARTIAL</span></li>
+<li>Production headers not observed from here (proxy 403). Caddy config sets HSTS 1 year with preload, nosniff, frame options (SAMEORIGIN on www, DENY on admin), Referrer-Policy. <span class="chip NT">NOT TESTED</span> in production.</li>
+</ul>
+<h3>Passed checks (all passes combined)</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>Check</th><th>Evidence</th></tr></thead>
+<tbody>
+<tr><td>4–7</td><td>Unauthenticated admin route; merchant token on admin routes and the switch simulator; customer on merchant-only v1 route</td><td>401 <code>unauthorized</code>; 403 <code>role_required</code>; 403; 403 <code>role_required</code></td></tr>
+<tr><td>8–9</td><td>IDOR: merchant B on merchant A's intent, binding, API key, payments</td><td>intent 403 · binding 404 · key delete 404 · B lists 0 of A's payments · cancel unknown 404</td></tr>
+<tr><td>10</td><td>Mass assignment of <code>merchant_id</code></td><td>403 <code>SCOPE_DENIED</code></td></tr>
+<tr><td>11–12</td><td>Idempotency: same key same body; same key different body</td><td>same intent id twice; 409</td></tr>
+<tr><td>13–16</td><td>Malformed JSON; 13 MB body; 6 MB body; negative / zero / huge amounts; wrong type, unknown currency, bad date</td><td>400 <code>invalid_json</code> without stack; 413 <code>payload_too_large</code>; 400 <code>validation_error</code>; 400 ×3; 400 ×3</td></tr>
+<tr><td>17–19</td><td>Login brute force; OTP attempts; account enumeration</td><td>429 after 11 (window 15 min, 30 per address across auth routes); 429 after 4 wrong codes; 401 "Invalid credentials" identical for unknown user and wrong password</td></tr>
+<tr><td>20–21</td><td>Logout revokes the token; suspended account refused</td><td>first run: <code>logout 404, reuse 200</code> → D-10; after the fix: <code>before 200 · logout 200 · reuse 401 invalid_token</code>. Suspended: <code>wallets 403 account_suspended · notifications 403 account_suspended</code></td></tr>
+<tr><td>22</td><td>Forged webhook signatures at the inbox</td><td><code>hmac_valid=false ed25519_valid=false</code></td></tr>
+<tr><td>24</td><td>Six parallel payer-simulator payments of one intent</td><td>1 × 200, 5 × 422 <code>intent_not_open</code></td></tr>
+<tr><td>25</td><td>Second refund of the same payment</td><td>first 200 SUCCEEDED · second 400 <code>INVALID_REQUEST</code></td></tr>
+<tr><td>26</td><td>Guardian after every flow</td><td>ok · 0 findings (three separate runs)</td></tr>
+<tr><td>27</td><td>Issuer routes under the aggregator perimeter, every role</td><td><code>/api/transfers</code>, <code>/api/savings</code>, <code>/api/credit</code>, <code>/api/open-banking/institutions</code> → 422 <code>module_disabled</code></td></tr>
+<tr><td>28–29</td><td>Stored XSS payload; path traversal and unknown routes</td><td>stored as data, checkout HTML contains no raw <code>onerror</code>; 404 JSON, no listing</td></tr>
+</tbody></table></div>
+<h3>Secrets</h3>
+<p>No secret in the repository: gitleaks runs in CI (it caught a test literal that looked like a token on run 75; the literal was changed). Production secrets are generated at deploy by <code>scripts/deploy.sh</code> and live only in the VPS env file.</p>
+</section>
+
+<section id="s7">
+<h2><span class="num">SECTION 7</span>Functional and UX findings</h2>
+<p>The 41-step walkthrough clicks the French interface exactly as the run-of-show describes it. Six runs were needed; the first five failed on the defects below and on selector mismatches between the document and the real labels. Each defect has a record in section 13.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Finding</th><th>Severity</th><th>Where seen</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>Developer portal → Webhooks tab crashed with "Objects are not valid as a React child" (the founder's "webhook not working" report)</td><td><span class="chip P1">P1</span></td><td>Web, merchant</td><td><span class="chip FIXED">FIXED D-01</span></td></tr>
+<tr><td>Guardian halted the whole platform after the first POS sale settled through the switch (false "captured without posting")</td><td><span class="chip P1">P1</span></td><td>API, everyone</td><td><span class="chip FIXED">FIXED D-02</span></td></tr>
+<tr><td>Payer simulator answered READY instead of COMPLETED while the standing dispatcher held the outbox lease (false pending state on the console)</td><td><span class="chip P2">P2</span></td><td>Console</td><td><span class="chip FIXED">FIXED D-03</span></td></tr>
+<tr><td>Acceptor's own webhook inbox URL refused as a destination on a plain-http API</td><td><span class="chip P2">P2</span></td><td>API / web</td><td><span class="chip FIXED">FIXED D-04</span></td></tr>
+<tr><td>Point of sale opened a USD sale for a CDF acceptor; no simulator pair could pay it</td><td><span class="chip P2">P2</span></td><td>Web, merchant</td><td><span class="chip FIXED">FIXED D-05</span></td></tr>
+<tr><td>New webhook endpoints did not subscribe to <code>payment_intent.created</code>, so scene 4.3 showed nothing</td><td><span class="chip P2">P2</span></td><td>Web, merchant</td><td><span class="chip FIXED">FIXED D-06</span></td></tr>
+<tr><td>Go-live checklist lines untranslated; the Open link did not open the Controls tab</td><td><span class="chip P3">P3</span></td><td>Console</td><td><span class="chip FIXED">FIXED D-07 (39c1a5a + 1ad7b48)</span></td></tr>
+<tr><td>Incidents register collapsed inside a half-width card</td><td><span class="chip P3">P3</span></td><td>Console</td><td><span class="chip FIXED">FIXED D-08</span></td></tr>
+<tr><td>Production had no simulation participants (the seeding skipped production)</td><td><span class="chip P1">P1</span> for the demonstration</td><td>Production console</td><td><span class="chip FIXED">FIXED 38ec17b</span> (button "Créer les institutions fictives du simulateur")</td></tr>
+<tr><td>Run-of-show quoted labels that the interface does not show (« Entreprise » vs « Marchand / entreprise », « Nom commercial » vs « Raison sociale », English checklist names, USD at the POS)</td><td><span class="chip P2">P2</span> (presentation risk)</td><td>Document</td><td><span class="chip FIXED">FIXED</span> document v10, PDF regenerated</td></tr>
+<tr><td>Inconsistent state: suspension notification "not found" in the customer's list during the walkthrough while the audit line carries the reason</td><td><span class="chip P3">P3</span></td><td>Web</td><td><span class="chip OPEN">OPEN</span> unit test asserts the notification reaches the customer; the browser step read the list before it refreshed. Not re-verified.</td></tr>
+</tbody></table></div>
+<p>Device-specific defects: none observed, because no device other than desktop Chromium was used. The founder observed stale PWA bundles on phones after deploys; that is a cache behaviour, not a defect, and needs a hard reload per device.</p>
+</section>
+
+<section id="s8">
+<h2><span class="num">SECTION 8</span>Data and database findings</h2>
+<ul>
+<li><strong>Integrity:</strong> every money movement is a better-sqlite3 transaction; 10 000 concurrent transfers stay zero-sum with every wallet equal to its derived balance (<code>acceptance_scale.test.ts</code>). Guardian invariants (captured-without-posting, suspense, reserves) return 0 findings after the walkthrough and the security flows. The event log is hash-chained and verified by <code>GET /api/admin/supervision/integrity</code>.</li>
+<li><strong>Tenancy:</strong> proven by IDOR checks (section 6) and <code>contract_organisations.test.ts</code>.</li>
+<li><strong>Migrations:</strong> 43, applied from empty on every test boot and on the production-mode boot check. Migrations 042 (webhook inbox) and 043 (revoked sessions, D-10) are new this week and additive only.</li>
+<li><strong>Backup:</strong> nightly <code>sqlite3 .backup</code> (WAL-safe) to the <code>backups</code> volume, 30-day retention. <span class="chip FAIL">Restoration: never executed</span> (B-01).</li>
+<li><strong>Restoration procedure exists in text</strong> (<code>deploy/README.md</code>): stop the stack, <code>.restore</code>, start. Untimed, unrehearsed.</li>
+<li><strong>Stray database:</strong> <code>scripts/demo-accounts.sh</code> created a second database at the repository root when run from there; fixed (D-09), stray file removed.</li>
+</ul>
+</section>
+
+<section id="s9">
+<h2><span class="num">SECTION 9</span>Payment and financial findings</h2>
+<ul>
+<li><strong>Amount control:</strong> client-supplied balance, transaction state or intent state is refused (unit test line 74 of <code>acceptance_scale.test.ts</code>); mass assignment of <code>merchant_id</code> refused (403).</li>
+<li><strong>Idempotency:</strong> same key → same intent; same key, different body → 409.</li>
+<li><strong>Concurrency:</strong> six parallel payments of one intent → exactly one 200, five 422 <code>intent_not_open</code>.</li>
+<li><strong>Refunds:</strong> second refund of a payment refused (400); refund reverses the aggregation fee (walkthrough 3.7: SUCCEEDED · reversed).</li>
+<li><strong>Webhooks:</strong> HMAC (<code>BitriPay-Signature</code>) and Ed25519 signatures, delivery ids, 8 retries over 24 h; inbox flags forged signatures false; <code>payment_intent.created</code> and <code>succeeded</code> arrived in the inbox within the walkthrough's 90 s window (actual: under 10 s).</li>
+<li><strong>Entitlements:</strong> the aggregation fee (0.80 %) accrues at completion and shows in the console (Frais d'agrégation) and in the acceptor's "Mes frais"; Guardian reconciles fee, suspense and settlement classes with 0 findings.</li>
+<li><strong>Reconciliation with a live switch:</strong> <span class="chip NT">NOT TESTED</span>. No membership yet; the simulation connection mirrors the file formats.</li>
+<li><strong>Four eyes:</strong> the administrator who verified a settlement account cannot activate it (<code>approver_required</code>); a second administrator can. Requires two console accounts in production (B-04).</li>
+</ul>
+</section>
+
+<section id="s10">
+<h2><span class="num">SECTION 10</span>AI and agent findings</h2>
+<p><span class="chip NT">NOT TESTED</span> in this audit. Facts from code inspection only:</p>
+<ul>
+<li>The assistant, the content agent and the command-centre agents are the only functions that call an external keyed service (<code>ANTHROPIC_API_KEY</code>, empty by default). No payment path calls them.</li>
+<li>Agents act through a tool gateway with a policy engine, a kill switch and allowances; the scale test completes a wallet payment, a QR payment and a settlement read with the kill switch on and every allowance at zero.</li>
+<li>Quality, cost per operation (ACU metering), prompt-injection resistance, fallback wording when the key is absent: none measured here. Under the aggregator perimeter these functions are not part of the demonstration.</li>
+</ul>
+</section>
+
+<section id="s11">
+<h2><span class="num">SECTION 11</span>Performance findings</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Measure</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Workload</td><td>Only the unit-level workload: 10 000 concurrent transfers in-process (passes, zero-sum). No HTTP load run.</td></tr>
+<tr><td>Concurrency</td><td>6 parallel payments of one intent: correct serialisation. Nothing higher.</td></tr>
+<tr><td>p50 / p95 / p99</td><td><span class="chip NT">NOT TESTED</span></td></tr>
+<tr><td>Throughput</td><td><span class="chip NT">NOT TESTED</span></td></tr>
+<tr><td>Error rate</td><td>0 unexpected errors across 370 tests, 41 clicks and the security passes; not a load figure.</td></tr>
+<tr><td>Breaking point</td><td><span class="chip NT">NOT TESTED</span>. Single API process on one VPS; SQLite serialises writes.</td></tr>
+<tr><td>Recovery time</td><td><span class="chip NT">NOT TESTED</span></td></tr>
+<tr><td>Infrastructure cost</td><td>One Hostinger VPS, Vercel/Firebase unused for the API. No cost observation possible from here.</td></tr>
+</tbody></table></div>
+<p>Full verification wall time is the only timing observed: 401 s for the API suite, about 13 minutes end to end.</p>
+</section>
+
+<section id="s12">
+<h2><span class="num">SECTION 12</span>Observability and incident-response findings</h2>
+<h3>Can be detected and diagnosed today</h3>
+<ul>
+<li>Every request carries a correlation id (<code>X-Correlation-Id</code> in and out) and the API error envelope carries a BP code.</li>
+<li>Audit log with actor, action, reason (suspension reason proven in the walkthrough); hash-chained event log with integrity endpoint; regulatory export with manifest.</li>
+<li>Guardian invariants on demand and on schedule; a breach halts payments and notifies every administrator in-app.</li>
+<li>Health endpoint, SLO page, incidents register (declare, acknowledge, resolve) in the console.</li>
+</ul>
+<h3>Cannot be detected today</h3>
+<ul>
+<li>Anything that happens while nobody is logged in to the console: there is no e-mail, SMS or push alert wired to Guardian, health or deploy failure (B-05).</li>
+<li>A failed deploy: the timer logs to <code>/var/log/bitripay-auto-deploy.log</code> only.</li>
+<li>Resource exhaustion (disk, memory) on the VPS.</li>
+</ul>
+<p>Incident owners: not written down. The only inbox is support@bitripay.com.</p>
+</section>
+<section id="s13">
+<h2><span class="num">SECTION 13</span>Fixes implemented</h2>
+<p>Each fix has a failing reproduction (walkthrough step or adversarial call), the smallest change, a regression test where the surface is the API, a retest, and its deployment state. Deployment state on 16 Sept 17:57 UTC: commits up to <code>e041116</code> are pushed; production last reported <code>c49faf7</code>; the VPS timer deploys a head only after CI passes it.</p>
+
+<div class="defect"><h4>D-01 · Developer portal → Webhooks tab crashed <span class="chip P1">P1</span></h4><dl>
+<dt>Root cause</dt><dd>The event catalogue endpoint returns <code>{type, description}</code> objects; the tab rendered each entry as a React child ("Objects are not valid as a React child").</dd>
+<dt>Change</dt><dd><code>frontend/web/src/pages/Developer.tsx</code>: map the catalogue to its <code>type</code> strings; show descriptions as titles.</dd>
+<dt>Tests added</dt><dd>Walkthrough steps 24 and 30 (tab opens, endpoint created, deliveries listed).</dd>
+<dt>Retest</dt><dd>PASS (run 6).</dd>
+<dt>Deployment</dt><dd>Pushed in <code>1ad7b48</code> (CI run 79 green); awaiting the VPS timer.</dd></dl></div>
+
+<div class="defect"><h4>D-02 · Guardian halted the platform after a switch-settled sale <span class="chip P1">P1</span></h4><dl>
+<dt>Root cause</dt><dd>The "captured without posting" invariant expected a ledger posting for every captured intent; a national-switch payment settles institution to institution and never posts to the wallet ledger by design, so the first sale tripped a halt.</dd>
+<dt>Change</dt><dd><code>services/guardian.ts</code>: the invariant excludes intents with a <code>switch_payments</code> row or a <code>national_switch</code> attempt.</dd>
+<dt>Tests added</dt><dd><code>switch_payer_simulator.test.ts</code>: Guardian ok after the sale.</dd>
+<dt>Retest</dt><dd>PASS; Guardian 0 findings after the walkthrough and after 6 parallel payments plus refund.</dd>
+<dt>Deployment</dt><dd>Pushed in <code>1ad7b48</code>.</dd></dl></div>
+
+<div class="defect"><h4>D-03 · Payer simulator reported READY instead of COMPLETED <span class="chip P2">P2</span></h4><dl>
+<dt>Root cause</dt><dd>The simulator dispatched the outbox under a lease already held by the standing dispatcher (60 s tick), so the message waited for the next tick and the console showed a pending state.</dd>
+<dt>Change</dt><dd><code>services/switch/payerSimulator.ts</code>: dispatch with <code>force</code> under the administrator's own owner (fencing token).</dd>
+<dt>Tests added</dt><dd><code>switch_payer_simulator.test.ts</code>: lease held by another owner before paying.</dd>
+<dt>Retest</dt><dd>PASS (walkthrough 27: COMPLETED with facts and timeline).</dd>
+<dt>Deployment</dt><dd>Pushed in <code>1ad7b48</code>.</dd></dl></div>
+
+<div class="defect"><h4>D-04 · Own webhook inbox refused as a destination <span class="chip P2">P2</span></h4><dl>
+<dt>Root cause</dt><dd><code>assertSafeDestination</code> refused plain-http and loopback targets before recognising the platform's own inbox URL.</dd>
+<dt>Change</dt><dd><code>services/webhooks.ts</code>: the acceptor's inbox URL on this API is always allowed; every other private or plain-http target is still refused outside dev/test.</dd>
+<dt>Tests added</dt><dd><code>kyb_dossier.test.ts</code> (created-intent webhook into the inbox).</dd>
+<dt>Retest</dt><dd>PASS (walkthrough 11, 24, 30).</dd>
+<dt>Deployment</dt><dd>Pushed in <code>1ad7b48</code>.</dd></dl></div>
+
+<div class="defect"><h4>D-05 · Point of sale defaulted to USD for a CDF acceptor <span class="chip P2">P2</span></h4><dl>
+<dt>Root cause</dt><dd>The POS form's initial currency was a constant.</dd>
+<dt>Change</dt><dd><code>frontend/web/src/pages/Merchant.tsx</code>: default is the merchant country's currency; "Paid by {0}" translated.</dd>
+<dt>Tests added</dt><dd>Walkthrough 26–28 (CDF sale, paid through the switch, POS shows « Payé par client »).</dd>
+<dt>Retest</dt><dd>PASS.</dd>
+<dt>Deployment</dt><dd>Pushed in <code>1ad7b48</code>.</dd></dl></div>
+
+<div class="defect"><h4>D-06 · New endpoints missed <code>payment_intent.created</code> <span class="chip P2">P2</span></h4><dl>
+<dt>Root cause</dt><dd>The developer portal pre-selected only <code>succeeded</code> and <code>refund.succeeded</code>; scene 4.3 expects the created event.</dd>
+<dt>Change</dt><dd>Default selection now includes <code>payment_intent.created</code>; delivery status read from <code>success/dead</code>.</dd>
+<dt>Tests added</dt><dd>API retest: PATCH the endpoint to <code>["*"]</code> → created event in the inbox in 5 s, both signatures valid.</dd>
+<dt>Retest</dt><dd>API PASS; browser step 4.3 not re-run after the fix (the only step not re-clicked).</dd>
+<dt>Deployment</dt><dd>Pushed in <code>1ad7b48</code>.</dd></dl></div>
+
+<div class="defect"><h4>D-07 · Checklist labels English in the French console; Open link went nowhere <span class="chip P3">P3</span></h4><dl>
+<dt>Root cause</dt><dd>Labels rendered without <code>tr()</code>; the link pointed at the page without the tab query.</dd>
+<dt>Change</dt><dd><code>frontend/admin/src/pages/Controls.tsx</code>, <code>services/goLive.ts</code> (<code>/controls?tab=controls</code>), 28 French labels.</dd>
+<dt>Tests added</dt><dd>Walkthrough 17 and 41.</dd>
+<dt>Retest</dt><dd>PASS.</dd>
+<dt>Deployment</dt><dd><code>39c1a5a</code> (CI green, run 78) and <code>1ad7b48</code>.</dd></dl></div>
+
+<div class="defect"><h4>D-08 · Incidents register collapsed <span class="chip P3">P3</span></h4><dl>
+<dt>Root cause</dt><dd>Register table inside a half-width card.</dd>
+<dt>Change</dt><dd><code>frontend/admin/src/pages/Switch.tsx</code>: declaration card above a full-width register; simulator result and refund kept in session storage across tabs.</dd>
+<dt>Tests added</dt><dd>Walkthrough 40 (declare, acknowledge, resolve).</dd>
+<dt>Retest</dt><dd>PASS.</dd>
+<dt>Deployment</dt><dd>Pushed in <code>1ad7b48</code>.</dd></dl></div>
+
+<div class="defect"><h4>D-09 · Demo-account script wrote a second database at the repository root <span class="chip P3">P3</span></h4><dl>
+<dt>Root cause</dt><dd>The database path resolves from the working directory; the wrapper scripts ran from the repository root.</dd>
+<dt>Change</dt><dd><code>scripts/demo-accounts.sh</code> and <code>scripts/payout-float.sh</code> change into <code>backend/api</code> first.</dd>
+<dt>Tests added</dt><dd>None (shell wrapper); the founder's production log shows the accounts landing in the live database after the change.</dd>
+<dt>Retest</dt><dd>PASS locally (accounts visible in the console).</dd>
+<dt>Deployment</dt><dd>Pushed in <code>1ad7b48</code>.</dd></dl></div>
+
+<div class="defect"><h4>D-10 · Sign-out never revoked the token on the server <span class="chip P1">P1</span></h4><dl>
+<dt>Root cause</dt><dd>There was no <code>/api/auth/logout</code> route (the 2FA exemption list named it, the router never defined it). The apps dropped the token locally; the server honoured it for its 7-day life. Found by adversarial check 20 on 16 Sept 17:39 UTC: <code>logout 404, reuse 200</code>.</dd>
+<dt>Change</dt><dd>Every token carries a session id (JWT <code>jti</code>); <code>POST /api/auth/logout</code> records it in the new <code>revoked_sessions</code> table (migration 043) until the token's own expiry; the middleware refuses a revoked id; web, console and mobile call the route before dropping the token; sign-out-everywhere unchanged; API keys get 400 <code>no_session</code>. Tokens issued before the change carry no id and keep working until they expire.</dd>
+<dt>Tests added</dt><dd><code>auth_logout.test.ts</code> (2 tests: revoked token 401, other device stays signed in, second sign-out 401, fresh sign-in works, row expiry; sign-out-everywhere still works; API key refused).</dd>
+<dt>Retest</dt><dd>Adversarial re-run against the restarted API: <code>before 200 · logout 200 · reuse 401 invalid_token</code>. Full API suite: 59 files / 372 tests passed after the change (lint 0 errors).</dd>
+<dt>Deployment</dt><dd>Pushed as <code>e041116</code> on 16 Sept 17:57 UTC; CI pending; not yet on the VPS.</dd></dl></div>
+
+<div class="defect"><h4>Earlier this week, same audit thread (already CI-green and partly deployed)</h4><dl>
+<dt>38ec17b</dt><dd>Production had no simulator institutions: seeded at boot when the switch connection is in simulation, plus the console button « Créer les institutions fictives du simulateur ». CI run 77 green.</dd>
+<dt>11795b0 / c49faf7</dt><dd>Scenes 3 and 5 exist as clicks (payer simulator, refund, sanctions refusal, suspension reason, Guardian button, incidents); <code>payment_intent.created</code> is emitted on every intent creation (it never was). Deployed: <code>c49faf7</code>.</dd>
+<dt>267fcbe / 8d0453a</dt><dd>Scene 2 end to end (KYB dossier with sealed files and PIN review, settlement account with four-eyes activation, webhook inbox); gateway coverage by country. Deployed.</dd></dl></div>
+</section>
+
+<section id="s14">
+<h2><span class="num">SECTION 14</span>Unresolved risks</h2>
+<h3>Accepted risks (need a written acceptance signed by the founder)</h3>
+<ul>
+<li>CORS reflects any origin on the API (bearer tokens only, no cookies; merchant checkout embeds from any domain).</li>
+<li>Single VPS hosts API, database, proxy and backups.</li>
+<li>In-memory rate limiter and dispatcher lease: correct for one API instance only.</li>
+</ul>
+<h3>Deferred risks</h3>
+<ul>
+<li>No CSP on API-served HTML pages.</li>
+<li>Off-host backup copy absent.</li>
+<li>Tokens issued before D-10 stay valid until their natural expiry (at most 7 days after deployment).</li>
+<li>Suspension notification timing in the customer's list (section 7, last row).</li>
+</ul>
+<h3>Blocked tests</h3>
+<ul>
+<li>Production headers, CORS on production, deployed version: outbound proxy in the audit environment answered 403 to every request to <code>*.bitripay.com</code>.</li>
+<li>Official sanctions feeds from CI and from here: HTTP 403 (proxy). Fetched successfully from the VPS per <code>docs/VERIFICATION.md</code>; not re-verified in this audit.</li>
+<li>Adversarial checks 20 and 21 were blocked twice by the 15-minute auth window the brute-force check filled, then run: 20 failed and led to D-10; 21 passed.</li>
+</ul>
+<h3>Assumptions</h3>
+<ul>
+<li>The founder's pasted deploy log is accurate: production runs <code>c49faf7</code> with the perimeter in force and one administrator.</li>
+<li>The VPS timer will deploy <code>e041116</code> once CI is green; if not, <code>bash deploy/auto-deploy.sh --force</code> is run by hand.</li>
+<li>The demonstration uses the simulation switch connection and fictitious institutions only; no real money moves.</li>
+</ul>
+<h3>External dependency risks</h3>
+<ul>
+<li>Let's Encrypt renewal through Caddy (untested failure mode).</li>
+<li>Sanctions feed endpoints changing format (parsers are unit-tested against saved samples).</li>
+<li>GitHub availability gates deployment.</li>
+<li>Anthropic API only for the assistant; a missing key degrades the assistant, never a payment.</li>
+</ul>
+</section>
+
+<section id="s15">
+<h2><span class="num">SECTION 15</span>Required pre-launch action plan</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>When</th><th>Action</th><th>Owner role</th><th>Priority</th><th>Complexity</th><th>Dependency</th><th>Completion evidence</th><th>Retest</th></tr></thead>
+<tbody>
+<tr><td rowspan="6"><strong>Before any launch</strong> (and before the 17 Sept demonstration where marked ★)</td><td>★ Create the second administrator, set both PINs, enable 2FA on both, turn on <code>require2fa.admin</code> (B-04)</td><td>Founder (console owner)</td><td>P1</td><td>Low (clicks)</td><td>None</td><td>Console → Administrateurs shows two accounts with 2FA on; audit log lines</td><td>Scene 2.5 four-eyes activation succeeds on production</td></tr>
+<tr><td>★ Deploy <code>e041116</code> (walkthrough fixes and sign-out fix); hard-reload every device (B-06)</td><td>Founder (VPS)</td><td>P1</td><td>Low</td><td>CI run green</td><td>Deploy log line "deployed &lt;sha&gt;"; console footer version</td><td>Open Portail développeur → Webhooks on production; Switch → Connexions shows the seeding button</td></tr>
+<tr><td>Restore last night's backup into a scratch container and boot the API against it (B-01)</td><td>Founder (VPS)</td><td>P1</td><td>Low–medium (30 min)</td><td>SSH access</td><td>Dated note in <code>deploy/README.md</code> with the file name, duration and Guardian result</td><td>Repeat monthly</td></tr>
+<tr><td>Execute one rollback to the previous commit and back (B-02)</td><td>Founder (VPS)</td><td>P1</td><td>Low</td><td>None</td><td>Deploy log with both transitions and timing; runbook section</td><td>Repeat at every major release</td></tr>
+<tr><td>Wire Guardian, health and deploy failures to support@bitripay.com and trigger one on purpose (B-05)</td><td>Engineering</td><td>P2</td><td>Medium (SMTP from the VPS through the existing messaging outbox)</td><td>Mailbox credentials on the VPS only</td><td>Received e-mail with the correlation id</td><td>Quarterly drill</td></tr>
+<tr><td>Sign the risk acceptance for CORS, single VPS, single-instance limiter (section 14)</td><td>Founder</td><td>P2</td><td>Low</td><td>None</td><td>Signed page in <code>docs/</code></td><td>Review at each launch gate</td></tr>
+<tr><td rowspan="3"><strong>Before limited beta</strong></td><td>Load test against a staging copy on the VPS (B-03): 15 min mixed intents/checkout/webhooks, record p50/p95/p99, error rate, breaking point, recovery</td><td>Engineering</td><td>P1</td><td>Medium</td><td>Staging compose file</td><td>Report with numbers in <code>docs/VERIFICATION.md</code></td><td>Before every capacity change</td></tr>
+<tr><td>Browser and device matrix: Firefox, Safari, Edge, Android Chrome, iOS Safari, Expo app on two phones</td><td>Engineering + founder</td><td>P2</td><td>Medium</td><td>Devices</td><td>Screenshot set per device</td><td>Each release</td></tr>
+<tr><td>Write the incident process: owners, escalation, the support inbox, the Guardian halt procedure</td><td>Founder</td><td>P2</td><td>Low</td><td>None</td><td>Page in <code>docs/</code></td><td>Drill once</td></tr>
+<tr><td rowspan="3"><strong>Before full public launch</strong></td><td>CSP on API-served pages; CORS allow-list or signed acceptance</td><td>Engineering</td><td>P2</td><td>Medium</td><td>Checkout script nonce</td><td>Headers observed on production</td><td>Security re-run</td></tr>
+<tr><td>Off-host backup copy (second VPS volume or object storage at the same host; no new vendor)</td><td>Founder + engineering</td><td>P2</td><td>Low</td><td>Host account</td><td>Cron log and a restore from the off-host copy</td><td>Monthly</td></tr>
+<tr><td>Exercise account closure end to end on production data (privacy gate)</td><td>Engineering</td><td>P3</td><td>Low</td><td>Test account</td><td>Anonymised row; ledger intact</td><td>Each release</td></tr>
+<tr><td><strong>Within 7 days after launch</strong></td><td>Review Guardian, SLO and incident register daily; confirm the alert channel fired at least once</td><td>Founder</td><td>P2</td><td>Low</td><td>B-05 done</td><td>Daily note</td><td>—</td></tr>
+<tr><td><strong>Within 30 days after launch</strong></td><td>Second load test on real traffic shape; first monthly restore drill; rotate the JWT secret (forces every session to sign in again; the revoked-session table is then empty)</td><td>Engineering + founder</td><td>P2</td><td>Medium</td><td>Traffic data</td><td>Reports in <code>docs/VERIFICATION.md</code></td><td>Quarterly</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s16">
+<h2><span class="num">SECTION 16</span>Launch configuration</h2>
+<p>This is the configuration the evidence supports for the 17 September sandbox demonstration and for any restricted showing until the gates in section 3 pass. It is enforced by settings, not by promises: the perimeter is a server-side module switch (422 <code>module_disabled</code>), the switch connection is in simulation, and Guardian can halt payments.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Item</th><th>Setting</th></tr></thead>
+<tbody>
+<tr><td>Enabled features</td><td>QR payments, payment links, money requests, merchant gateway and API (<code>/api/v1</code>), KYC/KYB, support, live chat. Switch national in <strong>simulation</strong> with the six fictitious institutions. Developer portal with webhook inbox.</td></tr>
+<tr><td>Disabled features (« après autorisation »)</td><td>Transfers, add money, withdrawals, agents, remittance, exchange, virtual cards, gift cards, bill pay, airtime, savings, restricted wallets, open banking, credit score, P2P, referral rewards: 16 functions off under the aggregator perimeter of Instructions n°42 and n°58.</td></tr>
+<tr><td>Feature flags</td><td>Console → Modules & méthodes → « Appliquer le périmètre agrégateur » (applied; audit line <code>settings.modules.aggregator_perimeter</code>). Compliance mode stays <em>sandbox</em>; the switch to live is refused until the BCC authorisation reference is recorded.</td></tr>
+<tr><td>Traffic limits</td><td>None beyond the rate limits below; no public campaign; no public sign-up drive.</td></tr>
+<tr><td>User limits</td><td>Demo accounts only (Marché Test, Kiosque Démo, Société Listée, the payer) plus the two administrators. No real merchant onboarding until authorisation.</td></tr>
+<tr><td>Geographic limits</td><td>Congo (CD) only; CDF pairs plus one USD pair on the simulator.</td></tr>
+<tr><td>Rate limits</td><td>Auth routes 30 / 15 min per address; refunds 20 / min and payouts 30 / min per account; console writes 300 / min; Lite 120 / min; site pages 240 / min; OTP 4 wrong codes; step-up and device routes 1 / min per subject.</td></tr>
+<tr><td>Support coverage</td><td>support@bitripay.com (the only mailbox), console live chat; no 24/7 rota.</td></tr>
+<tr><td>Alert thresholds</td><td>Guardian: any invariant finding → halted mode (payments 503 <code>guardian_halt</code>), administrators notified in-app. Health: <code>/api/health</code> not 200. Until B-05 is done these reach nobody out of band.</td></tr>
+<tr><td>Rollback trigger</td><td>Any P0/P1 defect on production, a Guardian halt that a fix cannot clear within 30 minutes, or a failed migration: redeploy the previous CI-green commit with <code>auto-deploy.sh --force</code> (procedure to be rehearsed, B-02).</td></tr>
+<tr><td>Kill-switch trigger</td><td>Suspected fraud, ledger inconsistency, or a regulator instruction: Console → Santé du système → Guardian mode « halted » (PIN), and Modules & méthodes to switch any function off. Both are immediate and logged.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s17">
+<h2><span class="num">SECTION 17</span>Final launch decision</h2>
+<div class="final">
+<p class="statement">This release is not approved for public launch.</p>
+<p>Reasons, in the framework's own terms: backups cannot be shown to restore, rollback is untested, major areas remain untested (load, alerts, devices), and the deployed build differs from the tested build. Two P1 items are operational and open (second administrator with 2FA; deployment of the tested head). Every functional and security defect found by the audit is fixed, tested and pushed.</p>
+<p>The 17 September demonstration for the Banque Centrale du Congo is a sandbox showing under the configuration in section 16, with the two starred actions done first. That is a demonstration of a product, not a launch of a service, and it should be described to the regulator exactly that way.</p>
+</div>
+</section>
+
+<footer>
+Evidence files (audit environment): verify-audit2.log (58 files / 370 tests, EXIT 0) · e2e/ros-results.json (41 steps) · e2e/sec-results.json (29 checks) · e2e/sec3-results.json (9) · e2e/sec4-results.json (2) · e2e/shots/ (screenshots) · CI: github.com/jnnseya-cpu/bitripay/actions runs 74–80. Statuses used: PASS · FAIL · PARTIAL · BLOCKED · NOT TESTED.
+</footer>
+</main>
+</body>
+</html>
