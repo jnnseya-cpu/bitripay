@@ -6,6 +6,7 @@ import { Screen, Card, Button, Input, Alert, T, KV, PinSheet, AmountInput, Row, 
 import { Header } from '../components/Header';
 import { useNav, type ScreenProps } from '../navigation';
 import type { BankAccount, PublicUser, Transaction } from '@bitripay/shared';
+import { countryLabel } from '@bitripay/shared';
 
 interface PaymentView {
   id: string;
@@ -341,7 +342,7 @@ export function OperatorPicker({
           onCountry(c);
           onChange('');
         }}
-        options={[{ value: '', label: 'All countries' }, ...(config?.countries ?? []).map((c: any) => ({ value: c.code, label: c.name }))]}
+        options={[{ value: '', label: 'All countries' }, ...(config?.countries ?? []).map((c: any) => ({ value: c.code, label: countryLabel(c.code, c.name) }))]}
       />
       <Select
         label="Mobile money operator"

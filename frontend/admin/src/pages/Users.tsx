@@ -24,7 +24,7 @@ import {
   useAsync,
   useDebounce,
 } from '../components/ui';
-import { TRANSACTION_TYPE_LABELS } from '@bitripay/shared';
+import { TRANSACTION_TYPE_LABELS, countryFlag, countryLabel } from '@bitripay/shared';
 
 const PERMS = ['users', 'transactions', 'approvals', 'kyc', 'settings', 'gateways', 'catalogs', 'cms', 'support', 'p2p', 'reports', 'admins', 'issuance', 'treasury', 'agents'];
 /** Labels for the permission chips; the treasury permission is the TREASURY_SUPER_ADMIN role of the e-money console. */
@@ -151,7 +151,7 @@ export function Users() {
             <option value="">—</option>
             {(config?.countries ?? []).map((c: any) => (
               <option key={c.code} value={c.code}>
-                {c.name}
+                {countryFlag(c.code)} {c.name}
               </option>
             ))}
           </Select>
@@ -302,7 +302,7 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                 </div>
                 <KV k="Email" v={d.user.email ?? '—'} />
                 <KV k="Phone" v={d.user.phone ?? '—'} />
-                <KV k="Country" v={d.user.country ?? '—'} />
+                <KV k="Country" v={countryLabel(d.user.country)} />
                 <KV k="Referral code" v={d.user.referralCode} />
                 <KV k="Referred by" v={d.referrer ? `@${d.referrer.tag}` : '—'} />
                 <KV k="Joined" v={fmtDate(d.user.createdAt)} />
@@ -386,7 +386,7 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     <option value="">—</option>
                     {(config?.countries ?? []).map((c: any) => (
                       <option key={c.code} value={c.code}>
-                        {c.name}
+                        {countryFlag(c.code)} {c.name}
                       </option>
                     ))}
                   </Select>

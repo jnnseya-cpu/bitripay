@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { countryLabel } from '@bitripay/shared';
 import { useSearchParams } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -65,7 +66,7 @@ export function Approvals() {
               money(t.fee, t.currency),
               t.metadata?.method === 'mobile_money' ? (
                 <span className="small">
-                  📱 {t.metadata.operator?.name} ({t.metadata.operator?.country})<br />
+                  📱 {t.metadata.operator?.name} ({countryLabel(t.metadata.operator?.country)})<br />
                   <span className="mono">{t.metadata.phone}</span>
                   {t.metadata.recipientName ? ` · ${t.metadata.recipientName}` : ''}
                 </span>

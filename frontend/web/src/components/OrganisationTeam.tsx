@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { Button, Chip, Empty, Field, Input, KV, Select } from './ui';
-import { ORG_PERMISSIONS, type OrgRole } from '@bitripay/shared';
+import { ORG_PERMISSIONS, type OrgRole, countryLabel } from '@bitripay/shared';
 
 /**
  * Team & business units (§43, §44): who acts for the organisation and with which role, and — for a merchant — the
@@ -43,7 +43,7 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
       <div className="card">
         <h3>{data.organisation.name}</h3>
         <p className="small muted">
-          {agent ? 'agent counter' : label(data.organisation.kind)} · {data.organisation.country ?? '—'} · KYB {data.organisation.kybStatus} · you act as <b>{label(data.membership.role)}</b>
+          {agent ? 'agent counter' : label(data.organisation.kind)} · {countryLabel(data.organisation.country)} · KYB {data.organisation.kybStatus} · you act as <b>{label(data.membership.role)}</b>
         </p>
         {agent && (
           <p className="small muted">

@@ -5,6 +5,7 @@ import { useStore } from '../lib/store';
 import { useT, tr } from '../lib/i18n';
 import { Alert, AmountInput, Avatar, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, StatusBadge, useAsync, useDebounce } from '../components/ui';
 import type { PublicUser } from '@bitripay/shared';
+import { countryLabel } from '@bitripay/shared';
 
 type Agent = PublicUser & { commissionBps: number };
 
@@ -63,7 +64,7 @@ export function Agents() {
                 <div className="flex1">
                   <div className="main-text">{a.businessName || a.fullName}</div>
                   <div className="sub-text">
-                    @{a.tag} {a.country ? `· ${a.country}` : ''} · commission {(a.commissionBps / 100).toFixed(2)}%
+                    @{a.tag} {a.country ? `· ${countryLabel(a.country)}` : ''} · commission {(a.commissionBps / 100).toFixed(2)}%
                   </div>
                 </div>
                 <Button size="sm" variant={selected?.id === a.id ? undefined : 'secondary'}>

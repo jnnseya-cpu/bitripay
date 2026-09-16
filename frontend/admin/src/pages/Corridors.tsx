@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { countryFlag, countryLabel } from '@bitripay/shared';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import {
@@ -117,7 +118,7 @@ export function Corridors() {
             head={['Corridor', 'Rail / operator', 'Status', 'Arrangements', 'ETA', 'Max', '']}
             rows={(corridors.data?.items ?? []).map((c: any) => [
               <b>
-                {c.sourceCountry ?? '*'} {c.sourceCurrency} → {c.destCountry} {c.destCurrency}
+                {c.sourceCountry ? countryLabel(c.sourceCountry) : '*'} {c.sourceCurrency} → {countryLabel(c.destCountry)} {c.destCurrency}
               </b>,
               <span className="small">
                 {c.rail}
@@ -221,7 +222,7 @@ export function Corridors() {
                 </span>,
                 <span className="small">
                   {a.rail}
-                  {a.operatorName ? ` · ${a.operatorName}` : ''} · {a.country}
+                  {a.operatorName ? ` · ${a.operatorName}` : ''} · {countryLabel(a.country)}
                 </span>,
                 <b>{money(a.balance, a.currency)}</b>,
                 money(a.paidToday, a.currency),
@@ -560,7 +561,7 @@ export function Corridors() {
                 <Select value={corridorEdit.destCountry} onChange={(e) => setCorridorEdit({ ...corridorEdit, destCountry: e.target.value })}>
                   {(config?.countries ?? []).map((c: any) => (
                     <option key={c.code} value={c.code}>
-                      {c.name}
+                      {countryFlag(c.code)} {c.name}
                     </option>
                   ))}
                 </Select>

@@ -5,7 +5,7 @@ import { useStore } from '../lib/store';
 import { Screen, Card, Button, Input, T, KV, PinSheet, AmountInput, Row, Status, Tabs, Empty, useAsync, Select, Sheet, Chip, useTheme } from '../components/ui';
 import { Header } from '../components/Header';
 import { useNav } from '../navigation';
-import { fromMinor, type VirtualCard } from '@bitripay/shared';
+import { fromMinor, type VirtualCard, countryLabel } from '@bitripay/shared';
 
 export function Remittance() {
   const { t, money, wallets, config, toast, refreshWallets } = useStore();
@@ -111,7 +111,7 @@ export function Remittance() {
               label="Country"
               value={rec.country}
               onChange={(v) => setRec({ ...rec, country: v })}
-              options={[{ value: '', label: '—' }, ...(config?.countries ?? []).map((c: any) => ({ value: c.code, label: c.name }))]}
+              options={[{ value: '', label: '—' }, ...(config?.countries ?? []).map((c: any) => ({ value: c.code, label: countryLabel(c.code, c.name) }))]}
             />
             {method === 'wallet' && <Input label="BitriPay @tag, email or phone" value={rec.tag} onChangeText={(v) => setRec({ ...rec, tag: v })} autoCapitalize="none" />}
             {method === 'bank' && (

@@ -45,3 +45,10 @@ export function currencyFlag(code: string | null | undefined): string {
 
 /** "🇨🇩 CDF": the label to show wherever a currency is picked or listed. */
 export const currencyLabel = (code: string): string => `${currencyFlag(code)} ${code.toUpperCase()}`;
+
+/** "🇨🇩 Congo (DRC)" or, without a name, "🇨🇩 CD": the label to show wherever a country is listed or named. */
+export function countryLabel(code: string | null | undefined, name?: string | null): string {
+  const c = (code ?? '').trim().toUpperCase();
+  if (!c) return name ?? '—';
+  return `${countryFlag(c)} ${name ?? c}`;
+}

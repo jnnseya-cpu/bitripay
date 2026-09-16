@@ -4,7 +4,7 @@ import { useStore } from '../lib/store';
 import { useT, tr } from '../lib/i18n';
 import { Alert, AmountInput, Button, Empty, Field, Input, KV, Modal, PageHeader, PinModal, Select, TxRow, useAsync } from '../components/ui';
 import type { BankAccount, Transaction } from '@bitripay/shared';
-import { currencyFlag } from '@bitripay/shared';
+import { currencyFlag, countryFlag } from '@bitripay/shared';
 import { useNavigate } from 'react-router-dom';
 import { OperatorPicker } from './AddMoney';
 
@@ -225,7 +225,7 @@ export function Withdraw() {
               <option value="">—</option>
               {(config?.countries ?? []).map((c) => (
                 <option key={c.code} value={c.code}>
-                  {currencyFlag(c.code)} {c.name}
+                  {countryFlag(c.code)} {c.name}
                 </option>
               ))}
             </Select>

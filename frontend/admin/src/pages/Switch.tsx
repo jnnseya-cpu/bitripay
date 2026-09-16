@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { countryLabel } from '@bitripay/shared';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, StepUpButton, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
@@ -62,7 +63,7 @@ function Connections({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
         <div className="card mb" key={c.id}>
           <div className="row">
             <h4 style={{ margin: 0 }}>
-              {c.name} <Chip>{c.country}</Chip> <Chip kind={c.environment === 'production' ? 'success' : 'warning'}>{c.environment}</Chip> <Chip>{c.accessMode}</Chip>{' '}
+              {c.name} <Chip>{countryLabel(c.country)}</Chip> <Chip kind={c.environment === 'production' ? 'success' : 'warning'}>{c.environment}</Chip> <Chip>{c.accessMode}</Chip>{' '}
               <Chip kind={c.enabled ? 'success' : 'danger'}>{c.enabled ? 'enabled' : 'disabled'}</Chip>
             </h4>
             <span style={{ marginLeft: 'auto' }} className="small muted">
@@ -608,7 +609,7 @@ function Rails({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
             <span className="mono tiny">{r.id}</span>
           </b>,
           r.kind,
-          r.country ?? '—',
+          countryLabel(r.country),
           <span>
             {r.health?.usable ? <Chip kind="success">usable</Chip> : <Chip kind="danger">{r.health?.reason ?? 'down'}</Chip>} <span className="tiny">{r.health?.circuit}</span>
           </span>,
@@ -736,7 +737,7 @@ function NationalView({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
           <Select value={selected} onChange={(e) => setConn(e.target.value)} style={{ width: 260, marginLeft: 'auto' }}>
             {(connections.data?.items ?? []).map((c: any) => (
               <option key={c.id} value={c.id}>
-                {c.name} ({c.country})
+                {c.name} ({countryLabel(c.country)})
               </option>
             ))}
           </Select>
@@ -786,7 +787,7 @@ function NationalView({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
         <Table
           head={['Country', 'Phase', 'Ceiling / tx', ...(matrix.data?.methods ?? []).map((m: any) => m.label)]}
           rows={(matrix.data?.items ?? []).map((c: any) => [
-            <b>{c.country}</b>,
+            <b>{countryLabel(c.country)}</b>,
             <Chip kind={c.licencePhase === 'full' ? 'success' : 'warning'}>{c.licencePhase}</Chip>,
             c.maxPerTransaction || 'policy',
             ...c.methods.map((m: any) => (

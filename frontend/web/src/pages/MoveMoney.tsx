@@ -7,7 +7,7 @@ import { Alert, AmountInput, Avatar, Button, Empty, Field, Input, KV, PageHeader
 import { CardForm, type CardValues } from '../components/CardForm';
 import { OperatorPicker, PaymentStatus, type PaymentView } from './AddMoney';
 import type { BankAccount } from '@bitripay/shared';
-import { currencyFlag } from '@bitripay/shared';
+import { currencyFlag, countryFlag } from '@bitripay/shared';
 
 type Source = 'wallet' | 'card' | 'mobile_money' | 'bank';
 type Dest = 'wallet' | 'qr' | 'mobile_money' | 'bank' | 'agent';
@@ -397,7 +397,7 @@ export function MoveMoney() {
                           <option value="">—</option>
                           {(config?.countries ?? []).map((c) => (
                             <option key={c.code} value={c.code}>
-                              {currencyFlag(c.code)} {c.name}
+                              {countryFlag(c.code)} {c.name}
                             </option>
                           ))}
                         </Select>

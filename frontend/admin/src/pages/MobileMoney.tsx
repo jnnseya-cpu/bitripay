@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { countryFlag } from '@bitripay/shared';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, ConfirmButton, Field, Input, Modal, PageHeader, Select, StatusBadge, Switch, Table, Tabs, Textarea, UserCell, fmtDate, useAsync, useDebounce } from '../components/ui';
@@ -151,7 +152,7 @@ export function MobileMoney() {
                 <option value="">All countries</option>
                 {(config?.countries ?? []).map((c: any) => (
                   <option key={c.code} value={c.code}>
-                    {c.name}
+                    {countryFlag(c.code)} {c.name}
                   </option>
                 ))}
               </Select>
@@ -479,7 +480,7 @@ export function MobileMoney() {
                 <Select value={edit.country} onChange={(e) => setEdit({ ...edit, country: e.target.value })}>
                   {(config?.countries ?? []).map((c: any) => (
                     <option key={c.code} value={c.code}>
-                      {c.name}
+                      {countryFlag(c.code)} {c.name}
                     </option>
                   ))}
                 </Select>

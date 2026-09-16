@@ -5,6 +5,7 @@ import { useStore } from '../lib/store';
 import { Screen, Card, Button, Input, Select, Alert, T, Tabs, useTheme } from '../components/ui';
 import { useNav, type ScreenProps } from '../navigation';
 import type { User } from '@bitripay/shared';
+import { countryLabel } from '@bitripay/shared';
 
 type AuthResult = { token: string; user: User; requiresTwoFactor?: boolean };
 
@@ -182,7 +183,7 @@ export function Register({ route }: ScreenProps<'Register'>) {
           label={t('auth.country')}
           value={form.country}
           onChange={(v) => set('country', v)}
-          options={[{ value: '', label: '—' }, ...((config?.countries ?? []) as any[]).map((c) => ({ value: c.code, label: c.name }))]}
+          options={[{ value: '', label: '—' }, ...((config?.countries ?? []) as any[]).map((c) => ({ value: c.code, label: countryLabel(c.code, c.name) }))]}
         />
         <Input label={t('auth.referral')} value={form.referralCode} onChangeText={(v) => set('referralCode', v)} autoCapitalize="characters" />
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>

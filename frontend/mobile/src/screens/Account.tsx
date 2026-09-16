@@ -8,7 +8,7 @@ import { Screen, Card, Button, Input, Alert, T, KV, Row, Status, Tabs, Empty, us
 import { Header } from '../components/Header';
 import { useNav, type ScreenProps } from '../navigation';
 import { ringLoud, setLoudEnabled } from '../lib/alerts';
-import { TRANSACTION_TYPE_LABELS, type Transaction, type User, currencyLabel } from '@bitripay/shared';
+import { TRANSACTION_TYPE_LABELS, type Transaction, type User, currencyLabel, countryLabel } from '@bitripay/shared';
 
 export function Activity() {
   const { t } = useStore();
@@ -185,7 +185,7 @@ export function Settings() {
           label={t('auth.country')}
           value={form.country}
           onChange={(v) => setForm({ ...form, country: v })}
-          options={[{ value: '', label: '—' }, ...(config?.countries ?? []).map((c: any) => ({ value: c.code, label: c.name }))]}
+          options={[{ value: '', label: '—' }, ...(config?.countries ?? []).map((c: any) => ({ value: c.code, label: countryLabel(c.code, c.name) }))]}
         />
         <Button title={t('common.save')} onPress={save} />
       </Card>

@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT, tr } from '../lib/i18n';
 import { Alert, Button, Chip, Empty, Field, Input, KV, PageHeader, PinModal, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
-import { currencyFlag } from '@bitripay/shared';
+import { countryFlag } from '@bitripay/shared';
 
 /** Linked banks: connect an account under consent (or import a statement), see verified income, pay by bank, and set recurring mandates. */
 export function Banks() {
@@ -95,7 +95,7 @@ export function Banks() {
               <Select value={country} onChange={(e) => setCountry(e.target.value)}>
                 {(view.data?.countries ?? []).map((c: any) => (
                   <option key={c.code} value={c.code}>
-                    {currencyFlag(c.code)} {c.name}
+                    {countryFlag(c.code)} {c.name}
                   </option>
                 ))}
               </Select>
