@@ -167,6 +167,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .catch(() => {});
       },
       logout: () => {
+        // Revoke this token on the server first (best effort; the local copy is dropped either way).
+        if (getToken()) api.post('/api/auth/logout').catch(() => {});
         setToken(null);
         setOrganisation(null);
         setOrganisationId(null);

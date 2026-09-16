@@ -3,7 +3,7 @@ import { AppError } from '../lib/errors';
 import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
 import { rateLimit } from '../middleware/rateLimit';
-import { requireAuth, requireMfaToken } from '../middleware/auth';
+import { requireAuth, requireMfaToken, revokeSession } from '../middleware/auth';
 import * as auth from '../services/auth';
 import { toUser } from '../services/users';
 import { verifyOtp } from '../services/otp';
@@ -172,6 +172,17 @@ authRouter.post(
 );
 /** What a claim link is for, before the person commits: the business name and the platform that created the account. */
 authRouter.get('/claim/:token', authLimit, (req, res) => res.json(describeClaimLink(String(req.params.token))));
+
+/**
+ * Sign out: the token used for this call is revoked on the server until its own expiry (the apps also drop it locally).
+ * Other devices keep their sessions; "sign out everywhere" is `POST /api/account/sessions/revoke`. API keys have no
+ * session to sign out of.
+ */
+authRouter.post('/logout', requireAuth, (req, res) => {
+  if (req.authVia !== 'jwt' || !req.session) throw new AppError(400, 'no_session', 'API keys have no session to sign out of; delete the key instead');
+  const revoked = revokeSession(req.session);
+  res.json({ ok: true, revoked });
+});
 
 /** The session's account plus every organisation the person can act for (own or as an invited member) and with which role. */
 authRouter.get('/me', requireAuth, (req, res) => {

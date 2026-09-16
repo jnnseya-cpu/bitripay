@@ -203,6 +203,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         await refresh();
       },
       logout: async () => {
+        // Revoke this token on the server first (best effort; the local copy is dropped either way).
+        await api.post('/api/auth/logout').catch(() => {});
         await saveToken(null);
         setUser(null);
         setMemberships([]);

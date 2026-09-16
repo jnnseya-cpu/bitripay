@@ -100,6 +100,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (u.role !== 'admin') throw new Error('This account is not an administrator');
       },
       logout: () => {
+        // Revoke this token on the server first (best effort; the local copy is dropped either way).
+        if (getToken()) api.post('/api/auth/logout').catch(() => {});
         setToken(null);
         setUser(null);
       },

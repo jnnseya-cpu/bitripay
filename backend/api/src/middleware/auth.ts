@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { verifyToken } from '../lib/jwt';
+import { verifyToken, type TokenPayload } from '../lib/jwt';
 import { forbidden, unauthorized } from '../lib/errors';
 import { findUserById, isMerchantRole, MERCHANT_ROLES, type UserRow } from '../services/users';
 import { getDb } from '../db';
@@ -29,8 +29,31 @@ declare global {
       apiKeyScopes?: string[];
       apiKeyMode?: 'live' | 'test';
       authVia?: 'jwt' | 'api_key';
+      /** The verified token of a signed-in person (absent for API keys); `session.jti` is what sign-out revokes. */
+      session?: TokenPayload;
     }
   }
+}
+
+/** Whether this token was signed out (`POST /api/auth/logout`). Tokens issued before session ids existed carry none and pass. */
+export function isSessionRevoked(payload: TokenPayload): boolean {
+  if (!payload.jti) return false;
+  return Boolean(getDb().prepare('SELECT 1 FROM revoked_sessions WHERE jti = ?').get(payload.jti));
+}
+
+/**
+ * Sign out the one token in hand: its session id is kept until the token's own expiry, so a stolen or forgotten copy
+ * stops working now instead of in seven days. Other devices of the same person keep their sessions
+ * (`POST /api/account/sessions/revoke` is the sign-out-everywhere). Expired rows are swept on every call.
+ */
+export function revokeSession(payload: TokenPayload): boolean {
+  if (!payload.jti) return false;
+  const db = getDb();
+  const at = now();
+  db.prepare('DELETE FROM revoked_sessions WHERE expires_at < ?').run(at);
+  const expiresAt = payload.exp ? new Date(payload.exp * 1000).toISOString() : new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+  db.prepare('INSERT OR IGNORE INTO revoked_sessions (jti, user_id, revoked_at, expires_at) VALUES (?, ?, ?, ?)').run(payload.jti, payload.sub, at, expiresAt);
+  return true;
 }
 
 /** Surfaces where a member of a merchant-class organisation acts for it with their own session (§44). */
@@ -131,7 +154,9 @@ function resolveBearer(req: Request): UserRow | null {
   const payload = verifyToken(token);
   if (!payload) throw unauthorized('Session expired. Please sign in again.', 'invalid_token');
   if (payload.mfa) throw unauthorized('Two-factor authentication required', 'mfa_required');
+  if (isSessionRevoked(payload)) throw unauthorized('Session expired. Please sign in again.', 'invalid_token');
   req.authVia = 'jwt';
+  req.session = payload;
   const user = findUserById(payload.sub) ?? null;
   // Password change, sign-out everywhere and closure invalidate every token issued before that moment.
   if (user?.status === 'closed') throw forbidden('This account has been closed', 'account_closed');
