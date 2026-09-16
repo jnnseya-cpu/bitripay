@@ -4615,4 +4615,6 @@ export const frPhrases: Record<string, string> = {
     "tok_ok approuve immédiatement ; les autres jetons rejouent les cas d'échec et de délai du profil de certification.",
   'Told to the customer in the notification and kept in the audit trail (a suspected fraud is also declared to the central bank within 48 hours).':
     "Communiqué au client dans la notification et conservé dans la piste d'audit (une fraude présumée est aussi déclarée à la Banque Centrale sous 48 heures).",
+  '{0} simulator institutions active, {1} open pairs': '{0} institutions fictives actives, {1} paires ouvertes',
+  'Seed the simulator institutions': 'Créer les institutions fictives du simulateur',
 };

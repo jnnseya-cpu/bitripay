@@ -42,6 +42,7 @@ import {
   upsertPair,
   setPairStatus,
   listPairs,
+  ensureSimulationParticipants,
   registryStatus,
   serviceAvailability,
   SWITCH_PRODUCTS,
@@ -176,6 +177,15 @@ r.post('/connections/:id/link', requirePermission('switch'), (req, res) => {
   res.json({ connection: getConnection(c.id) });
 });
 /** Simulator only: inject an inbound message for a payment (duplicate success, contradictory reject, bad signature, unknown code, stale pending, tampered same id). */
+/** Seeds (idempotently) the fictitious institutions and open pairs of the certification profile on a connection in simulation. */
+r.post('/connections/:id/seed-simulation', requirePermission('switch'), (req, res) => {
+  const c = getConnection(String(req.params.id));
+  if (!c.simulation) return res.status(409).json({ error: { code: 'not_simulation', message: 'The simulator institutions exist only for a connection in simulation' } });
+  ensureSimulationParticipants(c.id);
+  const participants = listParticipants({ country: c.country, status: 'ACTIVE' }).filter((p) => p.source === 'SIMULATION');
+  audit(req.user!.id, 'switch.simulation.seed', 'switch_connection', c.id, { participants: participants.length });
+  res.json({ participants, pairs: listPairs(c.id).filter((p) => p.status === 'OPEN').length });
+});
 r.post('/connections/:id/simulate-inbound', requirePermission('switch'), (req, res) => {
   const b = validate(
     z.object({

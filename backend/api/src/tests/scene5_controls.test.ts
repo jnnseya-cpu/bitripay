@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import { setupApp, registerUser, adminToken } from './helpers';
+import { getDb } from '../db';
 import { upsertSource, importSanctionsRows } from '../services/risk/compliance';
 
 let app: ReturnType<typeof setupApp>;
@@ -70,5 +71,18 @@ describe('scene 5 controls', () => {
     expect(res.body.incident.detail).toContain('resolution: Operator back');
     const list = await request(app).get('/api/admin/switch/incidents?status=RESOLVED').set(admin.auth);
     expect(list.body.items.some((i: any) => i.id === opened.body.incident.id && i.resolvedAt)).toBe(true);
+  });
+});
+
+describe('simulator institutions on a production-like server', () => {
+  it('re-seeds the fictitious institutions and open pairs of the connection in simulation from the console', async () => {
+    getDb().prepare("DELETE FROM participant_pairs WHERE connection_id = 'NATIONAL_SWITCH_CD'").run();
+    getDb().prepare("DELETE FROM participants WHERE source = 'SIMULATION' AND country = 'CD'").run();
+    const r = await request(app).post('/api/admin/switch/connections/NATIONAL_SWITCH_CD/seed-simulation').set(admin.auth).send({});
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.participants.map((p: any) => p.id)).toEqual(expect.arrayContaining(['DEMO_BANK_A', 'DEMO_MMO_B']));
+    expect(r.body.pairs).toBeGreaterThan(0);
+    const again = await request(app).post('/api/admin/switch/connections/NATIONAL_SWITCH_CD/seed-simulation').set(admin.auth).send({});
+    expect(again.body.participants.length).toBe(r.body.participants.length);
   });
 });

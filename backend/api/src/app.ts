@@ -45,7 +45,7 @@ import { governmentRouter } from './routes/government';
 import { restrictedRouter } from './routes/restricted';
 import { ensureDefaultBindings } from './services/assist/bindings';
 import './services/assist/meshTools';
-import { ensureDefaultConnections } from './services/switch/connections';
+import { ensureDefaultConnections, connectionForCountry } from './services/switch/connections';
 import { ensureDefaultPolicy } from './services/risk/policy';
 import { ensureMessageCatalogue } from './services/switch/payments';
 import { ensureSimulationParticipants } from './services/switch/participants';
@@ -86,7 +86,9 @@ export function bootstrap() {
   ensureMessageCatalogue();
   ensureDefaultPolicy();
   ensureDefaultBindings();
-  if (!config.isProduction) ensureSimulationParticipants();
+  // The fictitious institutions of the simulator exist wherever the DRC connection runs on the simulator adapter (they
+  // carry source SIMULATION and every pair says so); a production server that demonstrates the switch needs them too.
+  if (!config.isProduction || connectionForCountry('CD')?.simulation) ensureSimulationParticipants();
   seedDefaultCatalogs();
   // Screening lists: the official consolidated lists are registered on first start and loaded straight away outside
   // tests, so a fresh deployment screens against them before its first customer (the compliance job refreshes daily).

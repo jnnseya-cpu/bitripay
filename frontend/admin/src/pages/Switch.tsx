@@ -100,6 +100,20 @@ function Connections({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
             <Button size="sm" variant="secondary" onClick={() => setCert({ id: c.id, status: 'INTERNAL_TESTS', evidenceRef: '', profileVersion: '' })}>
               {tr('Certification step')}
             </Button>
+            {c.simulation && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  api
+                    .post<any>(`/api/admin/switch/connections/${c.id}/seed-simulation`, {})
+                    .then((r) => ok(tr('{0} simulator institutions active, {1} open pairs', { 0: r.participants.length, 1: r.pairs })))
+                    .catch(err)
+                }
+              >
+                {tr('Seed the simulator institutions')}
+              </Button>
+            )}
             <ConfirmButton
               size="sm"
               variant={c.enabled ? 'danger' : 'success'}

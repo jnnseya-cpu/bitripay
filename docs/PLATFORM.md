@@ -859,6 +859,11 @@ credited back, art. 23). A point-of-sale sale gets its intent bound on first use
 and a capture through the national switch marks the sale paid so the point of sale shows it. Every intent creation now
 emits the catalogued `payment_intent.created` webhook.
 
+**Simulator institutions in production.** The fictitious institutions and open pairs of the certification profile (source
+SIMULATION) are seeded at boot wherever the DRC connection runs on the simulator adapter, production included, and can be
+re-seeded from the console (National switch & rails → Connections → "Seed the simulator institutions",
+`POST /api/admin/switch/connections/:id/seed-simulation`, simulation connections only, idempotent).
+
 **Controls shown in scene 5.** A KYB approval is refused with `sanctions_hit` when a director or beneficial owner matches
 a sanctions list, and a SANCTIONS compliance case is opened (Risk & compliance → Compliance cases). Suspending an
 account carries a reason (`PATCH /api/admin/users/:id` with `status: suspended, reason`) that reaches the customer's
