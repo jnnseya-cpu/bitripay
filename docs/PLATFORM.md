@@ -322,6 +322,16 @@ Simulator scenarios are selected by the payer `account_token` suffix (`tok_ok`, 
 `tok_contradict`, `tok_badsig`, `tok_refund_unknown`). The acceptance matrix T01–T32 of the dossier runs in
 `src/tests/switch.test.ts`. Settings keys: `switch`, `routing`.
 
+### Profile and cover pictures
+
+Every account type has a profile picture and a cover picture (`user_pictures`, bytes kept apart from the users row; the
+row carries `picture_version` / `cover_version`). Uploads are `PUT /api/account/picture/:kind` with a base64 data URL,
+checked by magic bytes (JPEG, PNG, WebP) and size (1.5 MB photo, 3 MB cover, after the client-side shrink); they save
+the moment they are chosen. `PublicUser.pictureUrl` / `coverUrl` are versioned public URLs
+(`GET /api/pictures/:userId/:kind?v=N`, cached for a year, ETag), so the photo shows wherever an account appears without
+inlining bytes. Owners remove theirs; administrators remove any (`DELETE /api/admin/users/:id/picture/:kind`, audited
+`user.picture_removed`); closure removes both.
+
 ### Financial operations: fees, commissions, settlement, disputes, holds, splits, processor reconciliation
 
 Everything money-related that used to be a flat setting or an implicit rule is now an object with a history.

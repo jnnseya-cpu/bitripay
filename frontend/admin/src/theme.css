@@ -735,6 +735,65 @@ textarea.input {
   height: 64px;
   font-size: 1.4rem;
 }
+img.avatar {
+  object-fit: cover;
+  background: var(--card, #fff);
+}
+/* Profile and cover pictures (every account type) */
+.profile-pictures {
+  margin-bottom: 14px;
+}
+.cover-banner {
+  position: relative;
+  height: 150px;
+  border-radius: var(--radius, 12px);
+  background: linear-gradient(120deg, #0b2a6f, #12408f 60%, #f5b31c);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 10px;
+  overflow: hidden;
+}
+.cover-banner .cover-hint {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.8rem;
+}
+.cover-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  padding: 4px 6px;
+}
+.profile-pictures-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: -32px;
+  padding: 0 14px;
+  flex-wrap: wrap;
+}
+.profile-avatar-wrap .avatar.lg {
+  width: 88px;
+  height: 88px;
+  font-size: 1.8rem;
+  border: 4px solid var(--card, #fff);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.profile-pictures-row .row {
+  padding-bottom: 6px;
+}
+@media (max-width: 600px) {
+  .cover-banner {
+    height: 110px;
+  }
+}
 
 /* Lists & tables */
 .list {

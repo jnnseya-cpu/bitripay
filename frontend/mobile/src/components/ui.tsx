@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal as RNModal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle, KeyboardAvoidingView, Platform } from 'react-native';
+import { ActivityIndicator, Image, Modal as RNModal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCodeSvg from 'react-native-qrcode-svg';
 import { useStore } from '../lib/store';
@@ -227,6 +227,7 @@ export function Avatar({ user, size = 40 }: { user?: PublicUser | null; size?: n
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  if (user?.pictureUrl) return <Image source={{ uri: user.pictureUrl }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: '#e2e8f0' }} />;
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: user?.avatarColor || '#64748b', alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ color: '#fff', fontWeight: '700', fontSize: size * 0.38 }}>{initials}</Text>

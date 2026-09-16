@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, Field, Input, KV, Modal, PageHeader, Switch, useAsync } from '../components/ui';
 import { alertsEnabled, armAlerts, loudAlert, setAlertsEnabled } from '../lib/alerts';
+import { ProfilePictures } from '../components/ProfilePictures';
 
 export function Profile() {
   const { user, toast, refresh } = useStore();
@@ -40,6 +41,7 @@ export function Profile() {
       <div className="grid cols-2">
         <div className="card">
           <h4>Profile</h4>
+          {user && <ProfilePictures user={user} onSaved={() => void refresh()} onError={(m) => toast(m, 'error')} />}
           <KV k="Email" v={user?.email} />
           <KV k="Role" v={<Chip kind="primary">{user?.permissions?.length ? 'staff admin' : 'super admin'}</Chip>} />
           <KV k="Permissions" v={user?.permissions?.length ? user.permissions.join(', ') : 'all'} />

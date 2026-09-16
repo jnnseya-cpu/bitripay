@@ -4,10 +4,11 @@ import { alertsEnabled, armAlerts, loudAlert, setAlertsEnabled } from '../lib/al
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT, tr } from '../lib/i18n';
-import { Alert, Avatar, Button, Chip, CopyButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
+import { Alert, Button, Chip, CopyButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
 import type { User } from '@bitripay/shared';
 import { currencyFlag } from '@bitripay/shared';
 import { registerPasskey, passkeysSupported, biometricsAvailable } from '../lib/passkeys';
+import { ProfilePictures } from '../components/ProfilePictures';
 
 export function Settings() {
   const t = useT();
@@ -62,8 +63,8 @@ function Profile() {
   };
   return (
     <div className="card">
+      {user && <ProfilePictures user={user} onUser={setUser} onError={(m) => toast(m, 'error')} />}
       <div className="list-item mb">
-        <Avatar user={user} size="lg" />
         <div>
           <div className="main-text" style={{ fontSize: '1.1rem' }}>
             {user?.fullName}

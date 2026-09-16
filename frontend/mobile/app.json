@@ -50,6 +50,12 @@
     },
     "plugins": [
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow BitriPay to use your photos for your profile and cover pictures."
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Allow BitriPay to access your camera to scan QR codes."

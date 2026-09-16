@@ -1158,4 +1158,23 @@ export const frPhrases: Record<string, string> = {
   'Your subscriptions': 'Vos abonnements',
   'Your transaction PIN': 'Votre PIN de transaction',
   YouTube: 'YouTube',
+  'Add cover': 'Ajouter une couverture',
+  'Add photo': 'Ajouter une photo',
+  'Aggregation fees on national switch payments': "Frais d'agrégation sur les paiements via le switch national",
+  'Change cover': 'Changer la couverture',
+  'Change photo': 'Changer la photo',
+  'Choose an image file': 'Choisissez un fichier image',
+  'Invoice paid': 'Facture payée',
+  'No cover picture yet': 'Pas encore de photo de couverture',
+  'No switch payment completed yet.': 'Aucun paiement via le switch terminé pour le moment.',
+  'Pay from wallet': 'Payer depuis le portefeuille',
+  'Pay invoice': 'Payer la facture',
+  'Payments routed through the national switch never pass through your BitriPay balance. The aggregation fee ({0}% per completed payment) is accrued, invoiced per month and paid from your wallet or by bank transfer.':
+    "Les paiements routés par le switch national ne passent jamais par votre solde BitriPay. Les frais d'agrégation ({0} % par paiement terminé) sont accumulés, facturés chaque mois et payés depuis votre portefeuille ou par virement.",
+  'Pictures save as soon as you choose them. JPEG, PNG or WebP; the photo is shown to people you pay or who pay you.':
+    'Les images sont enregistrées dès que vous les choisissez. JPEG, PNG ou WebP ; la photo est visible par les personnes que vous payez ou qui vous paient.',
+  'Saving…': 'Enregistrement…',
+  'not yet invoiced': 'pas encore facturé',
+  'paid on': 'payée le',
+  'payment(s)': 'paiement(s)',
 };

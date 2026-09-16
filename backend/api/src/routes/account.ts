@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
 import { requireAuth, twoFactorDeadline } from '../middleware/auth';
 import * as auth from '../services/auth';
-import { toUser, updateUser, normalizeTag, findUserByTag, findUserByIdentifier, toPublicUser } from '../services/users';
+import { toUser, updateUser, normalizeTag, findUserByTag, findUserByIdentifier, findUserById, toPublicUser } from '../services/users';
 import { badRequest, conflict, forbidden } from '../lib/errors';
 import { listNotifications, markRead, registerPushToken, removePushToken, unreadCount, setLoudAlerts } from '../services/notifications';
 import { referralStats } from '../services/referrals';
@@ -17,6 +17,7 @@ import { accountAnalytics } from '../services/analytics';
 import { closeAccount, closureBlockers } from '../services/accountClosure';
 import { verifyPassword } from '../lib/password';
 import { updateUser as updateUserRow } from '../services/users';
+import { isPictureKind, removePicture, setPicture } from '../services/pictures';
 
 export const accountRouter = Router();
 accountRouter.use(requireAuth);
@@ -62,6 +63,27 @@ accountRouter.patch(
     }
     if (body.avatarColor) fields.avatar_color = body.avatarColor;
     res.json({ user: toUser(updateUser(req.user!.id, fields)) });
+  }),
+);
+
+/** Profile and cover pictures: saved the moment they are chosen (autosave), replaced in place, removable. */
+accountRouter.put(
+  '/picture/:kind',
+  wrap(async (req, res) => {
+    const kind = req.params.kind;
+    if (!isPictureKind(kind)) throw badRequest('Picture kind must be profile or cover');
+    const body = validate(z.object({ dataUrl: z.string().min(16).max(4_200_000) }), req.body);
+    const version = setPicture(req.user!.id, kind, body.dataUrl);
+    res.json({ user: toUser(findUserById(req.user!.id)!), version });
+  }),
+);
+accountRouter.delete(
+  '/picture/:kind',
+  wrap(async (req, res) => {
+    const kind = req.params.kind;
+    if (!isPictureKind(kind)) throw badRequest('Picture kind must be profile or cover');
+    removePicture(req.user!.id, kind);
+    res.json({ user: toUser(findUserById(req.user!.id)!) });
   }),
 );
 

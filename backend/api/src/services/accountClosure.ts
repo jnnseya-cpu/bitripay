@@ -12,6 +12,7 @@ import { listWallets } from './wallets';
 import { heldByKind } from './finops/holds';
 import { recordEvent, type Actor } from './events';
 import { emitAsync } from './comms/engine';
+import { removeAllPictures } from './pictures';
 
 export interface ClosureBlocker {
   code: string;
@@ -63,6 +64,7 @@ export function closeAccount(user: UserRow, actor: Actor, reason: string): UserR
       pin_hash: null,
       password_hash: null,
     } as any);
+    removeAllPictures(user.id);
     db.prepare('DELETE FROM push_tokens WHERE user_id = ?').run(user.id);
     db.prepare('UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(at, user.id);
     db.prepare("UPDATE virtual_cards SET status = 'closed' WHERE user_id = ?").run(user.id);

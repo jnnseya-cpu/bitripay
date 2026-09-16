@@ -68,6 +68,7 @@ export function Avatar({ user, size }: { user?: PublicUser | null; size?: 'sm' |
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  if (user?.pictureUrl) return <img className={`avatar ${size ?? ''}`} src={user.pictureUrl} alt="" loading="lazy" />;
   return (
     <div className={`avatar ${size ?? ''}`} style={{ background: user?.avatarColor || '#64748b' }}>
       {initials}

@@ -9,6 +9,10 @@ export interface PublicUser {
   avatarColor: string;
   businessName?: string | null;
   country?: string | null;
+  /** Public, versioned URL of the profile picture; null when the account shows its initials. */
+  pictureUrl?: string | null;
+  /** Public, versioned URL of the cover picture. */
+  coverUrl?: string | null;
 }
 
 export interface User extends PublicUser {

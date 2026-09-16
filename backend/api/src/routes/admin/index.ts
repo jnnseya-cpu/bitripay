@@ -52,6 +52,7 @@ import { adminSystemRouter } from './system';
 import { adminWhatsAppRouter } from './whatsapp';
 import { adminSupervisionRouter } from './supervision';
 import { closeAccount, closureBlockers } from '../../services/accountClosure';
+import { isPictureKind, removePicture } from '../../services/pictures';
 import { assertPricingAboveFloor } from '../../services/assist/gateway';
 import { toBase as toBaseMinor } from '../../services/currencies';
 /** Price-currency minor units → US dollars (the base currency is USD-denominated; other bases convert at the platform rate). */
@@ -530,6 +531,16 @@ adminRouter.post('/emoney/reconcile', requirePermission('treasury'), (req, res) 
 adminRouter.get('/emoney/reconciliations', requirePermission('reports'), (req, res) => res.json({ items: listReconciliations(req.query.programmeId ? String(req.query.programmeId) : null) }));
 /** Freeze / release a holder's balance where legally permitted (attributable, step-up protected). */
 /** Administrative closure on a lawful erasure request: same blockers as self-closure, step-up PIN, audited. */
+/** Moderation: an administrator removes a profile or cover picture that breaks the rules; audited, the account is told nothing else changed. */
+adminRouter.delete('/users/:id/picture/:kind', requirePermission('users'), (req, res) => {
+  const kind = req.params.kind;
+  if (!isPictureKind(kind)) throw badRequest('Picture kind must be profile or cover');
+  const user = getUserById(String(req.params.id));
+  removePicture(user.id, kind);
+  audit(req.user!.id, 'user.picture_removed', 'user', user.id, { kind, reason: req.body?.reason ?? null });
+  res.json({ user: toUser(findUserById(user.id)!) });
+});
+
 adminRouter.get('/users/:id/closure', requirePermission('users'), (req, res) => res.json({ blockers: closureBlockers(getUserById(String(req.params.id))) }));
 adminRouter.post('/users/:id/close', requirePermission('users'), (req, res) => {
   const body = validate(z.object({ reason: z.string().min(4).max(300), pin: z.string().optional() }), req.body);

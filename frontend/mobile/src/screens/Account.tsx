@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, Share, Switch as RNSwitch, View } from 'react-native';
+import { ImageBackground, Pressable, ScrollView, Share, Switch as RNSwitch, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import * as ImagePicker from 'expo-image-picker';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Screen, Card, Button, Input, Alert, T, KV, Row, Status, Tabs, Empty, useAsync, TxRow, Select, Qr, Sheet, Chip, useTheme, Avatar } from '../components/ui';
@@ -101,6 +102,7 @@ export function Settings() {
   const { t, user, setUser, toast, config, lang, setLang, dark, setDark } = useStore();
   const nav = useNav();
   const [form, setForm] = useState({ fullName: user?.fullName ?? '', tag: user?.tag ?? '', country: user?.country ?? '', businessName: user?.businessName ?? '' });
+  const [picBusy, setPicBusy] = useState<'profile' | 'cover' | null>(null);
   const save = async () => {
     try {
       const r = await api.patch<{ user: User }>('/api/account/profile', { ...form, country: form.country || null, businessName: form.businessName || null });
@@ -110,13 +112,55 @@ export function Settings() {
       toast((err as Error).message, 'error');
     }
   };
+  // Pictures save the moment they are picked: the picker returns a resized JPEG as base64, the API stores it and answers with the account.
+  const pickPicture = async (kind: 'profile' | 'cover') => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) return toast('Allow photo access to choose a picture', 'error');
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: kind === 'profile' ? [1, 1] : [8, 3], quality: 0.8, base64: true });
+      if (res.canceled || !res.assets[0]?.base64) return;
+      setPicBusy(kind);
+      const r = await api.put<{ user: User }>(`/api/account/picture/${kind}`, { dataUrl: `data:image/jpeg;base64,${res.assets[0].base64}` });
+      setUser(r.user);
+      toast(kind === 'profile' ? 'Photo saved' : 'Cover saved', 'success');
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    } finally {
+      setPicBusy(null);
+    }
+  };
+  const removePicture = async (kind: 'profile' | 'cover') => {
+    try {
+      setPicBusy(kind);
+      const r = await api.del<{ user: User }>(`/api/account/picture/${kind}`);
+      setUser(r.user);
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    } finally {
+      setPicBusy(null);
+    }
+  };
   return (
     <Screen>
       <Header title={t('nav.settings')} />
       <Card>
+        <ImageBackground
+          source={user?.coverUrl ? { uri: user.coverUrl } : undefined}
+          style={{ height: 120, borderRadius: 14, overflow: 'hidden', backgroundColor: '#12408f', justifyContent: 'flex-end', alignItems: 'flex-end', padding: 8 }}
+          imageStyle={{ borderRadius: 14 }}
+        >
+          <Row>
+            <Button small variant="secondary" onPress={() => void pickPicture('cover')} loading={picBusy === 'cover'} title={user?.coverUrl ? 'Change cover' : 'Add cover'} />
+            {user?.coverUrl && (
+              <Button small variant="ghost" onPress={() => void removePicture('cover')} disabled={picBusy !== null} title="Remove" />
+            )}
+          </Row>
+        </ImageBackground>
         <Row>
-          <Avatar user={user} size={52} />
-          <View>
+          <Pressable onPress={() => void pickPicture('profile')} accessibilityLabel="Change profile photo">
+            <Avatar user={user} size={64} />
+          </Pressable>
+          <View style={{ flex: 1 }}>
             <T bold size={18}>
               {user?.fullName}
             </T>
@@ -125,6 +169,15 @@ export function Settings() {
             </T>
           </View>
         </Row>
+        <Row>
+          <Button small variant="secondary" onPress={() => void pickPicture('profile')} loading={picBusy === 'profile'} title={user?.pictureUrl ? 'Change photo' : 'Add photo'} />
+          {user?.pictureUrl && (
+            <Button small variant="ghost" onPress={() => void removePicture('profile')} disabled={picBusy !== null} title="Remove" />
+          )}
+        </Row>
+        <T muted size={12}>
+          Pictures save as soon as you choose them.
+        </T>
         <Input label={t('auth.fullName')} value={form.fullName} onChangeText={(v) => setForm({ ...form, fullName: v })} />
         <Input label="@tag" value={form.tag} onChangeText={(v) => setForm({ ...form, tag: v })} autoCapitalize="none" />
         {user?.role !== 'user' && <Input label="Business name" value={form.businessName} onChangeText={(v) => setForm({ ...form, businessName: v })} />}

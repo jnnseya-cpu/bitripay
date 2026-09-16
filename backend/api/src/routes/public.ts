@@ -15,6 +15,7 @@ import { consentView, confirmPayoutCurrency } from '../services/routing';
 import { verifyStatement } from '../services/statements';
 import { statementVerifyPage } from '../site/render';
 import { AppError } from '../lib/errors';
+import { getPicture, isPictureKind } from '../services/pictures';
 import { listOperators as listMomoOperators } from '../services/momo';
 import { localeFromRequest } from '../services/locale';
 import { optionalAuth } from '../middleware/auth';
@@ -62,6 +63,22 @@ publicRouter.get('/config', (_req, res) => {
     exchangeMarginBps: app.exchangeMarginBps,
     countries: COUNTRIES,
   });
+});
+
+/** Profile and cover pictures, public by nature (they show on receipts, checkout and to counterparties); the URL carries the version, so the bytes cache for a year. */
+publicRouter.get('/pictures/:userId/:kind', (req, res) => {
+  const kind = req.params.kind;
+  if (!isPictureKind(kind)) throw new AppError(404, 'No such picture', 'not_found');
+  const p = getPicture(String(req.params.userId), kind);
+  const etag = `"${p.sha256.slice(0, 32)}"`;
+  if (req.headers['if-none-match'] === etag) return res.status(304).end();
+  res.setHeader('Content-Type', p.mime);
+  res.setHeader('Content-Length', String(p.size));
+  res.setHeader('ETag', etag);
+  res.setHeader('Cache-Control', req.query.v ? 'public, max-age=31536000, immutable' : 'public, max-age=300');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Disposition', 'inline');
+  res.end(p.bytes);
 });
 
 publicRouter.get('/countries', (_req, res) => res.json({ items: COUNTRIES }));

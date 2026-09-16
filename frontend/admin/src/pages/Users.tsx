@@ -4,6 +4,7 @@ import { api, qs, API_BASE, getToken } from '../lib/api';
 import { useStore } from '../lib/store';
 import {
   Alert,
+  Avatar,
   Button,
   Chip,
   ConfirmButton,
@@ -181,6 +182,14 @@ export function Users() {
 function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const { money, toast, config, can } = useStore();
   const detail = useAsync(() => api.get<any>(`/api/admin/users/${id}`), [id]);
+  const removePicture = (kind: 'profile' | 'cover') =>
+    api
+      .del(`/api/admin/users/${id}/picture/${kind}`)
+      .then(() => {
+        toast(kind === 'profile' ? 'Profile photo removed' : 'Cover picture removed', 'success');
+        detail.reload();
+      })
+      .catch((e) => toast((e as Error).message, 'error'));
   const [edit, setEdit] = useState<any>(null);
   const [adjust, setAdjust] = useState({ direction: 'credit', amount: '', currency: 'USD', reason: '' });
   const [proposed, setProposed] = useState<string | null>(null);
@@ -275,6 +284,22 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
           {tab === 'overview' && (
             <div className="grid cols-2">
               <div>
+                <div className="cover-banner" style={d.user.coverUrl ? { backgroundImage: `url("${d.user.coverUrl}")` } : undefined}>
+                  <div className="cover-actions">
+                    <Avatar user={d.user} size="sm" />
+                    {d.user.pictureUrl && (
+                      <Button size="sm" variant="ghost" onClick={() => removePicture('profile')}>
+                        Remove photo
+                      </Button>
+                    )}
+                    {d.user.coverUrl && (
+                      <Button size="sm" variant="ghost" onClick={() => removePicture('cover')}>
+                        Remove cover
+                      </Button>
+                    )}
+                    {!d.user.pictureUrl && !d.user.coverUrl && <span className="tiny muted">No pictures</span>}
+                  </div>
+                </div>
                 <KV k="Email" v={d.user.email ?? '—'} />
                 <KV k="Phone" v={d.user.phone ?? '—'} />
                 <KV k="Country" v={d.user.country ?? '—'} />

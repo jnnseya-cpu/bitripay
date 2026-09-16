@@ -6,6 +6,7 @@ import { parseJson } from '../lib/json';
 import { MERCHANT_CLASS_ROLES, type PublicUser, type Role, type User } from '@bitripay/shared';
 import { ensureWallet } from './wallets';
 import { getBaseCurrency } from './currencies';
+import { pictureUrls } from './pictures';
 
 const COLORS = ['#2563eb', '#7c3aed', '#db2777', '#dc2626', '#ea580c', '#d97706', '#16a34a', '#0d9488', '#0891b2', '#4f46e5'];
 
@@ -35,6 +36,8 @@ export interface UserRow {
   agent_commission_bps: number | null;
   main_currency?: string | null;
   alternative_currency?: string | null;
+  picture_version?: number | null;
+  cover_version?: number | null;
   webhook_url: string | null;
   webhook_secret: string | null;
   gateway_settings: string;
@@ -60,6 +63,7 @@ export function toPublicUser(row: UserRow): PublicUser {
     avatarColor: row.avatar_color,
     businessName: row.business_name,
     country: row.country,
+    ...pictureUrls(row),
   };
 }
 
