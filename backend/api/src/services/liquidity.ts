@@ -329,7 +329,14 @@ export function listMovements(accountId: string) {
 }
 
 /** Pick the account that can pay this now: active, right rail/operator/currency, enough float, within limits. Highest float first. */
-export function selectPayoutAccount(q: { rail: 'mobile_money' | 'bank'; operatorId?: string | null; currency: string; amount: number; country?: string | null; anyOperator?: boolean }): PayoutAccount | null {
+export function selectPayoutAccount(q: {
+  rail: 'mobile_money' | 'bank';
+  operatorId?: string | null;
+  currency: string;
+  amount: number;
+  country?: string | null;
+  anyOperator?: boolean;
+}): PayoutAccount | null {
   // anyOperator (airtime purchases, bills): every prefunded SIM of the country qualifies, the operator's own SIM first
   const candidates = listPayoutAccounts({ rail: q.rail, currency: q.currency, status: 'active' }).filter((a) =>
     q.rail === 'mobile_money' ? a.operatorId === q.operatorId || (!!q.anyOperator && (!q.country || a.country === q.country)) : !q.country || a.country === q.country,

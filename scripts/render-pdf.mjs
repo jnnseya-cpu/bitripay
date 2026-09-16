@@ -29,7 +29,21 @@ export async function renderDiagrams(page, html) {
       securityLevel: 'loose',
       fontFamily: 'IBM Plex Sans, Helvetica, Arial, sans-serif',
       // wrapped messages and larger type so a sequence diagram stays legible once scaled to the A4 text width
-      sequence: { wrap: true, width: 170, actorFontSize: 15, actorFontWeight: 600, messageFontSize: 14, noteFontSize: 13, actorMargin: 26, boxMargin: 6, messageMargin: 28, mirrorActors: false, diagramMarginX: 6, diagramMarginY: 6, useMaxWidth: true },
+      sequence: {
+        wrap: true,
+        width: 170,
+        actorFontSize: 15,
+        actorFontWeight: 600,
+        messageFontSize: 14,
+        noteFontSize: 13,
+        actorMargin: 26,
+        boxMargin: 6,
+        messageMargin: 28,
+        mirrorActors: false,
+        diagramMarginX: 6,
+        diagramMarginY: 6,
+        useMaxWidth: true,
+      },
       flowchart: { useMaxWidth: true, htmlLabels: true },
     });
     await m.run({ querySelector: 'pre.mermaid' });

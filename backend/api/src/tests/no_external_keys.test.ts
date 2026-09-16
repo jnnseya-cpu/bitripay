@@ -170,19 +170,16 @@ describe('SMS from an enrolled phone SIM (no SMS API)', () => {
     const agent = await registerUser(app, { role: 'agent', businessName: 'SMS Point', country: 'CD', phone: '+243817000001' });
     const { getDb } = await import('../db');
     getDb().prepare("UPDATE users SET kyc_status = 'verified' WHERE id = ?").run(agent.user.id);
-    const acc = await request(app)
-      .post('/api/admin/liquidity/accounts')
-      .set(admin.auth)
-      .send({
-        rail: 'mobile_money',
-        operatorId: 'orange_cd',
-        country: 'CD',
-        currency: 'CDF',
-        label: 'Orange SIM (SMS)',
-        msisdn: '+243890000900',
-        simIccid: '8924300000000000900',
-        agentUserId: agent.user.id,
-      });
+    const acc = await request(app).post('/api/admin/liquidity/accounts').set(admin.auth).send({
+      rail: 'mobile_money',
+      operatorId: 'orange_cd',
+      country: 'CD',
+      currency: 'CDF',
+      label: 'Orange SIM (SMS)',
+      msisdn: '+243890000900',
+      simIccid: '8924300000000000900',
+      agentUserId: agent.user.id,
+    });
     expect(acc.status, JSON.stringify(acc.body)).toBe(201);
     const k = keys();
     const dev = await request(app)

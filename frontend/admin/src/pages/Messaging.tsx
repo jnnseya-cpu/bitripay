@@ -460,15 +460,32 @@ function SmsOutbox() {
       </p>
       {s && (
         <div className="row wrap mb">
-          <Chip>{tr('Queued')}: {s.queued}</Chip>
-          <Chip>{tr('Sending')}: {s.sending}</Chip>
-          <Chip kind="success">{tr('Sent (24 h)')}: {s.sent24h}</Chip>
-          <Chip kind={s.failed ? 'danger' : undefined}>{tr('Failed')}: {s.failed}</Chip>
+          <Chip>
+            {tr('Queued')}: {s.queued}
+          </Chip>
+          <Chip>
+            {tr('Sending')}: {s.sending}
+          </Chip>
+          <Chip kind="success">
+            {tr('Sent (24 h)')}: {s.sent24h}
+          </Chip>
+          <Chip kind={s.failed ? 'danger' : undefined}>
+            {tr('Failed')}: {s.failed}
+          </Chip>
         </div>
       )}
       <Table
         head={[tr('To'), tr('Message'), tr('Status'), tr('Attempts'), tr('Device'), tr('Updated')]}
-        rows={(outbox.data?.items ?? []).slice(0, 40).map((m) => [m.to, <span className="tiny">{m.body.slice(0, 80)}</span>, <StatusBadge status={m.status} />, m.attempts, m.deviceId ? m.deviceId.slice(0, 8) : '—', new Date(m.updatedAt).toLocaleString()])}
+        rows={(outbox.data?.items ?? [])
+          .slice(0, 40)
+          .map((m) => [
+            m.to,
+            <span className="tiny">{m.body.slice(0, 80)}</span>,
+            <StatusBadge status={m.status} />,
+            m.attempts,
+            m.deviceId ? m.deviceId.slice(0, 8) : '—',
+            new Date(m.updatedAt).toLocaleString(),
+          ])}
         empty={tr('Nothing sent yet')}
       />
     </div>

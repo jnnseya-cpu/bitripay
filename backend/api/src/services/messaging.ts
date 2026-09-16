@@ -211,8 +211,12 @@ export function reportSmsOutbox(id: string, deviceId: string, ok: boolean, error
 
 export function listSmsOutbox(opts: { status?: string | null; limit?: number } = {}): SmsOutboxItem[] {
   const rows = opts.status
-    ? getDb().prepare('SELECT * FROM sms_outbox WHERE status = ? ORDER BY created_at DESC LIMIT ?').all(opts.status, opts.limit ?? 100)
-    : getDb().prepare('SELECT * FROM sms_outbox ORDER BY created_at DESC LIMIT ?').all(opts.limit ?? 100);
+    ? getDb()
+        .prepare('SELECT * FROM sms_outbox WHERE status = ? ORDER BY created_at DESC LIMIT ?')
+        .all(opts.status, opts.limit ?? 100)
+    : getDb()
+        .prepare('SELECT * FROM sms_outbox ORDER BY created_at DESC LIMIT ?')
+        .all(opts.limit ?? 100);
   return (rows as any[]).map(toOutbox);
 }
 
@@ -220,5 +224,10 @@ export function smsOutboxSummary(): { queued: number; sending: number; failed: n
   const db = getDb();
   const count = (status: string) => (db.prepare('SELECT COUNT(*) c FROM sms_outbox WHERE status = ?').get(status) as { c: number }).c;
   const since = new Date(Date.now() - 86_400_000).toISOString();
-  return { queued: count('queued'), sending: count('sending'), failed: count('failed'), sent24h: (db.prepare("SELECT COUNT(*) c FROM sms_outbox WHERE status = 'sent' AND sent_at >= ?").get(since) as { c: number }).c };
+  return {
+    queued: count('queued'),
+    sending: count('sending'),
+    failed: count('failed'),
+    sent24h: (db.prepare("SELECT COUNT(*) c FROM sms_outbox WHERE status = 'sent' AND sent_at >= ?").get(since) as { c: number }).c,
+  };
 }

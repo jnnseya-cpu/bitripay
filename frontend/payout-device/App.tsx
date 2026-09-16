@@ -677,7 +677,8 @@ function Home({ t, enrolment, privateKey, onUnenrol }: { t: Theme; enrolment: En
           <Card t={t} style={{ marginTop: 12 }}>
             <Text style={{ color: t.text, fontWeight: '600', marginBottom: 6 }}>Send BitriPay SMS from this SIM</Text>
             <Text style={{ color: t.muted, fontSize: 13, marginBottom: 8 }}>
-              With the SMS provider set to "Enrolled phone SIM" in the console, verification codes, receipts and notices are queued on the server and this phone sends them from its own SIM. No SMS API, no key. Each send is reported back; the server retries failures up to three times.
+              With the SMS provider set to "Enrolled phone SIM" in the console, verification codes, receipts and notices are queued on the server and this phone sends them from its own SIM. No SMS
+              API, no key. Each send is reported back; the server retries failures up to three times.
             </Text>
             <Button
               t={t}

@@ -61,7 +61,13 @@ export function Users() {
       <PageHeader
         title={titles[role]}
         subtitle={tr('Search, review, adjust balances, suspend or edit accounts')}
-        actions={(role !== 'admin' || can('admins')) && <Button onClick={() => setCreateOpen(true)}>{tr('+ Create {0}', { 0: ({ user: tr('User'), merchant: tr('Merchant'), agent: tr('Agent'), admin: tr('Admin') } as Record<string, string>)[role] ?? role })}</Button>}
+        actions={
+          (role !== 'admin' || can('admins')) && (
+            <Button onClick={() => setCreateOpen(true)}>
+              {tr('+ Create {0}', { 0: ({ user: tr('User'), merchant: tr('Merchant'), agent: tr('Agent'), admin: tr('Admin') } as Record<string, string>)[role] ?? role })}
+            </Button>
+          )
+        }
       />
       <Tabs
         tabs={[
@@ -127,7 +133,11 @@ export function Users() {
           }}
         />
       )}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={tr('Create {0} account', { 0: ({ user: tr('User'), merchant: tr('Merchant'), agent: tr('Agent'), admin: tr('Admin') } as Record<string, string>)[role] ?? role })}>
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title={tr('Create {0} account', { 0: ({ user: tr('User'), merchant: tr('Merchant'), agent: tr('Agent'), admin: tr('Admin') } as Record<string, string>)[role] ?? role })}
+      >
         <Field label={tr('Full name')}>
           <Input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
         </Field>

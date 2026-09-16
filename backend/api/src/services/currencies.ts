@@ -284,5 +284,12 @@ export function rateFreshness(): { live: boolean; fresh: boolean; manual: boolea
   const manual = [...sources].includes('manual');
   const live = enabled.length > 0 && [...sources].every(allowed);
   const oldest = enabled.map((c) => (c.rateUpdatedAt ? new Date(c.rateUpdatedAt).getTime() : 0)).reduce((a, b) => Math.min(a, b), Date.now());
-  return { live, fresh: live && Date.now() - oldest < maxAgeHours * 3600_000, manual, source: [...sources].join(', '), oldestUpdatedAt: enabled.length ? new Date(oldest).toISOString() : null, maxAgeHours };
+  return {
+    live,
+    fresh: live && Date.now() - oldest < maxAgeHours * 3600_000,
+    manual,
+    source: [...sources].join(', '),
+    oldestUpdatedAt: enabled.length ? new Date(oldest).toISOString() : null,
+    maxAgeHours,
+  };
 }

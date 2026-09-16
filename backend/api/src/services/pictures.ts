@@ -44,7 +44,7 @@ export function decodePictureDataUrl(dataUrl: string, kind: PictureKind): { mime
   const declared = m[1] as Mime;
   const bytes = Buffer.from(m[2].replace(/\s+/g, ''), 'base64');
   if (bytes.length === 0) throw badRequest('The image is empty', 'picture_format');
-  if (bytes.length > PICTURE_LIMITS[kind]) throw badRequest(`The ${kind} picture must be under ${Math.round(PICTURE_LIMITS[kind] / 1_000_000 * 10) / 10} MB`, 'picture_too_large');
+  if (bytes.length > PICTURE_LIMITS[kind]) throw badRequest(`The ${kind} picture must be under ${Math.round((PICTURE_LIMITS[kind] / 1_000_000) * 10) / 10} MB`, 'picture_too_large');
   const actual = sniff(bytes);
   if (!actual || actual !== declared) throw badRequest('The file is not the image type it claims to be', 'picture_format');
   return { mime: actual, bytes };
