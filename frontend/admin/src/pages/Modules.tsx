@@ -25,7 +25,30 @@ const LABELS: Record<string, string> = {
   liveChat: 'Live chat',
   merchantGateway: 'Merchant payment gateway & API',
   kyc: 'KYC verification',
+  savings: 'Goal savings',
+  creditScore: 'Credit-readiness score (informational)',
+  openBanking: 'Open banking: linked accounts, pay by bank, mandates',
+  restrictedWallets: 'Restricted-purpose wallets',
 };
+/** Off in the aggregator perimeter of Instructions n°42 and n°58 (issuer and acquirer functions); the API refuses them with module_disabled. */
+const OUT_OF_PERIMETER = [
+  'transfers',
+  'addMoney',
+  'withdrawals',
+  'agents',
+  'remittance',
+  'exchange',
+  'virtualCards',
+  'giftCards',
+  'billPay',
+  'mobileTopup',
+  'referrals',
+  'p2p',
+  'savings',
+  'creditScore',
+  'openBanking',
+  'restrictedWallets',
+];
 
 export function Modules() {
   const { toast, refresh, config } = useStore();
@@ -39,6 +62,13 @@ export function Modules() {
     }
   }, [settings.data]);
   if (!modules || !countries) return null;
+  const applyPerimeter = async () => {
+    const r = await api.post<{ modules: Record<string, boolean> }>('/api/admin/settings/modules/aggregator-perimeter', {});
+    setModules(r.modules);
+    toast(tr('Aggregator perimeter applied: issuer and acquirer functions are switched off'), 'success');
+    refresh();
+  };
+  const perimeterApplied = OUT_OF_PERIMETER.every((k) => modules[k] === false);
   const save = async () => {
     await api.put('/api/admin/settings/modules', { value: modules });
     await api.put('/api/admin/settings/countries', { value: countries });
@@ -50,14 +80,35 @@ export function Modules() {
       <PageHeader
         title={tr('Modules, methods & country restrictions')}
         subtitle={tr('Enable or disable platform features and restrict access by country')}
-        actions={<Button onClick={save}>{tr('Save')}</Button>}
+        actions={
+          <>
+            <Button variant="secondary" onClick={applyPerimeter}>
+              {tr('Apply the aggregator perimeter (Instructions n°42 and n°58)')}
+            </Button>
+            <Button onClick={save}>{tr('Save')}</Button>
+          </>
+        }
       />
+      <Alert kind={perimeterApplied ? 'success' : 'warning'}>
+        {perimeterApplied
+          ? tr(
+              'Aggregator perimeter in force: acceptance (QR, links, requests, merchant gateway and API), identity checks and support are on; every issuer or acquirer function is switched off and refused by the API until the authorisation of the Banque Centrale du Congo.',
+            )
+          : tr(
+              'Issuer or acquirer functions are switched on. Before an authorisation of the Banque Centrale du Congo exists, apply the aggregator perimeter: wallet funding, transfers, withdrawals, agents, remittances, exchange, cards, vouchers, bills and airtime paid from a wallet, savings, restricted wallets, open banking, credit score, P2P and referral rewards are then switched off.',
+            )}
+      </Alert>
       <div className="grid cols-2">
         <div className="card">
           <h4>{tr('Modules setup')}</h4>
           <div className="col">
             {Object.keys(LABELS).map((k) => (
-              <Switch key={k} on={modules[k] !== false} onChange={(v) => setModules({ ...modules, [k]: v })} label={LABELS[k]} />
+              <Switch
+                key={k}
+                on={modules[k] !== false}
+                onChange={(v) => setModules({ ...modules, [k]: v })}
+                label={OUT_OF_PERIMETER.includes(k) ? `${LABELS[k]} · ${tr('after authorisation')}` : LABELS[k]}
+              />
             ))}
           </div>
         </div>

@@ -107,7 +107,7 @@ import {
   getGatewayProductSettings,
   getWebhookSettings,
 } from '../../services/settings';
-import { getModules, DEFAULT_MODULES } from '../../services/modules';
+import { getModules, DEFAULT_MODULES, aggregatorPerimeterFlags, aggregatorPerimeterApplied, AGGREGATOR_PERIMETER_OFF, AGGREGATOR_PERIMETER_ON } from '../../services/modules';
 import { listGateways, upsertGateway, deleteGateway, PROVIDERS } from '../../payments';
 import { listBillers, upsertBiller, deleteBiller, listOperators, upsertOperator, deleteOperator, listGiftProducts, upsertGiftProduct, deleteGiftProduct } from '../../services/services';
 import {
@@ -1205,6 +1205,17 @@ adminRouter.get('/settings', requirePermission('settings'), (_req, res) => {
     emoney: getEmoneySettings(),
     gateway_products: getGatewayProductSettings(),
   });
+});
+/** One click: the aggregator perimeter of Instructions n°42 and n°58 (issuer and acquirer functions off), audited. */
+adminRouter.get('/settings/modules/aggregator-perimeter', requirePermission('settings'), (_req, res) =>
+  res.json({ applied: aggregatorPerimeterApplied(), on: AGGREGATOR_PERIMETER_ON, off: AGGREGATOR_PERIMETER_OFF, modules: getModules() }),
+);
+adminRouter.post('/settings/modules/aggregator-perimeter', requirePermission('settings'), (req, res) => {
+  const before = getModules();
+  const flags = aggregatorPerimeterFlags();
+  setSetting('modules', flags);
+  audit(req.user!.id, 'settings.modules.aggregator_perimeter', 'settings', 'modules', { switchedOff: AGGREGATOR_PERIMETER_OFF.filter((k) => before[k] !== false) });
+  res.json({ applied: true, on: AGGREGATOR_PERIMETER_ON, off: AGGREGATOR_PERIMETER_OFF, modules: flags });
 });
 adminRouter.put(
   '/settings/:key',

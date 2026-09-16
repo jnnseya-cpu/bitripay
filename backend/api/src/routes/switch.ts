@@ -52,6 +52,8 @@ const createSchema = z
     expires_at: z.string().datetime({ offset: true }).optional().nullable(),
     description: z.string().max(200).optional().nullable(),
     channel: z.enum(['api', 'qr', 'ussd']).optional(),
+    /** An existing intent of this merchant (a QR intent, a POS sale) that this switch payment settles. */
+    intent_id: z.string().max(80).optional().nullable(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();

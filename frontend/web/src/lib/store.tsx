@@ -6,6 +6,8 @@ import { formatMoney as fmt } from '@bitripay/shared';
 
 export interface FullConfig extends AppConfig {
   modules: Record<string, boolean>;
+  /** National scheme brand printed on QR sheets (Instruction n°58 art. 19). */
+  switchSchemeBrand?: string;
   maintenanceMode: boolean;
   registrationOpen: boolean;
   site: any;

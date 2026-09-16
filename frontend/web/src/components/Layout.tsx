@@ -53,7 +53,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/app/agents', key: 'nav.agents', ico: '🏪', module: 'agents' },
     { to: '/app/remittance', key: 'nav.remittance', ico: '🌍', module: 'remittance' },
     { to: '/app/exchange', key: 'nav.exchange', ico: '💱', module: 'exchange' },
-    { to: '/app/savings', key: 'nav.savings', ico: '🎯' },
+    { to: '/app/savings', key: 'nav.savings', ico: '🎯', module: 'savings' },
     { to: '/app/fx', key: 'nav.fxTools', ico: '📈', module: 'exchange' },
   ];
   const services: NavItem[] = [
@@ -63,13 +63,13 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/app/gift-cards', key: 'nav.giftCards', ico: '🎁', module: 'giftCards' },
     { to: '/app/p2p', key: 'nav.p2p', ico: '🤝', module: 'p2p' },
     { to: '/app/subscriptions', key: 'nav.subscriptions', ico: '🔄' },
-    { to: '/app/banks', key: 'nav.banks', ico: '🏦', module: 'addMoney' },
+    { to: '/app/banks', key: 'nav.banks', ico: '🏦', module: 'openBanking' },
   ];
   const account: NavItem[] = [
     { to: '/app/transactions', key: 'nav.transactions', ico: '📜' },
     { to: '/app/insights', key: 'nav.insights', ico: '📊' },
     { to: '/app/statements', key: 'nav.statements', ico: '🧾' },
-    { to: '/app/credit', key: 'nav.credit', ico: '📊' },
+    { to: '/app/credit', key: 'nav.credit', ico: '📊', module: 'creditScore' },
     { to: '/app/referrals', key: 'nav.referrals', ico: '🎉', module: 'referrals' },
     { to: '/app/support', key: 'nav.support', ico: '💬', module: 'support' },
     { to: '/app/settings', key: 'nav.settings', ico: '⚙️' },

@@ -20,7 +20,7 @@ import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { recordEvent, type Actor } from '../events';
 import { findUserById, type UserRow } from '../users';
 import { getCurrency } from '../currencies';
-import { accrueAggregationFee, feeEntryForPayment, quoteAggregationFee, type FeeEntry, type FeeQuote } from './fees';
+import { accrueAggregationFee, feeEntryForPayment, quoteAggregationFee, reverseAggregationFee, type FeeEntry, type FeeQuote } from './fees';
 import { countryCapabilities } from '../capabilities';
 import { screenSanctions } from '../risk';
 import { emitEvent } from '../webhooks';
@@ -511,6 +511,8 @@ export interface CreatePaymentBody {
   expires_at?: string | null;
   description?: string | null;
   channel?: string;
+  /** Settle an existing open intent of the merchant (QR intent, point-of-sale sale) instead of opening a new one. */
+  intent_id?: string | null;
   metadata?: Record<string, unknown>;
 }
 const FORBIDDEN_FIELDS = ['rail', 'route', 'sponsor_id', 'sponsor', 'access_mode', 'exemption', 'exception_id', 'connection_id', 'switch', 'bypass', 'currency_override'];
@@ -586,19 +588,37 @@ export function createPayment(
   const gate = emissionGate(conn);
   if (!gate.allowed && !gate.inquiryOnly && settings.refuseWhenLinkDown && gate.reasons.some((r) => /link down/.test(r)))
     throw new AppError(503, 'SERVICE_UNAVAILABLE', 'Service temporarily unavailable: the switch link is down; keep your Idempotency-Key and retry', { reasons: gate.reasons });
+  // an existing intent (the merchant's QR code or point-of-sale sale) may be settled by this payment: same merchant,
+  // still open, same amount and currency; the switch payment then carries the QR intent to SETTLED through the mirror
+  const linked = body.intent_id ? getIntentRow(body.intent_id) : null;
+  if (body.intent_id) {
+    if (!linked || linked.merchant_user_id !== merchant.id) throw new AppError(404, 'RESOURCE_NOT_FOUND', 'Intent not found');
+    if (!['CREATED', 'REQUIRES_PAYMENT_METHOD', 'ROUTING', 'REQUIRES_CUSTOMER_ACTION'].includes(linked.status))
+      throw new AppError(409, 'INVALID_REQUEST', `Intent ${linked.id} is ${linked.status}; only an open intent can be settled through the switch`);
+    if (linked.amount_minor !== amountMinor || linked.currency.toUpperCase() !== currency)
+      throw new AppError(409, 'INVALID_REQUEST', 'The switch payment must carry exactly the amount and currency of the intent it settles');
+    const already = db.prepare('SELECT id FROM switch_payments WHERE intent_id = ? AND status NOT IN (?, ?, ?)').get(linked.id, 'REJECTED', 'EXPIRED', 'CANCELLED') as any;
+    if (already) throw new AppError(409, 'ORDER_ALREADY_EXISTS', `Intent ${linked.id} is already being settled by payment ${already.id}`);
+  }
   db.transaction(() => {
-    const { row: intent } = createIntent(merchant, {
-      amountMinor,
-      currency,
-      rails: ['national_switch'],
-      reference: body.merchant_order_id,
-      description: body.description ?? null,
-      purposeCode: 'GENERAL_MERCHANT',
-      expiresInMinutes: Math.max(1, Math.round((Date.parse(expiresAt) - Date.now()) / 60_000)),
-      metadata: { ...(body.metadata ?? {}), switchPaymentId: id },
-      source: 'api',
-      customerMsisdn: null,
-    });
+    const intent = linked
+      ? linked
+      : createIntent(merchant, {
+          amountMinor,
+          currency,
+          rails: ['national_switch'],
+          reference: body.merchant_order_id,
+          description: body.description ?? null,
+          purposeCode: 'GENERAL_MERCHANT',
+          expiresInMinutes: Math.max(1, Math.round((Date.parse(expiresAt) - Date.now()) / 60_000)),
+          metadata: { ...(body.metadata ?? {}), switchPaymentId: id },
+          source: 'api',
+          customerMsisdn: null,
+        }).row;
+    if (linked) {
+      const meta = { ...parseJson(linked.metadata, {}), switchPaymentId: id };
+      db.prepare('UPDATE payment_intents SET metadata = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(meta), now(), linked.id);
+    }
     db.prepare('UPDATE payment_intents SET route_connector = ?, updated_at = ? WHERE id = ?').run(conn.id, now(), intent.id);
     db.prepare(
       'INSERT INTO switch_payments (id, tenant_id, merchant_user_id, api_client_id, merchant_order_id, product, intent_id, connection_id, amount_minor, currency, payer_participant_id, payer_account_token, beneficiary_binding_id, beneficiary_binding_version, consent_reference, description, status, state_version, route, expires_at, fingerprint, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)',
@@ -1697,8 +1717,11 @@ async function emitLinkedOperation(operationId: string, ctx: { owner: string; fe
     proofRef,
     obs.occurredAt,
   );
-  if (outcome === 'SUCCEEDED')
+  if (outcome === 'SUCCEEDED') {
     journal(p.id, op.kind === 'REFUND' ? 'REFUND_CONFIRMED' : 'REVERSAL_CONFIRMED', -op.amount_minor, op.currency, obs.authority, obs.externalReference, proofRef, obs.occurredAt);
+    // Instruction n°58 art. 23: a reversal returns principal and fees; the aggregation fee accrued on the reversed part is credited back to the merchant
+    reverseAggregationFee(p.id, op.amount_minor, op.kind, obs.externalReference ?? op.id);
+  }
   emitEvent(
     p.merchant_user_id,
     'refund.updated',

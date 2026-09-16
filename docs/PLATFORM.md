@@ -788,6 +788,38 @@ panel under *Mobile money & evidence*; confidence is scored (reference 50, amoun
 operator transaction id 10, sender 5) and only matches at or above `gateway.autoConfirmScore` from a
 trusted device settle automatically.
 
+### Aggregator perimeter (Banque Centrale du Congo, Instructions n°42 and n°58)
+
+BitriPay applies for the status of *prestataire de services connexes – agrégateur* (Instruction n°42, art. 1 (4)
+and 9) and connects to the Switch Monétique National as an *établissement assujetti* (Instruction n°58, art. 2 and
+6). Until that authorisation exists, and for every function that belongs to an issuer or an acquirer (art. 42, 37,
+40 of Instruction n°42), the platform is switched to the aggregator perimeter:
+
+- **One click in the console** (Modules → *Apply the aggregator perimeter*, or
+  `POST /api/admin/settings/modules/aggregator-perimeter`, audited as `settings.modules.aggregator_perimeter`) keeps
+  acceptance on (QR, payment links, requests, merchant gateway and API, identity checks, support) and switches off
+  wallet funding, transfers, withdrawals, agents, remittances, exchange, virtual cards, gift cards, bills and airtime
+  paid from a wallet, referral rewards, P2P, savings, restricted wallets, open banking and the credit score.
+  `GET …/aggregator-perimeter` reports whether it is in force; the console shows a green or amber banner.
+- **The API refuses what is off** with `422 module_disabled` and the message "This service will be available after
+  the authorisation of the Banque Centrale du Congo; it is switched off by the administrator" (translated); the web
+  navigation hides the pages. New module keys: `savings`, `creditScore`, `openBanking`, `restrictedWallets`
+  (`requireModule` middleware on their route families).
+- **A merchant QR intent is settled through the switch**: `POST /v1/payments` accepts `intent_id` (an open intent of
+  the merchant with the same amount and currency; one settlement per intent); the payment carries the intent to
+  captured / settled through the mirror, with a signed webhook and no customer ledger entry.
+- **Reversals return principal and fees** (Instruction n°58, art. 23): when a refund or reversal through the switch is
+  confirmed, the aggregation fee accrued on the reversed part is credited back to the merchant (reduced while still
+  accrued, `reversed` status at zero; carried as a credit against the next invoice once invoiced or paid, shown under
+  `credits` in the merchant's fee view and deducted at period close). Migration `041_switch_fee_reversals.sql`.
+- **The scheme brand on every acceptance point** (Instruction n°58, art. 19): `switch.schemeBrand` (default
+  "Switch Monétique National") is exposed as `switchSchemeBrand` in the public config and printed on the merchant QR
+  sheet ("Accepted through …").
+
+The regulator materials (`docs/regulator/`) follow the same line: the deck lists what is in the perimeter and what
+is built but switched off, walks both instructions article by article, and the demonstration only exercises the
+perimeter.
+
 ### Nothing depends on an external key, except the assistant
 
 Every movement of money and every message can run with **no provider API key at all**. The only

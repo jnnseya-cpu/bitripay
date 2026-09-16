@@ -25,6 +25,8 @@ export interface SwitchSettings {
   refuseWhenLinkDown: boolean;
   /** Days before certificate expiry at which alerts are raised. */
   certificateAlertDays: number[];
+  /** Name of the national scheme shown on merchant QR sheets and receipts (Instruction n°58 art. 19: the scheme brand on every acceptance point). */
+  schemeBrand: string;
 }
 
 const DEFAULT_SWITCH: SwitchSettings = {
@@ -41,6 +43,7 @@ const DEFAULT_SWITCH: SwitchSettings = {
   dispatcherLeaseSeconds: 30,
   refuseWhenLinkDown: true,
   certificateAlertDays: [60, 30, 14, 7],
+  schemeBrand: 'Switch Monétique National',
 };
 
 export const getSwitchSettings = (): SwitchSettings => {

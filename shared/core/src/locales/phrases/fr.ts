@@ -4417,4 +4417,16 @@ export const frPhrases: Record<string, string> = {
   'Your card payment was disputed. The transfer is under review.': "Votre paiement par carte a été contesté. Le transfert est en cours d'examen.",
   'Your float replenishment was credited to your wallet.': 'Votre réapprovisionnement de fonds de caisse a été crédité sur votre portefeuille.',
   'Your float request was declined; contact operations.': 'Votre demande de fonds de caisse a été refusée ; contactez les opérations.',
+  // aggregator perimeter (Instructions n°42 and n°58)
+  'Accepted through {0}': 'Accepté via {0}',
+  'after authorisation': 'après autorisation',
+  'Aggregator perimeter applied: issuer and acquirer functions are switched off': "Périmètre agrégateur appliqué : les fonctions d'émetteur et d'acquéreur sont désactivées",
+  'Aggregator perimeter in force: acceptance (QR, links, requests, merchant gateway and API), identity checks and support are on; every issuer or acquirer function is switched off and refused by the API until the authorisation of the Banque Centrale du Congo.':
+    "Périmètre agrégateur en force : l'acceptation (QR, liens, demandes, passerelle marchande et API), les vérifications d'identité et le support sont actifs ; toute fonction d'émetteur ou d'acquéreur est désactivée et refusée par l'API jusqu'à l'autorisation de la Banque Centrale du Congo.",
+  'Apply the aggregator perimeter (Instructions n°42 and n°58)': 'Appliquer le périmètre agrégateur (Instructions n°42 et n°58)',
+  'Issuer or acquirer functions are switched on. Before an authorisation of the Banque Centrale du Congo exists, apply the aggregator perimeter: wallet funding, transfers, withdrawals, agents, remittances, exchange, cards, vouchers, bills and airtime paid from a wallet, savings, restricted wallets, open banking, credit score, P2P and referral rewards are then switched off.':
+    "Des fonctions d'émetteur ou d'acquéreur sont actives. Tant qu'aucune autorisation de la Banque Centrale du Congo n'existe, appliquez le périmètre agrégateur : rechargement, transferts, retraits, agents, transferts internationaux, change, cartes, bons, factures et recharges payées depuis un portefeuille, épargne, portefeuilles restreints, open banking, score de crédit, P2P et primes de parrainage sont alors désactivés.",
+  'Switch Monétique National': 'Switch Monétique National',
+  'This service will be available after the authorisation of the Banque Centrale du Congo; it is switched off by the administrator':
+    "Ce service sera disponible après l'autorisation de la Banque Centrale du Congo ; il est désactivé par l'administrateur",
 };

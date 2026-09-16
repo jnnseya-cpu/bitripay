@@ -440,6 +440,9 @@ export function QrCentre() {
               </div>
             ) : null}
             {shown.reference && <div className="small muted">{shown.reference}</div>}
+            <div className="small" style={{ marginTop: 6 }}>
+              {tr('Accepted through {0}', { 0: config?.switchSchemeBrand ?? tr('Switch Monétique National') })}
+            </div>
             {shown.mode === 'OFFLINE' && (
               <Alert kind="warning">
                 {tr('Valid until')} {new Date(shown.expiresAt).toLocaleTimeString()}. The customer's app will confirm when back online{shown.local ? ' (signed on this device)' : ''}.

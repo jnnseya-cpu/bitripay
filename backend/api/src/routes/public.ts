@@ -5,6 +5,7 @@ import { config } from '../config';
 import { listCurrencies, getBaseCurrency } from '../services/currencies';
 import { currencyFlag } from '@bitripay/shared';
 import { getAppSettings, getFees, getLimits, getReferralSettings, getSetting } from '../services/settings';
+import { getSwitchSettings } from '../services/switch/settings';
 import { getModules } from '../services/modules';
 import { getSiteSettings, listPages, getPage, submitContact, subscribeNewsletter, listLanguages, getTranslationOverrides } from '../services/cms';
 import { listGateways, isGatewayReady, getGatewayCredentials } from '../payments';
@@ -56,6 +57,7 @@ publicRouter.get('/config', (_req, res) => {
     agentCommissionBps: app.agentCommissionBps,
     referral: getReferralSettings(),
     modules: getModules(),
+    switchSchemeBrand: getSwitchSettings().schemeBrand,
     maintenanceMode: app.maintenanceMode,
     registrationOpen: app.registrationOpen,
     site: getSiteSettings(),

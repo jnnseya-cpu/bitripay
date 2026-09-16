@@ -35,8 +35,12 @@ export interface FeeEntry {
   bps: number;
   base: number;
   period: string;
-  status: 'accrued' | 'invoiced' | 'paid' | 'waived';
+  status: 'accrued' | 'invoiced' | 'paid' | 'waived' | 'reversed';
   invoiceId: string | null;
+  /** Principal reversed or refunded so far (Instruction n°58 art. 23). */
+  reversed: number;
+  /** Fee credited back after an invoice, deducted from the merchant's next invoice. */
+  credit: number;
   createdAt: string;
 }
 export interface FeeInvoice {
@@ -48,6 +52,8 @@ export interface FeeInvoice {
   currency: string;
   total: number;
   entryCount: number;
+  /** Credits of reversed payments deducted from this invoice (Instruction n°58 art. 23). */
+  credit: number;
   status: 'open' | 'paid' | 'void';
   paidTransactionId: string | null;
   paidReference: string | null;
@@ -78,6 +84,8 @@ function toEntry(r: any): FeeEntry {
     period: r.period,
     status: r.status,
     invoiceId: r.invoice_id,
+    reversed: r.reversed_minor ?? 0,
+    credit: r.credit_minor ?? 0,
     createdAt: r.created_at,
   };
 }
@@ -92,6 +100,7 @@ function toInvoice(r: any, withMerchant = false): FeeInvoice {
     currency: r.currency,
     total: r.total_minor,
     entryCount: r.entry_count,
+    credit: r.credit_minor ?? 0,
     status: r.status,
     paidTransactionId: r.paid_transaction_id,
     paidReference: r.paid_reference,
@@ -127,6 +136,47 @@ export function accrueAggregationFee(payment: { id: string; merchant_user_id: st
   return toEntry(db.prepare('SELECT * FROM switch_fee_entries WHERE id = ?').get(id));
 }
 
+/**
+ * Instruction n°58 art. 23: when a payment is reversed or refunded (in full or in part), the fee accrued on that
+ * part is credited back to the merchant. While the entry is still accrued its amount is reduced (to zero on a full
+ * reversal); once invoiced or paid, the credit is kept on the entry and deducted from the merchant's next invoice in
+ * that currency. Idempotent per confirmed operation through the journal reference.
+ */
+export function reverseAggregationFee(paymentId: string, reversedMinor: number, kind: 'REFUND' | 'REVERSAL', reference: string): FeeEntry | null {
+  const db = getDb();
+  const r = db.prepare('SELECT * FROM switch_fee_entries WHERE payment_id = ?').get(paymentId) as any;
+  if (!r || reversedMinor <= 0) return null;
+  const already = db.prepare("SELECT 1 FROM switch_journal WHERE payment_id = ? AND fact = 'AGGREGATION_FEE_CREDIT' AND reference = ?").get(paymentId, reference);
+  if (already) return toEntry(r);
+  const base = r.base_minor as number;
+  const share = Math.min(reversedMinor, Math.max(0, base - r.reversed_minor)); // principal not yet reversed
+  if (share <= 0) return toEntry(r);
+  const feeOriginal = Math.round(applyBps(base, r.bps) + r.fixed_minor);
+  const feeStillDue = Math.round((feeOriginal * (base - r.reversed_minor)) / base); // fee attributable to the unreversed principal
+  const credit = Math.min(feeStillDue, Math.round((feeOriginal * share) / base));
+  const ts = now();
+  if (r.status === 'accrued') {
+    db.prepare(
+      'UPDATE switch_fee_entries SET amount_minor = MAX(0, amount_minor - ?), reversed_minor = reversed_minor + ?, status = CASE WHEN amount_minor - ? <= 0 THEN ? ELSE status END WHERE id = ?',
+    ).run(credit, share, credit, 'reversed', r.id);
+  } else {
+    db.prepare('UPDATE switch_fee_entries SET credit_minor = credit_minor + ?, reversed_minor = reversed_minor + ? WHERE id = ?').run(credit, share, r.id);
+  }
+  db.prepare('INSERT INTO switch_journal (id, payment_id, fact, amount_minor, currency, source, reference, proof_ref, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    uuid(),
+    paymentId,
+    'AGGREGATION_FEE_CREDIT',
+    -credit,
+    r.currency,
+    'bitripay',
+    reference,
+    kind,
+    ts,
+    ts,
+  );
+  return toEntry(db.prepare('SELECT * FROM switch_fee_entries WHERE id = ?').get(r.id));
+}
+
 export function feeEntryForPayment(paymentId: string): FeeEntry | null {
   const r = getDb().prepare('SELECT * FROM switch_fee_entries WHERE payment_id = ?').get(paymentId);
   return r ? toEntry(r) : null;
@@ -143,7 +193,11 @@ export function merchantAggregationFees(merchantUserId: string) {
   const invoices = (db.prepare('SELECT * FROM switch_fee_invoices WHERE merchant_user_id = ? ORDER BY number DESC LIMIT 100').all(merchantUserId) as any[]).map((r) => toInvoice(r));
   const entries = (db.prepare('SELECT * FROM switch_fee_entries WHERE merchant_user_id = ? ORDER BY created_at DESC LIMIT 200').all(merchantUserId) as any[]).map(toEntry);
   const rate = quoteAggregationFee(merchantUserId, 100_00, 'USD');
-  return { rate: { bps: rate.bps, source: rate.source }, accrued: accrued.map((a) => ({ currency: a.currency, period: a.period, count: a.c, total: a.total })), invoices, entries };
+  // credits of reversed payments already invoiced, deducted from the next invoice in that currency (Instruction n°58 art. 23)
+  const credits = db
+    .prepare("SELECT currency, COALESCE(SUM(credit_minor), 0) total FROM switch_fee_entries WHERE merchant_user_id = ? AND credit_minor > 0 AND status IN ('invoiced', 'paid') GROUP BY currency")
+    .all(merchantUserId) as { currency: string; total: number }[];
+  return { rate: { bps: rate.bps, source: rate.source }, accrued: accrued.map((a) => ({ currency: a.currency, period: a.period, count: a.c, total: a.total })), credits, invoices, entries };
 }
 
 /** Close a period (YYYY-MM): one invoice per merchant and currency for the entries still accrued; returns the invoices created. */
@@ -162,9 +216,20 @@ export function closeAggregationPeriod(period: string, adminId: string): FeeInvo
       if (exists) continue; // already invoiced: late entries of a closed period roll into the next close of that period only through a void + re-close
       const id = uuid();
       const number = ((db.prepare('SELECT COALESCE(MAX(number), 0) n FROM switch_fee_invoices').get() as { n: number }).n ?? 0) + 1;
+      // credits from reversed payments of earlier invoices reduce this invoice (never below zero); consumed credits are cleared
+      const creditRows = db
+        .prepare("SELECT id, credit_minor FROM switch_fee_entries WHERE merchant_user_id = ? AND currency = ? AND credit_minor > 0 AND status IN ('invoiced', 'paid') ORDER BY created_at")
+        .all(g.merchant_user_id, g.currency) as { id: string; credit_minor: number }[];
+      let creditApplied = 0;
+      for (const c of creditRows) {
+        const take = Math.min(c.credit_minor, g.total - creditApplied);
+        if (take <= 0) break;
+        creditApplied += take;
+        db.prepare('UPDATE switch_fee_entries SET credit_minor = credit_minor - ? WHERE id = ?').run(take, c.id);
+      }
       db.prepare(
-        "INSERT INTO switch_fee_invoices (id, number, merchant_user_id, period, currency, total_minor, entry_count, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)",
-      ).run(id, number, g.merchant_user_id, period, g.currency, g.total, g.c, adminId, now());
+        "INSERT INTO switch_fee_invoices (id, number, merchant_user_id, period, currency, total_minor, entry_count, status, created_by, created_at, credit_minor) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)",
+      ).run(id, number, g.merchant_user_id, period, g.currency, g.total - creditApplied, g.c, adminId, now(), creditApplied);
       db.prepare("UPDATE switch_fee_entries SET status = 'invoiced', invoice_id = ? WHERE merchant_user_id = ? AND period = ? AND currency = ? AND status = 'accrued'").run(
         id,
         g.merchant_user_id,
