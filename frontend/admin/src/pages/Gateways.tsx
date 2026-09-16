@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { tr } from '../lib/i18n';
+import { countryLabel } from '@bitripay/shared';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, ConfirmButton, Field, Input, Modal, PageHeader, Select, Switch, Table, useAsync } from '../components/ui';
@@ -7,6 +8,8 @@ import { Alert, Button, Chip, ConfirmButton, Field, Input, Modal, PageHeader, Se
 export function Gateways() {
   const { toast, config } = useStore();
   const data = useAsync(() => api.get<{ items: any[]; providers: any[] }>('/api/admin/gateways'), []);
+  const [country, setCountry] = useState('CD');
+  const coverage = useAsync(() => api.get<any>(`/api/admin/gateways/coverage?country=${country}`), [country, data.data]);
   const [edit, setEdit] = useState<any>(null);
   const [creds, setCreds] = useState<Record<string, string>>({});
   const [testing, setTesting] = useState<string | null>(null);
@@ -89,6 +92,101 @@ export function Gateways() {
         <i>bitcoin</i>) and the merchant opted in. <b>sandbox</b> mode generates invoices locally at a labelled sandbox BTC rate; <b>btcpay</b> mode talks to a BTCPay Server (Greenfield API key, store
         id, webhook secret) and Lightning settles on payment, on-chain after the configured confirmations. Refunds are manual.
       </Alert>
+      <div className="card">
+        <div className="row">
+          <h3 style={{ margin: 0 }}>{tr('Coverage by country')}</h3>
+          <Select value={country} onChange={(e) => setCountry(e.target.value)} style={{ marginLeft: 'auto', width: 260 }}>
+            {(config?.countries ?? []).map((c: any) => (
+              <option key={c.code} value={c.code}>
+                {countryLabel(c.code, c.name)}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <p className="small muted">
+          {tr(
+            'The table below lists keyed processor APIs, which are optional and market-specific. A country is served by its own operators and banks through the direct rails (no operator or bank API) and, where one exists, the national switch.',
+          )}
+        </p>
+        {coverage.error && <Alert kind="error">{coverage.error}</Alert>}
+        {coverage.data && (
+          <div className="grid cols-2">
+            <div className="card soft compact">
+              <h4>{tr('Mobile money · direct rail')}</h4>
+              <p className="tiny muted">
+                {tr('Every operator of the country pays into a collection number; the payout devices and the SMS evidence engine confirm it. Configure numbers under Mobile money operators.')}
+              </p>
+              {coverage.data.mobileMoney.operators.length === 0 && <span className="muted small">{tr('No operator registered for this country')}</span>}
+              {coverage.data.mobileMoney.operators.map((o: any) => (
+                <div key={o.id} className="row" style={{ gap: 8, marginBottom: 4 }}>
+                  <b>{o.name}</b>{' '}
+                  <span className="tiny muted">
+                    {o.currency}
+                    {o.ussd ? ` · ${o.ussd}` : ''}
+                  </span>
+                  <Chip kind={o.directRail ? 'success' : 'warning'}>{o.directRail ? tr('collection number set') : tr('no collection number')}</Chip>
+                  {!o.enabled && <Chip>{tr('disabled')}</Chip>}
+                </div>
+              ))}
+            </div>
+            <div className="card soft compact">
+              <h4>{tr('Banks')}</h4>
+              <div className="row" style={{ gap: 8 }}>
+                <Chip kind={coverage.data.banks.transfer ? 'success' : 'warning'}>{tr('Bank transfer (platform account)')}</Chip>
+                <Chip kind={coverage.data.banks.openBanking ? 'success' : undefined}>{tr('Pay by bank')}</Chip>
+              </div>
+              <p className="tiny muted">{tr('Any bank of the country can transfer to the platform account; the reference matches the deposit. Institutions reachable by pay-by-bank:')}</p>
+              {coverage.data.banks.institutions.length === 0 && <span className="muted small">{tr('None for this country')}</span>}
+              {coverage.data.banks.institutions.map((i: any) => (
+                <div key={i.id} className="small">
+                  {i.name}{' '}
+                  <span className="tiny muted">
+                    {(i.currencies ?? []).join(', ')} · {i.provider}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="card soft compact">
+              <h4>{tr('National switch')}</h4>
+              {!coverage.data.switch && <span className="muted small">{tr('No switch connection for this country')}</span>}
+              {coverage.data.switch && (
+                <>
+                  <div className="row" style={{ gap: 8 }}>
+                    <b>{coverage.data.switch.schemeId}</b>
+                    <Chip kind={coverage.data.switch.simulation ? 'warning' : 'success'}>{coverage.data.switch.simulation ? tr('simulation') : coverage.data.switch.environment}</Chip>
+                    <Chip>{coverage.data.switch.certification ?? '—'}</Chip>
+                    <Chip>{coverage.data.switch.linkState}</Chip>
+                  </div>
+                  <p className="tiny muted">{tr('Participants (banks and mobile money on the switch); payers pay from their own institution, funds settle at the acceptor institution:')}</p>
+                  {coverage.data.switch.participants.map((x: any) => (
+                    <div key={x.id} className="small">
+                      {x.name}{' '}
+                      <span className="tiny muted">
+                        {x.kind} · {(x.currencies ?? []).join(', ')}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+            <div className="card soft compact">
+              <h4>{tr('Keyed processor APIs for this country')}</h4>
+              {coverage.data.aggregatorPerimeter && (
+                <Alert kind="info">{tr('Aggregator perimeter in force: deposits (Add money) are off, so no keyed gateway is offered to payers until the authorisation.')}</Alert>
+              )}
+              {coverage.data.gateways.filter((g: any) => g.keyed).length === 0 && <span className="muted small">{tr('None')}</span>}
+              {coverage.data.gateways
+                .filter((g: any) => g.keyed)
+                .map((g: any) => (
+                  <div key={g.id} className="small">
+                    {g.name} <span className="tiny muted">{(g.currencies ?? []).join(', ') || tr('all currencies')}</span>{' '}
+                    <Chip kind={g.enabled ? 'success' : undefined}>{g.enabled ? tr('enabled') : tr('off')}</Chip>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+      </div>
       <div className="card">
         <Table
           head={[tr('Gateway'), tr('Provider'), tr('Mode'), tr('Methods'), tr('Currencies'), tr('Countries'), tr('Keys'), tr('Ops'), tr('Last test'), tr('Enabled'), '']}

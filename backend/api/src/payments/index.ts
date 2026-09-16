@@ -260,14 +260,14 @@ export function ensureDefaultGateways() {
   upsertGateway({ id: 'flutterwave', name: 'Flutterwave', provider: 'flutterwave', enabled: !!config.flutterwave.secretKey, methods: ['card', 'mobile_money', 'bank'], currencies: [], sortOrder: 3 });
   upsertGateway({
     id: 'mtn_momo',
-    name: 'MTN Mobile Money',
+    name: 'MTN Mobile Money (MoMo API)',
     provider: 'mtn_momo',
     enabled: !!config.mtnMomo.apiKey,
     methods: ['mobile_money'],
     currencies: ['GHS', 'UGX', 'XAF', 'XOF', 'RWF', 'ZMW', 'EUR'],
     sortOrder: 4,
   });
-  upsertGateway({ id: 'mpesa', name: 'M-Pesa', provider: 'mpesa', enabled: !!config.mpesa.consumerKey, methods: ['mobile_money'], currencies: ['KES'], sortOrder: 5 });
+  upsertGateway({ id: 'mpesa', name: 'M-Pesa (Safaricom Daraja, Kenya)', provider: 'mpesa', enabled: !!config.mpesa.consumerKey, methods: ['mobile_money'], currencies: ['KES'], sortOrder: 5 });
   upsertGateway({ id: 'manual_bank', name: 'Bank transfer', provider: 'manual_bank', enabled: true, methods: ['bank'], currencies: [], sortOrder: 6 });
   upsertGateway({ id: 'manual_momo', name: 'Mobile money (direct, all operators)', provider: 'manual_momo', enabled: true, methods: ['mobile_money'], currencies: [], sortOrder: 7 });
   upsertGateway({ id: 'open_banking', name: 'Pay by bank (open banking)', provider: 'open_banking', enabled: true, methods: ['bank'], currencies: [], sortOrder: 8 });

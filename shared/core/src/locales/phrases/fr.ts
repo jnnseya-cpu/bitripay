@@ -4524,4 +4524,30 @@ export const frPhrases: Record<string, string> = {
   'Written confirmation from the institution': "Confirmation écrite de l'institution",
   'Your business is verified.': 'Votre entreprise est vérifiée.',
   'Your dossier is under review.': "Votre dossier est en cours d'examen.",
+  'Aggregator perimeter in force: deposits (Add money) are off, so no keyed gateway is offered to payers until the authorisation.':
+    "Périmètre agrégateur en vigueur : les dépôts (Ajouter de l'argent) sont désactivés ; aucune passerelle à clés n'est proposée aux payeurs avant l'autorisation.",
+  'all currencies': 'toutes devises',
+  'Any bank of the country can transfer to the platform account; the reference matches the deposit. Institutions reachable by pay-by-bank:':
+    'Toute banque du pays peut virer vers le compte de la plateforme ; la référence rapproche le dépôt. Institutions accessibles par paiement bancaire :',
+  'Bank transfer (platform account)': 'Virement bancaire (compte de la plateforme)',
+  Banks: 'Banques',
+  'collection number set': 'numéro de collecte configuré',
+  'Coverage by country': 'Couverture par pays',
+  disabled: 'désactivé',
+  enabled: 'activé',
+  'Every operator of the country pays into a collection number; the payout devices and the SMS evidence engine confirm it. Configure numbers under Mobile money operators.':
+    'Chaque opérateur du pays paie vers un numéro de collecte ; les appareils de paiement et le moteur de preuves SMS le confirment. Configurez les numéros sous Opérateurs mobile money.',
+  'Keyed processor APIs for this country': 'API de processeurs à clés pour ce pays',
+  'Mobile money · direct rail': 'Mobile money · rail direct',
+  'no collection number': 'pas de numéro de collecte',
+  'No operator registered for this country': 'Aucun opérateur enregistré pour ce pays',
+  'No switch connection for this country': 'Aucune connexion au switch pour ce pays',
+  'None for this country': 'Aucune pour ce pays',
+  off: 'désactivée',
+  'Participants (banks and mobile money on the switch); payers pay from their own institution, funds settle at the acceptor institution:':
+    "Participants (banques et mobile money sur le switch) ; les payeurs paient depuis leur propre institution, les fonds sont réglés chez l'institution de l'accepteur :",
+  'Pay by bank': 'Paiement bancaire',
+  simulation: 'simulation',
+  'The table below lists keyed processor APIs, which are optional and market-specific. A country is served by its own operators and banks through the direct rails (no operator or bank API) and, where one exists, the national switch.':
+    "Le tableau ci-dessous liste les API de processeurs à clés, facultatives et propres à chaque marché. Un pays est servi par ses propres opérateurs et banques via les rails directs (sans API d'opérateur ni de banque) et, lorsqu'il existe, par le switch national.",
 };

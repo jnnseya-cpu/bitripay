@@ -839,6 +839,14 @@ platform key); nothing is executed on receipt. It lets a developer, or the regul
 signed deliveries without any external receiver site. `DELETE /api/v1/webhook_inbox` clears it; 200 messages are kept per
 account (migration `042_webhook_inbox.sql`).
 
+**Coverage by country (Deposit & payment gateways).** The gateway table lists keyed processor APIs, which are optional and
+market-specific (Stripe, Paystack, Flutterwave, MTN MoMo API, Safaricom Daraja for Kenyan M-Pesa). A country is served by its
+own operators and banks without any API: `GET /api/admin/gateways/coverage?country=CD` returns the mobile-money operators of
+the country on the direct rail (Orange Money, Airtel Money, M-Pesa Vodacom, Afrimoney for the DRC, each with its collection
+number state), the bank rails (bank transfer to the platform account, pay-by-bank institutions), the national switch
+connection with its active participants, and the keyed gateways whose scope includes the country; the console panel above
+the table shows it per country and says when the aggregator perimeter keeps deposits off.
+
 ### Nothing depends on an external key, except the assistant
 
 Every movement of money and every message can run with **no provider API key at all**. The only

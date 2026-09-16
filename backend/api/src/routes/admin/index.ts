@@ -137,6 +137,9 @@ import { toPaymentRequest, type PaymentRequestRow } from '../../services/payment
 import { usersById } from '../../services/users';
 import { ADMIN_PERMISSIONS } from '../../middleware/permissions';
 import { listOperators as listMomo, upsertOperator as upsertMomo, deleteOperator as deleteMomo } from '../../services/momo';
+import { listInstitutions as listBankInstitutions } from '../../services/openBanking';
+import { connectionForCountry } from '../../services/switch/connections';
+import { listParticipants as listSwitchParticipants } from '../../services/switch/participants';
 
 /** The decided item, whatever it is: payment intent, payout instruction, withdrawal transaction or route. */
 function verificationSubject(v: { subjectType: string; paymentId: string }) {
@@ -1342,6 +1345,65 @@ adminRouter.post('/currencies/import', requirePermission('settings'), (req, res)
 adminRouter.get('/gateways', requirePermission('gateways'), (_req, res) =>
   res.json({ items: listGateways(), providers: Object.values(PROVIDERS).map((p) => ({ id: p.id, name: p.name, methods: p.supportedMethods, credentialFields: p.credentialFields })) }),
 );
+/**
+ * What actually serves one country, rail by rail: the keyed gateways whose scope includes it, every mobile-money
+ * operator of the country on the direct rail (collection number, no operator API), the bank institutions reachable
+ * without a bank API (bank transfer to the platform account, sandbox open banking), and the national switch connection
+ * with its active participants. Answers "why does the gateway list not show my country's banks and operators".
+ */
+adminRouter.get('/gateways/coverage', requirePermission('gateways'), (req, res) => {
+  const country = String(req.query.country ?? 'CD').toUpperCase();
+  const gateways = listGateways().filter((g) => g.provider !== 'sandbox' && (!g.countries.length || g.countries.includes(country)));
+  const operators = listMomo({ country, onlyEnabled: false }).map((o) => ({
+    id: o.id,
+    name: o.name,
+    brand: o.brand,
+    currency: o.currency,
+    ussd: o.ussd,
+    enabled: o.enabled,
+    directRail: o.directRail,
+    collectionNumber: o.collectionNumber,
+    payoutEnabled: o.payoutEnabled,
+  }));
+  const conn = connectionForCountry(country);
+  const participants = conn
+    ? listSwitchParticipants({ country, status: 'ACTIVE' }).map((x) => ({ id: x.id, name: x.name, kind: x.kind, currencies: x.currencies, services: x.services, source: x.source }))
+    : [];
+  const modules = getModules();
+  res.json({
+    country,
+    aggregatorPerimeter: aggregatorPerimeterApplied(modules),
+    addMoney: modules.addMoney !== false,
+    gateways: gateways.map((g) => ({
+      id: g.id,
+      name: g.name,
+      provider: g.provider,
+      enabled: g.enabled,
+      mode: g.mode,
+      methods: g.methods,
+      currencies: g.currencies,
+      keyed: !['manual_bank', 'manual_momo', 'open_banking'].includes(g.provider),
+    })),
+    mobileMoney: { gateway: gateways.find((g) => g.provider === 'manual_momo')?.enabled ?? false, operators },
+    banks: {
+      transfer: gateways.find((g) => g.provider === 'manual_bank')?.enabled ?? false,
+      openBanking: gateways.find((g) => g.provider === 'open_banking')?.enabled ?? false,
+      institutions: listBankInstitutions(country).map((i) => ({ id: i.id, name: i.name, currencies: i.currencies, provider: i.provider })),
+    },
+    switch: conn
+      ? {
+          id: conn.id,
+          schemeId: conn.schemeId,
+          environment: conn.environment,
+          simulation: conn.simulation,
+          enabled: conn.enabled,
+          linkState: conn.linkState,
+          certification: conn.certification?.status ?? null,
+          participants,
+        }
+      : null,
+  });
+});
 /** Onboarding: connectivity test with the stored credentials; the result is kept on the gateway for the go-live checklist. */
 adminRouter.post(
   '/gateways/:id/test',
