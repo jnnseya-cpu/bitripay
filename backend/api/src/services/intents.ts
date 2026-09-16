@@ -368,6 +368,8 @@ export interface CreateIntentInput {
   allowedMethods?: string[];
   /** Static QR scans create the intent with the scanned code. */
   qrId?: string | null;
+  /** An existing open payment request of the merchant (a point-of-sale sale) that this intent settles; it must carry the same amount and currency and have no intent yet. */
+  paymentRequestId?: string | null;
 }
 
 export const DEFAULT_RAILS = ['wallet', 'mpesa', 'airtel', 'orange', 'card', 'bank'];
@@ -453,18 +455,29 @@ export function createIntent(merchant: UserRow, input: CreateIntentInput): { row
   const expiresAt = minutes > 0 ? new Date(Date.now() + minutes * 60_000).toISOString() : null;
   const rails = (input.rails?.length ? input.rails : DEFAULT_RAILS).map((r) => r.toLowerCase());
   return db.transaction(() => {
-    // Execution object: the payment request that the wallet, QR and hosted checkout flows already settle.
-    const request = createPaymentRequest(merchant, {
-      kind: input.source === 'link' ? 'link' : 'qr',
-      amount: input.amountMinor ?? null,
-      currency: cur.code,
-      description: input.description ?? input.reference ?? null,
-      expiresInMinutes: minutes > 0 ? minutes : null,
-      successUrl: input.successUrl ?? null,
-      cancelUrl: input.cancelUrl ?? null,
-      allowedMethods: input.allowedMethods ?? [],
-      metadata: { ...(input.metadata ?? {}), intentId: id, purposeCode: input.purposeCode ?? null, reference: input.reference ?? null },
-    });
+    // Execution object: the payment request that the wallet, QR and hosted checkout flows already settle. A point-of-sale
+    // sale already is one: the intent binds to it instead of opening a second request.
+    const bound = input.paymentRequestId ? (db.prepare('SELECT * FROM payment_requests WHERE id = ?').get(input.paymentRequestId) as PaymentRequestRow | undefined) : null;
+    if (input.paymentRequestId) {
+      if (!bound || bound.requester_user_id !== merchant.id) throw new AppError(404, 'not_found', 'Payment request not found');
+      if (bound.status !== 'open') throw new AppError(409, 'request_not_open', `Payment request is ${bound.status}`);
+      if (bound.intent_id) throw new AppError(409, 'request_has_intent', 'This payment request already has an intent');
+      if ((bound.amount ?? 0) !== (input.amountMinor ?? 0) || bound.currency !== cur.code)
+        throw new AppError(409, 'amount_mismatch', 'The intent must carry the amount and currency of the payment request');
+    }
+    const request =
+      bound ??
+      createPaymentRequest(merchant, {
+        kind: input.source === 'link' ? 'link' : 'qr',
+        amount: input.amountMinor ?? null,
+        currency: cur.code,
+        description: input.description ?? input.reference ?? null,
+        expiresInMinutes: minutes > 0 ? minutes : null,
+        successUrl: input.successUrl ?? null,
+        cancelUrl: input.cancelUrl ?? null,
+        allowedMethods: input.allowedMethods ?? [],
+        metadata: { ...(input.metadata ?? {}), intentId: id, purposeCode: input.purposeCode ?? null, reference: input.reference ?? null },
+      });
     db.prepare(
       'INSERT INTO payment_intents (id, organisation_id, merchant_user_id, amount_minor, currency, capture_method, method_policy, rails, reference, description, purpose_code, status, source, qr_id, payment_request_id, location_id, terminal_id, customer_user_id, customer_msisdn, customer_country, settlement_profile_id, client_secret_hash, idem_key, metadata, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ).run(
@@ -520,6 +533,8 @@ export function createIntent(merchant: UserRow, input: CreateIntentInput): { row
       currency: cur.code,
       payload: { reference: input.reference ?? null },
     });
+    // Catalogued webhook: integrators rely on it to learn about intents created from any surface (API, QR, link, checkout, USSD).
+    void dispatchWebhook(merchant.id, 'payment_intent.created', { paymentIntent: intentView(getIntentRow(id)) }, { resource: { type: 'payment_intent', id } });
     return { row: getIntentRow(id), clientSecret: secret };
   })();
 }
@@ -619,6 +634,12 @@ export function finishAttempt(
         if (!TRANSITIONS[r.status].includes('CAPTURED')) transitionIntent(r.id, 'PROCESSING', actor, { attemptId });
         intent = transitionIntent(r.id, 'CAPTURED', actor, { attemptId, transactionId: details.transactionId ?? null, source: details.source ?? actor.type });
         intent = transitionIntent(r.id, 'SETTLEMENT_PENDING', { type: 'system' }, { attemptId });
+        // A rail that settles outside the ledger (the national switch: funds move between institutions) still closes
+        // the point-of-sale request so the merchant screen shows the sale paid; wallet and gateway rails already did.
+        if (r.payment_request_id && a.rail === 'national_switch')
+          getDb()
+            .prepare("UPDATE payment_requests SET status = 'paid', paid_transaction_id = COALESCE(paid_transaction_id, ?) WHERE id = ? AND status = 'open'")
+            .run(details.providerRef ?? attemptId, r.payment_request_id);
       }
       const merchant = findUserById(r.merchant_user_id);
       if (merchant) void dispatchWebhook(merchant.id, 'payment_intent.succeeded', { paymentIntent: intentView(getIntentRow(r.id)) }, { resource: { type: 'payment_intent', id: r.id } });

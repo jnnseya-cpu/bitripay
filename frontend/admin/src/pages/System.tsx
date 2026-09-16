@@ -46,8 +46,10 @@ const ms = (n?: number | null) => (n == null ? '—' : `${Math.round(n)} ms`);
 const Verdict = ({ met }: { met: boolean | null }) => (met === true ? <Chip kind="success">met</Chip> : met === false ? <Chip kind="danger">missed</Chip> : <Chip>no traffic</Chip>);
 
 function Health() {
+  const { toast } = useStore();
   const data = useAsync(() => api.get<any>('/api/admin/system/health'), []);
   const h = data.data;
+  const [guardian, setGuardian] = useState<any>(null);
   if (!h) return data.error ? <Alert kind="error">{data.error}</Alert> : <p className="muted small">{tr('Loading…')}</p>;
   const stateKind = (s: string) => (s === 'HEALTHY' ? 'success' : s === 'DEGRADED' ? 'warning' : 'danger');
   return (
@@ -132,6 +134,39 @@ function Health() {
             </ul>
           )}
           <KV k={tr('Operating mode')} v={<Chip kind={h.guardian.operatingMode === 'normal' ? 'success' : 'danger'}>{h.guardian.operatingMode}</Chip>} />
+          <div className="row wrap mb">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() =>
+                api
+                  .post<any>('/api/admin/guardian/run', {})
+                  .then((r) => {
+                    setGuardian(r);
+                    data.reload();
+                  })
+                  .catch((e) => toast(e.message, 'error'))
+              }
+            >
+              {tr('Run the Guardian check now')}
+            </Button>
+            {guardian && (
+              <Chip kind={guardian.result.ok ? 'success' : 'danger'}>
+                {guardian.result.ok
+                  ? tr('No discrepancy: every transaction balances and no balance is negative')
+                  : tr('{0} finding(s): the platform is paused until an administrator resolves them', { 0: guardian.result.findings.length })}
+              </Chip>
+            )}
+          </div>
+          {guardian && !guardian.result.ok && (
+            <ul className="small">
+              {guardian.result.findings.map((f: any, i: number) => (
+                <li key={i}>
+                  <b>{f.kind}</b> {f.ref} — {f.detail}
+                </li>
+              ))}
+            </ul>
+          )}
           <KV
             k={tr('Last Guardian check')}
             v={h.guardian.lastCheck ? `${h.guardian.lastCheck.ok ? 'ok' : `${h.guardian.lastCheck.findings} finding(s)`} · ${fmtDate(h.guardian.lastCheck.at)}` : 'never'}

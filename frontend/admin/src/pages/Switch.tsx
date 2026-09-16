@@ -12,9 +12,9 @@ import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader
  */
 export function SwitchConsole() {
   const { toast, money } = useStore();
-  const [tab, setTab] = useState<'national' | 'config' | 'pra' | 'connections' | 'participants' | 'bindings' | 'policies' | 'payments' | 'messages' | 'recon' | 'rails' | 'incidents' | 'fees'>(
-    'national',
-  );
+  const [tab, setTab] = useState<
+    'national' | 'config' | 'pra' | 'connections' | 'participants' | 'bindings' | 'payer' | 'policies' | 'payments' | 'messages' | 'recon' | 'rails' | 'incidents' | 'fees'
+  >('national');
   const err = (e: any) => toast(e.message, 'error');
   const ok = (m: string) => toast(m, 'success');
   return (
@@ -31,6 +31,7 @@ export function SwitchConsole() {
           { id: 'connections', label: tr('Connections') },
           { id: 'participants', label: tr('Participants') },
           { id: 'bindings', label: tr('Settlement accounts') },
+          { id: 'payer', label: tr('Payer simulator') },
           { id: 'policies', label: tr('Routing policies') },
           { id: 'payments', label: tr('Payments') },
           { id: 'messages', label: tr('Inbox / outbox') },
@@ -48,6 +49,7 @@ export function SwitchConsole() {
       {tab === 'connections' && <Connections ok={ok} err={err} />}
       {tab === 'participants' && <Participants ok={ok} err={err} />}
       {tab === 'bindings' && <Bindings ok={ok} err={err} />}
+      {tab === 'payer' && <PayerSimulator err={err} money={money} />}
       {tab === 'policies' && <Policies ok={ok} err={err} />}
       {tab === 'payments' && <Payments ok={ok} err={err} money={money} />}
       {tab === 'messages' && <Messages ok={ok} err={err} />}
@@ -321,6 +323,184 @@ function Bindings({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
           </>
         )}
       </Modal>
+    </div>
+  );
+}
+
+/**
+ * Payer-institution simulator (demonstration scene 3): plays the customer's bank or mobile-money app scanning the
+ * acceptor's QR and the institution authorising the debit through the national switch. Simulation connections only.
+ */
+function PayerSimulator({ err, money }: { err: (e: any) => void; money: (m: number, c: string) => string }) {
+  const intents = useAsync(() => api.get<any>('/api/admin/switch/simulator/intents'), []);
+  const [intentId, setIntentId] = useState<string>('');
+  const [saleId, setSaleId] = useState<string>('');
+  const [payload, setPayload] = useState('');
+  const [amount, setAmount] = useState('');
+  const [participant, setParticipant] = useState('');
+  const [token, setToken] = useState('tok_ok');
+  const [result, setResult] = useState<any>(null);
+  const [refund, setRefund] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const options = useAsync(() => (intentId ? api.get<any>(`/api/admin/switch/simulator/payers${qs({ intent: intentId })}`) : Promise.resolve(null)), [intentId]);
+  const payers: any[] = options.data?.payers ?? [];
+  const pay = () => {
+    setBusy(true);
+    setResult(null);
+    setRefund(null);
+    api
+      .post<any>('/api/admin/switch/simulator/pay', {
+        intent_id: intentId || null,
+        payment_request_id: saleId || null,
+        qr_payload: intentId || saleId ? null : payload.trim() || null,
+        amount_minor: amount ? Math.round(Number(amount)) : null,
+        participant_id: participant,
+        account_token: token,
+      })
+      .then((r) => {
+        setResult(r);
+        intents.reload();
+      })
+      .catch(err)
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="grid cols-2">
+      <div className="card">
+        <h4>{tr('1 · The sale to pay')}</h4>
+        <p className="small muted">
+          {tr('Open QR and point-of-sale intents of every acceptor. In production the customer scans this QR with the app of their own bank or mobile money; here the console plays that app.')}
+        </p>
+        <Table
+          head={['', tr('Acceptor'), tr('Amount'), tr('Reference'), tr('Created')]}
+          rows={(intents.data?.items ?? []).map((i: any) => [
+            <input
+              type="radio"
+              name="sim-intent"
+              checked={i.kind === 'request' ? saleId === i.id : intentId === i.id}
+              onChange={() => {
+                setIntentId(i.kind === 'request' ? '' : i.id);
+                setSaleId(i.kind === 'request' ? i.id : '');
+              }}
+            />,
+            <b>
+              {i.merchant?.businessName ?? i.merchant?.name ?? i.merchantId} <Chip>{i.kind === 'request' ? tr('point of sale') : tr('QR / API intent')}</Chip>
+            </b>,
+            money(i.amount.valueMinor ?? 0, i.amount.currency),
+            <span className="tiny">{i.reference ?? i.description ?? i.id}</span>,
+            <span className="tiny">{fmtDate(i.createdAt)}</span>,
+          ])}
+          empty={tr('No open intent: create a sale at the point of sale or a QR intent first')}
+        />
+        <Field label={tr('…or paste the QR payload (EMVCo text of the code)')} hint={tr('A static QR carries no amount: enter the amount the payer types (minor units).')}>
+          <Textarea
+            rows={2}
+            value={payload}
+            onChange={(e) => {
+              setPayload(e.target.value);
+              if (e.target.value.trim()) {
+                setIntentId('');
+                setSaleId('');
+              }
+            }}
+          />
+        </Field>
+        {!intentId && !saleId && payload.trim() && (
+          <Field label={tr('Amount (minor units, static QR only)')}>
+            <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ width: 200 }} />
+          </Field>
+        )}
+      </div>
+      <div className="card">
+        <h4>{tr("2 · The payer's institution")}</h4>
+        {options.data?.connection && !options.data.connection.simulation && (
+          <Alert kind="warning">{tr('This connection is certified: the payer institution speaks to the switch itself, the simulator is disabled.')}</Alert>
+        )}
+        {options.data && options.data.bindings.length === 0 && (
+          <Alert kind="warning">{tr('The acceptor has no active settlement account at a participating institution: declare and activate one first (Settlement accounts).')}</Alert>
+        )}
+        <Field label={tr('Institution of the payer (bank or mobile money on the switch)')}>
+          <Select value={participant} onChange={(e) => setParticipant(e.target.value)}>
+            <option value="">{tr('Choose an institution')}</option>
+            {(payers.length
+              ? payers
+              : [
+                  { participant_id: 'DEMO_BANK_A', name: 'Demo Bank A (SIMULATION)', kind: 'BANK' },
+                  { participant_id: 'DEMO_MMO_A', name: 'Demo Mobile Money A (SIMULATION)', kind: 'MMO' },
+                ]
+            ).map((p: any) => (
+              <option key={p.participant_id} value={p.participant_id}>
+                {p.name} · {p.kind}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={tr('Payer account (simulator scenario)')} hint={tr('tok_ok approves at once; the other tokens replay the failure and timeout cases of the certification profile.')}>
+          <Select value={token} onChange={(e) => setToken(e.target.value)}>
+            {(options.data?.tokens ?? [{ token: 'tok_ok', scenario: 'ACK then COMPLETED synchronously (nominal)' }]).map((t: any) => (
+              <option key={t.token} value={t.token}>
+                {t.token} — {t.scenario}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Button onClick={pay} disabled={busy || !participant || (!intentId && !saleId && !payload.trim())}>
+          {tr('Scan and pay through the switch (simulation)')}
+        </Button>
+        {result && (
+          <div className="card soft compact mt">
+            <div className="row" style={{ gap: 8 }}>
+              <StatusBadge status={result.payment.status} />
+              <b>{money(Number(result.payment.amount?.value_minor ?? 0), result.payment.amount?.currency ?? '')}</b>
+              <span className="mono tiny">{result.payment.payment_id}</span>
+            </div>
+            <KV k={tr('Intent')} v={`${result.intent.id} · ${result.intent.status}`} />
+            <KV k={tr('Settlement account')} v={`${result.binding.participantId} · ${result.binding.accountMasked}`} />
+            <KV k={tr('Consent')} v={result.consentReference} />
+            <KV k={tr('Outbox dispatched')} v={String(result.dispatched)} />
+            <h4>{tr('Timeline')}</h4>
+            {(result.timeline?.events ?? []).map((e: any) => (
+              <div key={e.seq} className="small">
+                <span className="mono tiny">{e.seq}</span> {e.type}{' '}
+                <span className="tiny muted">
+                  {e.source} · {e.from ?? '—'} → {e.to ?? '—'} · {fmtDate(e.occurredAt)}
+                </span>
+              </div>
+            ))}
+            {(result.timeline?.journal ?? []).map((j: any, i: number) => (
+              <div key={i} className="small">
+                <Chip>{j.fact}</Chip> {money(Number(j.amountMinor), j.currency)}
+              </div>
+            ))}
+            <p className="tiny muted">{tr('No BitriPay ledger entry: the funds moved from the payer institution to the acceptor institution through the switch. See Payments for the full record.')}</p>
+            {result.payment.status === 'COMPLETED' && !refund && (
+              <ConfirmButton
+                variant="secondary"
+                prompt={tr('Reason of the refund')}
+                onConfirm={(reason) =>
+                  api
+                    .post<any>('/api/admin/switch/simulator/refund', { payment_id: result.payment.payment_id, reason: reason || 'Customer returned the goods' })
+                    .then(setRefund)
+                    .catch(err)
+                }
+              >
+                {tr('Refund through the switch (simulation)')}
+              </ConfirmButton>
+            )}
+            {refund && (
+              <div className="card soft compact mt">
+                <div className="row" style={{ gap: 8 }}>
+                  <b>{tr('Refund')}</b> <StatusBadge status={refund.operation.status} /> <span className="mono tiny">{refund.operation.id}</span>
+                </div>
+                <KV k={tr('Aggregation fee')} v={refund.fee ? `${refund.fee.status} · ${money(Number(refund.fee.amount), refund.fee.currency)}` : '—'} />
+                <p className="tiny muted">
+                  {tr('Principal and fees return to the customer (Instruction n°58, art. 23): the aggregation fee accrued on this payment is credited back to the acceptor.')}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -823,66 +1003,115 @@ function Rails({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
 
 function Incidents({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
   const data = useAsync(() => api.get<any>('/api/admin/switch/incidents'), []);
+  const [form, setForm] = useState({ level: 'P2', title: '', subjectId: '', detail: '' });
   return (
-    <div className="card">
-      <Table
-        head={[tr('Severity'), tr('Title'), tr('Status'), tr('Opened'), '']}
-        rows={(data.data?.items ?? []).map((i: any) => [
-          <Chip kind={i.severity === 'P1' ? 'danger' : i.severity === 'P2' ? 'warning' : undefined}>{i.severity}</Chip>,
-          <span>
-            <b>{i.title}</b>
-            <br />
-            <span className="tiny muted">{i.summary ?? i.description}</span>
-          </span>,
-          <StatusBadge status={i.status} />,
-          <span className="tiny">{fmtDate(i.openedAt ?? i.createdAt)}</span>,
-          <div className="row">
-            {i.status === 'OPEN' && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() =>
-                  api
-                    .post(`/api/admin/switch/incidents/${i.id}/acknowledge`, {})
-                    .then(() => {
-                      ok('Acknowledged');
-                      data.reload();
-                    })
-                    .catch(err)
-                }
-              >
-                {tr('Acknowledge')}
-              </Button>
-            )}
-            {i.status !== 'RESOLVED' && (
-              <ConfirmButton
-                size="sm"
-                variant="success"
-                prompt="Resolution"
-                onConfirm={(note) =>
-                  api
-                    .post(`/api/admin/switch/incidents/${i.id}/resolve`, { resolution: note || 'resolved' })
-                    .then(() => {
-                      ok('Resolved');
-                      data.reload();
-                    })
-                    .catch(err)
-                }
-              >
-                {tr('Resolve')}
-              </ConfirmButton>
-            )}
-          </div>,
-        ])}
-        empty={tr('No incidents')}
-      />
+    <div className="grid cols-2">
+      <div className="card">
+        <h4>{tr('Incidents and outages register')}</h4>
+        <p className="small muted">
+          {tr(
+            'Every outage with its rail, its duration and its cause: probes open incidents on their own, operations declare the ones they cannot see. This register feeds the declaration within two days and the report within five days (Instruction n°42, art. 26).',
+          )}
+        </p>
+        <Table
+          head={[tr('Severity'), tr('Title'), tr('Rail / subject'), tr('Duration'), tr('Cause'), tr('Status'), tr('Opened'), '']}
+          rows={(data.data?.items ?? []).map((i: any) => [
+            <Chip kind={i.level === 'P1' ? 'danger' : i.level === 'P2' ? 'warning' : undefined}>{i.level}</Chip>,
+            <b>{i.title}</b>,
+            <span className="tiny">{i.subjectId ? `${i.subjectType ?? ''} ${i.subjectId}` : (i.subjectType ?? '—')}</span>,
+            <span className="tiny">
+              {i.durationMinutes} min{i.resolvedAt ? '' : ` (${tr('ongoing')})`}
+            </span>,
+            <span className="tiny muted">{i.detail ?? '—'}</span>,
+            <StatusBadge status={i.status} />,
+            <span className="tiny">{fmtDate(i.openedAt)}</span>,
+            <div className="row">
+              {i.status === 'OPEN' && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    api
+                      .post(`/api/admin/switch/incidents/${i.id}/ack`, {})
+                      .then(() => {
+                        ok(tr('Acknowledged'));
+                        data.reload();
+                      })
+                      .catch(err)
+                  }
+                >
+                  {tr('Acknowledge')}
+                </Button>
+              )}
+              {i.status !== 'RESOLVED' && (
+                <ConfirmButton
+                  size="sm"
+                  variant="success"
+                  prompt={tr('Resolution')}
+                  onConfirm={(note) =>
+                    api
+                      .post(`/api/admin/switch/incidents/${i.id}/resolve`, { note: note || 'resolved' })
+                      .then(() => {
+                        ok(tr('Resolved'));
+                        data.reload();
+                      })
+                      .catch(err)
+                  }
+                >
+                  {tr('Resolve')}
+                </ConfirmButton>
+              )}
+            </div>,
+          ])}
+          empty={tr('No incident')}
+        />
+      </div>
+      <div className="card">
+        <h4>{tr('Declare an incident or outage')}</h4>
+        <div className="grid cols-2">
+          <Field label={tr('Severity')}>
+            <Select value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })}>
+              <option value="P1">
+                {tr('P1 —')} {tr('service down')}
+              </option>
+              <option value="P2">
+                {tr('P2 —')} {tr('degraded')}
+              </option>
+              <option value="P3">
+                {tr('P3 —')} {tr('minor')}
+              </option>
+            </Select>
+          </Field>
+          <Field label={tr('Rail / subject')}>
+            <Input value={form.subjectId} onChange={(e) => setForm({ ...form, subjectId: e.target.value })} placeholder="orange_cd · NATIONAL_SWITCH_CD" />
+          </Field>
+        </div>
+        <Field label={tr('Title')}>
+          <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        </Field>
+        <Field label={tr('Cause')}>
+          <Textarea rows={2} value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} />
+        </Field>
+        <Button
+          disabled={form.title.trim().length < 3}
+          onClick={() =>
+            api
+              .post('/api/admin/switch/incidents', { level: form.level, title: form.title.trim(), detail: form.detail.trim() || null, subjectType: 'rail', subjectId: form.subjectId.trim() || null })
+              .then(() => {
+                ok(tr('Incident declared'));
+                setForm({ level: 'P2', title: '', subjectId: '', detail: '' });
+                data.reload();
+              })
+              .catch(err)
+          }
+        >
+          {tr('Declare')}
+        </Button>
+      </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// National view: participants and pairs (reused), per-connection 24 h picture, capability matrix (country × method × rail)
-// ---------------------------------------------------------------------------------------------------------------------
 function NationalView({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
   const connections = useAsync(() => api.get<any>('/api/admin/switch/connections'), []);
   const [conn, setConn] = useState<string>('');

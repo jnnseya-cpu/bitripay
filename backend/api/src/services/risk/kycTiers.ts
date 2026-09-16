@@ -14,6 +14,9 @@ import { toBase } from '../currencies';
 import { recordEvent, type Actor } from '../events';
 import { findUserById, updateUser, toPublicUser, MERCHANT_ROLES, type UserRow } from '../users';
 import { encrypt, decrypt } from '../../lib/crypto';
+import { screenSanctions } from '../risk';
+import { openCase } from './compliance';
+import { forbidden } from '../../lib/errors';
 import { notify } from '../notifications';
 import { publish } from '../bus';
 
@@ -372,6 +375,28 @@ export function reviewKyb(id: string, adminId: string, decision: 'verified' | 'r
   const r = db.prepare('SELECT * FROM kyb_submissions WHERE id = ?').get(id) as any;
   if (!r) throw notFound('KYB submission not found', 'kyb_not_found');
   if (r.status !== 'pending') throw conflict('Submission already reviewed', 'kyb_reviewed');
+  // A business cannot be approved while a director or beneficial owner is on a sanctions list: the approval is
+  // refused, a sanctions case is opened for the compliance officer and the dossier stays pending.
+  if (decision === 'verified') {
+    for (const d of parseJson<{ name: string }[]>(r.directors, []) ?? []) {
+      const hits = screenSanctions({ name: d.name }).filter((h) => h.startsWith('sanctions:'));
+      if (!hits.length) continue;
+      const c = openCase({
+        kind: 'SANCTIONS',
+        userId: r.user_id,
+        subjectType: 'kyb',
+        subjectId: id,
+        severity: 'critical',
+        title: `Sanctions hit on a director of ${r.legal_name}`,
+        summary: `${d.name} matches a sanctions list entry (${hits.join(', ')}); the KYB approval was refused`,
+        indicators: hits,
+        dedupeKey: `kyb:${id}:${d.name.toLowerCase()}`,
+        openedBy: adminId,
+      });
+      recordEvent('risk', r.user_id, 'kyb.sanctions_refused', { type: 'admin', id: adminId }, { submissionId: id, director: d.name, hits, caseId: c.id });
+      throw forbidden(`Cannot approve: director ${d.name} matches a sanctions list; case ${c.id} was opened`, 'sanctions_hit');
+    }
+  }
   db.prepare('UPDATE kyb_submissions SET status = ?, note = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?').run(decision, note ?? null, adminId, now(), id);
   updateUser(r.user_id, { kyb_status: decision } as any);
   if (decision === 'verified') setTier(r.user_id, 4, { type: 'admin', id: adminId }, `KYB ${id} verified`);

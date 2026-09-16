@@ -315,6 +315,8 @@ adminRouter.patch(
         phone: z.string().optional().nullable(),
         role: z.enum(['user', 'merchant', 'agent', 'admin']).optional(),
         status: z.enum(['active', 'suspended']).optional(),
+        /** Why the account is suspended (suspected fraud, court order…): audited and told to the customer. */
+        reason: z.string().max(300).optional().nullable(),
         kycStatus: z.enum(['none', 'pending', 'verified', 'rejected']).optional(),
         country: z.string().length(2).optional().nullable(),
         businessName: z.string().optional().nullable(),
@@ -349,7 +351,8 @@ adminRouter.patch(
     if (body.password) fields.password_hash = hashPassword(body.password);
     const updated = updateUser(target.id, fields as any);
     audit(req.user!.id, 'user.update', 'user', target.id, { ...body, password: body.password ? '***' : undefined });
-    if (body.status === 'suspended') emitAsync('account.suspended', { userId: target.id, vars: { reason: '' }, data: { kind: 'account' } });
+    if (body.status === 'suspended')
+      emitAsync('account.suspended', { userId: target.id, vars: { reason: body.reason ? `: ${body.reason}` : '' }, data: { kind: 'account', reason: body.reason ?? null } });
     if (body.status === 'active' && target.status === 'suspended') emitAsync('account.reactivated', { userId: target.id, data: { kind: 'account' } });
     res.json({ user: { ...toUser(updated), permissions: JSON.parse((updated as any).permissions || '[]') } });
   }),

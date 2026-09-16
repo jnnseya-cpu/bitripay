@@ -426,10 +426,31 @@ export function openIncident(level: IncidentLevel, title: string, detail: string
     notify(a.id, `${level} incident: ${title}`, `${detail ?? ''} Acknowledge within ${targets} minutes.`, { kind: 'incident', incidentId: id, level });
   return id;
 }
+/** Console view of an incident: level, subject (rail, connection, corridor…), cause, and the outage duration so far or until resolution. */
+export function incidentView(r: any) {
+  const end = r.resolved_at ? new Date(r.resolved_at).getTime() : Date.now();
+  return {
+    id: r.id,
+    level: r.level,
+    severity: r.level,
+    title: r.title,
+    detail: r.detail,
+    subjectType: r.subject_type,
+    subjectId: r.subject_id,
+    status: r.status,
+    openedAt: r.created_at,
+    acknowledgedAt: r.acknowledged_at,
+    acknowledgedBy: r.acknowledged_by,
+    resolvedAt: r.resolved_at,
+    durationMinutes: Math.max(0, Math.round((end - new Date(r.created_at).getTime()) / 60_000)),
+  };
+}
 export function listIncidents(status?: string | null) {
-  return getDb()
-    .prepare(`SELECT * FROM incidents ${status ? 'WHERE status = ?' : ''} ORDER BY created_at DESC LIMIT 200`)
-    .all(...(status ? [status] : [])) as any[];
+  return (
+    getDb()
+      .prepare(`SELECT * FROM incidents ${status ? 'WHERE status = ?' : ''} ORDER BY created_at DESC LIMIT 200`)
+      .all(...(status ? [status] : [])) as any[]
+  ).map(incidentView);
 }
 export function acknowledgeIncident(id: string, adminId: string) {
   const r = getDb()
@@ -438,7 +459,7 @@ export function acknowledgeIncident(id: string, adminId: string) {
     )
     .run(now(), adminId, id);
   if (!r.changes) throw notFound('Incident not found', 'incident_not_found');
-  return getDb().prepare('SELECT * FROM incidents WHERE id = ?').get(id);
+  return incidentView(getDb().prepare('SELECT * FROM incidents WHERE id = ?').get(id));
 }
 export function resolveIncident(id: string, adminId: string, note?: string | null) {
   const r = getDb()
@@ -446,5 +467,5 @@ export function resolveIncident(id: string, adminId: string, note?: string | nul
     .run(now(), note ?? null, note ?? null, id);
   if (!r.changes) throw notFound('Incident not found', 'incident_not_found');
   recordEvent('corridor', id, 'incident.resolved', { type: 'admin', id: adminId }, { note: note ?? null });
-  return getDb().prepare('SELECT * FROM incidents WHERE id = ?').get(id);
+  return incidentView(getDb().prepare('SELECT * FROM incidents WHERE id = ?').get(id));
 }

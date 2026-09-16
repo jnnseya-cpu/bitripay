@@ -847,6 +847,26 @@ number state), the bank rails (bank transfer to the platform account, pay-by-ban
 connection with its active participants, and the keyed gateways whose scope includes the country; the console panel above
 the table shows it per country and says when the aggregator perimeter keeps deposits off.
 
+**Payer-institution simulator (demonstration scene 3).** National switch & rails → "Payer simulator" plays the customer's
+bank or mobile-money app scanning the acceptor's QR and its institution authorising the debit, on a connection in
+simulation only. It lists open QR / API intents and point-of-sale sales (`GET /api/admin/switch/simulator/intents`), the
+institutions that can reach the acceptor's active settlement account and the simulator account tokens
+(`GET /api/admin/switch/simulator/payers?intent=`), pays (`POST /api/admin/switch/simulator/pay` with `intent_id`,
+`payment_request_id` or a pasted `qr_payload`, `participant_id`, `account_token`) through the real path (consent recorded,
+payment created as the merchant's order, outbox dispatched under the lease, intent settled through the mirror, no ledger
+entry, aggregation fee accrued) and refunds (`POST /api/admin/switch/simulator/refund`: principal and fees return, fee
+credited back, art. 23). A point-of-sale sale gets its intent bound on first use (`CreateIntentInput.paymentRequestId`)
+and a capture through the national switch marks the sale paid so the point of sale shows it. Every intent creation now
+emits the catalogued `payment_intent.created` webhook.
+
+**Controls shown in scene 5.** A KYB approval is refused with `sanctions_hit` when a director or beneficial owner matches
+a sanctions list, and a SANCTIONS compliance case is opened (Risk & compliance → Compliance cases). Suspending an
+account carries a reason (`PATCH /api/admin/users/:id` with `status: suspended, reason`) that reaches the customer's
+notification and the audit trail. System health & SLOs → "Run the Guardian check now" runs the ledger invariants from
+the console. National switch & rails → Incidents is the incidents and outages register: level, rail / subject, cause,
+duration (open or until resolution), acknowledge, resolve, and a manual declaration (`POST /api/admin/switch/incidents`)
+for outages the probes cannot see.
+
 ### Nothing depends on an external key, except the assistant
 
 Every movement of money and every message can run with **no provider API key at all**. The only

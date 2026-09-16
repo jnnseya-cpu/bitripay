@@ -106,7 +106,7 @@ describe('webhook inbox', () => {
     const ep = await request(app)
       .post('/api/v1/webhook_endpoints')
       .set(merchant.auth)
-      .send({ url: inbox.body.url, events: ['payment_intent.succeeded'] });
+      .send({ url: inbox.body.url, events: ['payment_intent.succeeded', 'payment_intent.created'] });
     expect(ep.status, JSON.stringify(ep.body)).toBe(201);
     const body = JSON.stringify({ id: 'evt_test_1', type: 'payment_intent.succeeded', data: { object: { id: 'pi_1', amount_minor: 2500 } } });
     const ts = Math.floor(Date.now() / 1000);
@@ -128,6 +128,16 @@ describe('webhook inbox', () => {
     expect(list.body.data).toHaveLength(2);
     expect(list.body.data[1]).toMatchObject({ eventType: 'payment_intent.succeeded', deliveryId, endpointId: ep.body.id, hmacValid: true, ed25519Valid: true });
     expect(list.body.data[1].headers['bitripay-signature']).toBe(headers['BitriPay-Signature']);
+    // a payment intent created from the developer portal or the API emits payment_intent.created; the delivery to the inbox endpoint is queued
+    const intent = await request(app)
+      .post('/api/v1/qr-intents')
+      .set(merchant.auth)
+      .send({ amount: { currency: 'USD', value_minor: '2500' }, reference: 'ORDER-1' });
+    expect(intent.status, JSON.stringify(intent.body)).toBe(201);
+    const events = await request(app).get('/api/v1/events?limit=10').set(merchant.auth);
+    expect(events.body.data.map((e: any) => e.type)).toContain('payment_intent.created');
+    const deliveries = await request(app).get('/api/v1/webhook_deliveries?limit=10').set(merchant.auth);
+    expect(deliveries.body.data.some((d: any) => d.event === 'payment_intent.created' && d.url === inbox.body.url)).toBe(true);
     expect((await request(app).delete('/api/v1/webhook_inbox').set(merchant.auth)).body.cleared).toBe(2);
     expect((await request(app).get('/api/v1/webhook_inbox').set(merchant.auth)).body.data).toHaveLength(0);
   });

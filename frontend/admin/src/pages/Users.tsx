@@ -385,6 +385,14 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     <option value="suspended">{tr('Suspended')}</option>
                   </Select>
                 </Field>
+                {edit.status === 'suspended' && (
+                  <Field
+                    label={tr('Reason of the suspension')}
+                    hint={tr('Told to the customer in the notification and kept in the audit trail (a suspected fraud is also declared to the central bank within 48 hours).')}
+                  >
+                    <Input value={edit.reason ?? ''} onChange={(e) => setEdit({ ...edit, reason: e.target.value })} placeholder={tr('Suspected fraud')} />
+                  </Field>
+                )}
                 <Field label={tr('KYC status')}>
                   <Select value={edit.kycStatus} onChange={(e) => setEdit({ ...edit, kycStatus: e.target.value })}>
                     {['none', 'pending', 'verified', 'rejected'].map((s) => (

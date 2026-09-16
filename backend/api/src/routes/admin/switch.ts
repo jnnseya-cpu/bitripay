@@ -29,6 +29,7 @@ import {
   emissionGate,
   enableBlockers,
   listIncidents,
+  openIncident,
   acknowledgeIncident,
   resolveIncident,
   certificateAlerts,
@@ -47,6 +48,7 @@ import {
 } from '../../services/switch/participants';
 import { listPolicies, createPolicyDraft, approvePolicy, activatePolicy, listExceptions, createException, approveException, decideRoute, activePolicy } from '../../services/switch/policy';
 import { simulatorFor, SIMULATOR_SCENARIOS } from '../../services/switch/adapter';
+import { payableIntents, payerOptions, simulatePayerPayment, simulateRefund } from '../../services/switch/payerSimulator';
 import {
   listPayments,
   paymentTimeline,
@@ -377,6 +379,50 @@ r.post('/bindings/:id/suspend', requirePermission('compliance'), (req, res) => {
   audit(req.user!.id, 'switch.binding.suspend', 'beneficiary_binding', v.id, { reason: b.reason });
   res.json({ binding: v });
 });
+// ---------------------------------------------------------------- payer-institution simulator (demonstration, simulation connections only)
+r.get('/simulator/intents', requirePermission('switch'), (req, res) => res.json({ items: payableIntents(Number(req.query.limit) || 50) }));
+r.get('/simulator/payers', requirePermission('switch'), (req, res) => res.json(payerOptions(String(req.query.intent ?? ''))));
+r.post(
+  '/simulator/pay',
+  requirePermission('switch'),
+  wrap(async (req, res) => {
+    const b = validate(
+      z.object({
+        intent_id: z.string().max(80).optional().nullable(),
+        payment_request_id: z.string().max(80).optional().nullable(),
+        qr_payload: z.string().max(4000).optional().nullable(),
+        amount_minor: z.number().int().positive().optional().nullable(),
+        participant_id: z.string().min(1),
+        account_token: z.string().max(200).optional().nullable(),
+      }),
+      req.body,
+    );
+    const result = await simulatePayerPayment(req.user!, {
+      intentId: b.intent_id,
+      paymentRequestId: b.payment_request_id,
+      qrPayload: b.qr_payload,
+      amountMinor: b.amount_minor,
+      participantId: b.participant_id,
+      accountToken: b.account_token,
+    });
+    audit(req.user!.id, 'switch.simulator.pay', 'switch_payment', result.payment.payment_id, {
+      intentId: result.intent.id,
+      participantId: b.participant_id,
+      accountToken: b.account_token ?? 'tok_ok',
+    });
+    res.json(result);
+  }),
+);
+r.post(
+  '/simulator/refund',
+  requirePermission('switch'),
+  wrap(async (req, res) => {
+    const b = validate(z.object({ payment_id: z.string().min(1), reason: z.string().min(1).max(200) }), req.body);
+    const result = await simulateRefund(req.user!, b.payment_id, b.reason);
+    audit(req.user!.id, 'switch.simulator.refund', 'switch_payment', b.payment_id, { reason: b.reason, operationId: result.operation.id, status: result.operation.status });
+    res.json(result);
+  }),
+);
 r.get('/bindings', requirePermission('switch'), (req, res) =>
   res.json({ items: listAllBindings({ status: req.query.status ? String(req.query.status).toUpperCase() : null, limit: Number(req.query.limit) || 100 }) }),
 );
@@ -547,6 +593,22 @@ r.post('/fees/invoices/:id/settle', requirePermission('approvals'), (req, res) =
 
 // ---------------------------------------------------------------- incidents
 r.get('/incidents', requirePermission('switch'), (req, res) => res.json({ items: listIncidents(req.query.status ? String(req.query.status) : null) }));
+/** Outages the probes cannot see (an operator network down, a bank cut-over) are declared by operations: the register feeds the two-day declaration and the five-day report. */
+r.post('/incidents', requirePermission('switch'), (req, res) => {
+  const b = validate(
+    z.object({
+      level: z.enum(['P1', 'P2', 'P3']),
+      title: z.string().min(3).max(160),
+      detail: z.string().max(2000).optional().nullable(),
+      subjectType: z.string().max(40).optional().nullable(),
+      subjectId: z.string().max(80).optional().nullable(),
+    }),
+    req.body,
+  );
+  const id = openIncident(b.level, b.title, b.detail ?? null, b.subjectType ?? 'rail', b.subjectId ?? null);
+  audit(req.user!.id, 'incident.open', 'incident', id, { level: b.level, title: b.title, subject: b.subjectId ?? null });
+  res.status(201).json({ incident: listIncidents().find((i) => i.id === id) });
+});
 r.post('/incidents/:id/ack', requirePermission('switch'), (req, res) => {
   const i = acknowledgeIncident(String(req.params.id), req.user!.id);
   audit(req.user!.id, 'incident.ack', 'incident', String(req.params.id), {});

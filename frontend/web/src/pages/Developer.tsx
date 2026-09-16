@@ -318,11 +318,11 @@ export function Developer() {
                   <div className="flex1">
                     <div className="main-text">{d.type ?? d.eventType}</div>
                     <div className="sub-text">
-                      {d.url} · attempt {d.attempts ?? d.attempt} · {d.lastStatus ?? d.statusCode ?? ''} · {new Date(d.createdAt).toLocaleString()}
+                      {d.url} · {tr('attempt')} {d.attempts ?? d.attempt} · {d.lastStatus ?? d.statusCode ?? ''} · {new Date(d.createdAt).toLocaleString()}
                     </div>
                   </div>
-                  <StatusBadge status={d.status} />
-                  {d.status !== 'succeeded' && (
+                  <StatusBadge status={d.status ?? (d.success ? 'succeeded' : d.dead ? 'dead' : 'pending')} />
+                  {!d.success && (
                     <Button
                       size="sm"
                       variant="ghost"
