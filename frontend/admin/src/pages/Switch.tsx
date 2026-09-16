@@ -353,8 +353,32 @@ function PayerSimulator({ err, money }: { err: (e: any) => void; money: (m: numb
   const [amount, setAmount] = useState('');
   const [participant, setParticipant] = useState('');
   const [token, setToken] = useState('tok_ok');
-  const [result, setResult] = useState<any>(null);
-  const [refund, setRefund] = useState<any>(null);
+  // The last result survives a visit to Payments or Aggregation fees during the demonstration (session storage, this tab only).
+  const restore = (k: string) => {
+    try {
+      return JSON.parse(sessionStorage.getItem(k) ?? 'null');
+    } catch {
+      return null;
+    }
+  };
+  const [result, setResultState] = useState<any>(() => restore('bitripay.admin.simulator.result'));
+  const [refund, setRefundState] = useState<any>(() => restore('bitripay.admin.simulator.refund'));
+  const setResult = (v: any) => {
+    setResultState(v);
+    try {
+      sessionStorage.setItem('bitripay.admin.simulator.result', JSON.stringify(v));
+    } catch {
+      // session storage unavailable (private mode): the result simply does not survive a tab change
+    }
+  };
+  const setRefund = (v: any) => {
+    setRefundState(v);
+    try {
+      sessionStorage.setItem('bitripay.admin.simulator.refund', JSON.stringify(v));
+    } catch {
+      // session storage unavailable (private mode): the result simply does not survive a tab change
+    }
+  };
   const [busy, setBusy] = useState(false);
   const options = useAsync(() => (intentId ? api.get<any>(`/api/admin/switch/simulator/payers${qs({ intent: intentId })}`) : Promise.resolve(null)), [intentId]);
   const payers: any[] = options.data?.payers ?? [];
@@ -1019,7 +1043,49 @@ function Incidents({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
   const data = useAsync(() => api.get<any>('/api/admin/switch/incidents'), []);
   const [form, setForm] = useState({ level: 'P2', title: '', subjectId: '', detail: '' });
   return (
-    <div className="grid cols-2">
+    <div>
+      <div className="card">
+        <h4>{tr('Declare an incident or outage')}</h4>
+        <div className="grid cols-2">
+          <Field label={tr('Severity')}>
+            <Select value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })}>
+              <option value="P1">
+                {tr('P1 —')} {tr('service down')}
+              </option>
+              <option value="P2">
+                {tr('P2 —')} {tr('degraded')}
+              </option>
+              <option value="P3">
+                {tr('P3 —')} {tr('minor')}
+              </option>
+            </Select>
+          </Field>
+          <Field label={tr('Rail / subject')}>
+            <Input value={form.subjectId} onChange={(e) => setForm({ ...form, subjectId: e.target.value })} placeholder="orange_cd · NATIONAL_SWITCH_CD" />
+          </Field>
+          <Field label={tr('Title')}>
+            <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          </Field>
+          <Field label={tr('Cause')}>
+            <Textarea rows={2} value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} />
+          </Field>
+        </div>
+        <Button
+          disabled={form.title.trim().length < 3}
+          onClick={() =>
+            api
+              .post('/api/admin/switch/incidents', { level: form.level, title: form.title.trim(), detail: form.detail.trim() || null, subjectType: 'rail', subjectId: form.subjectId.trim() || null })
+              .then(() => {
+                ok(tr('Incident declared'));
+                setForm({ level: 'P2', title: '', subjectId: '', detail: '' });
+                data.reload();
+              })
+              .catch(err)
+          }
+        >
+          {tr('Declare')}
+        </Button>
+      </div>
       <div className="card">
         <h4>{tr('Incidents and outages register')}</h4>
         <p className="small muted">
@@ -1079,48 +1145,6 @@ function Incidents({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
           ])}
           empty={tr('No incident')}
         />
-      </div>
-      <div className="card">
-        <h4>{tr('Declare an incident or outage')}</h4>
-        <div className="grid cols-2">
-          <Field label={tr('Severity')}>
-            <Select value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })}>
-              <option value="P1">
-                {tr('P1 —')} {tr('service down')}
-              </option>
-              <option value="P2">
-                {tr('P2 —')} {tr('degraded')}
-              </option>
-              <option value="P3">
-                {tr('P3 —')} {tr('minor')}
-              </option>
-            </Select>
-          </Field>
-          <Field label={tr('Rail / subject')}>
-            <Input value={form.subjectId} onChange={(e) => setForm({ ...form, subjectId: e.target.value })} placeholder="orange_cd · NATIONAL_SWITCH_CD" />
-          </Field>
-        </div>
-        <Field label={tr('Title')}>
-          <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        </Field>
-        <Field label={tr('Cause')}>
-          <Textarea rows={2} value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} />
-        </Field>
-        <Button
-          disabled={form.title.trim().length < 3}
-          onClick={() =>
-            api
-              .post('/api/admin/switch/incidents', { level: form.level, title: form.title.trim(), detail: form.detail.trim() || null, subjectType: 'rail', subjectId: form.subjectId.trim() || null })
-              .then(() => {
-                ok(tr('Incident declared'));
-                setForm({ level: 'P2', title: '', subjectId: '', detail: '' });
-                data.reload();
-              })
-              .catch(err)
-          }
-        >
-          {tr('Declare')}
-        </Button>
       </div>
     </div>
   );

@@ -143,8 +143,12 @@ export function runGuardian(opts: { haltOnFailure?: boolean } = {}): GuardianRes
     .all() as any[];
   for (const e of orphanEvents) findings.push({ kind: 'event_without_ledger', ref: e.event_id, detail: `transaction ${e.transaction_id} missing` });
   // Observation-only rails (national switch, aggregator phase) never post a customer balance: their proof is the observation journal.
+  // An intent captured through the national switch (a switch payment settled it, or its captured attempt ran on that
+  // rail) legitimately has no ledger transaction: the funds moved between institutions and the proof is the switch journal.
   const captured = db
-    .prepare("SELECT id FROM payment_intents WHERE status IN ('CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED') AND transaction_id IS NULL AND rails NOT LIKE '%national_switch%'")
+    .prepare(
+      "SELECT pi.id FROM payment_intents pi WHERE pi.status IN ('CAPTURED', 'SETTLEMENT_PENDING', 'SETTLED') AND pi.transaction_id IS NULL AND pi.rails NOT LIKE '%national_switch%' AND NOT EXISTS (SELECT 1 FROM switch_payments sp WHERE sp.intent_id = pi.id) AND NOT EXISTS (SELECT 1 FROM payment_attempts a WHERE a.intent_id = pi.id AND a.rail = 'national_switch')",
+    )
     .all() as any[];
   for (const c of captured) findings.push({ kind: 'captured_without_posting', ref: c.id, detail: 'captured intent has no ledger transaction' });
   const overRefunded = db

@@ -156,7 +156,8 @@ export async function simulatePayerPayment(
     } as any,
     `sim-${intent.id}-${Date.now()}`,
   );
-  const dispatched = await dispatchOutbox(`admin:${admin.id}`, { limit: 100 });
+  // The standing dispatcher may hold the lease: the demonstration takes it over (fencing token) so the payment completes now.
+  const dispatched = await dispatchOutbox(`admin:${admin.id}`, { limit: 100, force: true });
   const id = r.payment.payment_id;
   return {
     payment: getPayment(merchant.id, id),
@@ -183,7 +184,7 @@ export async function simulateRefund(admin: UserRow, paymentId: string, reason: 
   getDb()
     .prepare('UPDATE outbox_messages SET available_at = ? WHERE payment_id = ? AND delivered_at IS NULL')
     .run(new Date(Date.now() - 1000).toISOString(), paymentId);
-  await dispatchOutbox(`admin:${admin.id}`, { limit: 100 });
+  await dispatchOutbox(`admin:${admin.id}`, { limit: 100, force: true });
   let after = listLinkedOperations(paymentId).find((o) => o.id === op.id)!;
   if (after.status !== 'SUCCEEDED' && after.status !== 'REJECTED') {
     const row = getDb().prepare('SELECT stable_message_id FROM linked_operations WHERE id = ?').get(op.id) as { stable_message_id: string | null } | undefined;

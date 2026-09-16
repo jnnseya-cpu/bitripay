@@ -29,7 +29,7 @@ export function Developer() {
   const inbox = useAsync(() => (tab === 'webhooks' ? api.get<any>('/api/v1/webhook_inbox') : Promise.resolve(null)), [tab]);
   const [key, setKey] = useState<any>({ label: '', kind: 'secret', mode: 'test', scopes: [] as string[] });
   const [created, setCreated] = useState<any>(null);
-  const [ep, setEp] = useState<any>({ url: '', events: ['payment_intent.succeeded', 'refund.succeeded'] });
+  const [ep, setEp] = useState<any>({ url: '', events: ['payment_intent.created', 'payment_intent.succeeded', 'refund.succeeded'] });
   const [epSecret, setEpSecret] = useState<any>(null);
   const err = (e: any) => toast(e.message, 'error');
   if (!isMerchantClass(user?.role) && user?.role !== 'admin' && clientWorkspaces.length === 0)
@@ -39,7 +39,8 @@ export function Developer() {
         client to add you under Command centre → Team with the developer role.
       </Alert>
     );
-  const allTypes: string[] = types.data?.data ?? types.data?.types ?? [];
+  // The catalogue lists { type, description } objects (older builds returned plain strings): render the type, keep the description as a tooltip.
+  const allTypes: { type: string; description?: string }[] = (types.data?.data ?? types.data?.types ?? []).map((t: any) => (typeof t === 'string' ? { type: t } : t));
   return (
     <div>
       <PageHeader
@@ -177,14 +178,15 @@ export function Developer() {
             </Field>
             <Field label={tr('Events')}>
               <div className="row wrap">
-                {allTypes.map((t: string) => (
-                  <Chip
-                    key={t}
-                    kind={ep.events.includes(t) ? 'primary' : undefined}
-                    onClick={() => setEp({ ...ep, events: ep.events.includes(t) ? ep.events.filter((x: string) => x !== t) : [...ep.events, t] })}
-                  >
-                    {t}
-                  </Chip>
+                {allTypes.map(({ type: t, description }) => (
+                  <span key={t} title={description ?? t}>
+                    <Chip
+                      kind={ep.events.includes(t) ? 'primary' : undefined}
+                      onClick={() => setEp({ ...ep, events: ep.events.includes(t) ? ep.events.filter((x: string) => x !== t) : [...ep.events, t] })}
+                    >
+                      {t}
+                    </Chip>
+                  </span>
                 ))}
               </div>
             </Field>

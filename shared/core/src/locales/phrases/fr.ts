@@ -4617,4 +4617,44 @@ export const frPhrases: Record<string, string> = {
     "Communiqué au client dans la notification et conservé dans la piste d'audit (une fraude présumée est aussi déclarée à la Banque Centrale sous 48 heures).",
   '{0} simulator institutions active, {1} open pairs': '{0} institutions fictives actives, {1} paires ouvertes',
   'Seed the simulator institutions': 'Créer les institutions fictives du simulateur',
+  'Acceptance on (QR, payment links, requests, merchant gateway and API); issuer rails wait for the e-money authorisation':
+    "Acceptation active (QR, liens de paiement, demandes, passerelle marchande et API) ; les rails d'émetteur attendent l'autorisation de monnaie électronique",
+  'Money moves on the BitriPay digital rail (ledger, direct operator numbers, bank instructions, payout devices, agents) without any bank, mobile-money or BTCPay API':
+    "L'argent circule sur le rail numérique BitriPay (grand livre, numéros directs des opérateurs, instructions bancaires, appareils de paiement, agents) sans aucune API de banque, de mobile money ni BTCPay",
+  'Aggregator perimeter applied: issuer and acquirer functions off until an e-money authorisation is recorded (Instruction n°42, art. 37, 40, 42)':
+    "Périmètre agrégateur appliqué : fonctions d'émetteur et d'acquéreur désactivées jusqu'à l'enregistrement d'une autorisation de monnaie électronique (Instruction n°42, art. 37, 40, 42)",
+  'Banque Centrale du Congo authorisation as prestataire de services connexes – agrégateur recorded (Instruction n°42, art. 9)':
+    'Autorisation de la Banque Centrale du Congo comme prestataire de services connexes – agrégateur enregistrée (Instruction n°42, art. 9)',
+  'Switch Monétique National participation recorded: indirect SAREC participation convention with a bank, GMIC membership, guarantee fund (Instruction n°58, art. 10, 12, 13)':
+    'Participation au Switch Monétique National enregistrée : convention de participation indirecte au SAREC avec une banque, adhésion au GMIC, fonds de garantie (Instruction n°58, art. 10, 12, 13)',
+  'Licensed card processor connected and tested (only if cards are offered)': 'Processeur de cartes agréé connecté et testé (seulement si les cartes sont proposées)',
+  'Card processor uses live keys (only if cards are offered)': 'Le processeur de cartes utilise des clés de production (seulement si les cartes sont proposées)',
+  'Card processor webhook secret configured (only if cards are offered)': 'Secret de webhook du processeur de cartes configuré (seulement si les cartes sont proposées)',
+  '3-D Secure enabled on card payments': '3-D Secure activé sur les paiements par carte',
+  'Sandbox processor disabled': 'Processeur bac à sable désactivé',
+  'Exchange rates fresh: a keyless provider refreshed automatically, or the official reference rate entered by the treasury':
+    'Taux de change à jour : un fournisseur sans clé actualisé automatiquement, ou le taux de référence officiel saisi par la trésorerie',
+  'At least one corridor authorised (live) with complete regulatory arrangements': 'Au moins un corridor autorisé (live) avec un dispositif réglementaire complet',
+  'Every live corridor has a prefunded payout account': "Chaque corridor live dispose d'un compte de versement préfinancé",
+  'Registered payout devices or approved agents for each payout account': 'Appareils de paiement enregistrés ou agents approuvés pour chaque compte de versement',
+  'E-money issuer programme (own authorisation or licensed partner) with safeguarding account for every enabled currency':
+    "Programme d'émetteur de monnaie électronique (autorisation propre ou partenaire agréé) avec compte de cantonnement pour chaque devise activée",
+  'Outstanding e-money fully backed by cleared safeguarded reserves (1:1)': 'Monnaie électronique en circulation entièrement couverte par des réserves cantonnées créditées (1:1)',
+  'Sanctions / screening lists loaded (official consolidated lists refresh daily)': "Listes de sanctions / de filtrage chargées (les listes consolidées officielles s'actualisent chaque jour)",
+  'At least two administrators can approve (maker-checker) with a step-up PIN': 'Au moins deux administrateurs peuvent approuver (maker-checker) avec un PIN de confirmation',
+  'All administrators use two-factor authentication': "Tous les administrateurs utilisent l'authentification à deux facteurs",
+  'KYC required before withdrawals / payouts': 'KYC exigé avant les retraits / versements',
+  'Legacy shared-secret SMS webhook not authoritative': "L'ancien webhook SMS à secret partagé ne fait pas foi",
+  'Email delivery configured': "Envoi d'e-mails configuré",
+  'Every enabled external rail passed its connectivity check (none is required for money movement)':
+    "Chaque rail externe activé a passé son test de connectivité (aucun n'est requis pour le mouvement d'argent)",
+  'Direct mobile-money collection numbers enrolled (customers pay the operator number shown; receipts confirmed by the payout device, the SMS forwarder or maker-checker)':
+    "Numéros de collecte mobile money directs enrôlés (les clients paient le numéro d'opérateur affiché ; réceptions confirmées par l'appareil de paiement, le transfert SMS ou le maker-checker)",
+  'National switch connection certified (homologation): the aggregator goes live through the Switch Monétique National only':
+    "Connexion au switch national certifiée (homologation) : l'agrégateur passe en live uniquement par le Switch Monétique National",
+  'National switch: certified adapter configured or connection kept in simulation': 'Switch national : adaptateur certifié configuré ou connexion maintenue en simulation',
+  'Public URLs are HTTPS on the production domain': 'Les URL publiques sont en HTTPS sur le domaine de production',
+  'Production secrets set (APP_SECRET / JWT_SECRET)': 'Secrets de production définis (APP_SECRET / JWT_SECRET)',
+  'Paid by {0}': 'Payé par {0}',
+  customer: 'client',
 };

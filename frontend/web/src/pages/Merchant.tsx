@@ -8,7 +8,7 @@ import { areaChart, donutChart, type AnalyticsSeries } from '@bitripay/charts';
 import { Chart } from '@bitripay/charts/react';
 import { tickMoney } from './Insights';
 import type { ApiKey, PaymentRequest, Sale, Transaction } from '@bitripay/shared';
-import { isMerchantClass, currencyFlag, toMinor } from '@bitripay/shared';
+import { isMerchantClass, currencyFlag, toMinor, COUNTRIES } from '@bitripay/shared';
 
 export function MerchantDashboard() {
   const { user, money, config } = useStore();
@@ -240,7 +240,9 @@ export function MerchantPos() {
   const { money, wallets, config, user, toast } = useStore();
   const [mode, setMode] = useState<'amount' | 'items'>('items');
   const [amount, setAmount] = useState('');
-  const [cur, setCur] = useState(wallets[0]?.currency || config?.baseCurrency || 'USD');
+  // The counter sells in the currency of the merchant's country when a wallet in it exists (CDF for a DRC acceptor), else the first wallet.
+  const countryCurrency = COUNTRIES.find((c) => c.code === (user?.country ?? '').toUpperCase())?.currency;
+  const [cur, setCur] = useState(wallets.find((w) => w.currency === countryCurrency)?.currency || wallets[0]?.currency || config?.baseCurrency || 'USD');
   const [desc, setDesc] = useState('');
   const [lines, setLines] = useState<SaleLine[]>([emptyLine()]);
   const [vatRate, setVatRate] = useState<string>('');
@@ -413,7 +415,7 @@ export function MerchantPos() {
                   {tr('Waiting for payment…')} <span className="spinner" style={{ verticalAlign: 'middle' }} />
                 </p>
               )}
-              {pr.status === 'paid' && <p className="small mt-sm">Paid by {pr.payer?.fullName ?? 'customer'}</p>}
+              {pr.status === 'paid' && <p className="small mt-sm">{tr('Paid by {0}', { 0: pr.payer?.fullName ?? tr('customer') })}</p>}
               <div className="row mt no-print" style={{ justifyContent: 'center' }}>
                 <CopyButton text={pr.link!} label={tr('Copy link')} />
                 {pr.sale && (

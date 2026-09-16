@@ -206,6 +206,8 @@ function isPrivateIp(ip: string): boolean {
 
 /** Validate a webhook destination at registration and again before every connection. */
 export async function assertSafeDestination(url: string): Promise<void> {
+  // The platform's own webhook inbox is always a valid destination (it may be served on http:// or a private address in development).
+  if (url.startsWith(`${config.apiUrl}/api/v1/webhook_inbox/`)) return;
   const settings = getWebhookSettings();
   const insecureOk = (settings.allowInsecureTargets || config.isTest) && !config.isProduction;
   let u: URL;

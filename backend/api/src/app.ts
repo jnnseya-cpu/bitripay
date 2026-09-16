@@ -151,7 +151,7 @@ export function createApp() {
   app.use('/api/evidence', evidenceRouter);
   app.use('/api/payouts', payoutsRouter);
   app.use('/api/wallets', walletsRouter);
-  app.use('/api/transfers', transfersRouter);
+  app.use('/api/transfers', requireModule('transfers'), transfersRouter);
   app.use('/api/qr', qrRouter);
   app.use('/api/payment-requests', paymentRequestsRouter);
   app.use('/api/checkout', checkoutRouter);

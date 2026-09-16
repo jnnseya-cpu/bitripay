@@ -11,6 +11,8 @@ import { getDb } from '../db';
 import { setSetting } from '../services/settings';
 import { getIntentRow } from '../services/intents';
 import { feeEntryForPayment } from '../services/switch/fees';
+import { runGuardian, getOperatingState } from '../services/guardian';
+import { acquireLease } from '../services/switch/payments';
 
 let app: ReturnType<typeof setupApp>;
 let admin: Awaited<ReturnType<typeof adminToken>>;
@@ -64,6 +66,8 @@ describe('payer simulator (scene 3)', () => {
     expect(opts.body.payers.map((p: any) => p.participant_id)).toContain('DEMO_BANK_A');
     expect(opts.body.tokens.some((t: any) => t.token === 'tok_ok')).toBe(true);
 
+    // the standing dispatcher holds the outbox lease (as in production): the demonstration still completes now
+    expect(acquireLease('node:standing-dispatcher', { force: true })).toBeTruthy();
     // the payer's institution scans the QR payload and authorises the debit
     const paid = await request(app).post('/api/admin/switch/simulator/pay').set(admin.auth).send({ qr_payload: qr.body.qr.payload, participant_id: 'DEMO_BANK_A', account_token: 'tok_ok' });
     expect(paid.status, JSON.stringify(paid.body)).toBe(200);
@@ -81,6 +85,10 @@ describe('payer simulator (scene 3)', () => {
     expect(refund.body.operation.status).toBe('SUCCEEDED');
     expect(refund.body.fee.status).toBe('reversed');
     expect(refund.body.fee.amount).toBe(0);
+    // the Guardian does not mistake a switch-settled sale for a capture without ledger posting (it would halt the platform)
+    const guardian = runGuardian({ haltOnFailure: true });
+    expect(guardian.findings.filter((f) => f.kind === 'captured_without_posting')).toEqual([]);
+    expect(getOperatingState().mode).not.toBe('halted');
     // a second payment of the same intent is refused: one settlement per intent
     const again = await request(app).post('/api/admin/switch/simulator/pay').set(admin.auth).send({ intent_id: qr.body.intent_id, participant_id: 'DEMO_BANK_A' });
     expect(again.status).toBe(422);

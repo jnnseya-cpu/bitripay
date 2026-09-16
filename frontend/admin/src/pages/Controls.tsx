@@ -307,7 +307,7 @@ export function Controls() {
             head={['', tr('Requirement'), tr('Status'), tr('What to do'), '']}
             rows={golive.data.items.map((i: any) => [
               i.ok ? <Chip kind="success">ok</Chip> : <Chip kind={i.blocking ? 'danger' : 'warning'}>{i.blocking ? 'blocking' : 'recommended'}</Chip>,
-              <b>{i.label}</b>,
+              <b>{tr(i.label)}</b>,
               <span className="tiny">{i.detail}</span>,
               <span className="tiny muted">{i.ok ? '' : (i.fix ?? '')}</span>,
               !i.ok && i.href ? (
