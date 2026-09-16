@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Alert, Button, Chip, Field, Input, Modal, PageHeader, Select, Switch, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
+import { Alert, Button, Chip, Field, Input, Modal, PageHeader, Select, StatusBadge, Switch, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
 
 interface NotificationTemplate {
   id: string;
@@ -106,10 +106,12 @@ export function Messaging() {
             <Field label={tr('Provider')}>
               <Select value={sms.provider} onChange={(e) => setSms({ ...sms, provider: e.target.value })}>
                 <option value="console">{tr('Console (development)')}</option>
+                <option value="device">{tr('Enrolled phone SIM (no SMS API key): the payout device sends every SMS from its own SIM')}</option>
                 <option value="twilio">{tr('Twilio')}</option>
                 <option value="africastalking">{tr("Africa's Talking (Kinshasa and most African routes)")}</option>
               </Select>
             </Field>
+            {sms.provider === 'device' && <SmsOutbox />}
             {sms.provider === 'africastalking' && (
               <div className="grid cols-3">
                 <Field label={tr('Username')} hint={`"sandbox" targets the Africa's Talking sandbox; your app username targets live routes`}>
@@ -443,5 +445,32 @@ function Templates() {
         )}
       </Modal>
     </>
+  );
+}
+
+/** What the enrolled phones still have to send, sent in the last day, or could not send after three attempts. */
+function SmsOutbox() {
+  const outbox = useAsync(() => api.get<{ summary: { queued: number; sending: number; failed: number; sent24h: number }; items: any[] }>('/api/admin/messaging/sms-outbox'), []);
+  const s = outbox.data?.summary;
+  return (
+    <div className="card mt">
+      <h4>{tr('SMS outbox (enrolled phones)')}</h4>
+      <p className="tiny muted">
+        {tr('Codes, receipts and notices wait here until a payout device with "Send BitriPay SMS from this SIM" switched on takes them; each send is reported back and retried up to three times.')}
+      </p>
+      {s && (
+        <div className="row wrap mb">
+          <Chip>{tr('Queued')}: {s.queued}</Chip>
+          <Chip>{tr('Sending')}: {s.sending}</Chip>
+          <Chip kind="success">{tr('Sent (24 h)')}: {s.sent24h}</Chip>
+          <Chip kind={s.failed ? 'danger' : undefined}>{tr('Failed')}: {s.failed}</Chip>
+        </div>
+      )}
+      <Table
+        head={[tr('To'), tr('Message'), tr('Status'), tr('Attempts'), tr('Device'), tr('Updated')]}
+        rows={(outbox.data?.items ?? []).slice(0, 40).map((m) => [m.to, <span className="tiny">{m.body.slice(0, 80)}</span>, <StatusBadge status={m.status} />, m.attempts, m.deviceId ? m.deviceId.slice(0, 8) : '—', new Date(m.updatedAt).toLocaleString()])}
+        empty={tr('Nothing sent yet')}
+      />
+    </div>
   );
 }

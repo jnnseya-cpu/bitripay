@@ -275,11 +275,14 @@ export function listRateSnapshots(limit = 20) {
 }
 
 /** Are the rates in use live and fresh enough for guaranteed quotes? */
-export function rateFreshness(): { live: boolean; fresh: boolean; source: string; oldestUpdatedAt: string | null; maxAgeHours: number } {
+export function rateFreshness(): { live: boolean; fresh: boolean; manual: boolean; source: string; oldestUpdatedAt: string | null; maxAgeHours: number } {
   const maxAgeHours = getFxSettings().maxRateAgeHours;
   const enabled = listCurrencies(true).filter((c) => !c.isBase);
   const sources = new Set(enabled.map((c) => c.rateSource));
-  const live = enabled.length > 0 && [...sources].every((s) => RATE_PROVIDERS.some((p) => p.id === s));
+  // a keyless provider, or the official reference rate entered by the treasury (source "manual"), both count as live while fresh
+  const allowed = (s: string) => s === 'manual' || RATE_PROVIDERS.some((p) => p.id === s);
+  const manual = [...sources].includes('manual');
+  const live = enabled.length > 0 && [...sources].every(allowed);
   const oldest = enabled.map((c) => (c.rateUpdatedAt ? new Date(c.rateUpdatedAt).getTime() : 0)).reduce((a, b) => Math.min(a, b), Date.now());
-  return { live, fresh: live && Date.now() - oldest < maxAgeHours * 3600_000, source: [...sources].join(', '), oldestUpdatedAt: enabled.length ? new Date(oldest).toISOString() : null, maxAgeHours };
+  return { live, fresh: live && Date.now() - oldest < maxAgeHours * 3600_000, manual, source: [...sources].join(', '), oldestUpdatedAt: enabled.length ? new Date(oldest).toISOString() : null, maxAgeHours };
 }

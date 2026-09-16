@@ -8,6 +8,7 @@ import { queueFor, claimPayout, releasePayout, submitPayoutEvidence, getPayout, 
 import { proposeVerification } from '../services/verification';
 import { forbidden } from '../lib/errors';
 import { getPayoutAccount, listPayoutAccounts } from '../services/liquidity';
+import { claimSmsOutbox, reportSmsOutbox } from '../services/messaging';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -69,6 +70,17 @@ payoutsRouter.post(
 // The agent, an administrator, or a member of the agent's team (`agent:view` to look, `agent:payouts` to claim, release and attest).
 payoutsRouter.use('/agent', requireAuth, requireRole('agent', 'admin'), requireOrgPermission('agent:view', 'agent:payouts'));
 const canHandle = requireOrgPermission('agent:payouts');
+/** Outbound SMS through the device's own SIM (SMS provider "device"): take the next messages, then report each outcome. */
+payoutsRouter.get('/device/sms-outbox', deviceAuth, (req, res) => res.json({ items: claimSmsOutbox(req.device!.id, Number(req.query.limit ?? 10)) }));
+payoutsRouter.post(
+  '/device/sms-outbox/:id',
+  deviceAuth,
+  wrap(async (req, res) => {
+    const body = validate(z.object({ ok: z.boolean(), error: z.string().max(300).optional().nullable() }), req.body);
+    res.json({ message: reportSmsOutbox(String(req.params.id), req.device!.id, body.ok, body.error ?? null) });
+  }),
+);
+
 payoutsRouter.get('/agent/queue', (req, res) => res.json({ items: queueFor({ agent: req.user }) }));
 /** Payout accounts this agent operates – the device app picks one at enrolment. */
 payoutsRouter.get('/agent/accounts', (req, res) =>

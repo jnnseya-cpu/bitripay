@@ -13,6 +13,7 @@ import { parseJson } from '../../lib/json';
 import { escapeHtml } from '../markdown';
 import { getSiteSettings } from '../cms';
 import { getSmtpSettings, sendEmail, sendSms, smsProvider } from '../messaging';
+import { listDevices } from '../evidence';
 import { fillPlaceholders, renderTemplate, insertNotification, sendPush, registerTemplatedNotifyHandler } from '../notifications';
 import { deliverWhatsApp, getWhatsAppSettings, toWaId } from '../channels/whatsapp';
 import { COMMS_CATEGORIES, COMMS_CHANNELS, COMMS_EVENTS, getCommsEvent, type CommsChannel, type CommsEvent } from './catalogue';
@@ -157,14 +158,20 @@ You receive this because you have a ${escapeHtml(site.siteName)} account. Securi
 export function channelStatus(): Record<CommsChannel, { wired: boolean; detail: string }> {
   const smtp = getSmtpSettings();
   const smsCfg = smsProvider();
-  const smsWired = (smsCfg.provider === 'twilio' && !!smsCfg.twilio) || (smsCfg.provider === 'africastalking' && !!smsCfg.africasTalking);
+  // "device": the enrolled payout phones send from their own SIM (no SMS API key); wired as soon as one active payout device exists
+  const smsPhones = smsCfg.provider === 'device' ? listDevices().filter((d) => d.kind === 'payout' && d.status === 'active').length : 0;
+  const smsWired = (smsCfg.provider === 'twilio' && !!smsCfg.twilio) || (smsCfg.provider === 'africastalking' && !!smsCfg.africasTalking) || smsPhones > 0;
   const smsDetail = smsWired
     ? smsCfg.provider === 'twilio'
       ? 'Twilio'
-      : `Africa's Talking (${smsCfg.africasTalking!.username === 'sandbox' ? 'sandbox' : 'live'}${smsCfg.africasTalking!.from ? `, sender ${smsCfg.africasTalking!.from}` : ''})`
-    : smsCfg.provider === 'console'
-      ? 'No SMS provider selected: SMS are logged, not sent'
-      : `${smsCfg.provider}: credentials missing, SMS are logged, not sent`;
+      : smsCfg.provider === 'device'
+        ? `Enrolled phone SIM (${smsPhones} payout device${smsPhones === 1 ? '' : 's'}, no SMS API key)`
+        : `Africa's Talking (${smsCfg.africasTalking!.username === 'sandbox' ? 'sandbox' : 'live'}${smsCfg.africasTalking!.from ? `, sender ${smsCfg.africasTalking!.from}` : ''})`
+    : smsCfg.provider === 'device'
+      ? 'Enrolled phone SIM: no active payout device yet, SMS wait in the outbox'
+      : smsCfg.provider === 'console'
+        ? 'No SMS provider selected: SMS are logged, not sent'
+        : `${smsCfg.provider}: credentials missing, SMS are logged, not sent`;
   const wa = getWhatsAppSettings();
   return {
     email: { wired: !!smtp.host, detail: smtp.host ? `SMTP ${smtp.host}:${smtp.port} as ${smtp.from}` : 'No SMTP host: emails are logged, not sent' },

@@ -19,7 +19,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import QRCode from 'react-native-qrcode-svg';
 import { agentCall, deviceCall, ApiError } from './src/api';
 import { createKeys } from './src/crypto';
-import { appendLog, loadEnrolment, loadLog, loadPending, saveEnrolment, savePending, secure, type Enrolment, type LogEntry, type PendingEvidence } from './src/store';
+import { appendLog, loadEnrolment, loadLog, loadPending, loadSmsSender, saveEnrolment, savePending, saveSmsSender, secure, type Enrolment, type LogEntry, type PendingEvidence } from './src/store';
 import { flushPending, forwardSms, matchesFilters, type IncomingSms } from './src/forwarder';
 import * as Sms from './modules/sms-receiver/src';
 
@@ -359,6 +359,34 @@ function Home({ t, enrolment, privateKey, onUnenrol }: { t: Theme; enrolment: En
   const [manualFrom, setManualFrom] = useState('');
   const [manualText, setManualText] = useState('');
   const [permissions, setPermissions] = useState(Sms.hasPermissions());
+  const [smsSender, setSmsSender] = useState(false);
+  const smsSenderRef = useRef(false);
+  useEffect(() => {
+    loadSmsSender().then((on) => {
+      setSmsSender(on);
+      smsSenderRef.current = on;
+    });
+  }, []);
+  // Outbound SMS from this SIM: take the queued messages, send each, report the outcome (the server retries failures).
+  const drainOutbox = useCallback(async () => {
+    if (!smsSenderRef.current) return;
+    try {
+      const r: any = await deviceCall(enrolment.apiUrl, privateKey, enrolment.deviceId, 'GET', '/api/payouts/device/sms-outbox?limit=10');
+      for (const m of r.items ?? []) {
+        let ok = false;
+        let error: string | null = null;
+        try {
+          ok = Sms.sendSms(m.to, m.body, -1);
+        } catch (err) {
+          error = (err as Error).message;
+        }
+        await deviceCall(enrolment.apiUrl, privateKey, enrolment.deviceId, 'POST', `/api/payouts/device/sms-outbox/${m.id}`, { ok, error });
+        await appendLog({ level: ok ? 'info' : 'warn', text: ok ? `Sent SMS to ${m.to}` : `Could not send SMS to ${m.to}: ${error}` });
+      }
+    } catch (err) {
+      await appendLog({ level: 'warn', text: `SMS outbox: ${(err as Error).message}` });
+    }
+  }, [enrolment, privateKey]);
   const activeRef = useRef<string | null>(null);
   const knownRef = useRef<Set<string>>(new Set());
   const primedRef = useRef(false);
@@ -420,6 +448,7 @@ function Home({ t, enrolment, privateKey, onUnenrol }: { t: Theme; enrolment: En
     const timer = setInterval(async () => {
       if (AppState.currentState !== 'active') return;
       await refresh();
+      await drainOutbox();
       const f = await flushPending(enrolment.apiUrl);
       if (f.delivered) setPending(await loadPending());
     }, POLL_MS);
@@ -644,6 +673,24 @@ function Home({ t, enrolment, privateKey, onUnenrol }: { t: Theme; enrolment: En
               {enrolment.operatorId ? ` · operator ${enrolment.operatorId}` : ''}
               {'\n'}Sender filters: {enrolment.senderFilters.length ? enrolment.senderFilters.join(', ') : 'all senders'}
             </Text>
+          </Card>
+          <Card t={t} style={{ marginTop: 12 }}>
+            <Text style={{ color: t.text, fontWeight: '600', marginBottom: 6 }}>Send BitriPay SMS from this SIM</Text>
+            <Text style={{ color: t.muted, fontSize: 13, marginBottom: 8 }}>
+              With the SMS provider set to "Enrolled phone SIM" in the console, verification codes, receipts and notices are queued on the server and this phone sends them from its own SIM. No SMS API, no key. Each send is reported back; the server retries failures up to three times.
+            </Text>
+            <Button
+              t={t}
+              title={smsSender ? 'Sending is ON – switch off' : 'Switch on SMS sending'}
+              kind={smsSender ? 'ghost' : 'ok'}
+              onPress={async () => {
+                const next = !smsSender;
+                if (next && !(await Sms.requestPermissions())) return Alert.alert('Permission needed', 'Allow SMS sending for this app in Android settings.');
+                setSmsSender(next);
+                smsSenderRef.current = next;
+                await saveSmsSender(next);
+              }}
+            />
           </Card>
           <Card t={t} style={{ marginTop: 12 }}>
             <Text style={{ color: t.text, fontWeight: '600', marginBottom: 6 }}>How this device is trusted</Text>

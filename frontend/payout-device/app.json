@@ -10,7 +10,7 @@
     "splash": { "backgroundColor": "#0f172a", "resizeMode": "contain" },
     "android": {
       "package": "com.bitripay.payoutdevice",
-      "permissions": ["RECEIVE_SMS", "READ_SMS", "READ_PHONE_STATE", "READ_PHONE_NUMBERS", "CALL_PHONE", "USE_BIOMETRIC", "USE_FINGERPRINT", "FOREGROUND_SERVICE", "RECEIVE_BOOT_COMPLETED"]
+      "permissions": ["RECEIVE_SMS", "READ_SMS", "SEND_SMS", "READ_PHONE_STATE", "READ_PHONE_NUMBERS", "CALL_PHONE", "USE_BIOMETRIC", "USE_FINGERPRINT", "FOREGROUND_SERVICE", "RECEIVE_BOOT_COMPLETED"]
     },
     "plugins": ["./modules/sms-receiver/app.plugin.js", ["expo-local-authentication", { "faceIDPermission": "Unlock the payout device." }], "expo-secure-store"],
     "extra": {

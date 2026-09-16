@@ -17,6 +17,8 @@ run as a **SMS collector** (kind `collection`) on a merchant SIM that receives c
 | Confirm | The operator SMS is captured by the broadcast receiver, signed (`deviceId\nnonce\nreceivedAt\nfrom\noperatorId\ntext`), hashed and posted to `POST /api/payouts/device/:id/evidence` with `simIdentity`, `deviceTimestamp`, `clientHash`. | Parses the SMS with the operator template, checks reference, amount, currency, recipient, SIM, timing, replay and duplicates. Only a full match settles the payout and debits the float. Anything else → `MISMATCHED` / `DUPLICATE` / `MANUAL_REVIEW`. |
 | Offline | Signed evidence that cannot be delivered is queued in app storage and retried; each payload carries a single-use nonce so it is never double-counted. | Replays are refused (`evidence_replay`). |
 | Collector | Every operator SMS is signed and forwarded to `POST /api/evidence/sms`. | Matches inbound receipts to pending payment intents; raw evidence is preserved whatever the outcome. |
+| Bills and airtime | The same queue carries bill payments (rail `bill`: biller, account number, receipt in the steps) and airtime purchases (rail `airtime`: operator and recipient number); the agent pays them from the operator menu and the confirmation SMS settles them like any payout. | `processing` → `completed` on the confirmation, `failed` with the money back to the customer if the payout fails. No biller or operator API. |
+| SMS sender | With *Send BitriPay SMS from this SIM* switched on (device tab), the app drains `GET /api/payouts/device/sms-outbox` every poll, sends each message from its own SIM (`SmsManager`) and reports `POST /api/payouts/device/sms-outbox/:id` with `ok` / `error`. | The server queues every code, receipt and notice in `sms_outbox` when the SMS provider is `device`; a refused send goes back to the queue up to three times, then shows as failed in Admin → Messaging. No SMS API key. |
 
 The app **never** decides that money has moved. It cannot mark a payout settled, cannot type a confirmation into the
 signed channel on a production build (the manual "paste SMS" panel only exists when the native receiver is absent,
@@ -55,7 +57,8 @@ loopback). The URL can also be changed on the enrolment screen.
 
 ### Permissions
 
-`RECEIVE_SMS` (capture confirmations), `READ_PHONE_STATE` / `READ_PHONE_NUMBERS` (SIM identity for enrolment),
+`RECEIVE_SMS` (capture confirmations), `SEND_SMS` (send BitriPay codes and receipts from the SIM, only while the
+switch on the device tab is on), `READ_PHONE_STATE` / `READ_PHONE_NUMBERS` (SIM identity for enrolment),
 `CALL_PHONE` (dial the USSD menu), `RECEIVE_BOOT_COMPLETED` (keep capturing after a reboot), `USE_BIOMETRIC`
 (unlock the app). The inbox is never read: only messages received after installation reach the app, and only senders
 matching the configured filters are forwarded.

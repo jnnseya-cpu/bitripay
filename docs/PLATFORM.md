@@ -788,6 +788,30 @@ panel under *Mobile money & evidence*; confidence is scored (reference 50, amoun
 operator transaction id 10, sender 5) and only matches at or above `gateway.autoConfirmScore` from a
 trusted device settle automatically.
 
+### Nothing depends on an external key, except the assistant
+
+Every movement of money and every message can run with **no provider API key at all**. The only
+external credential BitriPay ever needs is the model key behind the assistant functions
+(`ANTHROPIC_API_KEY`, or the encrypted key stored from the console), and every core flow keeps
+working without it.
+
+| Need | How it runs without a key | Optional keyed alternative |
+| --- | --- | --- |
+| Money in (mobile money, bank) | the customer pays the operator number or bank account shown; the receipt is confirmed by the payout device, the SMS forwarder or maker-checker (*Signed SMS evidence* above) | processors (Stripe, Paystack, Flutterwave), direct operator rails, BTCPay |
+| Money out (transfers, remittances, withdrawals) | a payout instruction on a prefunded BitriPay SIM; the Android payout device executes the USSD / operator menu and the operator's confirmation SMS settles it | direct operator rails |
+| **Bill payments** | `POST /api/bills` holds the money and opens a payout instruction with rail `bill`; any prefunded SIM of the biller's country qualifies (the operator's own first); the device pays the biller from its menu (biller, account number and receipt are in the instructions); the operator's confirmation, or maker-checker, moves the bill from `processing` to `completed`; a failed payout returns the money and marks it `failed`; the customer is told at each step | none needed |
+| **Mobile top-ups** | the same with rail `airtime`: an airtime purchase for the recipient number from a SIM of the country, `processing` → `completed` / `failed` on the operator's confirmation | none needed |
+| Gift cards and vouchers | issued and redeemed inside BitriPay | none needed |
+| Outbound SMS (codes, receipts, notices) | provider **`device`**: every SMS is queued in `sms_outbox`; an enrolled payout phone with *Send BitriPay SMS from this SIM* switched on drains `GET /api/payouts/device/sms-outbox` (signed like the payout queue), sends from its own SIM and reports `POST /api/payouts/device/sms-outbox/:id`; a failure is retried three times, then shown in Admin → Messaging → *SMS outbox* | Twilio, Africa's Talking |
+| Exchange rates | the official reference rate entered by the treasury (source `manual`) counts as live and fresh for the go-live checklist while it is younger than `maxRateAgeHours`; keyless providers (Frankfurter, open.er-api) refresh automatically | exchangerate.host, Open Exchange Rates, Fixer |
+| E-mail | SMTP on the existing mailbox (support@bitripay.com) | none |
+| Push notifications | Expo push service, no token required | Expo access token |
+| Sanctions screening | the official OFAC, OFSI, UN and EU lists downloaded as published | none |
+
+A prefunded SIM that is added or topped up (`POST /api/admin/liquidity/accounts/:id/prefund`, or the
+`payout-float` command in sandbox) re-queues every transfer, airtime purchase and bill of its
+currency that was waiting for liquidity.
+
 ## WooCommerce plugin
 
 Copy `integrations/woocommerce-bitripay` to `wp-content/plugins/`, activate it, and enter your API URL,

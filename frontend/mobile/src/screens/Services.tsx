@@ -324,7 +324,7 @@ export function Bills() {
     setLoading(true);
     try {
       const r = await api.post<{ receiptNo: string }>('/api/bills', { billerId: sel.id, accountNumber: account, amount, pin: p });
-      toast(`Bill paid · ${r.receiptNo}`, 'success');
+      toast(tr('Bill payment accepted (receipt {0}); you will be told when the biller confirms', { 0: r.receiptNo }), 'success');
       setPin(false);
       setSel(null);
       refreshWallets();
@@ -371,7 +371,7 @@ export function Topup() {
     setLoading(true);
     try {
       await api.post('/api/topups', { operatorId: sel.id, phone, amount, pin: p });
-      toast(tr('Top-up sent'), 'success');
+      toast(tr('Top-up accepted; you will be told when the operator confirms'), 'success');
       setPin(false);
       refreshWallets();
     } catch (err) {

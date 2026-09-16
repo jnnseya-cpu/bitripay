@@ -199,8 +199,10 @@ function scanApi() {
         const a = node.arguments;
         const lits = [];
         if (API_ERRORS.has(name) && a[0] && ts.isStringLiteral(a[0])) lits.push(a[0]);
-        if (name === 'notify' && a[1] && ts.isStringLiteral(a[1])) lits.push(a[1]);
-        if (name === 'notify' && a[2] && ts.isStringLiteral(a[2])) lits.push(a[2]);
+        // a notify title or body may be a plain literal or a `cond ? 'A' : 'B'` choice: both branches are phrases
+        const strings = (x) =>
+          !x ? [] : ts.isStringLiteral(x) ? [x] : ts.isConditionalExpression(x) ? [...strings(x.whenTrue), ...strings(x.whenFalse)] : ts.isParenthesizedExpression(x) ? strings(x.expression) : [];
+        if (name === 'notify') lits.push(...strings(a[1]), ...strings(a[2]));
         if (name === 'ev' && file.endsWith('comms/catalogue.ts')) for (const x of a.slice(2, 5)) if (x && ts.isStringLiteral(x)) lits.push(x);
         for (const l of lits)
           if (apiOk(l.text)) {

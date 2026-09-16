@@ -55,7 +55,7 @@ export function Catalogs() {
     <div>
       <PageHeader
         title={tr('Bill pay, mobile top-up & gift card catalogs')}
-        subtitle={tr('Manage what users can pay for. Connect a fulfilment provider (e.g. Reloadly) in the API to deliver live.')}
+        subtitle={tr('Manage what people can pay for. Every bill and top-up is executed from a BitriPay payout SIM (USSD / operator menu) and settled on the operator\'s confirmation SMS; no provider key.')}
         actions={<Button onClick={() => open()}>{tr('+ Add')}</Button>}
       />
       <Tabs

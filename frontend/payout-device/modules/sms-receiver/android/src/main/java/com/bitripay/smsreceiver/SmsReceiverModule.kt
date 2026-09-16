@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.telephony.SmsManager
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
@@ -62,6 +63,15 @@ class SmsReceiverModule : Module() {
     Function("acknowledge") { ids: List<String> ->
       SmsStore.acknowledge(context, ids.toSet())
       null
+    }
+
+    /** Send one SMS from this phone's SIM (subscriptionId -1 = default SIM). Long texts are split by the platform. */
+    Function("sendSms") { to: String, body: String, subscriptionId: Int ->
+      if (ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) throw IllegalStateException("SEND_SMS permission not granted")
+      val manager = if (subscriptionId >= 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) SmsManager.getSmsManagerForSubscriptionId(subscriptionId) else @Suppress("DEPRECATION") SmsManager.getDefault()
+      val parts = manager.divideMessage(body)
+      if (parts.size > 1) manager.sendMultipartTextMessage(to, null, parts, null, null) else manager.sendTextMessage(to, null, body, null, null)
+      true
     }
 
     Function("getSimInfo") {

@@ -24,9 +24,12 @@ import { getComplianceSettings, getGatewayControls } from './settings';
 import { recordEvent, listEvents, type Actor } from './events';
 import { authenticateDevice, bumpDeviceRisk, parseEvidenceText, storeEvidence, listEvidence, type EvidenceDevice, type IngestInput } from './evidence';
 import { selectPayoutAccount, getPayoutAccount, debitFloatForPayout, type PayoutAccount } from './liquidity';
-import { ensureCorridor, type Corridor } from './corridors';
+import { ensureCorridor, getCorridor, type Corridor } from './corridors';
 import { normalizePhoneDigits } from './risk';
 import { tryTransitionRoute } from './routeLifecycle';
+
+/** Where an instruction is executed: a mobile money transfer, a bank transfer, an airtime purchase or a bill paid from the payout SIM's menu. */
+export type PayoutRail = 'mobile_money' | 'bank' | 'airtime' | 'bill';
 
 export const PAYOUT_STAGES = [
   'QUEUED',
@@ -55,7 +58,7 @@ export interface PayoutView {
   payoutAccountId: string | null;
   payoutAccount: { id: string; label: string; msisdn: string | null; operatorName: string | null } | null;
   agent: ReturnType<typeof toPublicUser> | null;
-  rail: 'mobile_money' | 'bank';
+  rail: PayoutRail;
   operatorId: string | null;
   operatorName: string | null;
   recipientMsisdn: string | null;
@@ -110,19 +113,36 @@ function toView(r: any, full = true): PayoutView {
   }
   const cur = getCurrency(r.currency, false);
   const amountMajor = formatMoney(r.amount, cur);
+  const details = parseJson(r.bank_details, null) as Record<string, any> | null;
+  if (details?.operatorName) operatorName = String(details.operatorName);
+  const recipient = full ? r.recipient_msisdn : mask(r.recipient_msisdn);
+  const keep = 'Keep the confirmation SMS on the device – the forwarder submits it automatically';
   const steps =
     r.rail === 'mobile_money'
       ? [
           `Open ${operatorName ?? 'the operator'} on the payout SIM${ussd ? ` (dial ${ussd})` : ''}`,
-          `Send exactly ${amountMajor} to ${full ? r.recipient_msisdn : mask(r.recipient_msisdn)}${r.recipient_name ? ` (${r.recipient_name})` : ''}`,
+          `Send exactly ${amountMajor} to ${recipient}${r.recipient_name ? ` (${r.recipient_name})` : ''}`,
           `Use ${r.reference} as the reason / note if the operator allows one`,
-          'Keep the confirmation SMS on the device – the forwarder submits it automatically',
+          keep,
         ]
-      : [
-          `Pay exactly ${amountMajor} from the treasury bank account to the recipient's bank account`,
-          `Quote ${r.reference} as the payment reference`,
-          'Forward the bank confirmation / statement line as evidence',
-        ];
+      : r.rail === 'airtime'
+        ? [
+            `Open ${operatorName ?? 'the operator'} on the payout SIM${ussd ? ` (dial ${ussd})` : ''} and choose airtime transfer / buy airtime for another number`,
+            `Send exactly ${amountMajor} of airtime to ${recipient}`,
+            keep,
+          ]
+        : r.rail === 'bill'
+          ? [
+              `Open the mobile money menu on the payout SIM${ussd ? ` (dial ${ussd})` : ''} and choose Pay bill → ${details?.billerName ?? 'the biller'}`,
+              `Account / meter ${details?.accountNumber ?? ''}: pay exactly ${amountMajor}`,
+              `Quote ${r.reference} where the menu asks for a reference`,
+              keep,
+            ]
+          : [
+              `Pay exactly ${amountMajor} from the treasury bank account to the recipient's bank account`,
+              `Quote ${r.reference} as the payment reference`,
+              'Forward the bank confirmation / statement line as evidence',
+            ];
   return {
     id: r.id,
     reference: r.reference,
@@ -206,7 +226,7 @@ export interface CreatePayoutInput {
   transactionId: string;
   userId: string;
   routeId?: string | null;
-  rail: 'mobile_money' | 'bank';
+  rail: PayoutRail;
   operatorId?: string | null;
   recipientMsisdn?: string | null;
   recipientName?: string | null;
@@ -222,8 +242,11 @@ export interface CreatePayoutInput {
 export function createPayoutInstruction(input: CreatePayoutInput, actor: Actor = { type: 'system' }): PayoutView {
   const tx = getTransaction(input.transactionId);
   if (!tx) throw badRequest('Transaction not found');
-  const op = input.operatorId ? getOperator(input.operatorId) : null;
+  const op = input.operatorId && input.rail === 'mobile_money' ? getOperator(input.operatorId) : null;
   const country = (input.country ?? op?.country ?? '').toUpperCase();
+  // an airtime purchase or a bill is executed from any prefunded mobile money SIM of the country (the operator's own if one exists)
+  const accountRail: 'mobile_money' | 'bank' = input.rail === 'bank' ? 'bank' : 'mobile_money';
+  const anyOperator = input.rail === 'airtime' || input.rail === 'bill';
   const corridor: Corridor | null = country
     ? ensureCorridor({
         sourceCountry: input.sourceCountry ?? null,
@@ -231,10 +254,10 @@ export function createPayoutInstruction(input: CreatePayoutInput, actor: Actor =
         destCountry: country,
         destCurrency: input.currency,
         operatorId: input.operatorId ?? null,
-        rail: input.rail,
+        rail: accountRail,
       })
     : null;
-  const account = selectPayoutAccount({ rail: input.rail, operatorId: input.operatorId ?? null, currency: input.currency, amount: input.amount, country });
+  const account = selectPayoutAccount({ rail: accountRail, operatorId: input.operatorId ?? null, currency: input.currency, amount: input.amount, country, anyOperator });
   const id = uuid();
   const reference = `PO${shortCode(8)}`;
   const stage: PayoutStage = account ? 'QUEUED' : 'INSUFFICIENT_LIQUIDITY';
@@ -465,7 +488,7 @@ export function submitPayoutEvidence(id: string, input: PayoutEvidenceInput): { 
       if (!parsed.amount) checks.push('amount_missing');
       else if (toMinor(parsed.amount, cur.decimals) !== r.amount) checks.push('amount_mismatch');
       if (parsed.currency && parsed.currency !== r.currency) checks.push('currency_mismatch');
-      if (r.rail === 'mobile_money') {
+      if (r.rail === 'mobile_money' || r.rail === 'airtime') {
         if (!parsed.recipient) checks.push('recipient_missing');
         else if (normalizePhoneDigits(parsed.recipient) !== normalizePhoneDigits(r.recipient_msisdn ?? '')) checks.push('recipient_mismatch');
       }
@@ -599,7 +622,8 @@ export function settlePayout(
     syncRoute(r, 'SETTLED', actor, { externalRef: input.externalRef ?? null, confirmationMethod: method });
     const cur = getCurrency(r.currency, false);
     const sender = findUserById(r.user_id);
-    if (sender)
+    const moneyPayout = r.rail === 'mobile_money' || r.rail === 'bank';
+    if (sender && moneyPayout)
       notify(
         sender.id,
         'Payout delivered',
@@ -617,7 +641,7 @@ export function settlePayout(
           },
         },
       );
-    if (r.recipient_msisdn)
+    if (r.recipient_msisdn && moneyPayout)
       void sendSms(
         r.recipient_msisdn,
         `BitriPay: ${formatMoney(r.amount, cur)} was sent to you by ${sender?.full_name ?? 'a BitriPay user'}. Ref ${r.reference}${input.externalRef ? ` / ${input.externalRef}` : ''}.`,
@@ -661,7 +685,11 @@ export function requeuePayout(id: string, actor: Actor): PayoutView {
   if (!['INSUFFICIENT_LIQUIDITY', 'FAILED', 'EXPIRED', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE'].includes(r.stage)) throw conflict(`Payout is ${r.stage.toLowerCase()}`, 'invalid_stage_transition');
   const tx = getTransaction(r.transaction_id)!;
   if (tx.status !== 'pending') throw conflict('Held funds were already released; create a new transfer', 'invalid_status');
-  const account = selectPayoutAccount({ rail: r.rail, operatorId: r.operator_id, currency: r.currency, amount: r.amount });
+  // airtime and bills run from any SIM of the destination country (same rule as at creation)
+  const accountRail: 'mobile_money' | 'bank' = r.rail === 'bank' ? 'bank' : 'mobile_money';
+  const anyOperator = r.rail === 'airtime' || r.rail === 'bill';
+  const country = anyOperator && r.corridor_id ? getCorridor(r.corridor_id).destCountry : null;
+  const account = selectPayoutAccount({ rail: accountRail, operatorId: r.operator_id, currency: r.currency, amount: r.amount, country, anyOperator });
   if (!account) {
     if (r.stage !== 'INSUFFICIENT_LIQUIDITY') {
       setStage(id, 'INSUFFICIENT_LIQUIDITY', actor, {}, { error: 'No prefunded payout account with enough float', payout_account_id: null });
@@ -688,11 +716,15 @@ export function requeuePayout(id: string, actor: Actor): PayoutView {
   return getPayout(id);
 }
 
-/** Retry every payout waiting on liquidity for this account's rail/operator/currency (after a prefund). */
+/** Retry every payout waiting on liquidity for this account's rail/operator/currency (after a prefund); a mobile money SIM also retries the airtime purchases and bills of its currency. */
 export function requeueWaiting(account: PayoutAccount, actor: Actor): number {
   const rows = getDb()
-    .prepare("SELECT id FROM payout_instructions WHERE stage = 'INSUFFICIENT_LIQUIDITY' AND rail = ? AND currency = ? AND (operator_id IS ? OR ? IS NULL) ORDER BY created_at ASC")
-    .all(account.rail, account.currency, account.operatorId, account.operatorId) as { id: string }[];
+    .prepare(
+      `SELECT id FROM payout_instructions WHERE stage = 'INSUFFICIENT_LIQUIDITY' AND currency = ?
+         AND ((rail = ? AND (operator_id IS ? OR ? IS NULL)) OR (rail IN ('airtime', 'bill') AND ? = 'mobile_money'))
+       ORDER BY created_at ASC`,
+    )
+    .all(account.currency, account.rail, account.operatorId, account.operatorId, account.rail) as { id: string }[];
   let n = 0;
   for (const r of rows) if (requeuePayout(r.id, actor).stage === 'QUEUED') n += 1;
   return n;

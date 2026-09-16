@@ -3,10 +3,16 @@ import { z } from 'zod';
 import { validate, wrap } from '../../lib/http';
 import { requirePermission } from '../../middleware/permissions';
 import { audit } from '../../services/audit';
+import { listSmsOutbox, smsOutboxSummary } from '../../services/messaging';
 import { TEMPLATE_CHANNELS, TEMPLATE_EVENTS, listNotificationTemplates, upsertNotificationTemplate, renderTemplate, fillPlaceholders } from '../../services/notifications';
 
 /** Messaging administration: the notification templates (per event, channel and language) behind every message the API sends. */
 export const adminMessagingRouter = Router();
+
+/** SMS waiting for, sent by or refused by the enrolled phones (provider "device"). */
+adminMessagingRouter.get('/sms-outbox', requirePermission('settings'), (req, res) =>
+  res.json({ summary: smsOutboxSummary(), items: listSmsOutbox({ status: req.query.status ? String(req.query.status) : null, limit: 100 }) }),
+);
 
 adminMessagingRouter.get('/templates', requirePermission('settings'), (req, res) => {
   const q = (k: string) => (req.query[k] ? String(req.query[k]) : null);

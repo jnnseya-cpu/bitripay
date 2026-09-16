@@ -47,6 +47,11 @@ export async function loadEnrolment(): Promise<Enrolment | null> {
 }
 export const saveEnrolment = (e: Enrolment | null) => (e ? AsyncStorage.setItem(KEY_ENROL, JSON.stringify(e)) : AsyncStorage.removeItem(KEY_ENROL));
 
+const KEY_SMS_SENDER = 'bitripay.smsSender';
+/** Whether this phone also sends BitriPay's outbound SMS (codes, receipts) from its SIM. Off by default; the operator switches it on. */
+export const loadSmsSender = async () => (await AsyncStorage.getItem(KEY_SMS_SENDER)) === '1';
+export const saveSmsSender = (on: boolean) => AsyncStorage.setItem(KEY_SMS_SENDER, on ? '1' : '0');
+
 export async function loadPending(): Promise<PendingEvidence[]> {
   const raw = await AsyncStorage.getItem(KEY_PENDING);
   return raw ? (JSON.parse(raw) as PendingEvidence[]) : [];

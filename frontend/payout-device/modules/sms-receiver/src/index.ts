@@ -30,6 +30,7 @@ type Native = {
   drainPending(): ReceivedSms[];
   acknowledge(ids: string[]): void;
   getSimInfo(): SimInfo[];
+  sendSms(to: string, body: string, subscriptionId: number): boolean;
   addListener?: (event: string, listener: (e: ReceivedSms) => void) => { remove(): void };
 };
 
@@ -48,6 +49,19 @@ export const hasPermissions = () => (native ? native.hasPermissions() : false);
 export const drainPending = (): ReceivedSms[] => (native ? native.drainPending() : []);
 export const acknowledge = (ids: string[]) => native?.acknowledge(ids);
 export const getSimInfo = (): SimInfo[] => (native ? native.getSimInfo() : []);
+/** Send an SMS from this phone's SIM; throws when the native module or the permission is missing. */
+export function sendSms(to: string, body: string, subscriptionId = -1): boolean {
+  if (!native) throw new Error('SMS sending needs the Android build');
+  return native.sendSms(to, body, subscriptionId);
+}
+export const canSendSms = () => {
+  if (Platform.OS !== 'android') return false;
+  try {
+    return PermissionsAndroid.PERMISSIONS.SEND_SMS != null && native != null;
+  } catch {
+    return false;
+  }
+};
 
 /** Subscribe to SMS as they arrive while the app is alive. Returns an unsubscribe function. */
 export function onSms(listener: (sms: ReceivedSms) => void): () => void {
@@ -61,6 +75,7 @@ export async function requestPermissions(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
   const wanted = [
     PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
+    PermissionsAndroid.PERMISSIONS.SEND_SMS,
     PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
     PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS,
     PermissionsAndroid.PERMISSIONS.CALL_PHONE,

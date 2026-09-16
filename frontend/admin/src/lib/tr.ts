@@ -18,12 +18,6 @@ export function setTrLang(lang: string): void {
   currentLang = lang;
   bump();
 }
-export function hasOverrides(lang: string): boolean {
-  return !!overrides[lang];
-}
-export function overridesFor(lang: string): Record<string, string> | undefined {
-  return overrides[lang];
-}
 export function setOverrides(lang: string, dict: Record<string, string>): void {
   overrides[lang] = dict;
   bump();

@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
 import { config } from '../config';
+import { getDb } from '../db';
+import { uuid, now } from '../lib/ids';
 import { getSetting } from './settings';
 import { renderTemplate, type TemplateChannel } from './notifications';
 
@@ -98,6 +100,11 @@ export async function sendSms(to: string, body: string, template?: TemplatedMess
   outbox.push({ channel: 'sms', to, body, at: new Date().toISOString() });
   if (outbox.length > 200) outbox.shift();
   const { provider, twilio, africasTalking } = smsProvider();
+  if (provider === 'device') {
+    // no SMS API: the message waits in the outbox until an enrolled phone sends it from its own SIM
+    queueSmsForDevice(to, body);
+    return { delivered: true, via: 'device' };
+  }
   if (provider === 'twilio' && twilio) {
     try {
       const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilio.sid}/Messages.json`, {
@@ -136,4 +143,82 @@ export async function sendSms(to: string, body: string, template?: TemplatedMess
   }
   if (!config.isTest) console.log(`[sms → ${to}] ${body}`);
   return { delivered: false, via: 'console' };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// SMS outbox for the enrolled phones (SMS_PROVIDER=device or console → Email, SMS & push → "Enrolled phone SIM")
+// ---------------------------------------------------------------------------------------------------------------------
+export interface SmsOutboxItem {
+  id: string;
+  to: string;
+  body: string;
+  status: 'queued' | 'sending' | 'sent' | 'failed';
+  deviceId: string | null;
+  attempts: number;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sentAt: string | null;
+}
+const SMS_MAX_ATTEMPTS = 3;
+const SMS_SENDING_STALE_MS = 10 * 60_000;
+const toOutbox = (r: any): SmsOutboxItem => ({
+  id: r.id,
+  to: r.to_msisdn,
+  body: r.body,
+  status: r.status,
+  deviceId: r.device_id,
+  attempts: r.attempts,
+  lastError: r.last_error,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+  sentAt: r.sent_at,
+});
+
+export function queueSmsForDevice(to: string, body: string): SmsOutboxItem {
+  const id = uuid();
+  getDb().prepare("INSERT INTO sms_outbox (id, to_msisdn, body, status, attempts, created_at, updated_at) VALUES (?, ?, ?, 'queued', 0, ?, ?)").run(id, to, body, now(), now());
+  return toOutbox(getDb().prepare('SELECT * FROM sms_outbox WHERE id = ?').get(id));
+}
+
+/** A device takes the oldest queued messages; a message stuck in "sending" for ten minutes goes back to the queue first. */
+export function claimSmsOutbox(deviceId: string, limit = 10): SmsOutboxItem[] {
+  const db = getDb();
+  return db.transaction(() => {
+    const stale = new Date(Date.now() - SMS_SENDING_STALE_MS).toISOString();
+    db.prepare("UPDATE sms_outbox SET status = 'queued', device_id = NULL, updated_at = ? WHERE status = 'sending' AND updated_at < ?").run(now(), stale);
+    const rows = db.prepare("SELECT * FROM sms_outbox WHERE status = 'queued' ORDER BY created_at LIMIT ?").all(Math.max(1, Math.min(50, limit))) as any[];
+    const mark = db.prepare("UPDATE sms_outbox SET status = 'sending', device_id = ?, updated_at = ? WHERE id = ?");
+    for (const r of rows) mark.run(deviceId, now(), r.id);
+    return rows.map((r) => toOutbox({ ...r, status: 'sending', device_id: deviceId }));
+  })();
+}
+
+/** The device reports the outcome; a failure is retried up to three times, then the message is marked failed for the console. */
+export function reportSmsOutbox(id: string, deviceId: string, ok: boolean, error: string | null): SmsOutboxItem {
+  const db = getDb();
+  const r = db.prepare('SELECT * FROM sms_outbox WHERE id = ?').get(id) as any;
+  if (!r) throw new Error('Outbox message not found');
+  if (r.device_id !== deviceId || r.status !== 'sending') throw new Error('This message is not being sent by this device');
+  if (ok) db.prepare("UPDATE sms_outbox SET status = 'sent', sent_at = ?, updated_at = ?, last_error = NULL WHERE id = ?").run(now(), now(), id);
+  else {
+    const attempts = r.attempts + 1;
+    const status = attempts >= SMS_MAX_ATTEMPTS ? 'failed' : 'queued';
+    db.prepare('UPDATE sms_outbox SET status = ?, attempts = ?, device_id = NULL, last_error = ?, updated_at = ? WHERE id = ?').run(status, attempts, error ?? 'send failed', now(), id);
+  }
+  return toOutbox(db.prepare('SELECT * FROM sms_outbox WHERE id = ?').get(id));
+}
+
+export function listSmsOutbox(opts: { status?: string | null; limit?: number } = {}): SmsOutboxItem[] {
+  const rows = opts.status
+    ? getDb().prepare('SELECT * FROM sms_outbox WHERE status = ? ORDER BY created_at DESC LIMIT ?').all(opts.status, opts.limit ?? 100)
+    : getDb().prepare('SELECT * FROM sms_outbox ORDER BY created_at DESC LIMIT ?').all(opts.limit ?? 100);
+  return (rows as any[]).map(toOutbox);
+}
+
+export function smsOutboxSummary(): { queued: number; sending: number; failed: number; sent24h: number } {
+  const db = getDb();
+  const count = (status: string) => (db.prepare('SELECT COUNT(*) c FROM sms_outbox WHERE status = ?').get(status) as { c: number }).c;
+  const since = new Date(Date.now() - 86_400_000).toISOString();
+  return { queued: count('queued'), sending: count('sending'), failed: count('failed'), sent24h: (db.prepare("SELECT COUNT(*) c FROM sms_outbox WHERE status = 'sent' AND sent_at >= ?").get(since) as { c: number }).c };
 }

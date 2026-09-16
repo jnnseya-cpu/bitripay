@@ -118,11 +118,11 @@ export function goLiveChecklist(): { mode: string; readyForLive: boolean; items:
   const rs = getRateStatus();
   items.push({
     id: 'rates',
-    label: 'Live exchange rates from a provider, refreshed automatically',
-    ok: fresh.live && fresh.fresh && getAppSettings().rateAutoRefreshHours > 0,
+    label: 'Exchange rates fresh: a keyless provider refreshed automatically, or the official reference rate entered by the treasury',
+    ok: fresh.live && fresh.fresh && (fresh.manual || getAppSettings().rateAutoRefreshHours > 0),
     blocking: true,
     detail: `${fresh.live ? `live (${fresh.source})` : `not live (${fresh.source})`}${fresh.oldestUpdatedAt ? `, oldest ${fresh.oldestUpdatedAt}` : ''}${rs.lastError ? ` · last error: ${rs.lastError}` : ''}`,
-    fix: 'Currencies & rates → choose a provider (add an API key if needed) → Refresh now → set auto-refresh hours',
+    fix: 'Currencies & rates → choose a keyless provider and set auto-refresh hours, or enter the official reference rate (source manual) at least every maxRateAgeHours',
   });
   const corridors = listCorridors();
   const live = corridors.filter((c) => c.status === 'live');

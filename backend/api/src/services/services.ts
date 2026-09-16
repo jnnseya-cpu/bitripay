@@ -10,7 +10,8 @@ import { badRequest, notFound, unprocessable } from '../lib/errors';
 import { parseJson } from '../lib/json';
 import { applyBps, formatMoney } from '@bitripay/shared';
 import { getCurrency } from './currencies';
-import { calculateFee, enforceLimits, postTransaction } from './ledger';
+import { calculateFee, enforceLimits, postTransaction, transactionStatusHooks } from './ledger';
+import { createPayoutInstruction } from './payouts';
 import { ensureWallet, getUserWallet } from './wallets';
 import { getSystemUser, type UserRow } from './users';
 import { notify } from './notifications';
@@ -97,6 +98,7 @@ export function payBill(user: UserRow, input: { billerId: string; accountNumber:
   const treasury = ensureWallet(getSystemUser('treasury').id, cur.code);
   const receiptNo = `BILL-${shortCode(8)}`;
   return db.transaction(() => {
+    // held until the payout SIM pays the biller and the operator's confirmation SMS is matched (no biller API)
     const tx = postTransaction({
       type: 'bill_payment',
       amount: input.amount,
@@ -106,17 +108,76 @@ export function payBill(user: UserRow, input: { billerId: string; accountNumber:
       toWalletId: treasury.id,
       senderUserId: user.id,
       receiverUserId: null,
+      status: 'pending',
       note: `${biller.name} – ${input.accountNumber}`,
       metadata: { billerId: biller.id, billerName: biller.name, category: biller.category, accountNumber: input.accountNumber, receiptNo },
     });
     const id = uuid();
+    const payout = createPayoutInstruction(
+      {
+        transactionId: tx.id,
+        userId: user.id,
+        rail: 'bill',
+        operatorId: null,
+        recipientMsisdn: null,
+        recipientName: biller.name,
+        bankDetails: { kind: 'bill', billerId: biller.id, billerName: biller.name, category: biller.category, accountNumber: input.accountNumber, receiptNo },
+        country: biller.country ?? user.country ?? null,
+        amount: input.amount,
+        currency: cur.code,
+        sourceCurrency: cur.code,
+        sourceCountry: user.country,
+      },
+      { type: 'user', id: user.id },
+    );
     db.prepare(
-      "INSERT INTO bill_payments (id, user_id, biller_id, account_number, amount, currency, status, transaction_id, receipt_no, created_at) VALUES (?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)",
-    ).run(id, user.id, biller.id, input.accountNumber, input.amount, cur.code, tx.id, receiptNo, now());
-    notify(user.id, 'Bill paid', `${formatMoney(input.amount, cur)} paid to ${biller.name} for ${input.accountNumber}. Receipt ${receiptNo}.`, { kind: 'bill_payment', transactionId: tx.id });
-    return { id, receiptNo, transaction: tx, biller: toBiller(biller) };
+      "INSERT INTO bill_payments (id, user_id, biller_id, account_number, amount, currency, status, transaction_id, receipt_no, created_at, payout_id) VALUES (?, ?, ?, ?, ?, ?, 'processing', ?, ?, ?, ?)",
+    ).run(id, user.id, biller.id, input.accountNumber, input.amount, cur.code, tx.id, receiptNo, now(), payout.id);
+    db.prepare('UPDATE transactions SET metadata = ? WHERE id = ?').run(JSON.stringify({ ...JSON.parse(tx.metadata), payoutId: payout.id, payoutReference: payout.reference }), tx.id);
+    notify(
+      user.id,
+      'Bill payment accepted',
+      payout.stage === 'QUEUED'
+        ? `${formatMoney(input.amount, cur)} for ${biller.name} (${input.accountNumber}) is being paid from a BitriPay payout account. Receipt ${receiptNo}; you will be told when the biller confirms.`
+        : `${formatMoney(input.amount, cur)} for ${biller.name} is waiting for local liquidity; your funds are held safely. Receipt ${receiptNo}.`,
+      { kind: 'bill_payment', transactionId: tx.id, payoutId: payout.id },
+    );
+    return { id, receiptNo, status: 'processing' as const, payoutId: payout.id, transaction: tx, biller: toBiller(biller) };
   })();
 }
+
+/** Bills and top-ups follow their held transaction: settled by the operator's receipt (or maker-checker) → completed; reversed → failed. */
+transactionStatusHooks.push((tx, outcome) => {
+  if (tx.type !== 'bill_payment' && tx.type !== 'mobile_topup') return;
+  const db = getDb();
+  const done = outcome === 'completed';
+  const cur = getCurrency(tx.currency, false);
+  if (tx.type === 'bill_payment') {
+    const r = db.prepare('SELECT b.*, x.name AS biller_name FROM bill_payments b LEFT JOIN billers x ON x.id = b.biller_id WHERE b.transaction_id = ?').get(tx.id) as any;
+    if (!r) return;
+    db.prepare('UPDATE bill_payments SET status = ? WHERE id = ?').run(done ? 'completed' : 'failed', r.id);
+    notify(
+      r.user_id,
+      done ? 'Bill paid' : 'Bill payment failed',
+      done
+        ? `${formatMoney(r.amount, cur)} paid to ${r.biller_name ?? 'the biller'} for ${r.account_number}. Receipt ${r.receipt_no}.`
+        : `${formatMoney(r.amount, cur)} for ${r.biller_name ?? 'the biller'} could not be paid. The funds are back in your wallet.`,
+      { kind: 'bill_payment', transactionId: tx.id },
+    );
+  } else {
+    const r = db.prepare('SELECT t.*, o.name AS operator_name FROM mobile_topups t LEFT JOIN topup_operators o ON o.id = t.operator_id WHERE t.transaction_id = ?').get(tx.id) as any;
+    if (!r) return;
+    db.prepare('UPDATE mobile_topups SET status = ? WHERE id = ?').run(done ? 'completed' : 'failed', r.id);
+    notify(
+      r.user_id,
+      done ? 'Top-up successful' : 'Top-up failed',
+      done
+        ? `${formatMoney(r.amount, cur)} ${r.operator_name ?? ''} airtime sent to ${r.phone}.`
+        : `${formatMoney(r.amount, cur)} of ${r.operator_name ?? ''} airtime for ${r.phone} could not be sent. The funds are back in your wallet.`,
+      { kind: 'mobile_topup', transactionId: tx.id },
+    );
+  }
+});
 
 export function listBillPayments(userId: string) {
   return (
@@ -213,6 +274,7 @@ export function mobileTopup(user: UserRow, input: { operatorId: string; phone: s
   const wallet = getUserWallet(user.id, cur.code);
   const treasury = ensureWallet(getSystemUser('treasury').id, cur.code);
   return db.transaction(() => {
+    // held until the payout SIM transfers the airtime and the operator's confirmation SMS is matched (no operator API)
     const tx = postTransaction({
       type: 'mobile_topup',
       amount: input.amount,
@@ -222,11 +284,29 @@ export function mobileTopup(user: UserRow, input: { operatorId: string; phone: s
       toWalletId: treasury.id,
       senderUserId: user.id,
       receiverUserId: null,
+      status: 'pending',
       note: `${op.name} top-up for ${input.phone}`,
       metadata: { operatorId: op.id, operatorName: op.name, phone: input.phone },
     });
     const id = uuid();
-    db.prepare("INSERT INTO mobile_topups (id, user_id, operator_id, phone, amount, currency, status, transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 'completed', ?, ?)").run(
+    const payout = createPayoutInstruction(
+      {
+        transactionId: tx.id,
+        userId: user.id,
+        rail: 'airtime',
+        operatorId: op.id,
+        recipientMsisdn: input.phone,
+        recipientName: null,
+        bankDetails: { kind: 'airtime', operatorId: op.id, operatorName: op.name },
+        country: op.country ?? user.country ?? null,
+        amount: input.amount,
+        currency: cur.code,
+        sourceCurrency: cur.code,
+        sourceCountry: user.country,
+      },
+      { type: 'user', id: user.id },
+    );
+    db.prepare("INSERT INTO mobile_topups (id, user_id, operator_id, phone, amount, currency, status, transaction_id, created_at, payout_id) VALUES (?, ?, ?, ?, ?, ?, 'processing', ?, ?, ?)").run(
       id,
       user.id,
       op.id,
@@ -235,9 +315,18 @@ export function mobileTopup(user: UserRow, input: { operatorId: string; phone: s
       cur.code,
       tx.id,
       now(),
+      payout.id,
     );
-    notify(user.id, 'Top-up successful', `${formatMoney(input.amount, cur)} ${op.name} airtime sent to ${input.phone}.`, { kind: 'mobile_topup', transactionId: tx.id });
-    return { id, transaction: tx, operator: toOperator(op) };
+    db.prepare('UPDATE transactions SET metadata = ? WHERE id = ?').run(JSON.stringify({ ...JSON.parse(tx.metadata), payoutId: payout.id, payoutReference: payout.reference }), tx.id);
+    notify(
+      user.id,
+      'Top-up accepted',
+      payout.stage === 'QUEUED'
+        ? `${formatMoney(input.amount, cur)} of ${op.name} airtime for ${input.phone} is being sent from a BitriPay payout SIM; you will be told when the operator confirms.`
+        : `${formatMoney(input.amount, cur)} of ${op.name} airtime for ${input.phone} is waiting for local liquidity; your funds are held safely.`,
+      { kind: 'mobile_topup', transactionId: tx.id, payoutId: payout.id },
+    );
+    return { id, status: 'processing' as const, payoutId: payout.id, transaction: tx, operator: toOperator(op) };
   })();
 }
 
