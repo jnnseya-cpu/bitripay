@@ -128,7 +128,7 @@
     <header><span class="t">55' – 60'</span><h3>Clôture · Conditions de lancement et questions</h3><span class="tag">Direction</span></header>
     <div class="grid">
       <div class="cell"><b>Écrans</b>Console → Contrôles → Liste de mise en service</div>
-      <div class="cell"><b>À montrer</b><ol><li>Les points encore ouverts (programme de monnaie électronique, corridor, adaptateur certifié du switch…) et le bouton « Go live » refusé par la plateforme.</li><li>Feuille de route en trois phases (page 16) : phase 1 = ce que l'agrément d'agrégateur autorise (QR, liens, point de vente, API, homologation avec le switch, factures et recharges via partenaires, reporting BCC) ; phase 2 = monnaie électronique ; phase 3 = corridors, versements en masse, cartes virtuelles.</li></ol></div>
+      <div class="cell"><b>À montrer</b><ol><li>Les points encore ouverts (programme de monnaie électronique, corridor, adaptateur certifié du switch…) et le bouton « Go live » refusé par la plateforme.</li><li>Feuille de route en trois phases (page 16) : phase 1 = ce que l'agrément d'agrégateur autorise (QR, liens, point de vente, API, homologation avec le switch, factures et recharges depuis les SIM de paiement BitriPay, sans API, reporting BCC) ; phase 2 = monnaie électronique ; phase 3 = corridors, versements en masse, cartes virtuelles.</li></ol></div>
       <div class="cell"><b>Message</b>« La plateforme est prête techniquement ; elle reste en sandbox et le passage en live est verrouillé par le système jusqu'à l'enregistrement de l'agrément. Rien de ce que vous avez vu au-delà du périmètre d'agrégateur ne sera activé sans votre autorisation. »</div>
     </div>
   </div>
@@ -136,7 +136,7 @@
   <h2>Si quelque chose échoue</h2>
   <div class="table-wrap"><table>
     <tr><th>Symptôme</th><th>Que faire en séance</th></tr>
-    <tr><td>Le code SMS n'arrive pas</td><td>Dire que le canal SMS est opéré par un fournisseur tiers ; montrer le code dans la console → Communication → Livraisons (statut de livraison) ; continuer avec le compte préparé.</td></tr>
+    <tr><td>Le code SMS n'arrive pas</td><td>Dire que le canal SMS passe par un fournisseur tiers, ou par la SIM d'un téléphone enrôlé (fournisseur « téléphone enrôlé », sans clé) ; montrer le code dans la console → Communication → Livraisons (statut de livraison) ; continuer avec le compte préparé.</td></tr>
     <tr><td>Le SMS opérateur n'arrive pas sur le téléphone de collecte</td><td>Annoncer et injecter le SMS depuis la console → Simulateur ; expliquer que le même rapprochement s'applique.</td></tr>
     <tr><td>Une opération est refusée</td><td>Lire le motif affiché (limite, KYC, sanctions, montant hors bornes) : c'est un contrôle qui fonctionne. Le montrer dans le journal d'audit.</td></tr>
     <tr><td>Guardian signale un écart</td><td>Montrer la pause automatique des mouvements d'argent ; c'est le comportement attendu. Ne pas lever la pause en séance.</td></tr>
