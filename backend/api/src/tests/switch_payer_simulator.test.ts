@@ -27,7 +27,7 @@ describe('payer simulator (scene 3)', () => {
   it('pays a POS sale from a simulated payer institution through the switch and settles the intent', async () => {
     const merchant = await registerUser(app, { role: 'merchant', businessName: 'Kiosque Démo', country: 'CD' });
     // scene 2: settlement account at Demo Mobile Money B, verified and activated by two administrators
-    const b = await request(app).post('/api/v1/beneficiary_bindings').set(merchant.auth).send({ participant_id: 'DEMO_MMO_B', account_token: 'acct-kiosque-1122', account_name: 'Kiosque Démo' });
+    const b = await request(app).post('/api/v1/beneficiary_bindings').set(merchant.auth).send({ participant_id: 'DEMO_MMO_B', account_token: '+243990000123', account_name: 'Kiosque Démo' });
     expect(b.status, JSON.stringify(b.body)).toBe(201);
     await request(app).post(`/api/admin/switch/bindings/${b.body.id}/verify`).set(admin.auth).send({ method: 'institution_confirmation', reference: 'MMO-B-CONF-1' });
     await request(app).post(`/api/admin/switch/bindings/${b.body.id}/activate`).set(checker.auth);
