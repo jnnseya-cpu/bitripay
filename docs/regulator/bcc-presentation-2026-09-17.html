@@ -78,7 +78,8 @@
     .slide { border: 0; border-radius: 0; padding: 6px 4px 12px 16px; page-break-after: always; break-after: page; }
     .slide:last-child { page-break-after: auto; break-after: auto; }
     .slide h1 { font-size: 28px; } .slide h2 { font-size: 22px; }
-    .box, .kpi, .flow, .table-wrap, pre.mermaid, .meta { break-inside: avoid; page-break-inside: avoid; }
+    .box, .kpi, .flow, pre.mermaid, .meta { break-inside: avoid; page-break-inside: avoid; }
+    .table-wrap { break-inside: auto; page-break-inside: auto; } tr { break-inside: avoid; page-break-inside: avoid; } thead, tr:first-child { break-after: avoid; }
     h3 { break-after: avoid; page-break-after: avoid; }
     pre.mermaid { overflow: visible; } pre.mermaid svg { max-width: 100% !important; height: auto; }
     a { color: inherit; text-decoration: none; }
