@@ -60,9 +60,9 @@ export function ConfirmCurrency() {
         ) : (
           <>
             <p className="muted">{view.sender.name} is sending you money. This corridor requires you to confirm the currency you will receive before the payout is executed.</p>
-            <KV k="Proposed currency" v={<b>{view.currency}</b>} />
-            <KV k="Estimated amount" v={fmt(view.amount, view.currency)} />
-            {view.localCurrency && <KV k="Local currency" v={view.localCurrency} />}
+            <KV k={tr('Proposed currency')} v={<b>{view.currency}</b>} />
+            <KV k={tr('Estimated amount')} v={fmt(view.amount, view.currency)} />
+            {view.localCurrency && <KV k={tr('Local currency')} v={view.localCurrency} />}
             <div className="mt">
               <div className="small bold mb-sm">Receive in</div>
               <div className="row wrap">

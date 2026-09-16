@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes, type SelectHTMLAttributes } from 'react';
+import { tr } from '../lib/i18n';
 import type { PublicUser } from '@bitripay/shared';
 
 export function Button({
@@ -259,13 +260,13 @@ export function ConfirmButton({
       <Button size={size} variant={variant} onClick={() => setOpen(true)}>
         {children}
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Please confirm">
+      <Modal open={open} onClose={() => setOpen(false)} title={tr('Please confirm')}>
         {prompt ? (
           <Field label={prompt}>
             <Input value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
           </Field>
         ) : (
-          <p>Are you sure?</p>
+          <p>{tr('Are you sure?')}</p>
         )}
         <div className="row">
           <Button
@@ -277,10 +278,10 @@ export function ConfirmButton({
               setReason('');
             }}
           >
-            Confirm
+            {tr('Confirm')}
           </Button>
           <Button variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {tr('Cancel')}
           </Button>
         </div>
       </Modal>
@@ -312,13 +313,13 @@ export function StepUpButton({
       <Button size={size} variant={variant} onClick={() => setOpen(true)}>
         {children}
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title={title ?? 'Approve with step-up'}>
+      <Modal open={open} onClose={() => setOpen(false)} title={title ?? tr('Approve with step-up')}>
         {prompt && (
           <Field label={prompt}>
             <Input value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
           </Field>
         )}
-        <Field label="Your transaction PIN" hint="Maker-checker: this decision is recorded under your identity. Set a PIN in My profile if you have none.">
+        <Field label={tr('Your transaction PIN')} hint={tr('Maker-checker: this decision is recorded under your identity. Set a PIN in My profile if you have none.')}>
           <Input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} autoFocus={!prompt} />
         </Field>
         <div className="row">
@@ -332,10 +333,10 @@ export function StepUpButton({
               setPin('');
             }}
           >
-            Confirm
+            {tr('Confirm')}
           </Button>
           <Button variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {tr('Cancel')}
           </Button>
         </div>
       </Modal>

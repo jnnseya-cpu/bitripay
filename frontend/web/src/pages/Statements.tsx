@@ -102,16 +102,16 @@ export function Statements() {
               <div className="card soft compact mb">
                 <div className="grid cols-2">
                   <div>
-                    <KV k="Statement" v={<b>{statement.number}</b>} />
-                    <KV k="Account" v={<span className="mono">{statement.account.iban}</span>} />
-                    <KV k="Holder" v={`${statement.holder.businessName ? `${statement.holder.businessName} · ` : ''}${statement.holder.name} (@${statement.holder.tag})`} />
-                    <KV k="Period" v={`${statement.period.from} → ${statement.period.to}`} />
+                    <KV k={tr('Statement')} v={<b>{statement.number}</b>} />
+                    <KV k={tr('Account')} v={<span className="mono">{statement.account.iban}</span>} />
+                    <KV k={tr('Holder')} v={`${statement.holder.businessName ? `${statement.holder.businessName} · ` : ''}${statement.holder.name} (@${statement.holder.tag})`} />
+                    <KV k={tr('Period')} v={`${statement.period.from} → ${statement.period.to}`} />
                   </div>
                   <div>
-                    <KV k="Opening balance" v={money(statement.opening, currency)} />
-                    <KV k="Total credits" v={<span style={{ color: 'var(--success)' }}>{money(statement.totalCredits, currency)}</span>} />
-                    <KV k="Total debits" v={<span style={{ color: 'var(--danger)' }}>{money(statement.totalDebits, currency)}</span>} />
-                    <KV k="Closing balance" v={<b>{money(statement.closing, currency)}</b>} />
+                    <KV k={tr('Opening balance')} v={money(statement.opening, currency)} />
+                    <KV k={tr('Total credits')} v={<span style={{ color: 'var(--success)' }}>{money(statement.totalCredits, currency)}</span>} />
+                    <KV k={tr('Total debits')} v={<span style={{ color: 'var(--danger)' }}>{money(statement.totalDebits, currency)}</span>} />
+                    <KV k={tr('Closing balance')} v={<b>{money(statement.closing, currency)}</b>} />
                   </div>
                 </div>
                 <div className="tiny muted mt-sm">
@@ -166,7 +166,7 @@ export function Statements() {
                   {statement.promo.movements.map((m: any, i: number) => (
                     <KV key={i} k={`${m.date.slice(0, 10)} · ${m.description}`} v={money(m.amount, currency)} />
                   ))}
-                  <KV k="Promotional credit balance" v={money(statement.promo.closing, currency)} />
+                  <KV k={tr('Promotional credit balance')} v={money(statement.promo.closing, currency)} />
                 </div>
               )}
             </div>

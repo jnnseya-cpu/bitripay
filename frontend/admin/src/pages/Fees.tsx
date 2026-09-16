@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Button, Field, Input, PageHeader, Select, Switch, Tabs, useAsync, Alert } from '../components/ui';
@@ -23,7 +24,7 @@ export function Fees() {
   const save = async (key: string, value: unknown) => {
     try {
       await api.put(`/api/admin/settings/${key}`, { value });
-      toast('Saved', 'success');
+      toast(tr('Saved'), 'success');
       refresh();
     } catch (err) {
       toast((err as Error).message, 'error');
@@ -33,13 +34,13 @@ export function Fees() {
   if (!fees || !limits || !referral || !app) return null;
   return (
     <div>
-      <PageHeader title="Fees, limits, referral & platform" subtitle={`Fixed amounts are in ${base} minor units (e.g. 100 = 1.00). Percentages are basis points (100 bps = 1%).`} />
+      <PageHeader title={tr('Fees, limits, referral & platform')} subtitle={`Fixed amounts are in ${base} minor units (e.g. 100 = 1.00). Percentages are basis points (100 bps = 1%).`} />
       <Tabs
         tabs={[
-          { id: 'fees', label: 'Fees & charges' },
-          { id: 'limits', label: 'Transaction limits' },
-          { id: 'referral', label: 'Referral levels' },
-          { id: 'app', label: 'Platform settings' },
+          { id: 'fees', label: tr('Fees & charges') },
+          { id: 'limits', label: tr('Transaction limits') },
+          { id: 'referral', label: tr('Referral levels') },
+          { id: 'app', label: tr('Platform settings') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -47,20 +48,21 @@ export function Fees() {
       {tab === 'fees' && (
         <div className="card">
           <p className="tiny muted">
-            The published tariff grid: BitriPay fee as a percentage of the amount (basis points) plus an optional fixed part, the amount band of the operation and the agent commission paid out of the
-            fee. Blank or 0 = no bound / platform default. Statements, quotes and the developer portal show these figures; versioned schedules (Finance operations) layer on top.
+            {tr(
+              'The published tariff grid: BitriPay fee as a percentage of the amount (basis points) plus an optional fixed part, the amount band of the operation and the agent commission paid out of the fee. Blank or 0 = no bound / platform default. Statements, quotes and the developer portal show these figures; versioned schedules (Finance operations) layer on top.',
+            )}
           </p>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Operation</th>
-                  <th>Fee %</th>
-                  <th>Fixed ({base} minor)</th>
-                  <th>Min amount ({base} minor)</th>
-                  <th>Max amount ({base} minor)</th>
-                  <th>Agent commission %</th>
-                  <th>Example on 100.00</th>
+                  <th>{tr('Operation')}</th>
+                  <th>{tr('Fee %')}</th>
+                  <th>{tr('Fixed ({0} minor)', { 0: base })}</th>
+                  <th>{tr('Min amount ({0} minor)', { 0: base })}</th>
+                  <th>{tr('Max amount ({0} minor)', { 0: base })}</th>
+                  <th>{tr('Agent commission %')}</th>
+                  <th>{tr('Example on 100.00')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -106,7 +108,7 @@ export function Fees() {
             </table>
           </div>
           <Button className="mt" onClick={() => save('fees', fees)}>
-            Save tariff grid
+            {tr('Save tariff grid')}
           </Button>
         </div>
       )}
@@ -115,34 +117,34 @@ export function Fees() {
           <div className="grid cols-2">
             {(['unverified', 'verified'] as const).map((tier) => (
               <div key={tier} className="card soft">
-                <h4>{tier === 'unverified' ? 'Unverified accounts (no KYC)' : 'Verified accounts (KYC approved)'}</h4>
+                <h4>{tier === 'unverified' ? tr('Unverified accounts (no KYC)') : tr('Verified accounts (KYC approved)')}</h4>
                 <Field label={`Per transaction (${base} minor units)`}>
                   <Input type="number" value={limits[tier].perTransaction} onChange={(e) => setLimits({ ...limits, [tier]: { ...limits[tier], perTransaction: Number(e.target.value) } })} />
                 </Field>
-                <Field label="Daily total">
+                <Field label={tr('Daily total')}>
                   <Input type="number" value={limits[tier].daily} onChange={(e) => setLimits({ ...limits, [tier]: { ...limits[tier], daily: Number(e.target.value) } })} />
                 </Field>
               </div>
             ))}
           </div>
           <Button className="mt" onClick={() => save('limits', limits)}>
-            Save limits
+            {tr('Save limits')}
           </Button>
         </div>
       )}
       {tab === 'referral' && (
         <div className="card">
-          <Switch on={referral.enabled} onChange={(v) => setReferral({ ...referral, enabled: v })} label="Referral program enabled" />
-          <Field label="Reward trigger">
+          <Switch on={referral.enabled} onChange={(v) => setReferral({ ...referral, enabled: v })} label={tr('Referral program enabled')} />
+          <Field label={tr('Reward trigger')}>
             <Select value={referral.trigger} onChange={(e) => setReferral({ ...referral, trigger: e.target.value })}>
-              <option value="first_deposit">When the referred user makes their first deposit</option>
-              <option value="registration">Immediately at registration</option>
+              <option value="first_deposit">{tr('When the referred user makes their first deposit')}</option>
+              <option value="registration">{tr('Immediately at registration')}</option>
             </Select>
           </Field>
-          <h4>Level packages (reward per level, {base} minor units)</h4>
+          <h4>{tr('Level packages (reward per level, {0} minor units)', { 0: base })}</h4>
           {referral.rewards.map((r: number, i: number) => (
             <div key={i} className="row mb-sm">
-              <span style={{ width: 80 }}>Level {i + 1}</span>
+              <span style={{ width: 80 }}>{tr('Level {0}', { 0: i + 1 })}</span>
               <Input
                 type="number"
                 value={r}
@@ -150,52 +152,52 @@ export function Fees() {
                 style={{ width: 160 }}
               />
               <Button size="sm" variant="ghost" onClick={() => setReferral({ ...referral, rewards: referral.rewards.filter((_: number, j: number) => j !== i) })}>
-                Remove
+                {tr('Remove')}
               </Button>
             </div>
           ))}
           <div className="row">
             <Button variant="secondary" size="sm" onClick={() => setReferral({ ...referral, rewards: [...referral.rewards, 0] })}>
-              + Add level
+              {tr('+ Add level')}
             </Button>
-            <Button onClick={() => save('referral', referral)}>Save referral settings</Button>
+            <Button onClick={() => save('referral', referral)}>{tr('Save referral settings')}</Button>
           </div>
         </div>
       )}
       {tab === 'app' && (
         <div className="card">
           <div className="grid cols-2">
-            <Field label="Support email">
+            <Field label={tr('Support email')}>
               <Input value={app.supportEmail} onChange={(e) => setApp({ ...app, supportEmail: e.target.value })} />
             </Field>
-            <Field label="Default agent commission (bps of cash-in/out)">
+            <Field label={tr('Default agent commission (bps of cash-in/out)')}>
               <Input type="number" value={app.agentCommissionBps} onChange={(e) => setApp({ ...app, agentCommissionBps: Number(e.target.value) })} />
             </Field>
-            <Field label="P2P trade fee (bps, charged to seller)">
+            <Field label={tr('P2P trade fee (bps, charged to seller)')}>
               <Input type="number" value={app.p2pFeeBps} onChange={(e) => setApp({ ...app, p2pFeeBps: Number(e.target.value) })} />
             </Field>
-            <Field label="Exchange margin (bps)">
+            <Field label={tr('Exchange margin (bps)')}>
               <Input type="number" value={app.exchangeMarginBps} onChange={(e) => setApp({ ...app, exchangeMarginBps: Number(e.target.value) })} />
             </Field>
           </div>
-          <h4>Automated merchant settlements</h4>
+          <h4>{tr('Automated merchant settlements')}</h4>
           <div className="grid cols-3">
-            <Switch on={app.autoSettlement.enabled} onChange={(v) => setApp({ ...app, autoSettlement: { ...app.autoSettlement, enabled: v } })} label="Enabled" />
+            <Switch on={app.autoSettlement.enabled} onChange={(v) => setApp({ ...app, autoSettlement: { ...app.autoSettlement, enabled: v } })} label={tr('Enabled')} />
             <Field label={`Minimum balance to settle (${base} minor)`}>
               <Input type="number" value={app.autoSettlement.minAmount} onChange={(e) => setApp({ ...app, autoSettlement: { ...app.autoSettlement, minAmount: Number(e.target.value) } })} />
             </Field>
-            <Field label="Interval (hours)">
+            <Field label={tr('Interval (hours)')}>
               <Input type="number" value={app.autoSettlement.intervalHours} onChange={(e) => setApp({ ...app, autoSettlement: { ...app.autoSettlement, intervalHours: Number(e.target.value) } })} />
             </Field>
           </div>
-          <h4>Access control</h4>
+          <h4>{tr('Access control')}</h4>
           <div className="col mb">
-            <Switch on={app.registrationOpen} onChange={(v) => setApp({ ...app, registrationOpen: v })} label="Registration open" />
-            <Switch on={app.requireKycForWithdrawals} onChange={(v) => setApp({ ...app, requireKycForWithdrawals: v })} label="Require KYC before withdrawals" />
-            <Switch on={app.maintenanceMode} onChange={(v) => setApp({ ...app, maintenanceMode: v })} label="Maintenance mode (blocks all user operations except admin)" />
+            <Switch on={app.registrationOpen} onChange={(v) => setApp({ ...app, registrationOpen: v })} label={tr('Registration open')} />
+            <Switch on={app.requireKycForWithdrawals} onChange={(v) => setApp({ ...app, requireKycForWithdrawals: v })} label={tr('Require KYC before withdrawals')} />
+            <Switch on={app.maintenanceMode} onChange={(v) => setApp({ ...app, maintenanceMode: v })} label={tr('Maintenance mode (blocks all user operations except admin)')} />
           </div>
-          {app.maintenanceMode && <Alert kind="warning">Maintenance mode is ON – users see a "site under maintenance" message for any write operation.</Alert>}
-          <Button onClick={() => save('app', app)}>Save platform settings</Button>
+          {app.maintenanceMode && <Alert kind="warning">{tr('Maintenance mode is ON – users see a "site under maintenance" message for any write operation.')}</Alert>}
+          <Button onClick={() => save('app', app)}>{tr('Save platform settings')}</Button>
         </div>
       )}
     </div>

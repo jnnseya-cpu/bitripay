@@ -52,7 +52,7 @@ export function OrganisationTeam({ org, toast, err, kind }: { org: { data: any; 
             )}
           </p>
         )}
-        {!agent && <KV k="Cashier refund limit" v={`${data.organisation.settings.cashierRefundLimitMinor} minor units per refund`} />}
+        {!agent && <KV k={tr('Cashier refund limit')} v={`${data.organisation.settings.cashierRefundLimitMinor} minor units per refund`} />}
         {!agent && (
           <form
             className="row"

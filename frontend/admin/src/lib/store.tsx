@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { User, CurrencyInfo } from '@bitripay/shared';
 import { formatMoney } from '@bitripay/shared';
 import { api, getToken, setToken } from './api';
+import { setOverrides, setTrLang } from './tr';
 
 interface Store {
   user: (User & { permissions?: string[] }) | null;
@@ -9,6 +10,9 @@ interface Store {
   loading: boolean;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
+  /** Console language (phrase translation); persisted per browser. */
+  lang: string;
+  setLang: (lang: string) => void;
   login: (token: string, user: User) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
@@ -61,6 +65,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('bitripay.admin.theme', theme);
   }, [theme]);
+  const [lang, setLangState] = useState<string>(() => {
+    try {
+      return localStorage.getItem('bitripay.admin.lang') || 'en';
+    } catch {
+      return 'en';
+    }
+  });
+  useEffect(() => {
+    setTrLang(lang);
+    try {
+      localStorage.setItem('bitripay.admin.lang', lang);
+    } catch {
+      /* private mode */
+    }
+    api
+      .get<{ overrides: Record<string, string> }>(`/api/translations/${lang}`)
+      .then((r) => setOverrides(lang, r.overrides || {}))
+      .catch(() => setOverrides(lang, {}));
+  }, [lang]);
   const currency = useCallback((code: string) => config?.currencies?.find((c: CurrencyInfo) => c.code === code) ?? { code, name: code, symbol: code + ' ', decimals: 2, rateToBase: 1 }, [config]);
   const value = useMemo<Store>(
     () => ({
@@ -69,6 +92,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       loading,
       theme,
       toggleTheme: () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')),
+      lang,
+      setLang: setLangState,
       login: async (token, u) => {
         setToken(token);
         await refresh();
@@ -85,7 +110,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast,
       toasts,
     }),
-    [user, config, loading, theme, refresh, currency, toast, toasts],
+    [user, config, loading, theme, lang, refresh, currency, toast, toasts],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

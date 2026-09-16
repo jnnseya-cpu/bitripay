@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { View } from 'react-native';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -33,7 +34,7 @@ export function P2P() {
     try {
       await api.post('/api/p2p/ads', { ...ad, rate: Number(ad.rate), paymentMethods: ['wallet', 'bank_transfer'] });
       setCreate(false);
-      toast('Ad published', 'success');
+      toast(tr('Ad published'), 'success');
       setTab('ads');
     } catch (err) {
       toast((err as Error).message, 'error');
@@ -41,12 +42,12 @@ export function P2P() {
   };
   return (
     <Screen>
-      <Header title={t('nav.p2p')} right={<Button title="+ Ad" small onPress={() => setCreate(true)} />} />
+      <Header title={t('nav.p2p')} right={<Button title={tr('+ Ad')} small onPress={() => setCreate(true)} />} />
       <Tabs
         tabs={[
-          { id: 'market', label: 'Marketplace' },
-          { id: 'trades', label: 'My trades' },
-          { id: 'ads', label: 'My ads' },
+          { id: 'market', label: tr('Marketplace') },
+          { id: 'trades', label: tr('My trades') },
+          { id: 'ads', label: tr('My ads') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -55,13 +56,13 @@ export function P2P() {
         <>
           <Tabs
             tabs={[
-              { id: 'sell', label: 'Buy from sellers' },
-              { id: 'buy', label: 'Sell to buyers' },
+              { id: 'sell', label: tr('Buy from sellers') },
+              { id: 'buy', label: tr('Sell to buyers') },
             ]}
             value={side}
             onChange={(v) => setSide(v as any)}
           />
-          {ads.data?.items.length === 0 && <Empty icon="🤝" text="No live offers" />}
+          {ads.data?.items.length === 0 && <Empty icon="🤝" text={tr('No live offers')} />}
           {ads.data?.items.map((a) => (
             <Card key={a.id}>
               <Row between>
@@ -76,7 +77,7 @@ export function P2P() {
                 </Row>
                 {a.userId !== user?.id && (
                   <Button
-                    title={a.side === 'sell' ? 'Buy' : 'Sell'}
+                    title={a.side === 'sell' ? tr('Buy') : tr('Sell')}
                     small
                     onPress={() => {
                       setOpenAd(a);
@@ -90,7 +91,7 @@ export function P2P() {
                 <T bold>{a.currency}</T> for {a.priceCurrency} · 1 {a.currency} = {a.rate} {a.priceCurrency}
               </T>
               <T muted size={12}>
-                Limits {money(a.minAmount, a.currency)} – {money(a.maxAmount, a.currency)} · available {money(a.availableAmount, a.currency)}
+                {tr('Limits {0} – {1} · available {2}', { 0: money(a.minAmount, a.currency), 1: money(a.maxAmount, a.currency), 2: money(a.availableAmount, a.currency) })}
               </T>
               <Row style={{ flexWrap: 'wrap' }}>
                 {a.paymentMethods.map((m: string) => (
@@ -109,7 +110,7 @@ export function P2P() {
               <Row between>
                 <View>
                   <T bold>
-                    {tr.buyerId === user?.id ? 'Buy' : 'Sell'} {money(tr.amount, tr.currency)} for {money(tr.priceAmount, tr.priceCurrency)}
+                    {tr.buyerId === user?.id ? tr('Buy') : tr('Sell')} {money(tr.amount, tr.currency)} for {money(tr.priceAmount, tr.priceCurrency)}
                   </T>
                   <T muted size={12}>
                     {tr.reference}
@@ -117,7 +118,7 @@ export function P2P() {
                 </View>
                 <Status status={tr.status} />
               </Row>
-              <Button title="Open" small variant="secondary" onPress={() => nav.navigate('Trade', { id: tr.id })} />
+              <Button title={tr('Open')} small variant="secondary" onPress={() => nav.navigate('Trade', { id: tr.id })} />
             </Card>
           ))}
         </>
@@ -140,7 +141,7 @@ export function P2P() {
               </Row>
               {a.status !== 'closed' && (
                 <Button
-                  title={a.status === 'active' ? 'Pause' : 'Resume'}
+                  title={a.status === 'active' ? tr('Pause') : tr('Resume')}
                   small
                   variant="secondary"
                   onPress={() => api.post(`/api/p2p/ads/${a.id}/status`, { status: a.status === 'active' ? 'paused' : 'active' }).then(myAds.reload)}
@@ -150,29 +151,34 @@ export function P2P() {
           ))}
         </>
       )}
-      <Sheet open={!!openAd} onClose={() => setOpenAd(null)} title={openAd ? `${openAd.side === 'sell' ? 'Buy' : 'Sell'} ${openAd.currency}` : ''}>
+      <Sheet open={!!openAd} onClose={() => setOpenAd(null)} title={openAd ? `${openAd.side === 'sell' ? tr('Buy') : tr('Sell')} ${openAd.currency}` : ''}>
         {openAd && (
           <>
-            <KV k="Rate" v={`1 ${openAd.currency} = ${openAd.rate} ${openAd.priceCurrency}`} />
+            <KV k={tr('Rate')} v={`1 ${openAd.currency} = ${openAd.rate} ${openAd.priceCurrency}`} />
             <Input label={`Amount (${openAd.currency})`} value={amount} onChangeText={(v) => setAmount(v.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" big />
-            <Select label="Payment method" value={method} onChange={setMethod} options={openAd.paymentMethods.map((m: string) => ({ value: m, label: m.replace('_', ' ') }))} />
-            <Button title="Open trade" onPress={openTrade} disabled={!amount} />
+            <Select label={tr('Payment method')} value={method} onChange={setMethod} options={openAd.paymentMethods.map((m: string) => ({ value: m, label: m.replace('_', ' ') }))} />
+            <Button title={tr('Open trade')} onPress={openTrade} disabled={!amount} />
           </>
         )}
       </Sheet>
-      <Sheet open={create} onClose={() => setCreate(false)} title="Post a P2P ad">
+      <Sheet open={create} onClose={() => setCreate(false)} title={tr('Post a P2P ad')}>
         <Select
           label="I want to"
           value={ad.side}
           onChange={(v) => setAd({ ...ad, side: v })}
           options={[
-            { value: 'sell', label: 'Sell currency' },
-            { value: 'buy', label: 'Buy currency' },
+            { value: 'sell', label: tr('Sell currency') },
+            { value: 'buy', label: tr('Buy currency') },
           ]}
         />
         <Row>
           <View style={{ flex: 1 }}>
-            <Select label="Currency" value={ad.currency} onChange={(v) => setAd({ ...ad, currency: v })} options={(config?.currencies ?? []).map((c: any) => ({ value: c.code, label: c.code }))} />
+            <Select
+              label={tr('Currency')}
+              value={ad.currency}
+              onChange={(v) => setAd({ ...ad, currency: v })}
+              options={(config?.currencies ?? []).map((c: any) => ({ value: c.code, label: c.code }))}
+            />
           </View>
           <View style={{ flex: 1 }}>
             <Select
@@ -183,19 +189,19 @@ export function P2P() {
             />
           </View>
         </Row>
-        <Input label="Rate" value={ad.rate} onChangeText={(v) => setAd({ ...ad, rate: v })} keyboardType="decimal-pad" />
+        <Input label={tr('Rate')} value={ad.rate} onChangeText={(v) => setAd({ ...ad, rate: v })} keyboardType="decimal-pad" />
         <Row>
           <View style={{ flex: 1 }}>
-            <Input label="Min" value={ad.minAmount} onChangeText={(v) => setAd({ ...ad, minAmount: v })} keyboardType="decimal-pad" />
+            <Input label={tr('Min')} value={ad.minAmount} onChangeText={(v) => setAd({ ...ad, minAmount: v })} keyboardType="decimal-pad" />
           </View>
           <View style={{ flex: 1 }}>
-            <Input label="Max" value={ad.maxAmount} onChangeText={(v) => setAd({ ...ad, maxAmount: v })} keyboardType="decimal-pad" />
+            <Input label={tr('Max')} value={ad.maxAmount} onChangeText={(v) => setAd({ ...ad, maxAmount: v })} keyboardType="decimal-pad" />
           </View>
           <View style={{ flex: 1 }}>
-            <Input label="Available" value={ad.availableAmount} onChangeText={(v) => setAd({ ...ad, availableAmount: v })} keyboardType="decimal-pad" />
+            <Input label={tr('Available')} value={ad.availableAmount} onChangeText={(v) => setAd({ ...ad, availableAmount: v })} keyboardType="decimal-pad" />
           </View>
         </Row>
-        <Button title="Publish" onPress={createAd} disabled={!ad.rate || !ad.minAmount || !ad.maxAmount || !ad.availableAmount} />
+        <Button title={tr('Publish')} onPress={createAd} disabled={!ad.rate || !ad.minAmount || !ad.maxAmount || !ad.availableAmount} />
       </Sheet>
     </Screen>
   );
@@ -217,7 +223,7 @@ export function Trade({ route }: ScreenProps<'Trade'>) {
   if (!tr)
     return (
       <Screen>
-        <Header title="Trade" />
+        <Header title={tr('Trade')} />
       </Screen>
     );
   const isBuyer = tr.buyerId === user?.id;
@@ -228,7 +234,7 @@ export function Trade({ route }: ScreenProps<'Trade'>) {
       await api.post(`/api/p2p/trades/${tr.id}/${path}`, body);
       trade.reload();
       refreshWallets();
-      toast('Updated', 'success');
+      toast(tr('Updated'), 'success');
     } catch (err) {
       toast((err as Error).message, 'error');
     }
@@ -240,11 +246,11 @@ export function Trade({ route }: ScreenProps<'Trade'>) {
         <Row between>
           <Status status={tr.status} />
           <T muted size={12}>
-            Rate {tr.rate}
+            {tr('Rate {0}', { 0: tr.rate })}
           </T>
         </Row>
         <T bold size={18}>
-          {isBuyer ? 'Buying' : 'Selling'} {money(tr.amount, tr.currency)} for {money(tr.priceAmount, tr.priceCurrency)}
+          {isBuyer ? tr('Buying') : tr('Selling')} {money(tr.amount, tr.currency)} for {money(tr.priceAmount, tr.priceCurrency)}
         </T>
         <Row>
           <Avatar user={other} size={34} />
@@ -253,42 +259,42 @@ export function Trade({ route }: ScreenProps<'Trade'>) {
           </T>
         </Row>
         {tr.offers?.map((o: any) => (
-          <KV key={o.id} k={`${o.fromUserId === user?.id ? 'You' : other?.fullName}: ${money(o.amount, tr.currency)} @ ${o.rate}`} v={<Status status={o.status} />} />
+          <KV key={o.id} k={`${o.fromUserId === user?.id ? tr('You') : other?.fullName}: ${money(o.amount, tr.currency)} @ ${o.rate}`} v={<Status status={o.status} />} />
         ))}
         {tr.status === 'negotiating' && (
           <Row style={{ flexWrap: 'wrap' }}>
-            {pending && pending.fromUserId !== user?.id && <Button title="Accept" small onPress={() => setPinAction('accept')} />}
-            <Button title="Counter" small variant="secondary" onPress={() => setCounter({ amount: fromMinor(tr.amount, 2), rate: String(tr.rate) })} />
-            <Button title="Cancel" small variant="ghost" onPress={() => act('cancel')} />
+            {pending && pending.fromUserId !== user?.id && <Button title={tr('Accept')} small onPress={() => setPinAction('accept')} />}
+            <Button title={tr('Counter')} small variant="secondary" onPress={() => setCounter({ amount: fromMinor(tr.amount, 2), rate: String(tr.rate) })} />
+            <Button title={tr('Cancel')} small variant="ghost" onPress={() => act('cancel')} />
           </Row>
         )}
         {tr.status === 'escrowed' && isBuyer && (
           <>
             <Alert text={`Pay ${money(tr.priceAmount, tr.priceCurrency)} to the seller via ${tr.paymentMethod.replace('_', ' ')}, then mark as paid.`} />
-            <Button title="I have paid" onPress={() => act('paid')} />
+            <Button title={tr('I have paid')} onPress={() => act('paid')} />
           </>
         )}
-        {tr.status === 'escrowed' && !isBuyer && <Alert text="Your funds are in escrow. Waiting for the buyer to pay." />}
+        {tr.status === 'escrowed' && !isBuyer && <Alert text={tr('Your funds are in escrow. Waiting for the buyer to pay.')} />}
         {tr.status === 'paid' && !isBuyer && (
           <>
-            <Alert kind="warning" text="Buyer says they paid. Confirm to release escrow." />
+            <Alert kind="warning" text={tr('Buyer says they paid. Confirm to release escrow.')} />
             <Row>
-              <Button title="Release escrow" variant="success" onPress={() => setPinAction('release')} />
-              <Button title="Dispute" variant="danger" onPress={() => setDispute('')} />
+              <Button title={tr('Release escrow')} variant="success" onPress={() => setPinAction('release')} />
+              <Button title={tr('Dispute')} variant="danger" onPress={() => setDispute('')} />
             </Row>
           </>
         )}
         {tr.status === 'paid' && isBuyer && (
           <>
-            <Alert text="Waiting for the seller to confirm." />
-            <Button title="Open dispute" variant="danger" onPress={() => setDispute('')} />
+            <Alert text={tr('Waiting for the seller to confirm.')} />
+            <Button title={tr('Open dispute')} variant="danger" onPress={() => setDispute('')} />
           </>
         )}
         {tr.status === 'disputed' && <Alert kind="warning" text={`Dispute open: ${tr.disputeReason}`} />}
-        {tr.status === 'completed' && <Alert kind="success" text="Trade completed." />}
+        {tr.status === 'completed' && <Alert kind="success" text={tr('Trade completed.')} />}
       </Card>
       <Card>
-        <T bold>Chat</T>
+        <T bold>{tr('Chat')}</T>
         {tr.messages?.map((m: any) => (
           <View
             key={m.id}
@@ -301,10 +307,10 @@ export function Trade({ route }: ScreenProps<'Trade'>) {
         ))}
         <Row>
           <View style={{ flex: 1 }}>
-            <Input value={msg} onChangeText={setMsg} placeholder="Message…" />
+            <Input value={msg} onChangeText={setMsg} placeholder={tr('Message…')} />
           </View>
           <Button
-            title="Send"
+            title={tr('Send')}
             small
             onPress={() =>
               msg.trim() &&
@@ -316,24 +322,24 @@ export function Trade({ route }: ScreenProps<'Trade'>) {
           />
         </Row>
       </Card>
-      <Sheet open={!!counter} onClose={() => setCounter(null)} title="Counter-offer">
+      <Sheet open={!!counter} onClose={() => setCounter(null)} title={tr('Counter-offer')}>
         {counter && (
           <>
             <Input label={`Amount (${tr.currency})`} value={counter.amount} onChangeText={(v) => setCounter({ ...counter, amount: v })} keyboardType="decimal-pad" />
-            <Input label="Rate" value={counter.rate} onChangeText={(v) => setCounter({ ...counter, rate: v })} keyboardType="decimal-pad" />
-            <Button title="Send counter-offer" onPress={() => act('counter', { amount: counter.amount, rate: Number(counter.rate) }).then(() => setCounter(null))} />
+            <Input label={tr('Rate')} value={counter.rate} onChangeText={(v) => setCounter({ ...counter, rate: v })} keyboardType="decimal-pad" />
+            <Button title={tr('Send counter-offer')} onPress={() => act('counter', { amount: counter.amount, rate: Number(counter.rate) }).then(() => setCounter(null))} />
           </>
         )}
       </Sheet>
-      <Sheet open={dispute !== null} onClose={() => setDispute(null)} title="Open a dispute">
-        <Input label="What went wrong?" value={dispute ?? ''} onChangeText={setDispute} multiline />
-        <Button title="Submit dispute" variant="danger" disabled={!dispute || dispute.length < 3} onPress={() => act('dispute', { reason: dispute }).then(() => setDispute(null))} />
+      <Sheet open={dispute !== null} onClose={() => setDispute(null)} title={tr('Open a dispute')}>
+        <Input label={tr('What went wrong?')} value={dispute ?? ''} onChangeText={setDispute} multiline />
+        <Button title={tr('Submit dispute')} variant="danger" disabled={!dispute || dispute.length < 3} onPress={() => act('dispute', { reason: dispute }).then(() => setDispute(null))} />
       </Sheet>
       <PinSheet
         open={!!pinAction}
         onClose={() => setPinAction(null)}
         onSubmit={(pin) => act(pinAction!, { pin }).then(() => setPinAction(null))}
-        title={pinAction === 'accept' ? 'Accept offer' : 'Release escrow'}
+        title={pinAction === 'accept' ? tr('Accept offer') : tr('Release escrow')}
       />
     </Screen>
   );

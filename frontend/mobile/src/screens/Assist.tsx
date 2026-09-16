@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { Pressable, ScrollView, View } from 'react-native';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -140,11 +141,11 @@ export function Assist() {
     const d = billing.disclosure;
     const p = billing.prices[0];
     return (
-      <Screen title="Command centre">
+      <Screen title={tr('Command centre')}>
         {error && <Alert kind="error" text={error} />}
         <Card>
           <T bold size={18}>
-            How questions are priced
+            {tr('How questions are priced')}
           </T>
           {d.lines.map((l: string, i: number) => (
             <T key={i} size={14}>
@@ -154,21 +155,24 @@ export function Assist() {
         </Card>
         <Card>
           <Row between>
-            <T>Lookups from your records</T>
-            <T bold>Free</T>
+            <T>{tr('Lookups from your records')}</T>
+            <T bold>{tr('Free')}</T>
           </Row>
           <Row between>
-            <T>Question ({p?.currency})</T>
+            <T>
+              {tr('Question (')}
+              {p?.currency})
+            </T>
             <T bold>{p?.standardFormatted}</T>
           </Row>
           {billing.canDeep && (
             <Row between>
-              <T>In-depth analysis</T>
+              <T>{tr('In-depth analysis')}</T>
               <T bold>{p?.deepFormatted}</T>
             </Row>
           )}
           <Button
-            title="I understand the prices, continue"
+            title={tr('I understand the prices, continue')}
             loading={activating}
             onPress={async () => {
               setActivating(true);
@@ -183,7 +187,7 @@ export function Assist() {
             }}
           />
           <T muted size={12}>
-            Not for you? Nothing changes: everything else in BitriPay keeps working exactly as today.
+            {tr('Not for you? Nothing changes: everything else in BitriPay keeps working exactly as today.')}
           </T>
         </Card>
       </Screen>
@@ -192,13 +196,13 @@ export function Assist() {
   if (billing?.mode === 'subscription' && addon?.required && !addon.active && addon.freeRunsLeft === 0) {
     const price = addon.prices[0];
     return (
-      <Screen title="Command centre">
+      <Screen title={tr('Command centre')}>
         {error && <Alert kind="error" text={error} />}
         <Card>
           <T bold size={18}>
             An optional add-on
           </T>
-          <T muted>Personal agents that read your account, explain your money and prepare actions you confirm yourself. Every step is logged; agents never move money.</T>
+          <T muted>{tr('Personal agents that read your account, explain your money and prepare actions you confirm yourself. Every step is logged; agents never move money.')}</T>
         </Card>
         <Card>
           <T bold size={22}>
@@ -208,11 +212,12 @@ export function Assist() {
             </T>
           </T>
           <T muted size={13}>
-            Paid from your wallet now.{addon.autoRenewDefault ? ' Renews automatically; cancel any time.' : ''}
+            {tr('Paid from your wallet now.')}
+            {addon.autoRenewDefault ? tr('Renews automatically; cancel any time.') : ''}
           </T>
           <Button title={`Activate for ${price?.formatted ?? ''}`} onPress={() => setPinOpen(true)} loading={activating} />
           <T muted size={12}>
-            Not for you? Nothing changes: sending, receiving, cards, agents and statements keep working exactly as today.
+            {tr('Not for you? Nothing changes: sending, receiving, cards, agents and statements keep working exactly as today.')}
           </T>
         </Card>
         <PinSheet
@@ -220,16 +225,16 @@ export function Assist() {
           onClose={() => setPinOpen(false)}
           onSubmit={activate}
           loading={activating}
-          title="Activate the command centre"
+          title={tr('Activate the command centre')}
           summary={`${price?.formatted ?? ''} from your ${price?.currency ?? ''} wallet`}
         />
       </Screen>
     );
   }
   return (
-    <Screen title="Command centre" scroll={false}>
+    <Screen title={tr('Command centre')} scroll={false}>
       <View style={{ flex: 1, gap: 10 }}>
-        {mode === 'offline' && <Alert kind="info" text="Agents answer from built-in checks right now; every question still goes through the same audited tools." />}
+        {mode === 'offline' && <Alert kind="info" text={tr('Agents answer from built-in checks right now; every question still goes through the same audited tools.')} />}
         {error && <Alert kind="error" text={error} />}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {agents.map((a) => (
@@ -272,12 +277,12 @@ export function Assist() {
                 </View>
               ) : ['queued', 'running'].includes(r.status) ? (
                 <T muted size={12}>
-                  Checking…
+                  {tr('Checking…')}
                 </T>
               ) : null}
-              {r.status === 'failed' && <Alert kind="error" text={r.error ?? 'Something went wrong.'} />}
-              {r.status === 'budget_exhausted' && <Alert kind="warning" text="Your monthly agent credit is used up. It resets next month." />}
-              {r.status === 'awaiting_approval' && <Alert kind="warning" text="Queued for a second administrator to approve." />}
+              {r.status === 'failed' && <Alert kind="error" text={r.error ?? tr('Something went wrong.')} />}
+              {r.status === 'budget_exhausted' && <Alert kind="warning" text={tr('Your monthly agent credit is used up. It resets next month.')} />}
+              {r.status === 'awaiting_approval' && <Alert kind="warning" text={tr('Queued for a second administrator to approve.')} />}
               {r.proposals.map((p, i) => (
                 <Pressable
                   key={i}
@@ -286,10 +291,10 @@ export function Assist() {
                 >
                   <T bold>{p.title}</T>
                   <T muted size={12}>
-                    {p.why ?? 'Prepared for you to confirm. Nothing has been executed.'}
+                    {p.why ?? tr('Prepared for you to confirm. Nothing has been executed.')}
                   </T>
                   <T color={th.primary} size={13}>
-                    Review & confirm →
+                    {tr('Review & confirm →')}
                   </T>
                 </Pressable>
               ))}
@@ -308,21 +313,21 @@ export function Assist() {
             <Input
               value={input}
               onChangeText={setInput}
-              placeholder={agent ? `Ask ${agent.name}…` : 'Ask…'}
+              placeholder={agent ? `Ask ${agent.name}…` : tr('Ask…')}
               editable={!busy && !!agent && agent.enabled && !agent.paused}
               onSubmitEditing={() => ask(input)}
               returnKeyType="send"
             />
           </View>
           <Button
-            title={billing?.mode === 'per_use' && !billing.subscriptionActive && billing.prices[0] && !billing.freeRunsLeft ? `Ask · up to ${billing.prices[0].standardFormatted}` : 'Ask'}
+            title={billing?.mode === 'per_use' && !billing.subscriptionActive && billing.prices[0] && !billing.freeRunsLeft ? `Ask · up to ${billing.prices[0].standardFormatted}` : tr('Ask')}
             onPress={() => ask(input)}
             disabled={!input.trim() || !!busy || !agent}
             loading={!!busy}
           />
         </Row>
         <T muted size={11}>
-          Money only moves when you confirm with your PIN or biometrics. {user?.role === 'admin' ? 'Administrative actions need a second administrator.' : ''}
+          {tr('Money only moves when you confirm with your PIN or biometrics.')} {user?.role === 'admin' ? tr('Administrative actions need a second administrator.') : ''}
         </T>
       </View>
     </Screen>

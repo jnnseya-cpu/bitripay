@@ -205,15 +205,15 @@ export function MoveMoney() {
               <RouteTimeline stage={route.stage} stageLabel={route.stageLabel} stageDescription={route.stageDescription} />
               {route.quote && (
                 <div className="card soft compact mt">
-                  <KV k="You paid" v={money(route.quote.senderAmount, route.quote.currency)} />
-                  <KV k="Recipient gets" v={<b>{money(route.quote.recipientAmount, route.quote.targetCurrency)}</b>} />
+                  <KV k={tr('You paid')} v={money(route.quote.senderAmount, route.quote.currency)} />
+                  <KV k={tr('Recipient gets')} v={<b>{money(route.quote.recipientAmount, route.quote.targetCurrency)}</b>} />
                   {route.quote.rate !== 1 && (
                     <KV
-                      k="Rate"
+                      k={tr('Rate')}
                       v={`1 ${route.quote.currency} = ${Number(route.quote.rate).toFixed(4)} ${route.quote.targetCurrency}${route.quote.fx?.guaranteed ? ' (guaranteed)' : ' (indicative)'}`}
                     />
                   )}
-                  <KV k="Estimated payout" v={route.quote.estimatedPayoutTime} />
+                  <KV k={tr('Estimated payout')} v={route.quote.estimatedPayoutTime} />
                 </div>
               )}
               {route.payout && (
@@ -222,8 +222,8 @@ export function MoveMoney() {
                     {tr('Local payout ·')} {route.payout.stageLabel ?? route.payout.stage.toLowerCase().replace(/_/g, ' ')}
                   </div>
                   <KV k="To" v={`${route.payout.operatorName ?? route.payout.rail} · ${route.payout.recipientMasked ?? ''}${route.payout.recipientName ? ` · ${route.payout.recipientName}` : ''}`} />
-                  <KV k="Reference" v={<span className="mono">{route.payout.reference}</span>} />
-                  {route.payout.externalRef && <KV k="Operator confirmation" v={<span className="mono">{route.payout.externalRef}</span>} />}
+                  <KV k={tr('Reference')} v={<span className="mono">{route.payout.reference}</span>} />
+                  {route.payout.externalRef && <KV k={tr('Operator confirmation')} v={<span className="mono">{route.payout.externalRef}</span>} />}
                   {route.payout.payoutAccount && <KV k="Paid from" v={route.payout.payoutAccount.label} />}
                 </div>
               )}
@@ -468,17 +468,17 @@ export function MoveMoney() {
                     <b>{preview.destination.label}</b>
                     {preview.destination.instant ? <span className="chip success">instant</span> : <span className="chip warning">payout within a business day</span>}
                   </div>
-                  {preview.quote.fundingFee > 0 && <KV k="Funding fee" v={money(preview.quote.fundingFee, preview.quote.currency)} />}
-                  {preview.quote.exchangeFee > 0 && <KV k="Exchange fee" v={money(preview.quote.exchangeFee, preview.quote.currency)} />}
-                  {preview.quote.rate !== 1 && <KV k="Rate" v={`1 ${preview.quote.currency} = ${preview.quote.rate.toFixed(4)} ${preview.quote.targetCurrency}`} />}
-                  {preview.quote.payoutFee > 0 && <KV k="Payout fee" v={money(preview.quote.payoutFee, preview.quote.targetCurrency)} />}
-                  <KV k="You pay" v={money(preview.quote.senderAmount, preview.quote.currency)} />
-                  <KV k="Recipient gets" v={<b style={{ color: 'var(--success)' }}>{money(preview.quote.targetAmount, preview.quote.targetCurrency)}</b>} />
+                  {preview.quote.fundingFee > 0 && <KV k={tr('Funding fee')} v={money(preview.quote.fundingFee, preview.quote.currency)} />}
+                  {preview.quote.exchangeFee > 0 && <KV k={tr('Exchange fee')} v={money(preview.quote.exchangeFee, preview.quote.currency)} />}
+                  {preview.quote.rate !== 1 && <KV k={tr('Rate')} v={`1 ${preview.quote.currency} = ${preview.quote.rate.toFixed(4)} ${preview.quote.targetCurrency}`} />}
+                  {preview.quote.payoutFee > 0 && <KV k={tr('Payout fee')} v={money(preview.quote.payoutFee, preview.quote.targetCurrency)} />}
+                  <KV k={tr('You pay')} v={money(preview.quote.senderAmount, preview.quote.currency)} />
+                  <KV k={tr('Recipient gets')} v={<b style={{ color: 'var(--success)' }}>{money(preview.quote.targetAmount, preview.quote.targetCurrency)}</b>} />
                   {preview.quote.fx && preview.quote.fx.sourceCurrency !== preview.quote.fx.targetCurrency && (
-                    <KV k="FX margin" v={`${(preview.quote.fxMarginBps / 100).toFixed(2)}% over ${preview.quote.fx.providerLabel} reference ${preview.quote.fx.midRate.toFixed(4)}`} />
+                    <KV k={tr('FX margin')} v={`${(preview.quote.fxMarginBps / 100).toFixed(2)}% over ${preview.quote.fx.providerLabel} reference ${preview.quote.fx.midRate.toFixed(4)}`} />
                   )}
                   <KV
-                    k="Guaranteed amount"
+                    k={tr('Guaranteed amount')}
                     v={
                       preview.quote.guaranteedRecipientAmount != null ? (
                         <b>{money(preview.quote.guaranteedRecipientAmount, preview.quote.targetCurrency)}</b>
@@ -487,8 +487,8 @@ export function MoveMoney() {
                       )
                     }
                   />
-                  <KV k="Estimated payout" v={preview.quote.estimatedPayoutTime} />
-                  <KV k="Quote valid until" v={new Date(preview.quote.quoteExpiresAt).toLocaleTimeString()} />
+                  <KV k={tr('Estimated payout')} v={preview.quote.estimatedPayoutTime} />
+                  <KV k={tr('Quote valid until')} v={new Date(preview.quote.quoteExpiresAt).toLocaleTimeString()} />
                   {preview.quote.confirmation && (
                     <KV
                       k="Confirmed by"
@@ -504,7 +504,7 @@ export function MoveMoney() {
                   )}
                   {preview.quote.corridor && (
                     <KV
-                      k="Corridor"
+                      k={tr('Corridor')}
                       v={
                         preview.quote.corridor.status === 'live' ? (
                           <span className="chip success">authorised · {preview.quote.corridor.destCountry}</span>
@@ -576,7 +576,7 @@ export function MoveMoney() {
         title={pinFor === 'cancel' ? tr('Confirm cancellation') : tr('Authorise this transfer')}
         summary={
           pinFor === 'cancel' && route ? (
-            <KV k="Cancel transfer" v={money(route.amount, route.currency)} />
+            <KV k={tr('Cancel transfer')} v={money(route.amount, route.currency)} />
           ) : (
             preview && <KV k={`Send to ${preview.destination.label}`} v={money(preview.quote.targetAmount, preview.quote.targetCurrency)} />
           )

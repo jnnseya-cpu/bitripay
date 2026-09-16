@@ -113,12 +113,12 @@ export function SwitchPayments() {
               {selected.route?.rail && <Chip>{selected.route.rail}</Chip>}
             </div>
             <SwitchMessage message={selected.customer_message} />
-            <KV k="Amount" v={money(selected.amount)} />
-            <KV k="Tracking reference" v={<span className="mono">{selected.tracking_reference}</span>} />
-            <KV k="Authorisation" v={selected.authorization_status} />
-            <KV k="Beneficiary credit" v={selected.beneficiary_credit_status} />
-            <KV k="Settlement" v={selected.settlement_status} />
-            <KV k="Reconciliation" v={selected.reconciliation_status} />
+            <KV k={tr('Amount')} v={money(selected.amount)} />
+            <KV k={tr('Tracking reference')} v={<span className="mono">{selected.tracking_reference}</span>} />
+            <KV k={tr('Authorisation')} v={selected.authorization_status} />
+            <KV k={tr('Beneficiary credit')} v={selected.beneficiary_credit_status} />
+            <KV k={tr('Settlement')} v={selected.settlement_status} />
+            <KV k={tr('Reconciliation')} v={selected.reconciliation_status} />
             {selected.rejection && <Alert kind="error">{selected.rejection.message}</Alert>}
             {selected.action && <Alert kind="info">{selected.action.message}</Alert>}
             {timeline.error === UNAVAILABLE && <SwitchMessage unavailable />}

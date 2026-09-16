@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { ImageBackground, Pressable, ScrollView, Share, Switch as RNSwitch, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -56,7 +57,7 @@ export function TxDetail({ route }: ScreenProps<'TxDetail'>) {
   if (!d)
     return (
       <Screen>
-        <Header title="Transaction" />
+        <Header title={tr('Transaction')} />
       </Screen>
     );
   const tx: Transaction = d.transaction;
@@ -78,21 +79,21 @@ export function TxDetail({ route }: ScreenProps<'TxDetail'>) {
       <Card>
         {d.sender && <KV k="From" v={`${d.sender.businessName || d.sender.fullName} (@${d.sender.tag})`} />}
         {d.receiver && <KV k="To" v={`${d.receiver.businessName || d.receiver.fullName} (@${d.receiver.tag})`} />}
-        <KV k="Amount" v={money(tx.amount, tx.currency)} />
-        {tx.receiveCurrency && tx.receiveCurrency !== tx.currency && <KV k="Received" v={money(tx.receiveAmount ?? 0, tx.receiveCurrency)} />}
-        <KV k="Fee" v={money(tx.fee, tx.currency)} />
-        {tx.note && <KV k="Note" v={tx.note} />}
-        {meta?.method && <KV k="Method" v={String(meta.method).replace('_', ' ')} />}
-        {meta?.receiptNo && <KV k="Receipt" v={String(meta.receiptNo)} />}
-        <KV k="Reference" v={tx.reference} />
+        <KV k={tr('Amount')} v={money(tx.amount, tx.currency)} />
+        {tx.receiveCurrency && tx.receiveCurrency !== tx.currency && <KV k={tr('Received')} v={money(tx.receiveAmount ?? 0, tx.receiveCurrency)} />}
+        <KV k={tr('Fee')} v={money(tx.fee, tx.currency)} />
+        {tx.note && <KV k={tr('Note')} v={tx.note} />}
+        {meta?.method && <KV k={tr('Method')} v={String(meta.method).replace('_', ' ')} />}
+        {meta?.receiptNo && <KV k={tr('Receipt')} v={String(meta.receiptNo)} />}
+        <KV k={tr('Reference')} v={tx.reference} />
       </Card>
       <Row>
         <Button
-          title="Share receipt"
+          title={tr('Share receipt')}
           variant="secondary"
           onPress={() => Share.share({ message: `BitriPay ${TRANSACTION_TYPE_LABELS[tx.type]} ${tx.reference}: ${money(tx.amount, tx.currency)} · ${tx.status}` })}
         />
-        {d.receiver && tx.direction === 'out' && <Button title="Send again" variant="ghost" onPress={() => nav.navigate('Send', { to: d.receiver.tag })} />}
+        {d.receiver && tx.direction === 'out' && <Button title={tr('Send again')} variant="ghost" onPress={() => nav.navigate('Send', { to: d.receiver.tag })} />}
       </Row>
     </Screen>
   );
@@ -107,7 +108,7 @@ export function Settings() {
     try {
       const r = await api.patch<{ user: User }>('/api/account/profile', { ...form, country: form.country || null, businessName: form.businessName || null });
       setUser(r.user);
-      toast('Profile updated', 'success');
+      toast(tr('Profile updated'), 'success');
     } catch (err) {
       toast((err as Error).message, 'error');
     }
@@ -116,7 +117,7 @@ export function Settings() {
   const pickPicture = async (kind: 'profile' | 'cover') => {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) return toast('Allow photo access to choose a picture', 'error');
+      if (!perm.granted) return toast(tr('Allow photo access to choose a picture'), 'error');
       const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: kind === 'profile' ? [1, 1] : [8, 3], quality: 0.8, base64: true });
       if (res.canceled || !res.assets[0]?.base64) return;
       setPicBusy(kind);
@@ -150,10 +151,8 @@ export function Settings() {
           imageStyle={{ borderRadius: 14 }}
         >
           <Row>
-            <Button small variant="secondary" onPress={() => void pickPicture('cover')} loading={picBusy === 'cover'} title={user?.coverUrl ? 'Change cover' : 'Add cover'} />
-            {user?.coverUrl && (
-              <Button small variant="ghost" onPress={() => void removePicture('cover')} disabled={picBusy !== null} title="Remove" />
-            )}
+            <Button small variant="secondary" onPress={() => void pickPicture('cover')} loading={picBusy === 'cover'} title={user?.coverUrl ? tr('Change cover') : tr('Add cover')} />
+            {user?.coverUrl && <Button small variant="ghost" onPress={() => void removePicture('cover')} disabled={picBusy !== null} title={tr('Remove')} />}
           </Row>
         </ImageBackground>
         <Row>
@@ -170,17 +169,15 @@ export function Settings() {
           </View>
         </Row>
         <Row>
-          <Button small variant="secondary" onPress={() => void pickPicture('profile')} loading={picBusy === 'profile'} title={user?.pictureUrl ? 'Change photo' : 'Add photo'} />
-          {user?.pictureUrl && (
-            <Button small variant="ghost" onPress={() => void removePicture('profile')} disabled={picBusy !== null} title="Remove" />
-          )}
+          <Button small variant="secondary" onPress={() => void pickPicture('profile')} loading={picBusy === 'profile'} title={user?.pictureUrl ? tr('Change photo') : tr('Add photo')} />
+          {user?.pictureUrl && <Button small variant="ghost" onPress={() => void removePicture('profile')} disabled={picBusy !== null} title={tr('Remove')} />}
         </Row>
         <T muted size={12}>
-          Pictures save as soon as you choose them.
+          {tr('Pictures save as soon as you choose them.')}
         </T>
         <Input label={t('auth.fullName')} value={form.fullName} onChangeText={(v) => setForm({ ...form, fullName: v })} />
         <Input label="@tag" value={form.tag} onChangeText={(v) => setForm({ ...form, tag: v })} autoCapitalize="none" />
-        {user?.role !== 'user' && <Input label="Business name" value={form.businessName} onChangeText={(v) => setForm({ ...form, businessName: v })} />}
+        {user?.role !== 'user' && <Input label={tr('Business name')} value={form.businessName} onChangeText={(v) => setForm({ ...form, businessName: v })} />}
         <Select
           label={t('auth.country')}
           value={form.country}
@@ -203,9 +200,9 @@ export function Settings() {
         </Row>
         <Row between>
           <View style={{ flex: 1 }}>
-            <T>🔔 Loud alerts</T>
+            <T>{tr('🔔 Loud alerts')}</T>
             <T muted size={12}>
-              Alarm sound and long vibration when money arrives, a payout completes or something needs you
+              {tr('Alarm sound and long vibration when money arrives, a payout completes or something needs you')}
             </T>
           </View>
           <RNSwitch
@@ -219,8 +216,8 @@ export function Settings() {
             }}
           />
         </Row>
-        {user?.loudAlerts !== false && <Button title="Test alert" small variant="secondary" onPress={() => ringLoud()} />}
-        <Button title="Account statements" variant="secondary" onPress={() => nav.navigate('Statements')} />
+        {user?.loudAlerts !== false && <Button title={tr('Test alert')} small variant="secondary" onPress={() => ringLoud()} />}
+        <Button title={tr('Account statements')} variant="secondary" onPress={() => nav.navigate('Statements')} />
       </Card>
       <Card>
         <KV
@@ -228,7 +225,7 @@ export function Settings() {
           v={
             <Row>
               {user?.email ? <T>{user.email}</T> : <T muted>—</T>}
-              {user?.email && (user.emailVerified ? <Chip label="verified" kind="success" /> : <Button title="Verify" small variant="secondary" onPress={() => nav.navigate('Security')} />)}
+              {user?.email && (user.emailVerified ? <Chip label="verified" kind="success" /> : <Button title={tr('Verify')} small variant="secondary" onPress={() => nav.navigate('Security')} />)}
             </Row>
           }
         />
@@ -237,7 +234,7 @@ export function Settings() {
           v={
             <Row>
               {user?.phone ? <T>{user.phone}</T> : <T muted>—</T>}
-              {user?.phone && (user.phoneVerified ? <Chip label="verified" kind="success" /> : <Button title="Verify" small variant="secondary" onPress={() => nav.navigate('Security')} />)}
+              {user?.phone && (user.phoneVerified ? <Chip label="verified" kind="success" /> : <Button title={tr('Verify')} small variant="secondary" onPress={() => nav.navigate('Security')} />)}
             </Row>
           }
         />
@@ -275,22 +272,22 @@ export function Security() {
         <Card>
           <Row between>
             <View style={{ flex: 1 }}>
-              <T bold>Biometric login & payments</T>
+              <T bold>{tr('Biometric login & payments')}</T>
               <T muted size={12}>
-                Unlock BitriPay and confirm payments with fingerprint or face instead of your PIN
+                {tr('Unlock BitriPay and confirm payments with fingerprint or face instead of your PIN')}
               </T>
             </View>
             <RNSwitch value={biometrics} onValueChange={(v) => (v ? setBioPinOpen(true) : setBiometrics(false))} />
           </Row>
         </Card>
       )}
-      <Sheet open={bioPinOpen} onClose={() => setBioPinOpen(false)} title="Enable biometrics">
+      <Sheet open={bioPinOpen} onClose={() => setBioPinOpen(false)} title={tr('Enable biometrics')}>
         <T muted size={13}>
-          Enter your transaction PIN once. It is stored in the device's secure enclave and released only after a successful biometric check.
+          {tr("Enter your transaction PIN once. It is stored in the device's secure enclave and released only after a successful biometric check.")}
         </T>
         <Input label={t('common.pin')} value={bioPin} onChangeText={(v) => setBioPin(v.replace(/\D/g, ''))} secureTextEntry keyboardType="number-pad" maxLength={6} />
         <Button
-          title="Enable"
+          title={tr('Enable')}
           disabled={bioPin.length < 4}
           onPress={() =>
             api
@@ -299,7 +296,7 @@ export function Security() {
               .then(() => {
                 setBioPinOpen(false);
                 setBioPin('');
-                toast('Biometric login enabled', 'success');
+                toast(tr('Biometric login enabled'), 'success');
               })
               .catch((e) => toast(e.message, 'error'))
           }
@@ -307,9 +304,9 @@ export function Security() {
       </Sheet>
       <Card>
         <T bold>{t('settings.pin')}</T>
-        {user?.hasPin && <Input label="Current PIN" value={pin.currentPin} onChangeText={(v) => setPin({ ...pin, currentPin: v })} secureTextEntry keyboardType="number-pad" maxLength={6} />}
+        {user?.hasPin && <Input label={tr('Current PIN')} value={pin.currentPin} onChangeText={(v) => setPin({ ...pin, currentPin: v })} secureTextEntry keyboardType="number-pad" maxLength={6} />}
         <Input
-          label={user?.hasPin ? 'New PIN' : 'Choose a 4–6 digit PIN'}
+          label={user?.hasPin ? tr('New PIN') : tr('Choose a 4–6 digit PIN')}
           value={pin.pin}
           onChangeText={(v) => setPin({ ...pin, pin: v.replace(/\D/g, '') })}
           secureTextEntry
@@ -324,8 +321,8 @@ export function Security() {
       </Card>
       <Card>
         <T bold>{t('settings.password')}</T>
-        <Input label="Current password" value={pw.currentPassword} onChangeText={(v) => setPw({ ...pw, currentPassword: v })} secureTextEntry />
-        <Input label="New password" value={pw.newPassword} onChangeText={(v) => setPw({ ...pw, newPassword: v })} secureTextEntry />
+        <Input label={tr('Current password')} value={pw.currentPassword} onChangeText={(v) => setPw({ ...pw, currentPassword: v })} secureTextEntry />
+        <Input label={tr('New password')} value={pw.newPassword} onChangeText={(v) => setPw({ ...pw, newPassword: v })} secureTextEntry />
         <Button
           title={t('common.save')}
           disabled={pw.newPassword.length < 8}
@@ -335,32 +332,32 @@ export function Security() {
       <Card>
         <Row between>
           <T bold>{t('settings.2fa')}</T>
-          {user?.twoFactorEnabled ? <Chip label="Enabled" kind="success" /> : <Chip label="Disabled" />}
+          {user?.twoFactorEnabled ? <Chip label={tr('Enabled')} kind="success" /> : <Chip label={tr('Disabled')} />}
         </Row>
-        {!user?.twoFactorEnabled && !setup && <Button title="Set up 2FA" onPress={() => api.post<{ qr: string; secret: string }>('/api/account/2fa/setup').then(setSetup)} />}
+        {!user?.twoFactorEnabled && !setup && <Button title={tr('Set up 2FA')} onPress={() => api.post<{ qr: string; secret: string }>('/api/account/2fa/setup').then(setSetup)} />}
         {setup && (
           <>
             <Qr value={`otpauth://totp/BitriPay:${user?.email ?? user?.tag}?secret=${setup.secret}&issuer=BitriPay`} size={160} />
             <T mono size={12} center>
               {setup.secret}
             </T>
-            <Button title="Copy secret" small variant="secondary" onPress={() => Clipboard.setStringAsync(setup.secret)} />
-            <Input label="Code from authenticator" value={code} onChangeText={setCode} keyboardType="number-pad" />
-            <Button title="Enable" onPress={() => run(api.post('/api/account/2fa/enable', { code }), '2FA enabled').then(() => setSetup(null))} />
+            <Button title={tr('Copy secret')} small variant="secondary" onPress={() => Clipboard.setStringAsync(setup.secret)} />
+            <Input label={tr('Code from authenticator')} value={code} onChangeText={setCode} keyboardType="number-pad" />
+            <Button title={tr('Enable')} onPress={() => run(api.post('/api/account/2fa/enable', { code }), '2FA enabled').then(() => setSetup(null))} />
           </>
         )}
         {user?.twoFactorEnabled && (
           <>
-            <Input label="Code from authenticator" value={code} onChangeText={setCode} keyboardType="number-pad" />
-            <Button title="Disable 2FA" variant="danger" onPress={() => run(api.post('/api/account/2fa/disable', { code }), '2FA disabled')} />
+            <Input label={tr('Code from authenticator')} value={code} onChangeText={setCode} keyboardType="number-pad" />
+            <Button title={tr('Disable 2FA')} variant="danger" onPress={() => run(api.post('/api/account/2fa/disable', { code }), '2FA disabled')} />
           </>
         )}
       </Card>
       <Card>
-        <T bold>Verification</T>
+        <T bold>{tr('Verification')}</T>
         {user?.email && !user.emailVerified && (
           <Button
-            title="Verify email"
+            title={tr('Verify email')}
             variant="secondary"
             onPress={() =>
               api
@@ -371,7 +368,7 @@ export function Security() {
         )}
         {user?.phone && !user.phoneVerified && (
           <Button
-            title="Verify phone"
+            title={tr('Verify phone')}
             variant="secondary"
             onPress={() =>
               api
@@ -380,17 +377,18 @@ export function Security() {
             }
           />
         )}
-        {user?.emailVerified && user?.phoneVerified && <T muted>All verified ✓</T>}
+        {user?.emailVerified && user?.phoneVerified && <T muted>{tr('All verified ✓')}</T>}
       </Card>
       {user?.role !== 'admin' && (
         <Card>
-          <T bold>Delete account</T>
+          <T bold>{tr('Delete account')}</T>
           <T muted size={12}>
-            Closes this account for good: name, email, phone and documents are removed and every session and key is revoked. Balances must be at zero first. Ledger history stays under a pseudonym for
-            the legal retention period.
+            {tr(
+              'Closes this account for good: name, email, phone and documents are removed and every session and key is revoked. Balances must be at zero first. Ledger history stays under a pseudonym for the legal retention period.',
+            )}
           </T>
           <Button
-            title="Delete my account"
+            title={tr('Delete my account')}
             variant="danger"
             onPress={() =>
               api
@@ -404,9 +402,9 @@ export function Security() {
           />
         </Card>
       )}
-      <Sheet open={closing} onClose={() => setClosing(false)} title="Delete account">
+      <Sheet open={closing} onClose={() => setClosing(false)} title={tr('Delete account')}>
         {blockers.length > 0 && <Alert kind="warning" text={`Not yet possible: ${blockers.map((b) => b.detail).join('; ')}`} />}
-        <Input label="Password" value={closeForm.password} onChangeText={(v) => setCloseForm({ ...closeForm, password: v })} secureTextEntry />
+        <Input label={tr('Password')} value={closeForm.password} onChangeText={(v) => setCloseForm({ ...closeForm, password: v })} secureTextEntry />
         {user?.hasPin && (
           <Input
             label={t('common.pin')}
@@ -417,17 +415,17 @@ export function Security() {
             maxLength={6}
           />
         )}
-        <Input label="Why are you leaving? (optional)" value={closeForm.reason} onChangeText={(v) => setCloseForm({ ...closeForm, reason: v })} />
-        <Input label="Type CLOSE to confirm" value={closeForm.confirm} onChangeText={(v) => setCloseForm({ ...closeForm, confirm: v.toUpperCase() })} autoCapitalize="characters" />
+        <Input label={tr('Why are you leaving? (optional)')} value={closeForm.reason} onChangeText={(v) => setCloseForm({ ...closeForm, reason: v })} />
+        <Input label={tr('Type CLOSE to confirm')} value={closeForm.confirm} onChangeText={(v) => setCloseForm({ ...closeForm, confirm: v.toUpperCase() })} autoCapitalize="characters" />
         <Button
-          title="Delete my account permanently"
+          title={tr('Delete my account permanently')}
           variant="danger"
           disabled={blockers.length > 0 || closeForm.confirm !== 'CLOSE' || !closeForm.password || (!!user?.hasPin && closeForm.pin.length < 4)}
           onPress={() =>
             api
               .del('/api/account', { password: closeForm.password, pin: closeForm.pin || undefined, confirm: closeForm.confirm, reason: closeForm.reason || undefined })
               .then(() => {
-                toast('Your account has been closed', 'success');
+                toast(tr('Your account has been closed'), 'success');
                 setClosing(false);
                 return logout();
               })
@@ -435,7 +433,7 @@ export function Security() {
           }
         />
       </Sheet>
-      <Sheet open={!!otp} onClose={() => setOtp(null)} title="Enter code">
+      <Sheet open={!!otp} onClose={() => setOtp(null)} title={tr('Enter code')}>
         {otp && (
           <>
             <Alert text={otp.info} />
@@ -448,7 +446,7 @@ export function Security() {
                   .then((r) => {
                     setUser(r.user);
                     setOtp(null);
-                    toast('Verified', 'success');
+                    toast(tr('Verified'), 'success');
                   })
                   .catch((e) => toast(e.message, 'error'))
               }
@@ -469,7 +467,7 @@ export function Kyc() {
     api
       .post('/api/kyc', form)
       .then(() => {
-        toast('Submitted for review', 'success');
+        toast(tr('Submitted for review'), 'success');
         refresh();
         kyc.reload();
       })
@@ -477,30 +475,30 @@ export function Kyc() {
   return (
     <Screen>
       <Header title={t('settings.kyc')} right={<Status status={status} />} />
-      {status === 'verified' && <Alert kind="success" text="Your identity is verified. Higher limits are active." />}
-      {status === 'pending' && <Alert text="Your documents are under review." />}
+      {status === 'verified' && <Alert kind="success" text={tr('Your identity is verified. Higher limits are active.')} />}
+      {status === 'pending' && <Alert text={tr('Your documents are under review.')} />}
       {status === 'rejected' && <Alert kind="error" text={`Rejected${kyc.data?.submission?.note ? `: ${kyc.data.submission.note}` : ''}. Please submit again.`} />}
       {(status === 'none' || status === 'rejected') && (
         <Card>
           <Select
-            label="Document type"
+            label={tr('Document type')}
             value={form.docType}
             onChange={(v) => setForm({ ...form, docType: v })}
             options={[
-              { value: 'passport', label: 'Passport' },
-              { value: 'national_id', label: 'National ID' },
-              { value: 'drivers_license', label: "Driver's license" },
-              { value: 'voter_card', label: 'Voter card' },
+              { value: 'passport', label: tr('Passport') },
+              { value: 'national_id', label: tr('National ID') },
+              { value: 'drivers_license', label: tr("Driver's license") },
+              { value: 'voter_card', label: tr('Voter card') },
             ]}
           />
-          <Input label="Document number" value={form.docNumber} onChangeText={(v) => setForm({ ...form, docNumber: v })} />
-          <Input label="Full legal name" value={form.fullName} onChangeText={(v) => setForm({ ...form, fullName: v })} />
-          <Input label="Date of birth (YYYY-MM-DD)" value={form.dob} onChangeText={(v) => setForm({ ...form, dob: v })} />
-          <Input label="Address" value={form.address} onChangeText={(v) => setForm({ ...form, address: v })} multiline />
+          <Input label={tr('Document number')} value={form.docNumber} onChangeText={(v) => setForm({ ...form, docNumber: v })} />
+          <Input label={tr('Full legal name')} value={form.fullName} onChangeText={(v) => setForm({ ...form, fullName: v })} />
+          <Input label={tr('Date of birth (YYYY-MM-DD)')} value={form.dob} onChangeText={(v) => setForm({ ...form, dob: v })} />
+          <Input label={tr('Address')} value={form.address} onChangeText={(v) => setForm({ ...form, address: v })} multiline />
           <T muted size={12}>
-            Document photos and selfie can be uploaded from the web app; details submitted here are reviewed by our team.
+            {tr('Document photos and selfie can be uploaded from the web app; details submitted here are reviewed by our team.')}
           </T>
-          <Button title="Submit for verification" onPress={submit} disabled={form.docNumber.length < 3} />
+          <Button title={tr('Submit for verification')} onPress={submit} disabled={form.docNumber.length < 3} />
         </Card>
       )}
     </Screen>
@@ -521,13 +519,13 @@ export function Referrals() {
           {user?.referralCode}
         </T>
         <Row>
-          <Button title="Copy link" small variant="secondary" onPress={() => Clipboard.setStringAsync(link)} />
+          <Button title={tr('Copy link')} small variant="secondary" onPress={() => Clipboard.setStringAsync(link)} />
           <Button title={t('common.share')} small onPress={() => Share.share({ message: `Join me on BitriPay: ${link}` })} />
         </Row>
       </Card>
       <Card>
-        <KV k="Friends referred" v={String(s?.referredCount ?? 0)} />
-        <KV k="Total earned" v={s ? money(s.totalEarned, s.currency) : '—'} />
+        <KV k={tr('Friends referred')} v={String(s?.referredCount ?? 0)} />
+        <KV k={tr('Total earned')} v={s ? money(s.totalEarned, s.currency) : '—'} />
         <Row style={{ flexWrap: 'wrap' }}>
           {(s?.settings?.rewards ?? []).map((r: number, i: number) => (
             <Chip key={i} label={`Level ${i + 1}: ${money(r, s.currency)}`} kind="primary" />
@@ -579,32 +577,32 @@ export function Support() {
   return (
     <Screen scroll={tab !== 'chat'}>
       <Header title={t('nav.support')} />
-      <Tabs tabs={[...(config?.modules?.liveChat !== false ? [{ id: 'chat', label: 'Live chat' }] : []), { id: 'tickets', label: 'Tickets' }]} value={tab} onChange={(v) => setTab(v as any)} />
+      <Tabs tabs={[...(config?.modules?.liveChat !== false ? [{ id: 'chat', label: tr('Live chat') }] : []), { id: 'tickets', label: tr('Tickets') }]} value={tab} onChange={(v) => setTab(v as any)} />
       {tab === 'chat' ? (
         <View style={{ flex: 1 }}>
           <ScrollView ref={scroll} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })} contentContainerStyle={{ gap: 8, paddingVertical: 8 }}>
-            {msgs.length === 0 && <Empty icon="💬" text="Start a conversation with our support team" />}
+            {msgs.length === 0 && <Empty icon="💬" text={tr('Start a conversation with our support team')} />}
             {msgs.map((m) => (
               <View key={m.id} style={{ alignSelf: m.isAdmin ? 'flex-start' : 'flex-end', backgroundColor: m.isAdmin ? th.soft : th.primary, padding: 10, borderRadius: 12, maxWidth: '80%' }}>
                 <T color={m.isAdmin ? th.text : '#fff'} size={14}>
                   {m.body}
                 </T>
                 <T color={m.isAdmin ? th.muted : 'rgba(255,255,255,0.7)'} size={10}>
-                  {m.isAdmin ? 'Support' : user?.fullName} · {new Date(m.createdAt).toLocaleTimeString()}
+                  {m.isAdmin ? tr('Support') : user?.fullName} · {new Date(m.createdAt).toLocaleTimeString()}
                 </T>
               </View>
             ))}
           </ScrollView>
           <Row>
             <View style={{ flex: 1 }}>
-              <Input value={text} onChangeText={setText} placeholder="Type a message…" />
+              <Input value={text} onChangeText={setText} placeholder={tr('Type a message…')} />
             </View>
-            <Button title="Send" small onPress={send} />
+            <Button title={tr('Send')} small onPress={send} />
           </Row>
         </View>
       ) : (
         <>
-          <Button title="+ New ticket" small onPress={() => setCreate(true)} />
+          <Button title={tr('+ New ticket')} small onPress={() => setCreate(true)} />
           {tickets.data?.items.length === 0 && <Empty icon="🎫" />}
           {tickets.data?.items.map((tk) => (
             <Card key={tk.id}>
@@ -612,7 +610,7 @@ export function Support() {
                 <T bold>{tk.subject}</T>
                 <Status status={tk.status} />
               </Row>
-              <Button title="Open" small variant="secondary" onPress={() => api.get<{ ticket: any }>(`/api/support/tickets/${tk.id}`).then((r) => setSel(r.ticket))} />
+              <Button title={tr('Open')} small variant="secondary" onPress={() => api.get<{ ticket: any }>(`/api/support/tickets/${tk.id}`).then((r) => setSel(r.ticket))} />
             </Card>
           ))}
           <Sheet open={!!sel} onClose={() => setSel(null)} title={sel?.subject}>
@@ -620,7 +618,7 @@ export function Support() {
               {sel?.messages?.map((m: any) => (
                 <Card key={m.id} soft>
                   <T bold size={12}>
-                    {m.isAdmin ? 'Support' : 'You'}
+                    {m.isAdmin ? tr('Support') : tr('You')}
                   </T>
                   <T size={14}>{m.body}</T>
                 </Card>
@@ -628,9 +626,9 @@ export function Support() {
             </ScrollView>
             {sel?.status !== 'closed' && (
               <>
-                <Input value={reply} onChangeText={setReply} placeholder="Reply…" />
+                <Input value={reply} onChangeText={setReply} placeholder={tr('Reply…')} />
                 <Button
-                  title="Reply"
+                  title={tr('Reply')}
                   disabled={!reply.trim()}
                   onPress={() =>
                     api.post<{ ticket: any }>(`/api/support/tickets/${sel.id}/reply`, { body: reply }).then((r) => {
@@ -643,11 +641,11 @@ export function Support() {
               </>
             )}
           </Sheet>
-          <Sheet open={create} onClose={() => setCreate(false)} title="New ticket">
-            <Input label="Subject" value={form.subject} onChangeText={(v) => setForm({ ...form, subject: v })} />
-            <Input label="Describe the issue" value={form.body} onChangeText={(v) => setForm({ ...form, body: v })} multiline />
+          <Sheet open={create} onClose={() => setCreate(false)} title={tr('New ticket')}>
+            <Input label={tr('Subject')} value={form.subject} onChangeText={(v) => setForm({ ...form, subject: v })} />
+            <Input label={tr('Describe the issue')} value={form.body} onChangeText={(v) => setForm({ ...form, body: v })} multiline />
             <Button
-              title="Submit"
+              title={tr('Submit')}
               disabled={form.subject.length < 3 || form.body.length < 3}
               onPress={() =>
                 api.post('/api/support/tickets', form).then(() => {
@@ -700,35 +698,35 @@ export function Statements() {
   };
   return (
     <Screen>
-      <Header title="Account statements" />
+      <Header title={tr('Account statements')} />
       <Card>
-        <Select label="Account" value={currency} onChange={setCurrency} options={wallets.map((w) => ({ value: w.currency, label: `${w.currency} · ${money(w.balance, w.currency)}` }))} />
-        <Input label="From (YYYY-MM-DD)" value={from} onChangeText={setFrom} autoCapitalize="none" />
-        <Input label="To (YYYY-MM-DD)" value={to} onChangeText={setTo} autoCapitalize="none" />
-        <Button title="Generate statement" onPress={generate} loading={loading} />
+        <Select label={tr('Account')} value={currency} onChange={setCurrency} options={wallets.map((w) => ({ value: w.currency, label: `${w.currency} · ${money(w.balance, w.currency)}` }))} />
+        <Input label={tr('From (YYYY-MM-DD)')} value={from} onChangeText={setFrom} autoCapitalize="none" />
+        <Input label={tr('To (YYYY-MM-DD)')} value={to} onChangeText={setTo} autoCapitalize="none" />
+        <Button title={tr('Generate statement')} onPress={generate} loading={loading} />
       </Card>
       {st && (
         <Card>
-          <KV k="Statement" v={<T bold>{st.number}</T>} />
+          <KV k={tr('Statement')} v={<T bold>{st.number}</T>} />
           <KV
-            k="Account"
+            k={tr('Account')}
             v={
               <T mono size={12}>
                 {st.account.iban}
               </T>
             }
           />
-          <KV k="Period" v={`${st.period.from} → ${st.period.to}`} />
-          <KV k="Opening" v={money(st.opening, currency)} />
-          <KV k="Credits" v={money(st.totalCredits, currency)} />
-          <KV k="Debits" v={money(st.totalDebits, currency)} />
-          <KV k="Closing" v={<T bold>{money(st.closing, currency)}</T>} />
+          <KV k={tr('Period')} v={`${st.period.from} → ${st.period.to}`} />
+          <KV k={tr('Opening')} v={money(st.opening, currency)} />
+          <KV k={tr('Credits')} v={money(st.totalCredits, currency)} />
+          <KV k={tr('Debits')} v={money(st.totalDebits, currency)} />
+          <KV k={tr('Closing')} v={<T bold>{money(st.closing, currency)}</T>} />
           <T muted size={11}>
             {st.account.classification} · hash {String(st.hash).slice(0, 16)}…
           </T>
           {st.disclaimer?.includes('SANDBOX') && <Alert kind="warning" text={st.disclaimer} />}
-          <Button title="Share as CSV" variant="secondary" onPress={shareCsv} />
-          {st.lines.length === 0 && <Empty text="No transactions in this period." />}
+          <Button title={tr('Share as CSV')} variant="secondary" onPress={shareCsv} />
+          {st.lines.length === 0 && <Empty text={tr('No transactions in this period.')} />}
           {st.lines.map((l: any, i: number) => (
             <Row key={i} between>
               <View style={{ flex: 1 }}>
@@ -751,9 +749,9 @@ export function Statements() {
           {(st.promo.movements.length > 0 || st.promo.closing > 0) && (
             <>
               <T bold size={13}>
-                Promotional credit (not money – covers fees only)
+                {tr('Promotional credit (not money – covers fees only)')}
               </T>
-              <KV k="Balance" v={money(st.promo.closing, currency)} />
+              <KV k={tr('Balance')} v={money(st.promo.closing, currency)} />
             </>
           )}
         </Card>

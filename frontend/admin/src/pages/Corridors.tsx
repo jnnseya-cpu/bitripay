@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { countryFlag, countryLabel } from '@bitripay/shared';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -69,8 +70,8 @@ export function Corridors() {
   return (
     <div>
       <PageHeader
-        title="Corridors, liquidity & payouts"
-        subtitle="Where money can go, the prefunded local accounts that pay it out, the devices and agents that execute payouts, and the disputes."
+        title={tr('Corridors, liquidity & payouts')}
+        subtitle={tr('Where money can go, the prefunded local accounts that pay it out, the devices and agents that execute payouts, and the disputes.')}
         actions={
           <Button
             onClick={() =>
@@ -87,27 +88,29 @@ export function Corridors() {
               })
             }
           >
-            + Corridor
+            {tr('+ Corridor')}
           </Button>
         }
       />
       {compliance &&
         (compliance.mode === 'sandbox' ? (
           <Alert kind="warning">
-            <b>Sandbox mode.</b> Live customer funds are not accepted: real card processors are refused on every corridor until the platform is switched to live in Gateway controls and each corridor
-            records its authorised collection partner, payout partner and licence reference. Cross-border transfers are a regulated money-transfer service regardless of how payouts are executed.
+            <b>{tr('Sandbox mode.')}</b>{' '}
+            {tr(
+              'Live customer funds are not accepted: real card processors are refused on every corridor until the platform is switched to live in Gateway controls and each corridor records its authorised collection partner, payout partner and licence reference. Cross-border transfers are a regulated money-transfer service regardless of how payouts are executed.',
+            )}
           </Alert>
         ) : (
           <Alert kind="info">
-            <b>Live mode.</b> Only corridors marked live accept real processor funds; all others stay sandbox.
+            <b>{tr('Live mode.')}</b> {tr('Only corridors marked live accept real processor funds; all others stay sandbox.')}
           </Alert>
         ))}
       <Tabs
         tabs={[
-          { id: 'corridors', label: 'Corridors' },
-          { id: 'liquidity', label: 'Liquidity & payout accounts' },
-          { id: 'payouts', label: 'Payout instructions' },
-          { id: 'chargebacks', label: 'Chargebacks & disputes' },
+          { id: 'corridors', label: tr('Corridors') },
+          { id: 'liquidity', label: tr('Liquidity & payout accounts') },
+          { id: 'payouts', label: tr('Payout instructions') },
+          { id: 'chargebacks', label: tr('Chargebacks & disputes') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -115,7 +118,7 @@ export function Corridors() {
       {tab === 'corridors' && (
         <div className="card">
           <Table
-            head={['Corridor', 'Rail / operator', 'Status', 'Arrangements', 'ETA', 'Max', '']}
+            head={[tr('Corridor'), tr('Rail / operator'), tr('Status'), tr('Arrangements'), 'ETA', tr('Max'), '']}
             rows={(corridors.data?.items ?? []).map((c: any) => [
               <b>
                 {c.sourceCountry ? countryLabel(c.sourceCountry) : '*'} {c.sourceCurrency} → {countryLabel(c.destCountry)} {c.destCurrency}
@@ -170,10 +173,10 @@ export function Corridors() {
               c.maxAmount ? c.maxAmount : '—',
               <div className="row">
                 <Button size="sm" variant="secondary" onClick={() => setCorridorEdit({ ...c })}>
-                  Edit
+                  {tr('Edit')}
                 </Button>
                 <Button size="sm" variant={c.status === 'live' ? 'ghost' : undefined} onClick={() => setGoLive({ ...c, nextStatus: c.status === 'live' ? 'suspended' : 'live' })}>
-                  {c.status === 'live' ? 'Suspend' : 'Go live'}
+                  {c.status === 'live' ? tr('Suspend') : tr('Go live')}
                 </Button>
                 <ConfirmButton
                   size="sm"
@@ -185,11 +188,11 @@ export function Corridors() {
                       .catch(err)
                   }
                 >
-                  Delete
+                  {tr('Delete')}
                 </ConfirmButton>
               </div>,
             ])}
-            empty="No corridors yet – they are also registered automatically when a customer requests one (sandbox)"
+            empty={tr('No corridors yet – they are also registered automatically when a customer requests one (sandbox)')}
           />
         </div>
       )}
@@ -197,7 +200,7 @@ export function Corridors() {
         <>
           <div className="card mb">
             <div className="row">
-              <h4 style={{ margin: 0 }}>Prefunded payout accounts</h4>
+              <h4 style={{ margin: 0 }}>{tr('Prefunded payout accounts')}</h4>
               <Button
                 size="sm"
                 style={{ marginLeft: 'auto' }}
@@ -205,15 +208,16 @@ export function Corridors() {
                   setAcct({ rail: 'mobile_money', operatorId: 'orange_cd', country: 'CD', currency: 'CDF', label: '', msisdn: '', simIccid: '', agentUserId: '', dailyLimit: 0, perTxLimit: 0 })
                 }
               >
-                + Payout account
+                {tr('+ Payout account')}
               </Button>
             </div>
             <p className="small muted">
-              A card receipt in the UK never turns into mobile money: recipients are paid from these local balances (merchant SIMs / treasury bank accounts) and the corridor is rebalanced later. Each
-              account has its own ledger float wallet; prefunding is a step-up protected treasury posting.
+              {tr(
+                'A card receipt in the UK never turns into mobile money: recipients are paid from these local balances (merchant SIMs / treasury bank accounts) and the corridor is rebalanced later. Each account has its own ledger float wallet; prefunding is a step-up protected treasury posting.',
+              )}
             </p>
             <Table
-              head={['Account', 'Rail / operator', 'Float', 'Paid today', 'Queued demand', 'Shortfall', 'Agent', 'Device', 'Status', '']}
+              head={[tr('Account'), tr('Rail / operator'), tr('Float'), tr('Paid today'), tr('Queued demand'), tr('Shortfall'), tr('Agent'), tr('Device'), tr('Status'), '']}
               rows={(liquidity.data?.items ?? []).map((a: any) => [
                 <span>
                   <b>{a.label}</b>
@@ -236,7 +240,7 @@ export function Corridors() {
                     size="sm"
                     variant="success"
                     prompt="Amount to prefund (major units) – reference in the note"
-                    title="Prefund float"
+                    title={tr('Prefund float')}
                     onConfirm={(pin, amount) =>
                       api
                         .post(`/api/admin/liquidity/accounts/${a.id}/prefund`, { amount, pin, reference: `PREFUND-${Date.now()}` })
@@ -244,13 +248,13 @@ export function Corridors() {
                         .catch(err)
                     }
                   >
-                    Prefund
+                    {tr('Prefund')}
                   </StepUpButton>
                   <StepUpButton
                     size="sm"
                     variant="secondary"
                     prompt="Signed delta (e.g. -12.50) to match the real SIM balance"
-                    title="Reconcile float"
+                    title={tr('Reconcile float')}
                     onConfirm={(pin, delta) =>
                       api
                         .post(`/api/admin/liquidity/accounts/${a.id}/adjust`, { delta, pin, note: 'Reconciled to operator balance' })
@@ -258,7 +262,7 @@ export function Corridors() {
                         .catch(err)
                     }
                   >
-                    Adjust
+                    {tr('Adjust')}
                   </StepUpButton>
                   <Button
                     size="sm"
@@ -270,11 +274,11 @@ export function Corridors() {
                         .catch(err)
                     }
                   >
-                    {a.status === 'active' ? 'Pause' : 'Activate'}
+                    {a.status === 'active' ? tr('Pause') : tr('Activate')}
                   </Button>
                 </div>,
               ])}
-              empty="No payout accounts – payouts will wait on liquidity"
+              empty={tr('No payout accounts – payouts will wait on liquidity')}
             />
           </div>
         </>
@@ -283,9 +287,9 @@ export function Corridors() {
         <div className="grid cols-2">
           <div className="card">
             <div className="row mb">
-              <h4 style={{ margin: 0 }}>Instructions</h4>
+              <h4 style={{ margin: 0 }}>{tr('Instructions')}</h4>
               <Select value={stage} onChange={(e) => setStage(e.target.value)} style={{ width: 200, marginLeft: 'auto' }}>
-                <option value="">All stages</option>
+                <option value="">{tr('All stages')}</option>
                 {['QUEUED', 'IN_PROGRESS', 'EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'INSUFFICIENT_LIQUIDITY', 'SETTLED', 'FAILED', 'EXPIRED', 'CANCELLED'].map(
                   (s) => (
                     <option key={s} value={s}>
@@ -301,7 +305,7 @@ export function Corridors() {
               </Alert>
             )}
             <Table
-              head={['Ref', 'Amount', 'To', 'Account', 'Stage', 'Created', '']}
+              head={[tr('Ref'), tr('Amount'), 'To', tr('Account'), tr('Stage'), tr('Created'), '']}
               rows={(payouts.data?.items ?? []).map((p: any) => [
                 <span className="mono small">{p.reference}</span>,
                 <b>{money(p.amount, p.currency)}</b>,
@@ -314,14 +318,14 @@ export function Corridors() {
                 <Stage stage={p.stage} />,
                 <span className="small">{fmtDate(p.createdAt)}</span>,
                 <Button size="sm" variant={sel === p.id ? undefined : 'secondary'} onClick={() => setSel(p.id)}>
-                  Open
+                  {tr('Open')}
                 </Button>,
               ])}
-              empty="No payout instructions"
+              empty={tr('No payout instructions')}
             />
           </div>
           <div className="card">
-            {!kase.data && <div className="muted small">Select a payout to see its evidence, events and actions.</div>}
+            {!kase.data && <div className="muted small">{tr('Select a payout to see its evidence, events and actions.')}</div>}
             {kase.data &&
               (() => {
                 const p = kase.data.payout;
@@ -333,29 +337,29 @@ export function Corridors() {
                       </h4>
                       <Stage stage={p.stage} />
                     </div>
-                    <KV k="Reference" v={<span className="mono">{p.reference}</span>} />
-                    <KV k="Recipient" v={`${p.recipientMsisdn ?? ''}${p.recipientName ? ` · ${p.recipientName}` : ''}`} />
-                    <KV k="Sender" v={kase.data.sender ? <UserCell user={kase.data.sender} /> : '—'} />
-                    <KV k="Payout account" v={p.payoutAccount?.label ?? 'unassigned'} />
+                    <KV k={tr('Reference')} v={<span className="mono">{p.reference}</span>} />
+                    <KV k={tr('Recipient')} v={`${p.recipientMsisdn ?? ''}${p.recipientName ? ` · ${p.recipientName}` : ''}`} />
+                    <KV k={tr('Sender')} v={kase.data.sender ? <UserCell user={kase.data.sender} /> : '—'} />
+                    <KV k={tr('Payout account')} v={p.payoutAccount?.label ?? 'unassigned'} />
                     <KV
-                      k="Claimed"
+                      k={tr('Claimed')}
                       v={p.claimedAt ? `${fmtDate(p.claimedAt)} · ${p.claimedByDeviceId ? `device ${p.claimedByDeviceId.slice(0, 8)}` : `agent ${p.claimedByUserId?.slice(0, 8)}`}` : '—'}
                     />
-                    <KV k="Held transaction" v={kase.data.transaction ? `${kase.data.transaction.reference} · ${kase.data.transaction.status}` : '—'} />
-                    {p.externalRef && <KV k="Operator ref" v={<span className="mono">{p.externalRef}</span>} />}
+                    <KV k={tr('Held transaction')} v={kase.data.transaction ? `${kase.data.transaction.reference} · ${kase.data.transaction.status}` : '—'} />
+                    {p.externalRef && <KV k={tr('Operator ref')} v={<span className="mono">{p.externalRef}</span>} />}
                     {p.riskFlags.length > 0 && <Alert kind="warning">{p.riskFlags.join(', ')}</Alert>}
                     {p.error && (
                       <div className="tiny" style={{ color: 'var(--danger)' }}>
                         {p.error}
                       </div>
                     )}
-                    <h5 className="mt">Evidence ({kase.data.evidence.length})</h5>
+                    <h5 className="mt">{tr('Evidence ({0})', { 0: kase.data.evidence.length })}</h5>
                     {kase.data.evidence.map((e: any) => (
                       <div key={e.id} className="card soft compact mb-sm">
                         <div className="row wrap">
                           <Chip kind={e.outcome === 'settled' ? 'success' : e.outcome === 'review' ? 'warning' : 'danger'}>{e.outcome}</Chip>
                           <Chip>{e.source.replace('_', ' ')}</Chip>
-                          {e.simIdentity && <span className="tiny">SIM …{String(e.simIdentity).slice(-4)}</span>}
+                          {e.simIdentity && <span className="tiny">{tr('SIM …{0}', { 0: String(e.simIdentity).slice(-4) })}</span>}
                           <span className="tiny muted">{fmtDate(e.createdAt)}</span>
                         </div>
                         <div className="mono tiny mt-sm" style={{ whiteSpace: 'pre-wrap' }}>
@@ -388,7 +392,7 @@ export function Corridors() {
                                   .catch(err)
                               }
                             >
-                              Re-queue
+                              {tr('Re-queue')}
                             </Button>
                           )}
                           {p.stage === 'IN_PROGRESS' && (
@@ -403,14 +407,14 @@ export function Corridors() {
                                   .catch(err)
                               }
                             >
-                              Release claim
+                              {tr('Release claim')}
                             </ConfirmButton>
                           )}
                           <StepUpButton
                             size="sm"
                             variant="danger"
                             prompt="Reason"
-                            title="Cancel payout (funds back to sender)"
+                            title={tr('Cancel payout (funds back to sender)')}
                             onConfirm={(pin, r) =>
                               api
                                 .post(`/api/admin/payouts/${p.id}/cancel`, { reason: r, pin })
@@ -418,7 +422,7 @@ export function Corridors() {
                                 .catch(err)
                             }
                           >
-                            Cancel
+                            {tr('Cancel')}
                           </StepUpButton>
                           <ConfirmButton
                             size="sm"
@@ -431,15 +435,15 @@ export function Corridors() {
                                 .catch(err)
                             }
                           >
-                            Propose: failed
+                            {tr('Propose: failed')}
                           </ConfirmButton>
                         </div>
-                        <div className="small bold">Administrative settlement (exception – documentary evidence + second approver)</div>
+                        <div className="small bold">{tr('Administrative settlement (exception – documentary evidence + second approver)')}</div>
                         <div className="grid cols-2">
-                          <Field label="Operator / bank transaction reference">
+                          <Field label={tr('Operator / bank transaction reference')}>
                             <Input value={settle.externalRef} onChange={(e) => setSettle({ ...settle, externalRef: e.target.value })} />
                           </Field>
-                          <Field label="What you checked (statement line, portal, receipt id)">
+                          <Field label={tr('What you checked (statement line, portal, receipt id)')}>
                             <Input value={settle.note} onChange={(e) => setSettle({ ...settle, note: e.target.value })} />
                           </Field>
                         </div>
@@ -456,11 +460,11 @@ export function Corridors() {
                               .catch(err)
                           }
                         >
-                          Propose: settled
+                          {tr('Propose: settled')}
                         </Button>
                       </div>
                     )}
-                    <h5 className="mt">History</h5>
+                    <h5 className="mt">{tr('History')}</h5>
                     <div style={{ maxHeight: 220, overflow: 'auto' }}>
                       {kase.data.events.map((e: any) => (
                         <div key={e.id} className="tiny mb-sm">
@@ -478,8 +482,9 @@ export function Corridors() {
       {tab === 'chargebacks' && (
         <div className="card">
           <p className="small muted">
-            A processor dispute freezes the transfer it funded. If the local payout had not been executed, the payout is cancelled and the funding reversed immediately; otherwise the case stays open
-            until won or lost (lost books the customer's debt). Sandbox disputes can be opened here by payment id.
+            {tr(
+              "A processor dispute freezes the transfer it funded. If the local payout had not been executed, the payout is cancelled and the funding reversed immediately; otherwise the case stays open until won or lost (lost books the customer's debt). Sandbox disputes can be opened here by payment id.",
+            )}
           </p>
           <div className="row wrap mb">
             <Input placeholder="payment id" value={cbOpen.paymentId} onChange={(e) => setCbOpen({ ...cbOpen, paymentId: e.target.value })} style={{ maxWidth: 320 }} />
@@ -487,7 +492,7 @@ export function Corridors() {
             <StepUpButton
               size="sm"
               variant="danger"
-              title="Open chargeback"
+              title={tr('Open chargeback')}
               onConfirm={(pin) =>
                 api
                   .post('/api/admin/chargebacks', { ...cbOpen, pin })
@@ -498,11 +503,11 @@ export function Corridors() {
                   .catch(err)
               }
             >
-              Open dispute
+              {tr('Open dispute')}
             </StepUpButton>
           </div>
           <Table
-            head={['Opened', 'Payment', 'Amount', 'Reason', 'Payout state', 'Status', 'Resolved', '']}
+            head={[tr('Opened'), tr('Payment'), tr('Amount'), tr('Reason'), tr('Payout state'), tr('Status'), tr('Resolved'), '']}
             rows={(chargebacks.data?.items ?? []).map((c: any) => [
               fmtDate(c.openedAt),
               <span className="mono tiny">{c.paymentId.slice(0, 8)}…</span>,
@@ -516,7 +521,7 @@ export function Corridors() {
                   <StepUpButton
                     size="sm"
                     variant="success"
-                    title="Dispute won"
+                    title={tr('Dispute won')}
                     onConfirm={(pin) =>
                       api
                         .post(`/api/admin/chargebacks/${c.id}/resolve`, { outcome: 'won', pin })
@@ -524,13 +529,13 @@ export function Corridors() {
                         .catch(err)
                     }
                   >
-                    Won
+                    {tr('Won')}
                   </StepUpButton>
                   <StepUpButton
                     size="sm"
                     variant="danger"
                     prompt="Note"
-                    title="Dispute lost"
+                    title={tr('Dispute lost')}
                     onConfirm={(pin, note) =>
                       api
                         .post(`/api/admin/chargebacks/${c.id}/resolve`, { outcome: 'lost', note, pin })
@@ -538,26 +543,26 @@ export function Corridors() {
                         .catch(err)
                     }
                   >
-                    Lost
+                    {tr('Lost')}
                   </StepUpButton>
                 </div>
               ) : null,
             ])}
-            empty="No disputes"
+            empty={tr('No disputes')}
           />
         </div>
       )}
-      <Modal open={!!corridorEdit} onClose={() => setCorridorEdit(null)} title={corridorEdit?.id ? 'Edit corridor' : 'New corridor'}>
+      <Modal open={!!corridorEdit} onClose={() => setCorridorEdit(null)} title={corridorEdit?.id ? tr('Edit corridor') : tr('New corridor')}>
         {corridorEdit && (
           <>
             <div className="grid cols-2">
-              <Field label="Source country (blank = any)">
+              <Field label={tr('Source country (blank = any)')}>
                 <Input value={corridorEdit.sourceCountry ?? ''} onChange={(e) => setCorridorEdit({ ...corridorEdit, sourceCountry: e.target.value.toUpperCase() || null })} maxLength={2} />
               </Field>
-              <Field label="Source currency (* = any)">
+              <Field label={tr('Source currency (* = any)')}>
                 <Input value={corridorEdit.sourceCurrency} onChange={(e) => setCorridorEdit({ ...corridorEdit, sourceCurrency: e.target.value.toUpperCase() })} maxLength={3} />
               </Field>
-              <Field label="Destination country">
+              <Field label={tr('Destination country')}>
                 <Select value={corridorEdit.destCountry} onChange={(e) => setCorridorEdit({ ...corridorEdit, destCountry: e.target.value })}>
                   {(config?.countries ?? []).map((c: any) => (
                     <option key={c.code} value={c.code}>
@@ -566,30 +571,30 @@ export function Corridors() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Destination currency">
+              <Field label={tr('Destination currency')}>
                 <Input value={corridorEdit.destCurrency} onChange={(e) => setCorridorEdit({ ...corridorEdit, destCurrency: e.target.value.toUpperCase() })} maxLength={3} />
               </Field>
-              <Field label="Rail">
+              <Field label={tr('Rail')}>
                 <Select value={corridorEdit.rail} onChange={(e) => setCorridorEdit({ ...corridorEdit, rail: e.target.value })}>
                   <option value="mobile_money">mobile money</option>
                   <option value="bank">bank</option>
                   <option value="agent">agent cash</option>
                 </Select>
               </Field>
-              <Field label="Operator id (blank = any)">
+              <Field label={tr('Operator id (blank = any)')}>
                 <Input value={corridorEdit.operatorId ?? ''} onChange={(e) => setCorridorEdit({ ...corridorEdit, operatorId: e.target.value || null })} placeholder="orange_cd" />
               </Field>
-              <Field label="Estimated payout (minutes)">
+              <Field label={tr('Estimated payout (minutes)')}>
                 <Input type="number" value={corridorEdit.estimatedPayoutMinutes} onChange={(e) => setCorridorEdit({ ...corridorEdit, estimatedPayoutMinutes: Number(e.target.value) })} />
               </Field>
-              <Field label="Max amount (base minor units, 0 = none)">
+              <Field label={tr('Max amount (base minor units, 0 = none)')}>
                 <Input type="number" value={corridorEdit.maxAmount} onChange={(e) => setCorridorEdit({ ...corridorEdit, maxAmount: Number(e.target.value) })} />
               </Field>
             </div>
             <div className="grid cols-2">
               <Field
-                label="Additional payout currencies (comma-separated)"
-                hint="Only where the destination institution / agent can legally pay them, e.g. USD wallets in the DRC. The local currency is always the default."
+                label={tr('Additional payout currencies (comma-separated)')}
+                hint={tr('Only where the destination institution / agent can legally pay them, e.g. USD wallets in the DRC. The local currency is always the default.')}
               >
                 <Input
                   value={(corridorEdit.payoutCurrencies ?? []).join(', ')}
@@ -605,14 +610,14 @@ export function Corridors() {
                   placeholder="USD"
                 />
               </Field>
-              <Field label="Payout confirmation method">
+              <Field label={tr('Payout confirmation method')}>
                 <Select value={corridorEdit.payoutConfirmation ?? ''} onChange={(e) => setCorridorEdit({ ...corridorEdit, payoutConfirmation: e.target.value || null })}>
-                  <option value="">Rail default</option>
-                  <option value="SECURED_DEVICE_CONFIRMATION">Secured payout device</option>
-                  <option value="SIGNED_SMS_FORWARDER">Signed SMS forwarder</option>
-                  <option value="AGENT_WITH_EVIDENCE">Agent with evidence</option>
-                  <option value="ADMIN_MAKER_CHECKER">Administrator maker-checker</option>
-                  <option value="PROCESSOR_WEBHOOK">Processor webhook</option>
+                  <option value="">{tr('Rail default')}</option>
+                  <option value="SECURED_DEVICE_CONFIRMATION">{tr('Secured payout device')}</option>
+                  <option value="SIGNED_SMS_FORWARDER">{tr('Signed SMS forwarder')}</option>
+                  <option value="AGENT_WITH_EVIDENCE">{tr('Agent with evidence')}</option>
+                  <option value="ADMIN_MAKER_CHECKER">{tr('Administrator maker-checker')}</option>
+                  <option value="PROCESSOR_WEBHOOK">{tr('Processor webhook')}</option>
                 </Select>
               </Field>
             </div>
@@ -620,10 +625,10 @@ export function Corridors() {
               <Switch
                 on={!!corridorEdit.beneficiaryConsent}
                 onChange={(v) => setCorridorEdit({ ...corridorEdit, beneficiaryConsent: v })}
-                label="Beneficiary must confirm a non-local payout currency before the payout executes (regulated corridor)"
+                label={tr('Beneficiary must confirm a non-local payout currency before the payout executes (regulated corridor)')}
               />
             </div>
-            <Field label="Notes">
+            <Field label={tr('Notes')}>
               <Textarea rows={2} value={corridorEdit.notes ?? ''} onChange={(e) => setCorridorEdit({ ...corridorEdit, notes: e.target.value })} />
             </Field>
             <Button
@@ -637,73 +642,75 @@ export function Corridors() {
                   .catch(err)
               }
             >
-              Save
+              {tr('Save')}
             </Button>
           </>
         )}
       </Modal>
-      <Modal open={!!goLive} onClose={() => setGoLive(null)} title={goLive?.nextStatus === 'live' ? 'Authorise corridor for live funds' : 'Suspend corridor'}>
+      <Modal open={!!goLive} onClose={() => setGoLive(null)} title={goLive?.nextStatus === 'live' ? tr('Authorise corridor for live funds') : tr('Suspend corridor')}>
         {goLive && (
           <>
             {goLive.nextStatus === 'live' && (
               <Alert kind="warning">
-                Going live requires the regulatory arrangements on record: an authorised collection partner (licensed processor / EMI), an authorised payout partner (operator super-agent / licensed
-                payout partner) and your licence or authorisation reference. This decision is attributed to you ({user?.fullName}) and step-up protected.
+                {tr(
+                  'Going live requires the regulatory arrangements on record: an authorised collection partner (licensed processor / EMI), an authorised payout partner (operator super-agent / licensed payout partner) and your licence or authorisation reference. This decision is attributed to you (',
+                )}
+                {user?.fullName}) and step-up protected.
               </Alert>
             )}
-            <Field label="Collection partner">
+            <Field label={tr('Collection partner')}>
               <Input value={goLive.collectionPartner ?? ''} onChange={(e) => setGoLive({ ...goLive, collectionPartner: e.target.value })} />
             </Field>
-            <Field label="Payout partner">
+            <Field label={tr('Payout partner')}>
               <Input value={goLive.payoutPartner ?? ''} onChange={(e) => setGoLive({ ...goLive, payoutPartner: e.target.value })} />
             </Field>
-            <Field label="Licence / authorisation reference">
+            <Field label={tr('Licence / authorisation reference')}>
               <Input value={goLive.licenceRef ?? ''} onChange={(e) => setGoLive({ ...goLive, licenceRef: e.target.value })} />
             </Field>
             <div className="grid cols-2">
-              <Field label="Regulator / competent authority *">
+              <Field label={tr('Regulator / competent authority *')}>
                 <Input value={goLive.compliance?.regulator ?? ''} onChange={(e) => setGoLive({ ...goLive, compliance: { ...goLive.compliance, regulator: e.target.value } })} />
               </Field>
-              <Field label="Licence type *">
+              <Field label={tr('Licence type *')}>
                 <Input
                   value={goLive.compliance?.licenceType ?? ''}
                   onChange={(e) => setGoLive({ ...goLive, compliance: { ...goLive.compliance, licenceType: e.target.value } })}
-                  placeholder="Authorised Payment Institution"
+                  placeholder={tr('Authorised Payment Institution')}
                 />
               </Field>
-              <Field label="Licence number *">
+              <Field label={tr('Licence number *')}>
                 <Input value={goLive.compliance?.licenceNumber ?? ''} onChange={(e) => setGoLive({ ...goLive, compliance: { ...goLive.compliance, licenceNumber: e.target.value } })} />
               </Field>
-              <Field label="Licence expiry *">
+              <Field label={tr('Licence expiry *')}>
                 <Input
                   type="date"
                   value={goLive.licenceExpiresAt ? String(goLive.licenceExpiresAt).slice(0, 10) : ''}
                   onChange={(e) => setGoLive({ ...goLive, licenceExpiresAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
                 />
               </Field>
-              <Field label="Safeguarding account *">
+              <Field label={tr('Safeguarding account *')}>
                 <Input value={goLive.compliance?.safeguardingAccount ?? ''} onChange={(e) => setGoLive({ ...goLive, compliance: { ...goLive.compliance, safeguardingAccount: e.target.value } })} />
               </Field>
-              <Field label="AML / KYC programme reference *">
+              <Field label={tr('AML / KYC programme reference *')}>
                 <Input value={goLive.compliance?.amlProgrammeRef ?? ''} onChange={(e) => setGoLive({ ...goLive, compliance: { ...goLive.compliance, amlProgrammeRef: e.target.value } })} />
               </Field>
-              <Field label="Data-protection registration">
+              <Field label={tr('Data-protection registration')}>
                 <Input value={goLive.compliance?.dataProtectionRef ?? ''} onChange={(e) => setGoLive({ ...goLive, compliance: { ...goLive.compliance, dataProtectionRef: e.target.value } })} />
               </Field>
-              <Field label="Destination FX / mobile-money approval">
+              <Field label={tr('Destination FX / mobile-money approval')}>
                 <Input value={goLive.compliance?.fxApprovalRef ?? ''} onChange={(e) => setGoLive({ ...goLive, compliance: { ...goLive.compliance, fxApprovalRef: e.target.value } })} />
               </Field>
-              <Field label="Consumer disclosure / terms URL">
+              <Field label={tr('Consumer disclosure / terms URL')}>
                 <Input value={goLive.compliance?.consumerDisclosureUrl ?? ''} onChange={(e) => setGoLive({ ...goLive, compliance: { ...goLive.compliance, consumerDisclosureUrl: e.target.value } })} />
               </Field>
-              <Field label="Agent due-diligence & supervision procedure">
+              <Field label={tr('Agent due-diligence & supervision procedure')}>
                 <Input value={goLive.compliance?.agentSupervisionRef ?? ''} onChange={(e) => setGoLive({ ...goLive, compliance: { ...goLive.compliance, agentSupervisionRef: e.target.value } })} />
               </Field>
             </div>
-            {goLive.readiness && !goLive.readiness.ready && <Alert kind="warning">Still missing: {goLive.readiness.missing.join('; ')}</Alert>}
+            {goLive.readiness && !goLive.readiness.ready && <Alert kind="warning">{tr('Still missing: {0}', { 0: goLive.readiness.missing.join('; ') })}</Alert>}
             <StepUpButton
               variant={goLive.nextStatus === 'live' ? 'success' : 'danger'}
-              title={goLive.nextStatus === 'live' ? 'Confirm go-live' : 'Confirm suspension'}
+              title={goLive.nextStatus === 'live' ? tr('Confirm go-live') : tr('Confirm suspension')}
               onConfirm={(pin) =>
                 api
                   .post(`/api/admin/corridors/${goLive.id}/status`, {
@@ -725,50 +732,50 @@ export function Corridors() {
                   })
               }
             >
-              {goLive.nextStatus === 'live' ? 'Mark live' : 'Suspend'}
+              {goLive.nextStatus === 'live' ? tr('Mark live') : tr('Suspend')}
             </StepUpButton>
           </>
         )}
       </Modal>
-      <Modal open={!!acct} onClose={() => setAcct(null)} title="New payout account">
+      <Modal open={!!acct} onClose={() => setAcct(null)} title={tr('New payout account')}>
         {acct && (
           <>
             <div className="grid cols-2">
-              <Field label="Rail">
+              <Field label={tr('Rail')}>
                 <Select value={acct.rail} onChange={(e) => setAcct({ ...acct, rail: e.target.value })}>
                   <option value="mobile_money">mobile money (merchant SIM)</option>
                   <option value="bank">bank (treasury account)</option>
                 </Select>
               </Field>
-              <Field label="Operator id">
+              <Field label={tr('Operator id')}>
                 <Input value={acct.operatorId} onChange={(e) => setAcct({ ...acct, operatorId: e.target.value })} placeholder="orange_cd" />
               </Field>
-              <Field label="Country">
+              <Field label={tr('Country')}>
                 <Input value={acct.country} onChange={(e) => setAcct({ ...acct, country: e.target.value.toUpperCase() })} maxLength={2} />
               </Field>
-              <Field label="Currency">
+              <Field label={tr('Currency')}>
                 <Input value={acct.currency} onChange={(e) => setAcct({ ...acct, currency: e.target.value.toUpperCase() })} maxLength={3} />
               </Field>
-              <Field label="Label">
-                <Input value={acct.label} onChange={(e) => setAcct({ ...acct, label: e.target.value })} placeholder="Orange Money DRC – SIM 1" />
+              <Field label={tr('Label')}>
+                <Input value={acct.label} onChange={(e) => setAcct({ ...acct, label: e.target.value })} placeholder={tr('Orange Money DRC – SIM 1')} />
               </Field>
-              <Field label="Merchant SIM number (MSISDN)">
+              <Field label={tr('Merchant SIM number (MSISDN)')}>
                 <Input value={acct.msisdn} onChange={(e) => setAcct({ ...acct, msisdn: e.target.value })} />
               </Field>
-              <Field label="SIM ICCID">
+              <Field label={tr('SIM ICCID')}>
                 <Input value={acct.simIccid} onChange={(e) => setAcct({ ...acct, simIccid: e.target.value })} />
               </Field>
-              <Field label="Operating agent user id (KYC verified)">
+              <Field label={tr('Operating agent user id (KYC verified)')}>
                 <Input value={acct.agentUserId} onChange={(e) => setAcct({ ...acct, agentUserId: e.target.value })} />
               </Field>
-              <Field label="Daily limit (minor units, 0 = none)">
+              <Field label={tr('Daily limit (minor units, 0 = none)')}>
                 <Input type="number" value={acct.dailyLimit} onChange={(e) => setAcct({ ...acct, dailyLimit: Number(e.target.value) })} />
               </Field>
-              <Field label="Per-transaction limit (minor units)">
+              <Field label={tr('Per-transaction limit (minor units)')}>
                 <Input type="number" value={acct.perTxLimit} onChange={(e) => setAcct({ ...acct, perTxLimit: Number(e.target.value) })} />
               </Field>
             </div>
-            <p className="tiny muted">Then register the Android payout device on this account under Mobile money & evidence → Evidence devices (kind: payout, with the SIM identity).</p>
+            <p className="tiny muted">{tr('Then register the Android payout device on this account under Mobile money & evidence → Evidence devices (kind: payout, with the SIM identity).')}</p>
             <Button
               onClick={() =>
                 api
@@ -786,7 +793,7 @@ export function Corridors() {
                   .catch(err)
               }
             >
-              Create
+              {tr('Create')}
             </Button>
           </>
         )}

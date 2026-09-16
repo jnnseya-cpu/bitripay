@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, Field, Input, KV, Modal, PageHeader, Select, StepUpButton, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
@@ -37,22 +38,25 @@ export function Emoney() {
     p.sandbox ? (
       <Chip>sandbox</Chip>
     ) : p.status === 'ok' ? (
-      <Chip kind="success">1:1 backed</Chip>
+      <Chip kind="success">{tr('1:1 backed')}</Chip>
     ) : p.status === 'warning' ? (
       <Chip kind="warning">cleared funds short</Chip>
     ) : (
-      <Chip kind="danger">BREACH</Chip>
+      <Chip kind="danger">{tr('BREACH')}</Chip>
     );
 
   return (
     <div>
       <PageHeader
-        title="E-money & safeguarded reserves"
-        subtitle="BitriPay balances are a redeemable claim on the authorised issuer, backed 1:1 by cleared safeguarded funds. Issuable ≤ cleared reserves − pending redemptions − reserved exposure − e-money outstanding. No administrator can type an amount into existence."
+        title={tr('E-money & safeguarded reserves')}
+        subtitle={tr(
+          'BitriPay balances are a redeemable claim on the authorised issuer, backed 1:1 by cleared safeguarded funds. Issuable ≤ cleared reserves − pending redemptions − reserved exposure − e-money outstanding. No administrator can type an amount into existence.',
+        )}
         actions={
           <>
             <Chip kind={treasury ? 'primary' : undefined} selected={treasury}>
-              TREASURY_SUPER_ADMIN{treasury ? '' : ' · view only'}
+              {tr('TREASURY_SUPER_ADMIN')}
+              {treasury ? '' : ' · view only'}
             </Chip>
             {treasury && (
               <>
@@ -67,7 +71,7 @@ export function Emoney() {
                       .catch(err)
                   }
                 >
-                  Run reconciliation now
+                  {tr('Run reconciliation now')}
                 </Button>
                 <Button
                   onClick={() =>
@@ -84,7 +88,7 @@ export function Emoney() {
                     })
                   }
                 >
-                  + Issuer programme
+                  {tr('+ Issuer programme')}
                 </Button>
               </>
             )}
@@ -93,8 +97,10 @@ export function Emoney() {
       />
       {overview.data?.compliance === 'sandbox' && (
         <Alert kind="warning">
-          <b>Platform in sandbox mode.</b> Programmes cannot issue live e-money until the go-live checklist is complete; sandbox programmes are created automatically per currency so flows can be
-          demonstrated with clearly labelled sandbox balances.
+          <b>{tr('Platform in sandbox mode.')}</b>{' '}
+          {tr(
+            'Programmes cannot issue live e-money until the go-live checklist is complete; sandbox programmes are created automatically per currency so flows can be demonstrated with clearly labelled sandbox balances.',
+          )}
         </Alert>
       )}
       {(overview.data?.pending ?? []).length > 0 && (
@@ -104,10 +110,10 @@ export function Emoney() {
       )}
       <Tabs
         tabs={[
-          { id: 'programmes', label: 'Issuer programmes & reserves' },
-          { id: 'pools', label: 'Distribution pools' },
-          { id: 'recon', label: 'Reconciliation' },
-          { id: 'register', label: 'Issuance register' },
+          { id: 'programmes', label: tr('Issuer programmes & reserves') },
+          { id: 'pools', label: tr('Distribution pools') },
+          { id: 'recon', label: tr('Reconciliation') },
+          { id: 'register', label: tr('Issuance register') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -117,7 +123,7 @@ export function Emoney() {
         <>
           <div className="card mb">
             <Table
-              head={['Currency / jurisdiction', 'Issuer', 'Licence · regulator · safeguarding', 'Status', 'Cleared reserves', 'Outstanding', 'Headroom', 'Backing', '']}
+              head={[tr('Currency / jurisdiction'), tr('Issuer'), tr('Licence · regulator · safeguarding'), tr('Status'), tr('Cleared reserves'), tr('Outstanding'), tr('Headroom'), tr('Backing'), '']}
               rows={programmes.map((p: any) => [
                 <b>
                   {p.currency} / {p.jurisdiction}
@@ -167,7 +173,7 @@ export function Emoney() {
                 </span>,
                 <div className="row wrap">
                   <Button size="sm" variant="ghost" onClick={() => setSelected(p.id)}>
-                    Details
+                    {tr('Details')}
                   </Button>
                   {treasury && (
                     <Button
@@ -189,7 +195,7 @@ export function Emoney() {
                         })
                       }
                     >
-                      Edit
+                      {tr('Edit')}
                     </Button>
                   )}
                   {treasury && (
@@ -198,14 +204,14 @@ export function Emoney() {
                       variant="secondary"
                       onClick={() => setReserve({ programmeId: p.id, currency: p.currency, kind: 'funding', direction: 'in', amount: '', reference: '', note: '', evidence: '' })}
                     >
-                      Reserves +
+                      {tr('Reserves +')}
                     </Button>
                   )}
                   {treasury && p.status !== 'live' && (
                     <StepUpButton
                       size="sm"
                       variant="success"
-                      title="Authorise live issuance"
+                      title={tr('Authorise live issuance')}
                       onConfirm={(pin) =>
                         api
                           .post(`/api/admin/emoney/programmes/${p.id}/status`, { status: 'live', pin })
@@ -213,7 +219,7 @@ export function Emoney() {
                           .catch(err)
                       }
                     >
-                      Go live
+                      {tr('Go live')}
                     </StepUpButton>
                   )}
                   {treasury && p.status === 'live' && (
@@ -228,7 +234,7 @@ export function Emoney() {
                           .catch(err)
                       }
                     >
-                      Suspend
+                      {tr('Suspend')}
                     </StepUpButton>
                   )}
                   {treasury && p.status === 'suspended' && (
@@ -242,12 +248,12 @@ export function Emoney() {
                           .catch(err)
                       }
                     >
-                      Back to sandbox
+                      {tr('Back to sandbox')}
                     </StepUpButton>
                   )}
                 </div>,
               ])}
-              empty="No issuer programme yet. Register the authorised issuer and safeguarding account per currency."
+              empty={tr('No issuer programme yet. Register the authorised issuer and safeguarding account per currency.')}
             />
           </div>
           {selected && detail.data && (
@@ -257,17 +263,17 @@ export function Emoney() {
                   {detail.data.programme.currency} / {detail.data.programme.jurisdiction} · reserve movements
                 </h4>
                 <Button size="sm" variant="ghost" onClick={() => setSelected(null)}>
-                  Close
+                  {tr('Close')}
                 </Button>
               </div>
               <div className="grid cols-4 mb">
-                <KV k="Cleared reserves" v={fmt(detail.data.programme.position.clearedReserves, detail.data.programme.currency)} />
-                <KV k="Pending inflows (processor)" v={fmt(detail.data.programme.position.pendingInflows, detail.data.programme.currency)} />
-                <KV k="Reserved exposure" v={fmt(detail.data.programme.position.reservedExposure, detail.data.programme.currency)} />
-                <KV k="Payout float (asset mirror)" v={fmt(detail.data.programme.position.payoutFloat, detail.data.programme.currency)} />
+                <KV k={tr('Cleared reserves')} v={fmt(detail.data.programme.position.clearedReserves, detail.data.programme.currency)} />
+                <KV k={tr('Pending inflows (processor)')} v={fmt(detail.data.programme.position.pendingInflows, detail.data.programme.currency)} />
+                <KV k={tr('Reserved exposure')} v={fmt(detail.data.programme.position.reservedExposure, detail.data.programme.currency)} />
+                <KV k={tr('Payout float (asset mirror)')} v={fmt(detail.data.programme.position.payoutFloat, detail.data.programme.currency)} />
               </div>
               <Table
-                head={['When', 'Kind', 'Direction', 'Amount', 'Status', 'Reference', 'Proposed / cleared by', 'Note', '']}
+                head={[tr('When'), tr('Kind'), tr('Direction'), tr('Amount'), tr('Status'), tr('Reference'), 'Proposed / cleared by', tr('Note'), '']}
                 rows={(detail.data.movements ?? []).map((m: any) => [
                   fmtDate(m.createdAt),
                   m.kind.replace(/_/g, ' '),
@@ -291,15 +297,15 @@ export function Emoney() {
                           .catch(err)
                       }
                     >
-                      Reverse
+                      {tr('Reverse')}
                     </StepUpButton>
                   ) : null,
                 ])}
-                empty="No reserve movements"
+                empty={tr('No reserve movements')}
               />
-              <h4 className="mt">Reconciliation history</h4>
+              <h4 className="mt">{tr('Reconciliation history')}</h4>
               <Table
-                head={['When', 'Reserves', 'Pending in', 'Pending redemptions', 'Outstanding', 'Headroom', 'Result', 'Run by']}
+                head={[tr('When'), tr('Reserves'), 'Pending in', tr('Pending redemptions'), tr('Outstanding'), tr('Headroom'), tr('Result'), 'Run by']}
                 rows={(detail.data.reconciliations ?? []).map((r: any) => [
                   fmtDate(r.createdAt),
                   r.clearedReserves,
@@ -310,13 +316,17 @@ export function Emoney() {
                   posChip(r),
                   r.runBy ? r.runBy.slice(0, 8) : 'scheduler',
                 ])}
-                empty="Not reconciled yet"
+                empty={tr('Not reconciled yet')}
               />
             </div>
           )}
           <div className="card">
-            <h4>Promotional credit outstanding (marketing liability – not money)</h4>
-            <Table head={['Currency', 'Unused promotional credit']} rows={(overview.data?.promotionalLiability ?? []).map((p: any) => [p.currency, fmt(p.total, p.currency)])} empty="None" />
+            <h4>{tr('Promotional credit outstanding (marketing liability – not money)')}</h4>
+            <Table
+              head={[tr('Currency'), tr('Unused promotional credit')]}
+              rows={(overview.data?.promotionalLiability ?? []).map((p: any) => [p.currency, fmt(p.total, p.currency)])}
+              empty={tr('None')}
+            />
           </div>
         </>
       )}
@@ -325,16 +335,17 @@ export function Emoney() {
         <div className="card">
           <div className="row between mb">
             <div>
-              <h4>Distribution hierarchy</h4>
+              <h4>{tr('Distribution hierarchy')}</h4>
               <div className="tiny muted">
-                Issuer → treasury → country / currency pools → institutions & master agents → agents & merchants → users. Allocation moves existing e-money and never creates it; minting into a pool is
-                an issuance request (maker-checker, against reserves).
+                {tr(
+                  'Issuer → treasury → country / currency pools → institutions & master agents → agents & merchants → users. Allocation moves existing e-money and never creates it; minting into a pool is an issuance request (maker-checker, against reserves).',
+                )}
               </div>
             </div>
-            {treasury && <Button onClick={() => setPool({ programmeId: programmes[0]?.id ?? '', name: '', level: 'country', parentId: '', ownerUserId: '', country: '' })}>+ Pool</Button>}
+            {treasury && <Button onClick={() => setPool({ programmeId: programmes[0]?.id ?? '', name: '', level: 'country', parentId: '', ownerUserId: '', country: '' })}>{tr('+ Pool')}</Button>}
           </div>
           <Table
-            head={['Pool', 'Level', 'Parent', 'Owner', 'Currency', 'Balance', 'Status', '']}
+            head={[tr('Pool'), tr('Level'), tr('Parent'), tr('Owner'), tr('Currency'), tr('Balance'), tr('Status'), '']}
             rows={pools.map((p: any) => [
               <b>{p.name}</b>,
               p.level.replace(/_/g, ' '),
@@ -346,17 +357,17 @@ export function Emoney() {
               <div className="row wrap">
                 {can('issuance') && (
                   <Button size="sm" variant="secondary" onClick={() => setIssue({ programmeId: p.programmeId, poolId: p.id, poolName: p.name, currency: p.currency, amount: '', reason: '' })}>
-                    Mint into pool
+                    {tr('Mint into pool')}
                   </Button>
                 )}
                 {treasury && (
                   <Button size="sm" onClick={() => setAllocate({ fromPoolId: p.id, fromName: p.name, currency: p.currency, toPoolId: '', toUserId: '', amount: '', reason: '' })}>
-                    Allocate
+                    {tr('Allocate')}
                   </Button>
                 )}
               </div>,
             ])}
-            empty="No distribution pools"
+            empty={tr('No distribution pools')}
           />
         </div>
       )}
@@ -368,7 +379,7 @@ export function Emoney() {
             suspends issuance automatically and alerts every administrator (loud).
           </Alert>
           <Table
-            head={['When', 'Programme', 'Cleared reserves', 'Pending inflows', 'Pending redemptions', 'Reserved exposure', 'Outstanding', 'Headroom', 'Result']}
+            head={[tr('When'), tr('Programme'), tr('Cleared reserves'), tr('Pending inflows'), tr('Pending redemptions'), tr('Reserved exposure'), tr('Outstanding'), tr('Headroom'), tr('Result')]}
             rows={(overview.data?.lastReconciliation ?? []).map((r: any) => [
               fmtDate(r.createdAt),
               r.currency,
@@ -380,81 +391,82 @@ export function Emoney() {
               r.headroom,
               posChip(r),
             ])}
-            empty="No reconciliation yet"
+            empty={tr('No reconciliation yet')}
           />
         </div>
       )}
 
       {tab === 'register' && (
         <div className="card">
-          <h4>Immutable issuance register (hash-chained event log)</h4>
+          <h4>{tr('Immutable issuance register (hash-chained event log)')}</h4>
           <Table
-            head={['When', 'Event', 'Details', 'Actor']}
+            head={[tr('When'), tr('Event'), tr('Details'), tr('Actor')]}
             rows={(overview.data?.register?.items ?? []).map((e: any) => [
               fmtDate(e.createdAt),
               <Chip kind={/breach|suspended|burned|reversed/.test(e.event) ? 'danger' : /minted|cleared|allocated|live/.test(e.event) ? 'success' : undefined}>{e.event}</Chip>,
               <span className="tiny mono">{JSON.stringify(e.details).slice(0, 160)}</span>,
               e.actor.id ? <span className="mono tiny">{String(e.actor.id).slice(0, 8)}</span> : e.actor.type,
             ])}
-            empty="Nothing yet"
+            empty={tr('Nothing yet')}
           />
         </div>
       )}
 
-      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? 'Edit issuer programme' : 'Register issuer programme'}>
+      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? tr('Edit issuer programme') : tr('Register issuer programme')}>
         {edit && (
           <>
             <Alert kind="info">
-              Live e-money may be issued only when BitriPay holds the e-money authorisation in the jurisdiction, or a licensed bank / EMI is the legal issuer and BitriPay is its distributor. Sandbox
-              programmes have no real-world value.
+              {tr(
+                'Live e-money may be issued only when BitriPay holds the e-money authorisation in the jurisdiction, or a licensed bank / EMI is the legal issuer and BitriPay is its distributor. Sandbox programmes have no real-world value.',
+              )}
             </Alert>
             <div className="grid cols-2">
-              <Field label="Currency">
+              <Field label={tr('Currency')}>
                 <Input value={edit.currency} disabled={!!edit.id} maxLength={3} onChange={(e) => setEdit({ ...edit, currency: e.target.value.toUpperCase() })} />
               </Field>
-              <Field label="Jurisdiction (ISO country)">
+              <Field label={tr('Jurisdiction (ISO country)')}>
                 <Input value={edit.jurisdiction} disabled={!!edit.id} maxLength={10} onChange={(e) => setEdit({ ...edit, jurisdiction: e.target.value.toUpperCase() })} />
               </Field>
-              <Field label="Issuer model">
+              <Field label={tr('Issuer model')}>
                 <Select value={edit.issuerModel} onChange={(e) => setEdit({ ...edit, issuerModel: e.target.value })}>
-                  <option value="own_authorisation">BitriPay own e-money authorisation</option>
-                  <option value="partner_issuer">Licensed bank / EMI issues, BitriPay distributes</option>
-                  <option value="sandbox">Sandbox (no real value)</option>
+                  <option value="own_authorisation">{tr('BitriPay own e-money authorisation')}</option>
+                  <option value="partner_issuer">{tr('Licensed bank / EMI issues, BitriPay distributes')}</option>
+                  <option value="sandbox">{tr('Sandbox (no real value)')}</option>
                 </Select>
               </Field>
-              <Field label="Legal issuer name">
+              <Field label={tr('Legal issuer name')}>
                 <Input value={edit.issuerName} onChange={(e) => setEdit({ ...edit, issuerName: e.target.value })} />
               </Field>
-              <Field label="Authorisation / licence reference">
-                <Input value={edit.licenceRef} onChange={(e) => setEdit({ ...edit, licenceRef: e.target.value })} placeholder="FCA FRN …" />
+              <Field label={tr('Authorisation / licence reference')}>
+                <Input value={edit.licenceRef} onChange={(e) => setEdit({ ...edit, licenceRef: e.target.value })} placeholder={tr('FCA FRN …')} />
               </Field>
-              <Field label="Regulator">
+              <Field label={tr('Regulator')}>
                 <Input value={edit.regulator} onChange={(e) => setEdit({ ...edit, regulator: e.target.value })} />
               </Field>
-              <Field label="Safeguarding bank">
+              <Field label={tr('Safeguarding bank')}>
                 <Input value={edit.safeguardingBank} onChange={(e) => setEdit({ ...edit, safeguardingBank: e.target.value })} />
               </Field>
-              <Field label="Safeguarding account reference">
+              <Field label={tr('Safeguarding account reference')}>
                 <Input value={edit.safeguardingAccountRef} onChange={(e) => setEdit({ ...edit, safeguardingAccountRef: e.target.value })} />
               </Field>
-              <Field label="Reserved exposure (minor units, e.g. open chargebacks)">
+              <Field label={tr('Reserved exposure (minor units, e.g. open chargebacks)')}>
                 <Input type="number" value={edit.reservedExposure} onChange={(e) => setEdit({ ...edit, reservedExposure: Number(e.target.value) })} />
               </Field>
-              <Field label="Per-request issuance limit (minor units, 0 = none)">
+              <Field label={tr('Per-request issuance limit (minor units, 0 = none)')}>
                 <Input
                   type="number"
                   value={edit.limits?.maxIssuancePerRequest ?? 0}
                   onChange={(e) => setEdit({ ...edit, limits: { ...(edit.limits ?? {}), maxIssuancePerRequest: Number(e.target.value) } })}
                 />
               </Field>
-              <Field label="Daily issuance limit (minor units, 0 = none)">
+              <Field label={tr('Daily issuance limit (minor units, 0 = none)')}>
                 <Input
                   type="number"
                   value={edit.limits?.dailyIssuanceLimit ?? 0}
                   onChange={(e) => setEdit({ ...edit, limits: { ...(edit.limits ?? {}), dailyIssuanceLimit: Number(e.target.value) } })}
                 />
               </Field>
-              <Field label="Max holder balance (minor units, 0 = none)">
+              <Field label={tr('Max holder balance (minor units, 0 = none)')}>
                 <Input type="number" value={edit.limits?.maxHolderBalance ?? 0} onChange={(e) => setEdit({ ...edit, limits: { ...(edit.limits ?? {}), maxHolderBalance: Number(e.target.value) } })} />
               </Field>
             </div>
@@ -477,13 +489,13 @@ export function Emoney() {
                   .catch(err)
               }
             >
-              Save
+              {tr('Save')}
             </Button>
           </>
         )}
       </Modal>
 
-      <Modal open={!!reserve} onClose={() => setReserve(null)} title="Confirm safeguarded reserve funding (maker)">
+      <Modal open={!!reserve} onClose={() => setReserve(null)} title={tr('Confirm safeguarded reserve funding (maker)')}>
         {reserve && (
           <>
             <Alert kind="warning">
@@ -491,30 +503,30 @@ export function Emoney() {
               count towards issuance.
             </Alert>
             <div className="grid cols-2">
-              <Field label="Kind">
+              <Field label={tr('Kind')}>
                 <Select value={reserve.kind} onChange={(e) => setReserve({ ...reserve, kind: e.target.value })}>
-                  <option value="funding">Funding received (cleared)</option>
-                  <option value="adjustment">Adjustment</option>
-                  <option value="redemption">Redemption paid out</option>
+                  <option value="funding">{tr('Funding received (cleared)')}</option>
+                  <option value="adjustment">{tr('Adjustment')}</option>
+                  <option value="redemption">{tr('Redemption paid out')}</option>
                 </Select>
               </Field>
-              <Field label="Direction">
+              <Field label={tr('Direction')}>
                 <Select value={reserve.direction} onChange={(e) => setReserve({ ...reserve, direction: e.target.value })}>
-                  <option value="in">Into safeguarding</option>
-                  <option value="out">Out of safeguarding</option>
+                  <option value="in">{tr('Into safeguarding')}</option>
+                  <option value="out">{tr('Out of safeguarding')}</option>
                 </Select>
               </Field>
               <Field label={`Amount (${reserve.currency})`}>
                 <Input inputMode="decimal" value={reserve.amount} onChange={(e) => setReserve({ ...reserve, amount: e.target.value })} />
               </Field>
-              <Field label="Bank / partner reference">
+              <Field label={tr('Bank / partner reference')}>
                 <Input value={reserve.reference} onChange={(e) => setReserve({ ...reserve, reference: e.target.value })} />
               </Field>
             </div>
-            <Field label="Evidence checked (statement line, portal, document id)">
+            <Field label={tr('Evidence checked (statement line, portal, document id)')}>
               <Input value={reserve.evidence} onChange={(e) => setReserve({ ...reserve, evidence: e.target.value })} />
             </Field>
-            <Field label="Note">
+            <Field label={tr('Note')}>
               <Textarea rows={2} value={reserve.note} onChange={(e) => setReserve({ ...reserve, note: e.target.value })} />
             </Field>
             <Button
@@ -536,17 +548,17 @@ export function Emoney() {
                   .catch(err)
               }
             >
-              Propose
+              {tr('Propose')}
             </Button>
           </>
         )}
       </Modal>
 
-      <Modal open={!!pool} onClose={() => setPool(null)} title="New distribution pool">
+      <Modal open={!!pool} onClose={() => setPool(null)} title={tr('New distribution pool')}>
         {pool && (
           <>
             <div className="grid cols-2">
-              <Field label="Programme">
+              <Field label={tr('Programme')}>
                 <Select value={pool.programmeId} onChange={(e) => setPool({ ...pool, programmeId: e.target.value })}>
                   {programmes.map((p: any) => (
                     <option key={p.id} value={p.id}>
@@ -555,21 +567,21 @@ export function Emoney() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Level">
+              <Field label={tr('Level')}>
                 <Select value={pool.level} onChange={(e) => setPool({ ...pool, level: e.target.value })}>
-                  <option value="country">Country / currency pool</option>
-                  <option value="institution">Financial institution</option>
-                  <option value="master_agent">Master agent</option>
-                  <option value="agent">Local agent</option>
-                  <option value="merchant">Merchant</option>
+                  <option value="country">{tr('Country / currency pool')}</option>
+                  <option value="institution">{tr('Financial institution')}</option>
+                  <option value="master_agent">{tr('Master agent')}</option>
+                  <option value="agent">{tr('Local agent')}</option>
+                  <option value="merchant">{tr('Merchant')}</option>
                 </Select>
               </Field>
-              <Field label="Name">
+              <Field label={tr('Name')}>
                 <Input value={pool.name} onChange={(e) => setPool({ ...pool, name: e.target.value })} />
               </Field>
-              <Field label="Parent pool">
+              <Field label={tr('Parent pool')}>
                 <Select value={pool.parentId} onChange={(e) => setPool({ ...pool, parentId: e.target.value })}>
-                  <option value="">Treasury (top level)</option>
+                  <option value="">{tr('Treasury (top level)')}</option>
                   {pools
                     .filter((x: any) => x.programmeId === pool.programmeId)
                     .map((x: any) => (
@@ -579,10 +591,10 @@ export function Emoney() {
                     ))}
                 </Select>
               </Field>
-              <Field label="Owner user id (institution / master agent account)">
+              <Field label={tr('Owner user id (institution / master agent account)')}>
                 <Input value={pool.ownerUserId} onChange={(e) => setPool({ ...pool, ownerUserId: e.target.value })} />
               </Field>
-              <Field label="Country">
+              <Field label={tr('Country')}>
                 <Input value={pool.country} maxLength={2} onChange={(e) => setPool({ ...pool, country: e.target.value.toUpperCase() })} />
               </Field>
             </div>
@@ -598,7 +610,7 @@ export function Emoney() {
                   .catch(err)
               }
             >
-              Create
+              {tr('Create')}
             </Button>
           </>
         )}
@@ -608,13 +620,14 @@ export function Emoney() {
         {issue && (
           <>
             <Alert kind="warning">
-              Issuance request against cleared safeguarded reserves. A different administrator with the issuance permission must approve it under step-up; the reserve rule is checked again at
-              execution.
+              {tr(
+                'Issuance request against cleared safeguarded reserves. A different administrator with the issuance permission must approve it under step-up; the reserve rule is checked again at execution.',
+              )}
             </Alert>
             <Field label={`Amount (${issue.currency})`}>
               <Input inputMode="decimal" value={issue.amount} onChange={(e) => setIssue({ ...issue, amount: e.target.value })} />
             </Field>
-            <Field label="Reason">
+            <Field label={tr('Reason')}>
               <Input value={issue.reason} onChange={(e) => setIssue({ ...issue, reason: e.target.value })} />
             </Field>
             <Button
@@ -629,7 +642,7 @@ export function Emoney() {
                   .catch(err)
               }
             >
-              Propose issuance
+              {tr('Propose issuance')}
             </Button>
           </>
         )}
@@ -638,9 +651,9 @@ export function Emoney() {
       <Modal open={!!allocate} onClose={() => setAllocate(null)} title={allocate ? `Allocate from ${allocate.fromName}` : ''}>
         {allocate && (
           <>
-            <Alert kind="info">Distribution moves existing e-money down the hierarchy under step-up. The pool must hold the balance; nothing is created.</Alert>
+            <Alert kind="info">{tr('Distribution moves existing e-money down the hierarchy under step-up. The pool must hold the balance; nothing is created.')}</Alert>
             <div className="grid cols-2">
-              <Field label="To pool">
+              <Field label={tr('To pool')}>
                 <Select value={allocate.toPoolId} onChange={(e) => setAllocate({ ...allocate, toPoolId: e.target.value, toUserId: '' })}>
                   <option value="">— (choose a user instead)</option>
                   {pools
@@ -652,18 +665,18 @@ export function Emoney() {
                     ))}
                 </Select>
               </Field>
-              <Field label="Or to user id">
+              <Field label={tr('Or to user id')}>
                 <Input value={allocate.toUserId} onChange={(e) => setAllocate({ ...allocate, toUserId: e.target.value, toPoolId: '' })} />
               </Field>
               <Field label={`Amount (${allocate.currency})`}>
                 <Input inputMode="decimal" value={allocate.amount} onChange={(e) => setAllocate({ ...allocate, amount: e.target.value })} />
               </Field>
-              <Field label="Reason">
+              <Field label={tr('Reason')}>
                 <Input value={allocate.reason} onChange={(e) => setAllocate({ ...allocate, reason: e.target.value })} />
               </Field>
             </div>
             <StepUpButton
-              title="Confirm allocation"
+              title={tr('Confirm allocation')}
               onConfirm={(pin) =>
                 api
                   .post(`/api/admin/emoney/pools/${allocate.fromPoolId}/allocate`, {
@@ -680,7 +693,7 @@ export function Emoney() {
                   .catch(err)
               }
             >
-              Allocate
+              {tr('Allocate')}
             </StepUpButton>
           </>
         )}

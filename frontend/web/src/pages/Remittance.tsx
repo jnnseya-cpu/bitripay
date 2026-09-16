@@ -106,10 +106,10 @@ export function Remittance() {
             </Field>
             {quote && (
               <div className="card soft compact mb">
-                <KV k="Exchange rate" v={`1 ${from} = ${quote.rate.toFixed(4)} ${to}`} />
+                <KV k={tr('Exchange rate')} v={`1 ${from} = ${quote.rate.toFixed(4)} ${to}`} />
                 <KV k={t('common.fee')} v={money(quote.fee, from)} />
-                <KV k="Total debited" v={money(quote.total, from)} />
-                <KV k="Recipient gets" v={<b style={{ color: 'var(--success)' }}>{money(quote.targetAmount, to)}</b>} />
+                <KV k={tr('Total debited')} v={money(quote.total, from)} />
+                <KV k={tr('Recipient gets')} v={<b style={{ color: 'var(--success)' }}>{money(quote.targetAmount, to)}</b>} />
               </div>
             )}
             <Field label={tr('Payout method')}>
@@ -247,7 +247,7 @@ export function Remittance() {
         summary={
           quote && (
             <>
-              <KV k="Send" v={money(quote.total, from)} />
+              <KV k={tr('Send')} v={money(quote.total, from)} />
               <KV k={`${rec.name} receives`} v={money(quote.targetAmount, to)} />
             </>
           )

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, StepUpButton, Switch, Table, Tabs, Textarea, UserCell, fmtDate, useAsync } from '../components/ui';
@@ -28,12 +29,12 @@ export function Agents() {
   return (
     <div>
       <PageHeader
-        title="Agents & command centres"
-        subtitle="Every agent reads through typed tools under a policy you publish here. Agents propose; people approve. Nothing here can mint, release, unfreeze or change a corridor."
+        title={tr('Agents & command centres')}
+        subtitle={tr('Every agent reads through typed tools under a policy you publish here. Agents propose; people approve. Nothing here can mint, release, unfreeze or change a corridor.')}
         actions={
           <StepUpButton
             variant={rt.killSwitch ? 'success' : 'danger'}
-            title={rt.killSwitch ? 'Resume all agents' : 'Pause every agent now'}
+            title={rt.killSwitch ? tr('Resume all agents') : tr('Pause every agent now')}
             onConfirm={(pin) =>
               api
                 .post('/api/admin/agents/kill-switch', { on: !rt.killSwitch, pin })
@@ -41,18 +42,18 @@ export function Agents() {
                 .catch(err)
             }
           >
-            {rt.killSwitch ? '▶ Resume all agents' : '⏹ Kill switch'}
+            {rt.killSwitch ? tr('▶ Resume all agents') : tr('⏹ Kill switch')}
           </StepUpButton>
         }
       />
       <Alert kind={rt.killSwitch ? 'error' : rt.mode === 'live' ? 'success' : 'warning'}>
         {rt.killSwitch ? (
           <>
-            Kill switch is <b>on</b>: no agent runs until an administrator resumes them.
+            {tr('Kill switch is')} <b>on</b>: no agent runs until an administrator resumes them.
           </>
         ) : rt.mode === 'live' ? (
           <>
-            Agents are <b>live</b> on {rt.model} (fast model {rt.fastModel}). {rt.agents} agents, {rt.tools} tools, {pending.length} approval(s) waiting.
+            {tr('Agents are')} <b>live</b> on {rt.model} (fast model {rt.fastModel}). {rt.agents} agents, {rt.tools} tools, {pending.length} approval(s) waiting.
           </>
         ) : (
           <>
@@ -64,12 +65,12 @@ export function Agents() {
         tabs={[
           { id: 'agents', label: `Agents (${d.agents.length})` },
           { id: 'approvals', label: `Approvals (${pending.length})` },
-          { id: 'runs', label: 'Runs' },
+          { id: 'runs', label: tr('Runs') },
           { id: 'policies', label: `Policies (${d.policies.length})` },
-          { id: 'usage', label: 'Usage & cost' },
-          { id: 'billing', label: 'Billing & margin' },
+          { id: 'usage', label: tr('Usage & cost') },
+          { id: 'billing', label: tr('Billing & margin') },
           { id: 'addon', label: `Flat plan (${d.addon?.active ?? 0} active)` },
-          { id: 'settings', label: 'Settings' },
+          { id: 'settings', label: tr('Settings') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -94,7 +95,7 @@ function Registry({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
     <>
       <div className="card">
         <Table
-          head={['Agent', 'For', 'Tools', 'Runs (30d)', 'Failed', 'Waiting', 'ACU (30d)', 'Last run', '']}
+          head={[tr('Agent'), 'For', tr('Tools'), tr('Runs (30d)'), tr('Failed'), tr('Waiting'), tr('ACU (30d)'), tr('Last run'), '']}
           rows={d.agents.map((a: any) => [
             <div>
               <b>
@@ -126,7 +127,7 @@ function Registry({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
                       .catch(err)
                   }
                 >
-                  Resume
+                  {tr('Resume')}
                 </Button>
               ) : (
                 <Button
@@ -139,7 +140,7 @@ function Registry({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
                       .catch(err)
                   }
                 >
-                  Pause
+                  {tr('Pause')}
                 </Button>
               )}
               {a.roles.includes('admin') && (
@@ -151,7 +152,7 @@ function Registry({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
                     setResult(null);
                   }}
                 >
-                  Run
+                  {tr('Run')}
                 </Button>
               )}
             </div>,
@@ -159,8 +160,8 @@ function Registry({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
         />
       </div>
       <div className="card mt">
-        <h4>Never available to agents</h4>
-        <p className="tiny muted">These capabilities are not tools. A person does them in the app under maker-checker and step-up, and any attempt by an agent is logged as denied.</p>
+        <h4>{tr('Never available to agents')}</h4>
+        <p className="tiny muted">{tr('These capabilities are not tools. A person does them in the app under maker-checker and step-up, and any attempt by an agent is logged as denied.')}</p>
         <div className="row wrap">
           {d.forbidden.map((f: string) => (
             <Chip key={f} kind="danger">
@@ -172,7 +173,7 @@ function Registry({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
       <Modal open={!!ask} onClose={() => setAsk(null)} title={`Run ${ask?.key.replace(/_/g, ' ')} as yourself`} wide>
         {ask && (
           <>
-            <Field label="Instruction">
+            <Field label={tr('Instruction')}>
               <Textarea rows={2} value={ask.input} onChange={(e) => setAsk({ ...ask, input: e.target.value })} />
             </Field>
             <Button
@@ -190,7 +191,7 @@ function Registry({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
                   .finally(() => setBusy(false));
               }}
             >
-              Run now
+              {tr('Run now')}
             </Button>
             {result && <RunDetail run={result} />}
           </>
@@ -203,9 +204,9 @@ function Registry({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
 function Approvals({ items, ok, err, canApprove }: { items: any[]; ok: (m: string) => void; err: (e: any) => void; canApprove: boolean }) {
   return (
     <div className="card">
-      <p className="tiny muted">An agent may only queue these; a different administrator with the right permission approves under PIN or passkey step-up. Approvals expire after three days.</p>
+      <p className="tiny muted">{tr('An agent may only queue these; a different administrator with the right permission approves under PIN or passkey step-up. Approvals expire after three days.')}</p>
       <Table
-        head={['Requested', 'Agent', 'For', 'Action', 'Expires', '']}
+        head={[tr('Requested'), tr('Agent'), 'For', tr('Action'), tr('Expires'), '']}
         rows={items.map((a) => [
           fmtDate(a.createdAt),
           a.agent,
@@ -222,7 +223,7 @@ function Approvals({ items, ok, err, canApprove }: { items: any[]; ok: (m: strin
               <StepUpButton
                 size="sm"
                 variant="success"
-                title="Approve agent action"
+                title={tr('Approve agent action')}
                 prompt="Reason / reference"
                 onConfirm={(pin, reason) =>
                   api
@@ -231,7 +232,7 @@ function Approvals({ items, ok, err, canApprove }: { items: any[]; ok: (m: strin
                     .catch(err)
                 }
               >
-                Approve
+                {tr('Approve')}
               </StepUpButton>
               <ConfirmButton
                 size="sm"
@@ -244,14 +245,14 @@ function Approvals({ items, ok, err, canApprove }: { items: any[]; ok: (m: strin
                     .catch(err)
                 }
               >
-                Decline
+                {tr('Decline')}
               </ConfirmButton>
             </div>
           ) : (
             <span className="tiny muted">needs approvals permission</span>
           ),
         ])}
-        empty="Nothing waiting for approval"
+        empty={tr('Nothing waiting for approval')}
       />
     </div>
   );
@@ -267,9 +268,9 @@ function RunDetail({ run }: { run: any }) {
           {run.model ? ` · ${run.model}` : ''} · {run.steps} steps · {run.tokensIn + run.tokensOut} tokens · {run.acu} ACU
         </span>
       </div>
-      <KV k="Input" v={<span className="small">{run.input}</span>} />
+      <KV k={tr('Input')} v={<span className="small">{run.input}</span>} />
       <Table
-        head={['#', 'Tool', 'Input', 'Outcome', 'Result']}
+        head={['#', tr('Tool'), tr('Input'), tr('Outcome'), tr('Result')]}
         rows={(run.actions ?? []).map((a: any) => [
           a.stepNo,
           <span className="mono tiny">{a.tool}</span>,
@@ -285,7 +286,7 @@ function RunDetail({ run }: { run: any }) {
             </pre>
           </details>,
         ])}
-        empty="No tool calls"
+        empty={tr('No tool calls')}
       />
       {run.output && (
         <div className="card mt" style={{ whiteSpace: 'pre-wrap' }}>
@@ -310,7 +311,7 @@ function Runs() {
       <div className="row mb wrap">
         <Input placeholder="agent key" value={filter.agent} onChange={(e) => setFilter({ ...filter, agent: e.target.value })} style={{ width: 180 }} />
         <Select value={filter.status} onChange={(e) => setFilter({ ...filter, status: e.target.value })} style={{ width: 180 }}>
-          <option value="">Any status</option>
+          <option value="">{tr('Any status')}</option>
           {['completed', 'failed', 'awaiting_approval', 'running', 'cancelled', 'budget_exhausted'].map((s) => (
             <option key={s} value={s}>
               {s}
@@ -319,7 +320,7 @@ function Runs() {
         </Select>
       </div>
       <Table
-        head={['When', 'Agent', 'Trigger', 'Input', 'Status', 'Steps', 'ACU', '']}
+        head={[tr('When'), tr('Agent'), tr('Trigger'), tr('Input'), tr('Status'), tr('Steps'), 'ACU', '']}
         rows={(runs.data?.items ?? []).map((r: any) => [
           fmtDate(r.createdAt),
           r.agent,
@@ -329,15 +330,15 @@ function Runs() {
           r.steps,
           r.acu,
           <Button size="sm" variant="ghost" onClick={() => api.get<any>(`/api/admin/agents/runs/${r.id}`).then((x) => setOpen(x))}>
-            Open
+            {tr('Open')}
           </Button>,
         ])}
-        empty="No runs"
+        empty={tr('No runs')}
       />
-      <Modal open={!!open} onClose={() => setOpen(null)} title="Run detail" wide>
+      <Modal open={!!open} onClose={() => setOpen(null)} title={tr('Run detail')} wide>
         {open && (
           <>
-            <KV k="Account" v={<UserCell user={open.user} />} />
+            <KV k={tr('Account')} v={<UserCell user={open.user} />} />
             <RunDetail run={open.run} />
           </>
         )}
@@ -356,14 +357,14 @@ function Policies({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
       <div className="card">
         <div className="row between mb">
           <p className="tiny muted" style={{ margin: 0 }}>
-            Policies layer: global → agent → account. Publishing a new version retires the previous one and needs step-up. Deny wins over allow; approval lists add a checker.
+            {tr('Policies layer: global → agent → account. Publishing a new version retires the previous one and needs step-up. Deny wins over allow; approval lists add a checker.')}
           </p>
           <Button onClick={() => setForm({ scope: 'agent', scopeId: 'chief_of_staff', note: '', rules: { deny: [], requireApproval: [], allow: [] }, maxStepsPerRun: '', maxRunsPerDay: '' })}>
-            + Publish policy
+            {tr('+ Publish policy')}
           </Button>
         </div>
         <Table
-          head={['Scope', 'Target', 'Version', 'Deny', 'Needs approval', 'Allow only', 'Limits', 'Note', 'Published']}
+          head={[tr('Scope'), tr('Target'), tr('Version'), tr('Deny'), tr('Needs approval'), tr('Allow only'), tr('Limits'), tr('Note'), tr('Published')]}
           rows={d.policies.map((p: any) => [
             p.scope,
             p.scopeId,
@@ -378,22 +379,22 @@ function Policies({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
             <span className="tiny">{p.note ?? ''}</span>,
             fmtDate(p.createdAt),
           ])}
-          empty="No policies published; agents run with their registry defaults."
+          empty={tr('No policies published; agents run with their registry defaults.')}
         />
       </div>
-      <Modal open={!!form} onClose={() => setForm(null)} title="Publish a policy" wide>
+      <Modal open={!!form} onClose={() => setForm(null)} title={tr('Publish a policy')} wide>
         {form && (
           <>
             <div className="grid cols-2">
-              <Field label="Scope">
+              <Field label={tr('Scope')}>
                 <Select value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value, scopeId: e.target.value === 'global' ? '*' : '' })}>
-                  <option value="global">Global (every agent)</option>
-                  <option value="agent">One agent</option>
-                  <option value="user">One account</option>
+                  <option value="global">{tr('Global (every agent)')}</option>
+                  <option value="agent">{tr('One agent')}</option>
+                  <option value="user">{tr('One account')}</option>
                 </Select>
               </Field>
               {form.scope === 'agent' ? (
-                <Field label="Agent">
+                <Field label={tr('Agent')}>
                   <Select value={form.scopeId} onChange={(e) => setForm({ ...form, scopeId: e.target.value })}>
                     {d.agents.map((a: any) => (
                       <option key={a.key} value={a.key}>
@@ -403,7 +404,7 @@ function Policies({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
                   </Select>
                 </Field>
               ) : form.scope === 'user' ? (
-                <Field label="Account id">
+                <Field label={tr('Account id')}>
                   <Input value={form.scopeId} onChange={(e) => setForm({ ...form, scopeId: e.target.value })} />
                 </Field>
               ) : (
@@ -411,7 +412,10 @@ function Policies({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
               )}
             </div>
             {(['deny', 'requireApproval', 'allow'] as const).map((list) => (
-              <Field key={list} label={list === 'deny' ? 'Deny these tools' : list === 'requireApproval' ? 'Require a checker for these tools' : 'Allow only these tools (empty = no restriction)'}>
+              <Field
+                key={list}
+                label={list === 'deny' ? tr('Deny these tools') : list === 'requireApproval' ? tr('Require a checker for these tools') : tr('Allow only these tools (empty = no restriction)')}
+              >
                 <div className="row wrap">
                   {tools.map((t) => (
                     <Chip
@@ -426,18 +430,18 @@ function Policies({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
               </Field>
             ))}
             <div className="grid cols-3">
-              <Field label="Max steps per run">
+              <Field label={tr('Max steps per run')}>
                 <Input type="number" value={form.maxStepsPerRun} onChange={(e) => setForm({ ...form, maxStepsPerRun: e.target.value })} />
               </Field>
-              <Field label="Max runs per day">
+              <Field label={tr('Max runs per day')}>
                 <Input type="number" value={form.maxRunsPerDay} onChange={(e) => setForm({ ...form, maxRunsPerDay: e.target.value })} />
               </Field>
-              <Field label="Note">
+              <Field label={tr('Note')}>
                 <Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
               </Field>
             </div>
             <StepUpButton
-              title="Publish policy"
+              title={tr('Publish policy')}
               onConfirm={(pin) =>
                 api
                   .put('/api/admin/agents/policies', {
@@ -460,7 +464,7 @@ function Policies({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
                   .catch(err)
               }
             >
-              Publish with step-up
+              {tr('Publish with step-up')}
             </StepUpButton>
           </>
         )}
@@ -476,21 +480,21 @@ function Usage({ d }: { d: any }) {
     <>
       <div className="grid cols-3 mb">
         <div className="card">
-          <KV k="Runs (30 days)" v={totals.runs} />
+          <KV k={tr('Runs (30 days)')} v={totals.runs} />
         </div>
         <div className="card">
-          <KV k="Tokens" v={totals.tokens.toLocaleString()} />
+          <KV k={tr('Tokens')} v={totals.tokens.toLocaleString()} />
         </div>
         <div className="card">
-          <KV k="ACU (≈ USD)" v={`${Math.round(totals.acu * 100) / 100} (≈ $${(totals.acu / 100).toFixed(2)})`} />
+          <KV k={tr('ACU (≈ USD)')} v={`${Math.round(totals.acu * 100) / 100} (≈ $${(totals.acu / 100).toFixed(2)})`} />
         </div>
       </div>
       <div className="card">
-        <p className="tiny muted">1 ACU = one US cent of model spend at the list prices under Settings. Offline runs cost nothing.</p>
+        <p className="tiny muted">{tr('1 ACU = one US cent of model spend at the list prices under Settings. Offline runs cost nothing.')}</p>
         <Table
-          head={['Day', 'Agent', 'Model', 'Runs', 'Tokens in', 'Tokens out', 'ACU']}
+          head={[tr('Day'), tr('Agent'), tr('Model'), tr('Runs'), 'Tokens in', tr('Tokens out'), 'ACU']}
           rows={rows.map((r) => [r.day, r.agent_key, r.model, r.runs, r.tokens_in, r.tokens_out, Math.round(Number(r.acu) * 1000) / 1000])}
-          empty="No usage yet"
+          empty={tr('No usage yet')}
         />
       </div>
     </>
@@ -506,35 +510,33 @@ function Billing({ d }: { d: any }) {
     <>
       <Alert kind={b.cap.degraded ? 'warning' : b.margin >= 0 ? 'success' : 'error'}>
         {b.cap.degraded ? (
-          <>
-            Platform cap reached: model spend {f(b.cap.spend)} of {f(b.cap.cap)} this month. Everyone is answered by the free planner until next month; nothing is charged.
-          </>
+          <>{tr('Platform cap reached: model spend {0} of {1} this month. Everyone is answered by the free planner until next month; nothing is charged.', { 0: f(b.cap.spend), 1: f(b.cap.cap) })}</>
         ) : (
           <>
-            Month {b.month}: agents earned {f(b.revenue)} ({f(b.tax)} tax), cost {f(b.modelCost)} in model spend, margin <b>{f(b.margin)}</b>. Spend is at {capPct}% of the cap ({f(b.cap.cap)} = max of{' '}
-            {b.cap.pctOfFees}% of last month's fees {f(b.cap.lastMonthFees)} and the floor {f(b.cap.floor)}).
+            {tr('Month')} {b.month}: agents earned {f(b.revenue)} ({f(b.tax)} tax), cost {f(b.modelCost)} in model spend, margin <b>{f(b.margin)}</b>. Spend is at {capPct}% of the cap ({f(b.cap.cap)}{' '}
+            = max of {b.cap.pctOfFees}% of last month's fees {f(b.cap.lastMonthFees)} and the floor {f(b.cap.floor)}).
           </>
         )}
       </Alert>
       <div className="grid cols-4 mb">
         <div className="card">
-          <KV k="Revenue (tax incl.)" v={f(b.revenue)} />
+          <KV k={tr('Revenue (tax incl.)')} v={f(b.revenue)} />
         </div>
         <div className="card">
-          <KV k="Tax to remit" v={f(b.tax)} />
+          <KV k={tr('Tax to remit')} v={f(b.tax)} />
         </div>
         <div className="card">
-          <KV k="Model cost" v={f(b.modelCost)} />
+          <KV k={tr('Model cost')} v={f(b.modelCost)} />
         </div>
         <div className="card">
-          <KV k="Margin" v={<span style={{ color: b.margin >= 0 ? 'var(--success, #15803d)' : '#b91c1c' }}>{f(b.margin)}</span>} />
+          <KV k={tr('Margin')} v={<span style={{ color: b.margin >= 0 ? 'var(--success, #15803d)' : '#b91c1c' }}>{f(b.margin)}</span>} />
         </div>
       </div>
       <div className="grid cols-2">
         <div className="card">
-          <h4>Runs this month by billing outcome</h4>
+          <h4>{tr('Runs this month by billing outcome')}</h4>
           <Table
-            head={['Outcome', 'Runs']}
+            head={[tr('Outcome'), tr('Runs')]}
             rows={b.runsByReason.map((r: any) => [
               <span>
                 {r.reason === 'lookup'
@@ -551,18 +553,18 @@ function Billing({ d }: { d: any }) {
               </span>,
               r.count,
             ])}
-            empty="No runs yet"
+            empty={tr('No runs yet')}
           />
           <p className="tiny muted">{b.consents} account(s) have accepted the current pricing.</p>
         </div>
         <div className="card">
-          <h4>Revenue by wallet currency</h4>
+          <h4>{tr('Revenue by wallet currency')}</h4>
           <Table
-            head={['Currency', 'Questions', 'Charged', 'Tax']}
+            head={[tr('Currency'), tr('Questions'), tr('Charged'), tr('Tax')]}
             rows={b.byCurrency.map((r: any) => [r.currency, r.c, (r.total / 100).toFixed(2), (r.tax / 100).toFixed(2)])}
-            empty="Nothing charged yet"
+            empty={tr('Nothing charged yet')}
           />
-          <p className="tiny muted">Every charge is a ledger posting to the fees account with the tax share in its metadata, so accounting and VAT returns come straight from the ledger.</p>
+          <p className="tiny muted">{tr('Every charge is a ledger posting to the fees account with the tax share in its metadata, so accounting and VAT returns come straight from the ledger.')}</p>
         </div>
       </div>
     </>
@@ -577,16 +579,19 @@ function Addon({ d }: { d: any }) {
       <Alert kind="info">
         {s.enabled ? (
           <>
-            The flat plan is offered as an alternative to per-question pricing: {s.priceCurrency} {(s.priceMinor / 100).toFixed(2)} per {s.periodDays} days from the wallet, unlimited questions within
-            the caps. Administrators never pay.
+            {tr('The flat plan is offered as an alternative to per-question pricing: {0} {1} per {2} days from the wallet, unlimited questions within the caps. Administrators never pay.', {
+              0: s.priceCurrency,
+              1: (s.priceMinor / 100).toFixed(2),
+              2: s.periodDays,
+            })}
           </>
         ) : (
-          <>The flat plan is switched off; account holders pay per question. Enable it under Settings to offer it as an alternative.</>
+          <>{tr('The flat plan is switched off; account holders pay per question. Enable it under Settings to offer it as an alternative.')}</>
         )}
       </Alert>
       <div className="grid cols-3 mb">
         <div className="card">
-          <KV k="Active subscriptions" v={a.active} />
+          <KV k={tr('Active subscriptions')} v={a.active} />
         </div>
         {a.revenue.map((r: any) => (
           <div key={r.currency} className="card">
@@ -596,7 +601,7 @@ function Addon({ d }: { d: any }) {
       </div>
       <div className="card">
         <Table
-          head={['Account', 'Status', 'Price', 'Period', 'Renews', 'Started', 'Expires', 'Renewals']}
+          head={[tr('Account'), tr('Status'), tr('Price'), tr('Period'), tr('Renews'), tr('Started'), tr('Expires'), tr('Renewals')]}
           rows={a.recent.map((r: any) => [
             <span className="mono tiny">{r.userId}</span>,
             <Chip kind={r.status === 'active' ? 'success' : undefined}>{r.status}</Chip>,
@@ -607,7 +612,7 @@ function Addon({ d }: { d: any }) {
             fmtDate(r.expiresAt),
             r.renewals,
           ])}
-          empty="No subscriptions yet"
+          empty={tr('No subscriptions yet')}
         />
       </div>
     </>
@@ -633,71 +638,71 @@ function Settings({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
     <div className="card">
       <div className="grid cols-2">
         <div>
-          <Switch on={s.enabled} onChange={(v) => setS({ ...s, enabled: v })} label="Command centres enabled" />
-          <Switch on={s.scheduledSystemAgents} onChange={(v) => setS({ ...s, scheduledSystemAgents: v })} label="Run Operations, Compliance and System Health every morning (05:00 UTC)" />
-          <Field label="Model (reasoning, drafting)">
+          <Switch on={s.enabled} onChange={(v) => setS({ ...s, enabled: v })} label={tr('Command centres enabled')} />
+          <Switch on={s.scheduledSystemAgents} onChange={(v) => setS({ ...s, scheduledSystemAgents: v })} label={tr('Run Operations, Compliance and System Health every morning (05:00 UTC)')} />
+          <Field label={tr('Model (reasoning, drafting)')}>
             <Input value={s.model} onChange={(e) => setS({ ...s, model: e.target.value })} />
           </Field>
-          <Field label="Fast model (short answers, research)">
+          <Field label={tr('Fast model (short answers, research)')}>
             <Input value={s.fastModel} onChange={(e) => setS({ ...s, fastModel: e.target.value })} />
           </Field>
-          <Field label="Anthropic API key" hint="Stored encrypted. Leave the dots to keep the current key; clear to fall back to the content-agent key or the server environment.">
+          <Field label={tr('Anthropic API key')} hint={tr('Stored encrypted. Leave the dots to keep the current key; clear to fall back to the content-agent key or the server environment.')}>
             <Input type="password" value={s.apiKey} onChange={(e) => setS({ ...s, apiKey: e.target.value })} />
           </Field>
           <div className="grid cols-2">
-            <Field label="Max steps per run">
+            <Field label={tr('Max steps per run')}>
               <Input type="number" value={s.maxStepsPerRun} onChange={(e) => setS({ ...s, maxStepsPerRun: Number(e.target.value) })} />
             </Field>
-            <Field label="Max tokens per run">
+            <Field label={tr('Max tokens per run')}>
               <Input type="number" value={s.maxTokensPerRun} onChange={(e) => setS({ ...s, maxTokensPerRun: Number(e.target.value) })} />
             </Field>
           </div>
         </div>
         <div>
-          <h4>Per-question pricing</h4>
-          <Field label="Mode">
+          <h4>{tr('Per-question pricing')}</h4>
+          <Field label={tr('Mode')}>
             <Select value={s.billing.mode} onChange={(e) => setS({ ...s, billing: { ...s.billing, mode: e.target.value } })}>
-              <option value="per_use">Pay per question (recommended)</option>
-              <option value="included">Included for everyone (platform pays)</option>
-              <option value="subscription">Flat plan only</option>
+              <option value="per_use">{tr('Pay per question (recommended)')}</option>
+              <option value="included">{tr('Included for everyone (platform pays)')}</option>
+              <option value="subscription">{tr('Flat plan only')}</option>
             </Select>
           </Field>
           <div className="grid cols-3">
             <Field label={`Question (${s.billing.priceCurrency} minor, tax incl.)`}>
               <Input type="number" value={s.billing.prices.standard} onChange={(e) => setS({ ...s, billing: { ...s.billing, prices: { ...s.billing.prices, standard: Number(e.target.value) } } })} />
             </Field>
-            <Field label="In-depth analysis">
+            <Field label={tr('In-depth analysis')}>
               <Input type="number" value={s.billing.prices.deep} onChange={(e) => setS({ ...s, billing: { ...s.billing, prices: { ...s.billing.prices, deep: Number(e.target.value) } } })} />
             </Field>
-            <Field label="Price currency">
+            <Field label={tr('Price currency')}>
               <Input value={s.billing.priceCurrency} onChange={(e) => setS({ ...s, billing: { ...s.billing, priceCurrency: e.target.value.toUpperCase() } })} />
             </Field>
           </div>
           <div className="grid cols-3">
-            <Field label="Tax in price (bps)">
+            <Field label={tr('Tax in price (bps)')}>
               <Input type="number" value={s.billing.taxRateBps} onChange={(e) => setS({ ...s, billing: { ...s.billing, taxRateBps: Number(e.target.value) } })} />
             </Field>
-            <Field label="Free questions / month">
+            <Field label={tr('Free questions / month')}>
               <Input type="number" value={s.billing.freeRunsPerMonth} onChange={(e) => setS({ ...s, billing: { ...s.billing, freeRunsPerMonth: Number(e.target.value) } })} />
             </Field>
-            <Field label="Paid questions / day">
+            <Field label={tr('Paid questions / day')}>
               <Input type="number" value={s.billing.dailyCapPerUser} onChange={(e) => setS({ ...s, billing: { ...s.billing, dailyCapPerUser: Number(e.target.value) } })} />
             </Field>
           </div>
           <Switch
             on={s.billing.freeRunsRequireActivity}
             onChange={(v) => setS({ ...s, billing: { ...s.billing, freeRunsRequireActivity: v } })}
-            label="Free questions only in months the account moved money"
+            label={tr('Free questions only in months the account moved money')}
           />
           <div className="grid cols-2">
-            <Field label="Platform cap: % of last month's fee revenue" hint="Model spend past this share degrades everyone to the free planner.">
+            <Field label={tr("Platform cap: % of last month's fee revenue")} hint={tr('Model spend past this share degrades everyone to the free planner.')}>
               <Input type="number" value={s.billing.platformCapPctOfFees} onChange={(e) => setS({ ...s, billing: { ...s.billing, platformCapPctOfFees: Number(e.target.value) } })} />
             </Field>
-            <Field label="Cap floor (minor units)">
+            <Field label={tr('Cap floor (minor units)')}>
               <Input type="number" value={s.billing.platformCapFloorMinor} onChange={(e) => setS({ ...s, billing: { ...s.billing, platformCapFloorMinor: Number(e.target.value) } })} />
             </Field>
           </div>
-          <Field label="Roles that may ask for in-depth (main model) answers">
+          <Field label={tr('Roles that may ask for in-depth (main model) answers')}>
             <Input
               value={(s.billing.deepRoles ?? []).join(', ')}
               onChange={(e) =>
@@ -714,32 +719,38 @@ function Settings({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
               }
             />
           </Field>
-          <Switch on={s.billing.simulateLive} onChange={(v) => setS({ ...s, billing: { ...s.billing, simulateLive: v } })} label="Sandbox: bill and meter as if the model answered (no key needed)" />
+          <Switch
+            on={s.billing.simulateLive}
+            onChange={(v) => setS({ ...s, billing: { ...s.billing, simulateLive: v } })}
+            label={tr('Sandbox: bill and meter as if the model answered (no key needed)')}
+          />
           <p className="tiny muted">
-            Disclosure version {s.billing.disclosureVersion}: changing prices, tax or the free allowance bumps it automatically and every account re-reads the pricing before the next question.
+            {tr('Disclosure version {0}: changing prices, tax or the free allowance bumps it automatically and every account re-reads the pricing before the next question.', {
+              0: s.billing.disclosureVersion,
+            })}
           </p>
-          <h4>Optional flat plan</h4>
-          <Switch on={s.addon.enabled} onChange={(v) => setS({ ...s, addon: { ...s.addon, enabled: v } })} label="Offer a flat plan (unlimited questions per period) as an alternative" />
+          <h4>{tr('Optional flat plan')}</h4>
+          <Switch on={s.addon.enabled} onChange={(v) => setS({ ...s, addon: { ...s.addon, enabled: v } })} label={tr('Offer a flat plan (unlimited questions per period) as an alternative')} />
           <div className="grid cols-3">
-            <Field label="Price (minor units)">
+            <Field label={tr('Price (minor units)')}>
               <Input type="number" value={s.addon.priceMinor} onChange={(e) => setS({ ...s, addon: { ...s.addon, priceMinor: Number(e.target.value) } })} />
             </Field>
-            <Field label="Price currency">
+            <Field label={tr('Price currency')}>
               <Input value={s.addon.priceCurrency} onChange={(e) => setS({ ...s, addon: { ...s.addon, priceCurrency: e.target.value.toUpperCase() } })} />
             </Field>
-            <Field label="Period (days)">
+            <Field label={tr('Period (days)')}>
               <Input type="number" value={s.addon.periodDays} onChange={(e) => setS({ ...s, addon: { ...s.addon, periodDays: Number(e.target.value) } })} />
             </Field>
           </div>
           <div className="grid cols-2">
-            <Field label="Free runs per month before paying">
+            <Field label={tr('Free runs per month before paying')}>
               <Input type="number" value={s.addon.freeRuns} onChange={(e) => setS({ ...s, addon: { ...s.addon, freeRuns: Number(e.target.value) } })} />
             </Field>
             <div>
-              <Switch on={s.addon.autoRenew} onChange={(v) => setS({ ...s, addon: { ...s.addon, autoRenew: v } })} label="Renew automatically by default" />
+              <Switch on={s.addon.autoRenew} onChange={(v) => setS({ ...s, addon: { ...s.addon, autoRenew: v } })} label={tr('Renew automatically by default')} />
             </div>
           </div>
-          <h4>Monthly allowance (ACU) per role · 0 = unlimited</h4>
+          <h4>{tr('Monthly allowance (ACU) per role · 0 = unlimited')}</h4>
           <div className="grid cols-2">
             {['user', 'merchant', 'agent', 'admin'].map((r) => (
               <Field key={r} label={r}>
@@ -747,12 +758,12 @@ function Settings({ d, ok, err }: { d: any; ok: (m: string) => void; err: (e: an
               </Field>
             ))}
           </div>
-          <Field label="List prices (USD per million tokens) by model" hint="Edit to follow the provider's price list; ACU metering uses these.">
+          <Field label={tr('List prices (USD per million tokens) by model')} hint={tr("Edit to follow the provider's price list; ACU metering uses these.")}>
             <Textarea rows={8} value={pricing} onChange={(e) => setPricing(e.target.value)} />
           </Field>
         </div>
       </div>
-      <Button onClick={save}>Save settings</Button>
+      <Button onClick={save}>{tr('Save settings')}</Button>
     </div>
   );
 }

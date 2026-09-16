@@ -611,8 +611,8 @@ function Preferences() {
         </div>
       )}
       <div className="divider" />
-      <KV k="Account created" v={user ? new Date(user.createdAt).toLocaleDateString() : ''} />
-      <KV k="User ID" v={<span className="mono tiny">{user?.id}</span>} />
+      <KV k={tr('Account created')} v={user ? new Date(user.createdAt).toLocaleDateString() : ''} />
+      <KV k={tr('User ID')} v={<span className="mono tiny">{user?.id}</span>} />
     </div>
   );
 }

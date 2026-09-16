@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -61,13 +62,13 @@ function SettingsForm({ title, keyName, fields, initial, onSaved }: { title: str
           api
             .put(`/api/admin/settings/${keyName}`, { value: v })
             .then(() => {
-              toast('Saved', 'success');
+              toast(tr('Saved'), 'success');
               onSaved();
             })
             .catch((e) => toast(e.message, 'error'))
         }
       >
-        Save
+        {tr('Save')}
       </Button>
     </div>
   );
@@ -98,11 +99,12 @@ function CapabilityMatrixEditor() {
   return (
     <div className="card">
       <p className="small muted">
-        Never assume a capability from one country applies elsewhere. Toggling a method here changes what the policy and routing layers allow for that country immediately; the ceiling is the country's
-        per-transaction maximum in its main currency's minor units (0 = policy limits only). ● rail enabled and usable · ○ rail disabled, paused, open circuit or in maintenance.
+        {tr(
+          "Never assume a capability from one country applies elsewhere. Toggling a method here changes what the policy and routing layers allow for that country immediately; the ceiling is the country's per-transaction maximum in its main currency's minor units (0 = policy limits only). ● rail enabled and usable · ○ rail disabled, paused, open circuit or in maintenance.",
+        )}
       </p>
       <div className="row mb">
-        <Input placeholder="Add country (ISO-2)" value={newCountry} onChange={(e) => setNewCountry(e.target.value.toUpperCase().slice(0, 2))} style={{ width: 180 }} />
+        <Input placeholder={tr('Add country (ISO-2)')} value={newCountry} onChange={(e) => setNewCountry(e.target.value.toUpperCase().slice(0, 2))} style={{ width: 180 }} />
         <Button
           size="sm"
           variant="secondary"
@@ -112,11 +114,11 @@ function CapabilityMatrixEditor() {
             setNewCountry('');
           }}
         >
-          Show
+          {tr('Show')}
         </Button>
       </div>
       <Table
-        head={['Country', 'Phase', ...(matrix.data?.methods ?? []).map((m: any) => m.label), 'Ceiling / tx (minor)']}
+        head={[tr('Country'), tr('Phase'), ...(matrix.data?.methods ?? []).map((m: any) => m.label), tr('Ceiling / tx (minor)')]}
         rows={rows.map((c: any) => [
           <b>{c.country}</b>,
           <Chip kind={c.licencePhase === 'full' ? 'success' : 'warning'}>{c.licencePhase}</Chip>,
@@ -149,11 +151,11 @@ function CapabilityMatrixEditor() {
               disabled={ceilings[c.country] == null || ceilings[c.country] === String(c.maxPerTransaction)}
               onClick={() => save(c.country, { maxPerTransaction: Number(ceilings[c.country]) })}
             >
-              Save
+              {tr('Save')}
             </Button>
           </div>,
         ])}
-        empty="No country configured"
+        empty={tr('No country configured')}
       />
     </div>
   );
@@ -181,25 +183,25 @@ function GoLiveProfileBox({ onApplied }: { onApplied: () => void }) {
   };
   return (
     <div className="mt">
-      <h4>Apply a go-live profile</h4>
+      <h4>{tr('Apply a go-live profile')}</h4>
       <p className="tiny muted">
         Paste the launch records as JSON (template: <code>deploy/go-live.profile.example.json</code>). Records are matched on their natural key and updated, never duplicated. PINs, 2FA, reserve
         clearing, pressing Go live and device enrolment stay with people and are listed after applying.
       </p>
-      <Field label="Profile (JSON)">
+      <Field label={tr('Profile (JSON)')}>
         <Textarea className="mono" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder='{ "bankTransfer": { ... }, "collectionNumbers": [ ... ] }' />
       </Field>
       <div className="row">
-        <Input type="password" placeholder="Step-up PIN" value={pin} onChange={(e) => setPin(e.target.value)} style={{ maxWidth: 160 }} />
+        <Input type="password" placeholder={tr('Step-up PIN')} value={pin} onChange={(e) => setPin(e.target.value)} style={{ maxWidth: 160 }} />
         <Button onClick={apply} disabled={busy || !text.trim() || !pin}>
-          {busy ? 'Applying…' : 'Apply profile'}
+          {busy ? tr('Applying…') : tr('Apply profile')}
         </Button>
       </div>
       {error && <Alert kind="error">{error}</Alert>}
       {report && (
         <div className="mt">
           <Table
-            head={['Section', 'Action', 'Record', 'Note']}
+            head={[tr('Section'), tr('Action'), tr('Record'), tr('Note')]}
             rows={report.lines.map((l: any) => [
               l.section,
               <Chip kind={l.action === 'skipped' ? 'warning' : l.action === 'unchanged' ? undefined : 'success'}>{l.action}</Chip>,
@@ -208,7 +210,7 @@ function GoLiveProfileBox({ onApplied }: { onApplied: () => void }) {
             ])}
           />
           {report.generatedPasswords?.length > 0 && (
-            <Alert kind="warning">Temporary passwords (shown once): {report.generatedPasswords.map((g: any) => `${g.email} → ${g.password}`).join(' · ')}</Alert>
+            <Alert kind="warning">{tr('Temporary passwords (shown once): {0}', { 0: report.generatedPasswords.map((g: any) => `${g.email} → ${g.password}`).join(' · ') })}</Alert>
           )}
           {report.remaining?.length > 0 && (
             <div className="tiny mt">
@@ -242,17 +244,20 @@ export function Controls() {
   const [entry, setEntry] = useState({ kind: 'name', value: '', note: '' });
   return (
     <div>
-      <PageHeader title="Gateway controls & risk" subtitle="Lifecycle thresholds, evidence policy, FX disclosure, fraud/sanctions controls, ledger reconciliation and the declared route catalogue" />
+      <PageHeader
+        title={tr('Gateway controls & risk')}
+        subtitle={tr('Lifecycle thresholds, evidence policy, FX disclosure, fraud/sanctions controls, ledger reconciliation and the declared route catalogue')}
+      />
       <Tabs
         tabs={[
-          { id: 'golive', label: 'Go-live checklist' },
-          { id: 'controls', label: 'Controls' },
-          { id: 'capabilities', label: 'Capability matrix' },
-          { id: 'sanctions', label: 'Sanctions & risk events' },
-          { id: 'reconcile', label: 'Reconciliation' },
-          { id: 'catalog', label: 'Route catalogue' },
-          { id: 'events', label: 'Event log' },
-          { id: 'emoney', label: 'E-money issuance' },
+          { id: 'golive', label: tr('Go-live checklist') },
+          { id: 'controls', label: tr('Controls') },
+          { id: 'capabilities', label: tr('Capability matrix') },
+          { id: 'sanctions', label: tr('Sanctions & risk events') },
+          { id: 'reconcile', label: tr('Reconciliation') },
+          { id: 'catalog', label: tr('Route catalogue') },
+          { id: 'events', label: tr('Event log') },
+          { id: 'emoney', label: tr('E-money issuance') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -260,15 +265,15 @@ export function Controls() {
       {tab === 'golive' && golive.data && (
         <div className="card">
           {golive.data.readyForLive ? (
-            <Alert kind="success">All blocking items are complete. Switching to live mode (Controls → Compliance mode) will be accepted; it requires your step-up PIN.</Alert>
+            <Alert kind="success">{tr('All blocking items are complete. Switching to live mode (Controls → Compliance mode) will be accepted; it requires your step-up PIN.')}</Alert>
           ) : (
             <Alert kind="warning">
-              <b>Platform is in {golive.data.mode} mode.</b> Live customer funds cannot be accepted until every blocking item below is complete. The switch to live is refused by the API while any
-              blocking item is open.
+              <b>{tr('Platform is in {0} mode.', { 0: golive.data.mode })}</b>{' '}
+              {tr('Live customer funds cannot be accepted until every blocking item below is complete. The switch to live is refused by the API while any blocking item is open.')}
             </Alert>
           )}
           <Table
-            head={['', 'Requirement', 'Status', 'What to do', '']}
+            head={['', tr('Requirement'), tr('Status'), tr('What to do'), '']}
             rows={golive.data.items.map((i: any) => [
               i.ok ? <Chip kind="success">ok</Chip> : <Chip kind={i.blocking ? 'danger' : 'warning'}>{i.blocking ? 'blocking' : 'recommended'}</Chip>,
               <b>{i.label}</b>,
@@ -276,7 +281,7 @@ export function Controls() {
               <span className="tiny muted">{i.ok ? '' : (i.fix ?? '')}</span>,
               !i.ok && i.href ? (
                 <Link to={i.href} className="tiny">
-                  Open →
+                  {tr('Open →')}
                 </Link>
               ) : (
                 ''
@@ -285,7 +290,7 @@ export function Controls() {
           />
           <div className="row mt">
             <Button variant="secondary" onClick={golive.reload}>
-              Re-check
+              {tr('Re-check')}
             </Button>
           </div>
           <GoLiveProfileBox onApplied={golive.reload} />
@@ -293,20 +298,21 @@ export function Controls() {
       )}
       {tab === 'controls' && settings.data && (
         <div className="grid cols-3">
-          <SettingsForm title="Payment lifecycle & evidence" keyName="gateway" fields={GATEWAY_FIELDS} initial={settings.data.gateway} onSaved={settings.reload} />
-          <SettingsForm title="Foreign exchange disclosure" keyName="fx" fields={FX_FIELDS} initial={settings.data.fx} onSaved={settings.reload} />
-          <SettingsForm title="Fraud, velocity & cooling-off" keyName="risk" fields={RISK_FIELDS} initial={settings.data.risk} onSaved={settings.reload} />
-          <SettingsForm title="Compliance & payout exposure" keyName="compliance" fields={COMPLIANCE_FIELDS} initial={settings.data.compliance} onSaved={settings.reload} />
+          <SettingsForm title={tr('Payment lifecycle & evidence')} keyName="gateway" fields={GATEWAY_FIELDS} initial={settings.data.gateway} onSaved={settings.reload} />
+          <SettingsForm title={tr('Foreign exchange disclosure')} keyName="fx" fields={FX_FIELDS} initial={settings.data.fx} onSaved={settings.reload} />
+          <SettingsForm title={tr('Fraud, velocity & cooling-off')} keyName="risk" fields={RISK_FIELDS} initial={settings.data.risk} onSaved={settings.reload} />
+          <SettingsForm title={tr('Compliance & payout exposure')} keyName="compliance" fields={COMPLIANCE_FIELDS} initial={settings.data.compliance} onSaved={settings.reload} />
         </div>
       )}
       {tab === 'capabilities' && <CapabilityMatrixEditor />}
       {tab === 'sanctions' && (
         <div className="grid cols-2">
           <div className="card">
-            <h4>Sanctions / block list</h4>
+            <h4>{tr('Sanctions / block list')}</h4>
             <p className="small muted">
-              Names match on normalised containment, phones on the last 9 digits. Matches block outbound movements and hold inbound payments for manual review. Connect a screening provider by
-              importing its list here.
+              {tr(
+                'Names match on normalised containment, phones on the last 9 digits. Matches block outbound movements and hold inbound payments for manual review. Connect a screening provider by importing its list here.',
+              )}
             </p>
             <div className="row wrap">
               <Select value={entry.kind} onChange={(e) => setEntry({ ...entry, kind: e.target.value })} style={{ width: 120 }}>
@@ -323,34 +329,34 @@ export function Controls() {
                   api
                     .post('/api/admin/sanctions', entry)
                     .then(() => {
-                      toast('Added', 'success');
+                      toast(tr('Added'), 'success');
                       setEntry({ ...entry, value: '', note: '' });
                       sanctions.reload();
                     })
                     .catch((e) => toast(e.message, 'error'))
                 }
               >
-                Add
+                {tr('Add')}
               </Button>
             </div>
             <Table
-              head={['Kind', 'Value', 'Note', 'Added', '']}
+              head={[tr('Kind'), tr('Value'), tr('Note'), tr('Added'), '']}
               rows={(sanctions.data?.items ?? []).map((s: any) => [
                 s.kind,
                 <b>{s.value}</b>,
                 s.note ?? '—',
                 fmtDate(s.createdAt),
                 <ConfirmButton size="sm" variant="ghost" onConfirm={() => api.del(`/api/admin/sanctions/${s.id}`).then(sanctions.reload)}>
-                  Remove
+                  {tr('Remove')}
                 </ConfirmButton>,
               ])}
-              empty="No entries"
+              empty={tr('No entries')}
             />
           </div>
           <div className="card">
-            <h4>Recent risk assessments</h4>
+            <h4>{tr('Recent risk assessments')}</h4>
             <Table
-              head={['When', 'Kind', 'Score', 'Action', 'Flags']}
+              head={[tr('When'), tr('Kind'), tr('Score'), tr('Action'), tr('Flags')]}
               rows={(risk.data?.items ?? []).map((r: any) => [
                 fmtDate(r.createdAt),
                 r.kind,
@@ -358,7 +364,7 @@ export function Controls() {
                 <Chip kind={r.action === 'allow' ? 'success' : r.action === 'review' ? 'warning' : 'danger'}>{r.action}</Chip>,
                 <span className="tiny">{r.flags.join(', ')}</span>,
               ])}
-              empty="No assessments yet"
+              empty={tr('No assessments yet')}
             />
           </div>
         </div>
@@ -366,26 +372,28 @@ export function Controls() {
       {tab === 'reconcile' && (
         <div className="grid cols-2">
           <div className="card">
-            <h4>Ledger</h4>
+            <h4>{tr('Ledger')}</h4>
             {reconcile.data &&
               (reconcile.data.ledger.ok ? (
-                <Alert kind="success">Every transaction balances per currency and every wallet equals the sum of its entries ({reconcile.data.ledger.transactionsChecked} transactions checked).</Alert>
+                <Alert kind="success">
+                  {tr('Every transaction balances per currency and every wallet equals the sum of its entries ({0} transactions checked).', { 0: reconcile.data.ledger.transactionsChecked })}
+                </Alert>
               ) : (
                 <Alert kind="error">
                   Ledger inconsistency detected. Unbalanced: {reconcile.data.ledger.unbalancedTransactions.join(', ') || 'none'}. Wallet mismatches: {reconcile.data.ledger.walletMismatches.length}.
                 </Alert>
               ))}
             <Button variant="secondary" onClick={reconcile.reload}>
-              Re-run
+              {tr('Re-run')}
             </Button>
           </div>
           <div className="card">
-            <h4>Immutable event chain</h4>
+            <h4>{tr('Immutable event chain')}</h4>
             {reconcile.data &&
               (reconcile.data.events.ok ? (
-                <Alert kind="success">Hash chain intact across {reconcile.data.events.checked} events. Audit, event and ledger tables are append-only at the database level.</Alert>
+                <Alert kind="success">{tr('Hash chain intact across {0} events. Audit, event and ledger tables are append-only at the database level.', { 0: reconcile.data.events.checked })}</Alert>
               ) : (
-                <Alert kind="error">Event chain broken at sequence {reconcile.data.events.brokenAt} – history was altered.</Alert>
+                <Alert kind="error">{tr('Event chain broken at sequence {0} – history was altered.', { 0: reconcile.data.events.brokenAt })}</Alert>
               ))}
           </div>
         </div>
@@ -393,11 +401,12 @@ export function Controls() {
       {tab === 'catalog' && (
         <div className="card">
           <p className="small muted">
-            Every logical route declares how it is initiated, confirmed and settled, its expected completion, refund path and whether processing is automatic, assisted (a verifier confirms evidence)
-            or manual. External legs always depend on the payer's own bank, operator or a licensed processor.
+            {tr(
+              "Every logical route declares how it is initiated, confirmed and settled, its expected completion, refund path and whether processing is automatic, assisted (a verifier confirms evidence) or manual. External legs always depend on the payer's own bank, operator or a licensed processor.",
+            )}
           </p>
           <Table
-            head={['Route', 'Processing', 'Initiation', 'Confirmation', 'Settlement', 'Expected', 'Refund']}
+            head={[tr('Route'), tr('Processing'), tr('Initiation'), tr('Confirmation'), tr('Settlement'), tr('Expected'), tr('Refund')]}
             rows={(catalog.data?.items ?? []).map((r: any) => [
               <b>
                 {r.source.replace('_', ' ')} → {r.destination.replace('_', ' ')}
@@ -420,13 +429,14 @@ export function Controls() {
       {tab === 'emoney' && (
         <>
           <Alert kind="success">
-            Issuer programmes, safeguarded reserves, distribution pools and reconciliation live in the <a href="/emoney">E-money & reserves console</a>. Spendable e-money never exceeds verified
-            safeguarded reserves.
+            Issuer programmes, safeguarded reserves, distribution pools and reconciliation live in the <a href="/emoney">{tr('E-money & reserves console')}</a>. Spendable e-money never exceeds
+            verified safeguarded reserves.
           </Alert>
           <Alert kind="info">
-            <b>E-money is created by administrators only.</b> Balance enters circulation solely through confirmed external funding, administrator issuance (proposed by one admin, approved by a
-            different admin with the issuance permission under step-up), liquidity prefunding of payout floats, or an administrator-configured programme. Users, agents, merchants and devices can never
-            create balance; the ledger refuses any posting from the treasury without an issuance authority.
+            <b>{tr('E-money is created by administrators only.')}</b>{' '}
+            {tr(
+              'Balance enters circulation solely through confirmed external funding, administrator issuance (proposed by one admin, approved by a different admin with the issuance permission under step-up), liquidity prefunding of payout floats, or an administrator-configured programme. Users, agents, merchants and devices can never create balance; the ledger refuses any posting from the treasury without an issuance authority.',
+            )}
           </Alert>
           {(emoney.data?.pending ?? []).length > 0 && (
             <Alert kind="warning">
@@ -434,9 +444,9 @@ export function Controls() {
             </Alert>
           )}
           <div className="card mb">
-            <h4>Outstanding e-money by currency</h4>
+            <h4>{tr('Outstanding e-money by currency')}</h4>
             <Table
-              head={['Currency', 'Outstanding (customer wallets)', 'Wallets', 'Issued by authority', 'Payout float']}
+              head={[tr('Currency'), tr('Outstanding (customer wallets)'), tr('Wallets'), tr('Issued by authority'), tr('Payout float')]}
               rows={(emoney.data?.supply ?? []).map((s: any) => [
                 <b>{s.currency}</b>,
                 s.outstanding,
@@ -444,13 +454,13 @@ export function Controls() {
                 <span className="tiny">{s.issued.map((i: any) => `${i.authority}: ${i.total} (${i.count})`).join(' · ') || '—'}</span>,
                 s.payoutFloat,
               ])}
-              empty="No e-money outstanding"
+              empty={tr('No e-money outstanding')}
             />
           </div>
           <div className="card">
-            <h4>Issuance register (immutable)</h4>
+            <h4>{tr('Issuance register (immutable)')}</h4>
             <Table
-              head={['When', 'Authority', 'Type', 'Amount', 'Currency', 'Approved by', 'Reference']}
+              head={[tr('When'), tr('Authority'), tr('Type'), tr('Amount'), tr('Currency'), 'Approved by', tr('Reference')]}
               rows={(emoney.data?.register?.items ?? []).map((e: any) => [
                 fmtDate(e.createdAt),
                 <Chip kind={e.details.authority === 'admin' ? 'warning' : 'success'}>{e.event.replace('issuance.', '')}</Chip>,
@@ -460,7 +470,7 @@ export function Controls() {
                 e.actor.id ? <span className="mono tiny">{String(e.actor.id).slice(0, 8)}</span> : e.actor.type,
                 <span className="tiny">{e.details.reference ?? e.details.programme ?? e.details.paymentId ?? ''}</span>,
               ])}
-              empty="Nothing issued yet"
+              empty={tr('Nothing issued yet')}
             />
           </div>
         </>
@@ -469,7 +479,7 @@ export function Controls() {
         <div className="card">
           <div className="row mb">
             <Select value={stream} onChange={(e) => setStream(e.target.value)} style={{ width: 200 }}>
-              <option value="">All streams</option>
+              <option value="">{tr('All streams')}</option>
               {['payment', 'auth', 'evidence', 'approval', 'ledger', 'risk', 'route', 'admin'].map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -480,7 +490,7 @@ export function Controls() {
               (events.data.chain.ok ? <Chip kind="success">chain intact ({events.data.chain.checked})</Chip> : <Chip kind="danger">chain broken at {events.data.chain.brokenAt}</Chip>)}
           </div>
           <Table
-            head={['Seq', 'When', 'Stream', 'Event', 'Actor', 'Subject', 'Details']}
+            head={[tr('Seq'), tr('When'), tr('Stream'), tr('Event'), tr('Actor'), tr('Subject'), tr('Details')]}
             rows={(events.data?.items ?? []).map((e: any) => [
               e.seq,
               fmtDate(e.createdAt),

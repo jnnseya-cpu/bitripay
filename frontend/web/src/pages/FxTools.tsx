@@ -263,9 +263,9 @@ export function FxTools() {
             </div>
             {quote && (
               <Alert kind="info">
-                <KV k="You give" v={money(quote.amountMinor, quote.fromCurrency)} />
-                <KV k="You receive on the date" v={money(quote.receiveMinor, quote.toCurrency)} />
-                <KV k="Locked rate" v={quote.rate.toFixed(6)} />
+                <KV k={tr('You give')} v={money(quote.amountMinor, quote.fromCurrency)} />
+                <KV k={tr('You receive on the date')} v={money(quote.receiveMinor, quote.toCurrency)} />
+                <KV k={tr('Locked rate')} v={quote.rate.toFixed(6)} />
                 <div className="sub-text">{quote.disclosure}</div>
               </Alert>
             )}

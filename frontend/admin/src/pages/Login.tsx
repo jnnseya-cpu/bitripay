@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -33,27 +34,27 @@ export function Login() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="brand" style={{ justifyContent: 'center' }}>
-          <img className="brand-img lg swap" src="/brand/logo.svg" alt="BitriPay" width={214} height={52} /> <span className="chip primary">Admin</span>
+          <img className="brand-img lg swap" src="/brand/logo.svg" alt="BitriPay" width={214} height={52} /> <span className="chip primary">{tr('Admin')}</span>
         </div>
         <form className="card" onSubmit={submit}>
           <h2 className="center">Sign in</h2>
           {error && <Alert kind="error">{error}</Alert>}
           {mfa ? (
-            <Field label="Authenticator code">
+            <Field label={tr('Authenticator code')}>
               <Input className="pin-input" autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
             </Field>
           ) : (
             <>
-              <Field label="Email">
+              <Field label={tr('Email')}>
                 <Input autoFocus value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
               </Field>
-              <Field label="Password">
+              <Field label={tr('Password')}>
                 <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
               </Field>
             </>
           )}
           <Button block loading={loading}>
-            {mfa ? 'Verify' : 'Sign in'}
+            {mfa ? tr('Verify') : 'Sign in'}
           </Button>
         </form>
       </div>

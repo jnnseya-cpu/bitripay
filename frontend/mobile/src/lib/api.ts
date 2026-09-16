@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { tr } from './tr';
 import Constants from 'expo-constants';
 
 export class ApiError extends Error {
@@ -53,7 +54,7 @@ async function request<T>(method: string, path: string, body?: unknown, override
       await saveToken(null);
       listeners.forEach((fn) => fn());
     }
-    throw new ApiError(res.status, err.code ?? 'error', err.message ?? `Request failed (${res.status})`);
+    throw new ApiError(res.status, err.code ?? 'error', tr(err.message ?? `Request failed (${res.status})`));
   }
   return json as T;
 }

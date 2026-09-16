@@ -16,6 +16,7 @@ import { getSmtpSettings, sendEmail, sendSms, smsProvider } from '../messaging';
 import { fillPlaceholders, renderTemplate, insertNotification, sendPush, registerTemplatedNotifyHandler } from '../notifications';
 import { deliverWhatsApp, getWhatsAppSettings, toWaId } from '../channels/whatsapp';
 import { COMMS_CATEGORIES, COMMS_CHANNELS, COMMS_EVENTS, getCommsEvent, type CommsChannel, type CommsEvent } from './catalogue';
+import { translate } from '@bitripay/shared';
 
 export type DeliveryStatus = 'sent' | 'logged' | 'failed' | 'skipped_opted_out' | 'skipped_no_contact' | 'skipped_no_device';
 
@@ -118,7 +119,9 @@ export function renderEvent(event: CommsEvent, channel: CommsChannel, vars: Reco
   const templateChannel = channel === 'inapp' ? 'push' : channel;
   const edited = renderTemplate(event.id, templateChannel, lang, merged);
   if (edited) return { subject: edited.subject ?? fillPlaceholders(event.subject, merged), body: edited.body };
-  return { subject: fillPlaceholders(event.subject, merged), body: fillPlaceholders(event.body, merged) };
+  // shipped text in the person's language (phrase packs), placeholders filled afterwards
+  const l = lang || 'en';
+  return { subject: fillPlaceholders(translate(l, event.subject), merged), body: fillPlaceholders(translate(l, event.body), merged) };
 }
 
 /** Branded HTML email: the site logo (or name), primary colour, the message, an optional call-to-action, contact footer. */

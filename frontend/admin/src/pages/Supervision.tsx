@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api, qs, API_BASE, getToken } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, Field, Input, PageHeader, Select, Table, fmtDate, useAsync } from '../components/ui';
@@ -74,15 +75,17 @@ export function Supervision() {
   return (
     <div>
       <PageHeader
-        title="Regulatory supervision"
-        subtitle="Real-time supervisory report, the normalised operations journal for the supervisor (CSV or JSON with an integrity manifest) and the integrity check of the ledger and event chain."
+        title={tr('Regulatory supervision')}
+        subtitle={tr(
+          'Real-time supervisory report, the normalised operations journal for the supervisor (CSV or JSON with an integrity manifest) and the integrity check of the ledger and event chain.',
+        )}
         actions={
           <div className="row">
             <Button variant="secondary" onClick={() => exportJournal('csv')} disabled={busy}>
-              Export journal (CSV)
+              {tr('Export journal (CSV)')}
             </Button>
             <Button variant="secondary" onClick={() => exportJournal('json')} disabled={busy}>
-              Export journal (JSON)
+              {tr('Export journal (JSON)')}
             </Button>
           </div>
         }
@@ -95,12 +98,12 @@ export function Supervision() {
           <Field label="To">
             <Input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />
           </Field>
-          <Field label="Currency (export)">
-            <Input placeholder="All" value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value.toUpperCase() })} style={{ width: 90 }} />
+          <Field label={tr('Currency (export)')}>
+            <Input placeholder={tr('All')} value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value.toUpperCase() })} style={{ width: 90 }} />
           </Field>
-          <Field label="Type (export)">
+          <Field label={tr('Type (export)')}>
             <Select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>
-              <option value="">All types</option>
+              <option value="">{tr('All types')}</option>
               {Object.entries(TRANSACTION_TYPE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>
                   {v}
@@ -112,7 +115,7 @@ export function Supervision() {
         {error && <Alert kind="error">{error}</Alert>}
         {manifest && (
           <div className="mt-sm tiny">
-            <b>Integrity manifest of the last export</b> · {manifest.records} records · {manifest.format.toUpperCase()} · SHA-256 <span className="mono">{manifest.sha256}</span> · event chain{' '}
+            <b>{tr('Integrity manifest of the last export')}</b> · {manifest.records} records · {manifest.format.toUpperCase()} · SHA-256 <span className="mono">{manifest.sha256}</span> · event chain{' '}
             <Chip kind={manifest.eventChain.ok ? 'success' : 'danger'}>{manifest.eventChain.ok ? `intact (${manifest.eventChain.checked} events)` : `broken at ${manifest.eventChain.brokenAt}`}</Chip>{' '}
             · mode {manifest.complianceMode} · generated {fmtDate(manifest.generatedAt)}
             <div className="muted">{manifest.pseudonymisation}</div>
@@ -121,29 +124,29 @@ export function Supervision() {
       </div>
 
       {!r ? (
-        <div className="card">Loading the report…</div>
+        <div className="card">{tr('Loading the report…')}</div>
       ) : (
         <>
           <div className="grid cols-4">
             <div className="card">
-              <div className="tiny muted">Transactions in period</div>
+              <div className="tiny muted">{tr('Transactions in period')}</div>
               <div style={{ fontSize: 28, fontWeight: 700 }}>{r.transactions.total}</div>
               <div className="tiny">
                 {r.transactions.failed} failed / rejected / reversed · exception rate {r.transactions.exceptionRate}%
               </div>
             </div>
             <div className="card">
-              <div className="tiny muted">Compliance mode</div>
+              <div className="tiny muted">{tr('Compliance mode')}</div>
               <div style={{ fontSize: 28, fontWeight: 700 }}>{r.complianceMode}</div>
-              <div className="tiny">Guardian: {r.integrity.guardian.mode}</div>
+              <div className="tiny">{tr('Guardian: {0}', { 0: r.integrity.guardian.mode })}</div>
             </div>
             <div className="card">
-              <div className="tiny muted">Event chain</div>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{r.integrity.eventChain.ok ? 'intact' : 'BROKEN'}</div>
+              <div className="tiny muted">{tr('Event chain')}</div>
+              <div style={{ fontSize: 28, fontWeight: 700 }}>{r.integrity.eventChain.ok ? 'intact' : tr('BROKEN')}</div>
               <div className="tiny">{r.integrity.eventChain.checked} hash-chained events verified</div>
             </div>
             <div className="card">
-              <div className="tiny muted">Sanctions entries loaded</div>
+              <div className="tiny muted">{tr('Sanctions entries loaded')}</div>
               <div style={{ fontSize: 28, fontWeight: 700 }}>{r.aml.sanctionsEntries.toLocaleString()}</div>
               <div className="tiny">{r.accounts.newInPeriod} accounts opened in period</div>
             </div>
@@ -151,7 +154,7 @@ export function Supervision() {
 
           <div className="grid cols-3 mt">
             <div className="card">
-              <h4>Last 24 hours</h4>
+              <h4>{tr('Last 24 hours')}</h4>
               <Chart
                 scene={lineChart(
                   r.transactions.hourly.map((h) => h.hour.slice(11) + 'h'),
@@ -164,7 +167,7 @@ export function Supervision() {
               />
             </div>
             <div className="card">
-              <h4>Completed operations by channel</h4>
+              <h4>{tr('Completed operations by channel')}</h4>
               <Chart
                 scene={donutChart(
                   Object.entries(r.transactions.channels).map(([label, c]) => ({ label, value: c.count })),
@@ -173,7 +176,7 @@ export function Supervision() {
               />
             </div>
             <div className="card">
-              <h4>Accounts by KYC tier</h4>
+              <h4>{tr('Accounts by KYC tier')}</h4>
               <Chart
                 scene={columnChart(
                   Array.from(new Set(r.accounts.kyc.map((k) => k.tierLabel.replace(/^Tier \d · /, '')))),
@@ -190,9 +193,9 @@ export function Supervision() {
           </div>
 
           <div className="card mt">
-            <h4>Volumes by type, status and currency</h4>
+            <h4>{tr('Volumes by type, status and currency')}</h4>
             <Table
-              head={['Type', 'Status', 'Currency', 'Count', 'Volume', 'Fees']}
+              head={[tr('Type'), tr('Status'), tr('Currency'), tr('Count'), tr('Volume'), tr('Fees')]}
               rows={r.transactions.byTypeStatus.map((x) => [
                 (TRANSACTION_TYPE_LABELS as Record<string, string>)[x.type] ?? x.type,
                 <Chip kind={x.status === 'completed' ? 'success' : x.status === 'pending' ? 'warning' : x.status === 'failed' || x.status === 'rejected' ? 'danger' : undefined}>{x.status}</Chip>,
@@ -201,15 +204,15 @@ export function Supervision() {
                 money(x.volume, x.currency),
                 money(x.fees, x.currency),
               ])}
-              empty="No transactions in the period"
+              empty={tr('No transactions in the period')}
             />
           </div>
 
           <div className="grid cols-2 mt">
             <div className="card">
-              <h4>Channels (completed)</h4>
+              <h4>{tr('Channels (completed)')}</h4>
               <Table
-                head={['Channel', 'Count', 'Volume']}
+                head={[tr('Channel'), tr('Count'), tr('Volume')]}
                 rows={Object.entries(r.transactions.channels).map(([ch, c]) => [
                   <b>{ch}</b>,
                   c.count,
@@ -219,28 +222,28 @@ export function Supervision() {
                       .join(' · ')}
                   </span>,
                 ])}
-                empty="Nothing completed in the period"
+                empty={tr('Nothing completed in the period')}
               />
             </div>
             <div className="card">
-              <h4>Last 24 hours, by hour (UTC)</h4>
+              <h4>{tr('Last 24 hours, by hour (UTC)')}</h4>
               <Table
-                head={['Hour', 'Total', 'Completed', 'Failed']}
+                head={[tr('Hour'), tr('Total'), tr('Completed'), tr('Failed')]}
                 rows={r.transactions.hourly.map((h) => [h.hour.replace('T', ' ') + ':00', h.count, h.completed, h.failed])}
-                empty="No activity in the last 24 hours"
+                empty={tr('No activity in the last 24 hours')}
               />
             </div>
           </div>
 
           <div className="grid cols-2 mt">
             <div className="card">
-              <h4>Accounts and KYC distribution</h4>
-              <Table head={['Role', 'KYC status', 'Tier', 'Accounts']} rows={r.accounts.kyc.map((k) => [k.role, k.kyc_status, k.tierLabel, k.count])} empty="No accounts" />
-              <Table head={['Role', 'Status', 'Accounts']} rows={r.accounts.byRoleStatus.map((a) => [a.role, a.status, a.count])} />
+              <h4>{tr('Accounts and KYC distribution')}</h4>
+              <Table head={[tr('Role'), tr('KYC status'), tr('Tier'), tr('Accounts')]} rows={r.accounts.kyc.map((k) => [k.role, k.kyc_status, k.tierLabel, k.count])} empty={tr('No accounts')} />
+              <Table head={[tr('Role'), tr('Status'), tr('Accounts')]} rows={r.accounts.byRoleStatus.map((a) => [a.role, a.status, a.count])} />
             </div>
             <div className="card">
-              <h4>AML activity in period</h4>
-              <Table head={['Risk engine action', 'Events']} rows={r.aml.riskEvents.map((e) => [e.action, e.count])} empty="No risk events in the period" />
+              <h4>{tr('AML activity in period')}</h4>
+              <Table head={[tr('Risk engine action'), tr('Events')]} rows={r.aml.riskEvents.map((e) => [e.action, e.count])} empty={tr('No risk events in the period')} />
               <div className="tiny mt-sm">
                 Open compliance work: <span className="mono">{JSON.stringify(r.aml.openCases)}</span>
               </div>
@@ -249,9 +252,9 @@ export function Supervision() {
 
           <div className="grid cols-2 mt">
             <div className="card">
-              <h4>E-money programmes and safeguarding cover</h4>
+              <h4>{tr('E-money programmes and safeguarding cover')}</h4>
               <Table
-                head={['Currency', 'Jurisdiction', 'Issuer model', 'Status', 'Cleared reserves', 'Liabilities', 'Cover']}
+                head={[tr('Currency'), tr('Jurisdiction'), tr('Issuer model'), tr('Status'), tr('Cleared reserves'), tr('Liabilities'), tr('Cover')]}
                 rows={r.emoney.map((p) => [
                   p.currency,
                   p.jurisdiction,
@@ -261,13 +264,13 @@ export function Supervision() {
                   money(p.liabilities, p.currency),
                   p.coverRatio === null ? '—' : <Chip kind={p.coverRatio >= 100 ? 'success' : 'danger'}>{p.coverRatio}%</Chip>,
                 ])}
-                empty="No e-money programme declared"
+                empty={tr('No e-money programme declared')}
               />
             </div>
             <div className="card">
-              <h4>Payout liquidity and corridors</h4>
+              <h4>{tr('Payout liquidity and corridors')}</h4>
               <Table
-                head={['Payout account', 'Rail', 'Balance', 'Queued', 'Shortfall', 'Status']}
+                head={[tr('Payout account'), tr('Rail'), tr('Balance'), tr('Queued'), tr('Shortfall'), tr('Status')]}
                 rows={r.liquidity.map((l) => [
                   l.label,
                   `${l.rail}${l.operatorId ? ` · ${l.operatorId}` : ''}`,
@@ -276,23 +279,26 @@ export function Supervision() {
                   money(l.shortfall, l.currency),
                   l.status,
                 ])}
-                empty="No payout account"
+                empty={tr('No payout account')}
               />
               <Table
-                head={['Corridor', 'Status', 'Ready', 'Licence expires']}
+                head={[tr('Corridor'), tr('Status'), tr('Ready'), tr('Licence expires')]}
                 rows={r.corridors.map((c) => [
                   c.corridor,
                   c.status,
                   <Chip kind={c.ready ? 'success' : 'warning'}>{c.ready ? 'yes' : 'no'}</Chip>,
                   c.licenceExpiresAt ? fmtDate(c.licenceExpiresAt) : '—',
                 ])}
-                empty="No corridor declared"
+                empty={tr('No corridor declared')}
               />
             </div>
           </div>
           <p className="tiny muted mt">
-            Report generated {fmtDate(r.generatedAt)} for {fmtDate(r.period.from)} → {fmtDate(r.period.to)}. Parties in the journal are pseudonymised; the platform re-identifies them on a lawful
-            request.
+            {tr('Report generated {0} for {1} → {2}. Parties in the journal are pseudonymised; the platform re-identifies them on a lawful request.', {
+              0: fmtDate(r.generatedAt),
+              1: fmtDate(r.period.from),
+              2: fmtDate(r.period.to),
+            })}
           </p>
         </>
       )}

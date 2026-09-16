@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { Share, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { api, qs } from '../lib/api';
@@ -55,7 +56,7 @@ export function Scan() {
       <Scanner onScan={go} active={active} />
       <Card>
         <Input label={t('scan.paste')} value={manual} onChangeText={setManual} autoCapitalize="none" placeholder="@tag, bitripay://… or https://…/pay/CODE" />
-        <Button title="Go" onPress={() => manual && go(manual)} disabled={!manual} />
+        <Button title={tr('Go')} onPress={() => manual && go(manual)} disabled={!manual} />
       </Card>
     </Screen>
   );
@@ -155,7 +156,7 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
         tx = (await api.post<{ transaction: Transaction }>(`/api/payment-requests/${intent.paymentRequestCode}/pay`, { pin: p, note })).transaction;
       } else tx = (await api.post<{ transaction: Transaction }>('/api/transfers', { to: target!.tag, amount, currency: cur, note, pin: p })).transaction;
       await refreshWallets();
-      toast('Payment successful', 'success');
+      toast(tr('Payment successful'), 'success');
       setPin(false);
       nav.replace('TxDetail', { id: tx.id });
     } catch (err) {
@@ -169,7 +170,7 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
   if (error)
     return (
       <Screen>
-        <Header title="Pay" />
+        <Header title={tr('Pay')} />
         <Alert kind="error" text={error} />
         <Button title={t('common.back')} variant="secondary" onPress={() => nav.goBack()} />
       </Screen>
@@ -177,7 +178,7 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
   if (!resolved && offlineCode) {
     return (
       <Screen>
-        <Header title="Pay offline" />
+        <Header title={tr('Pay offline')} />
         <Card>
           <T bold size={18}>
             {offlineCode.merchantName}
@@ -191,8 +192,8 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
               {offlineCode.amount} {offlineCode.currency}
             </T>
           </View>
-          <Alert kind="info" text="No network right now. This payment is signed on your phone and settles in order when you are back online; if it cannot settle, nothing leaves your balance." />
-          <Button title="Confirm offline payment" loading={loading} onPress={payOffline} />
+          <Alert kind="info" text={tr('No network right now. This payment is signed on your phone and settles in order when you are back online; if it cannot settle, nothing leaves your balance.')} />
+          <Button title={tr('Confirm offline payment')} loading={loading} onPress={payOffline} />
         </Card>
       </Screen>
     );
@@ -200,14 +201,14 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
   if (!resolved || !target)
     return (
       <Screen>
-        <Header title="Pay" />
+        <Header title={tr('Pay')} />
         <T muted>{t('common.loading')}</T>
       </Screen>
     );
   if (resolved.kind === 'agent') {
     return (
       <Screen>
-        <Header title="Agent" />
+        <Header title={tr('Agent')} />
         <Card>
           <Row>
             <Avatar user={target} />
@@ -217,17 +218,17 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
             </View>
           </Row>
           <T muted size={13}>
-            Agents let you deposit or withdraw cash.
+            {tr('Agents let you deposit or withdraw cash.')}
           </T>
-          <Button title="Withdraw cash (cash-out)" onPress={() => nav.navigate('Agents', { agent: target.tag })} />
-          <Button title="Send money to agent" variant="secondary" onPress={() => nav.navigate('Send', { to: target.tag })} />
+          <Button title={tr('Withdraw cash (cash-out)')} onPress={() => nav.navigate('Agents', { agent: target.tag })} />
+          <Button title={tr('Send money to agent')} variant="secondary" onPress={() => nav.navigate('Send', { to: target.tag })} />
         </Card>
       </Screen>
     );
   }
   return (
     <Screen>
-      <Header title="Pay" />
+      <Header title={tr('Pay')} />
       <Card>
         <Row>
           <Avatar user={target} size={52} />
@@ -243,12 +244,12 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
         </Row>
         {(resolved.kind === 'bitriqr' || (isPr && (resolved as any).trust)) && (
           <Row style={{ flexWrap: 'wrap', gap: 6 }}>
-            <Chip label={(resolved as any).trust === 'verified' ? '✓ Verified merchant' : 'Unverified code'} kind={(resolved as any).trust === 'verified' ? 'success' : 'warning'} />
+            <Chip label={(resolved as any).trust === 'verified' ? tr('✓ Verified merchant') : tr('Unverified code')} kind={(resolved as any).trust === 'verified' ? 'success' : 'warning'} />
             {(target as any).location?.name ? <Chip label={(target as any).location.name} /> : null}
           </Row>
         )}
         {pr && pr.status !== 'open' && <Alert kind="warning" text={`This payment request is ${pr.status}.`} />}
-        {target.id === user?.id && <Alert kind="warning" text="This is your own code." />}
+        {target.id === user?.id && <Alert kind="warning" text={tr('This is your own code.')} />}
         {pr?.amount != null ? (
           <View style={{ alignItems: 'center', paddingVertical: 8 }}>
             <T bold size={34}>
@@ -464,7 +465,7 @@ export function Requests() {
     setLoading(true);
     try {
       await api.post(`/api/payment-requests/${payCode!.code}/pay`, { pin: p });
-      toast('Paid', 'success');
+      toast(tr('Paid'), 'success');
       setPayCode(null);
       list.reload();
       refreshWallets();
@@ -479,14 +480,14 @@ export function Requests() {
     <Screen>
       <Header title={t('nav.requests')} />
       <Row>
-        <Button title="🙋 Request money" small variant="secondary" onPress={() => setCreate('request')} />
-        <Button title="🔗 Payment link" small onPress={() => setCreate('link')} />
+        <Button title={tr('🙋 Request money')} small variant="secondary" onPress={() => setCreate('request')} />
+        <Button title={tr('🔗 Payment link')} small onPress={() => setCreate('link')} />
       </Row>
       <Tabs
         tabs={[
-          { id: 'incoming', label: 'To pay' },
-          { id: 'mine', label: 'My requests' },
-          { id: 'links', label: 'My links' },
+          { id: 'incoming', label: tr('To pay') },
+          { id: 'mine', label: tr('My requests') },
+          { id: 'links', label: tr('My links') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -504,21 +505,21 @@ export function Requests() {
           <Row>
             {tab === 'incoming' && r.status === 'open' && (
               <>
-                <Button title="Pay" small onPress={() => setPayCode(r)} />
-                <Button title="Decline" small variant="secondary" onPress={() => api.post(`/api/payment-requests/${r.code}/decline`).then(list.reload)} />
+                <Button title={tr('Pay')} small onPress={() => setPayCode(r)} />
+                <Button title={tr('Decline')} small variant="secondary" onPress={() => api.post(`/api/payment-requests/${r.code}/decline`).then(list.reload)} />
               </>
             )}
             {tab !== 'incoming' && (
               <>
-                <Button title="View QR" small variant="secondary" onPress={() => setCreated(r)} />
+                <Button title={tr('View QR')} small variant="secondary" onPress={() => setCreated(r)} />
                 {r.status === 'open' && <Button title={t('common.cancel')} small variant="ghost" onPress={() => api.post(`/api/payment-requests/${r.code}/cancel`).then(list.reload)} />}
               </>
             )}
           </Row>
         </Card>
       ))}
-      <Sheet open={!!create} onClose={() => setCreate(null)} title={create === 'link' ? 'New payment link' : 'Request money'}>
-        {create === 'request' && <Input label="From (@tag, email or phone)" value={form.payer} onChangeText={(v) => setForm({ ...form, payer: v })} autoCapitalize="none" />}
+      <Sheet open={!!create} onClose={() => setCreate(null)} title={create === 'link' ? tr('New payment link') : tr('Request money')}>
+        {create === 'request' && <Input label={tr('From (@tag, email or phone)')} value={form.payer} onChangeText={(v) => setForm({ ...form, payer: v })} autoCapitalize="none" />}
         <AmountInput
           label={t('common.amount')}
           amount={form.amount}
@@ -527,21 +528,21 @@ export function Requests() {
           onCurrency={(c) => setForm({ ...form, currency: c })}
           currencies={(config?.currencies ?? []).map((c: any) => c.code)}
         />
-        <Input label="Description" value={form.description} onChangeText={(v) => setForm({ ...form, description: v })} />
-        <Button title={create === 'link' ? 'Create link' : 'Send request'} loading={loading} onPress={submitCreate} disabled={create === 'request' && (!form.amount || !form.payer)} />
+        <Input label={tr('Description')} value={form.description} onChangeText={(v) => setForm({ ...form, description: v })} />
+        <Button title={create === 'link' ? tr('Create link') : tr('Send request')} loading={loading} onPress={submitCreate} disabled={create === 'request' && (!form.amount || !form.payer)} />
       </Sheet>
-      <Sheet open={!!created} onClose={() => setCreated(null)} title="Payment link">
+      <Sheet open={!!created} onClose={() => setCreated(null)} title={tr('Payment link')}>
         {created && (
           <View style={{ alignItems: 'center', gap: 10 }}>
             <Qr value={created.link!} size={200} />
             <T bold size={20}>
-              {created.amount != null ? money(created.amount, created.currency) : 'Any amount'}
+              {created.amount != null ? money(created.amount, created.currency) : tr('Any amount')}
             </T>
             <T muted size={12}>
               {created.link}
             </T>
             <Row>
-              <Button title="Copy link" small variant="secondary" onPress={() => Clipboard.setStringAsync(created.link!)} />
+              <Button title={tr('Copy link')} small variant="secondary" onPress={() => Clipboard.setStringAsync(created.link!)} />
               <Button title={t('common.share')} small onPress={() => Share.share({ message: created.link! })} />
             </Row>
           </View>

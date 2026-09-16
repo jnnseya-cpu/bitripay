@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, PageHeader, Select, StatusBadge, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
@@ -12,18 +13,20 @@ export function Risk() {
   return (
     <div>
       <PageHeader
-        title="Risk & compliance"
-        subtitle="Deterministic controls that run for every account: an explainable policy, fraud scores, cases with a report draft, sanctions lists with versions, tiers and business verification."
+        title={tr('Risk & compliance')}
+        subtitle={tr(
+          'Deterministic controls that run for every account: an explainable policy, fraud scores, cases with a report draft, sanctions lists with versions, tiers and business verification.',
+        )}
       />
       <Tabs
         tabs={[
-          { id: 'cases', label: 'Compliance cases' },
-          { id: 'fraud', label: 'Fraud scores' },
-          { id: 'policies', label: 'Risk policy' },
-          { id: 'sanctions', label: 'Sanctions lists' },
-          { id: 'kyc', label: 'KYC tiers & KYB' },
-          { id: 'destinations', label: 'Destination changes' },
-          { id: 'agents', label: 'Agent intelligence' },
+          { id: 'cases', label: tr('Compliance cases') },
+          { id: 'fraud', label: tr('Fraud scores') },
+          { id: 'policies', label: tr('Risk policy') },
+          { id: 'sanctions', label: tr('Sanctions lists') },
+          { id: 'kyc', label: tr('KYC tiers & KYB') },
+          { id: 'destinations', label: tr('Destination changes') },
+          { id: 'agents', label: tr('Agent intelligence') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -65,7 +68,7 @@ function Cases({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
         ))}
         <div className="card">
           <div className="stat">
-            <span className="label">SAR drafts open</span>
+            <span className="label">{tr('SAR drafts open')}</span>
             <span className="value">{data.data?.sarDrafts ?? 0}</span>
           </div>
           <Button
@@ -81,7 +84,7 @@ function Cases({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
                 .catch(err)
             }
           >
-            Run AML monitor
+            {tr('Run AML monitor')}
           </Button>
         </div>
       </div>
@@ -89,14 +92,14 @@ function Cases({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
         <div className="card">
           <div className="row mb">
             <Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 200 }}>
-              <option value="">All</option>
+              <option value="">{tr('All')}</option>
               {['OPEN', 'ASSIGNED', 'ESCALATED', 'DECIDED', 'CLOSED'].map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </Select>
           </div>
           <Table
-            head={['Case', 'Kind', 'Severity', 'Account', 'Status', '']}
+            head={[tr('Case'), tr('Kind'), tr('Severity'), tr('Account'), tr('Status'), '']}
             rows={(data.data?.items ?? []).map((c: any) => [
               <span>
                 <b>{c.title}</b>
@@ -108,14 +111,14 @@ function Cases({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
               <span className="tiny">{c.user?.fullName ?? c.userId ?? '—'}</span>,
               <StatusBadge status={c.status} />,
               <Button size="sm" variant="secondary" onClick={() => open(c)}>
-                Open
+                {tr('Open')}
               </Button>,
             ])}
-            empty="No cases"
+            empty={tr('No cases')}
           />
         </div>
         <div className="card">
-          {!sel && <p className="small muted">Open a case to read the indicators, edit the report draft, decide and close (a different officer closes).</p>}
+          {!sel && <p className="small muted">{tr('Open a case to read the indicators, edit the report draft, decide and close (a different officer closes).')}</p>}
           {sel && (
             <>
               <h4>{sel.title}</h4>
@@ -138,7 +141,7 @@ function Cases({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
                       .catch(err)
                   }
                 >
-                  Assign to me
+                  {tr('Assign to me')}
                 </ConfirmButton>
                 <ConfirmButton
                   size="sm"
@@ -154,10 +157,10 @@ function Cases({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
                       .catch(err)
                   }
                 >
-                  Escalate
+                  {tr('Escalate')}
                 </ConfirmButton>
               </div>
-              <Field label="Suspicious activity report (draft)">
+              <Field label={tr('Suspicious activity report (draft)')}>
                 <Textarea rows={10} value={sar} onChange={(e) => setSar(e.target.value)} />
               </Field>
               <Button
@@ -170,23 +173,23 @@ function Cases({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
                     .catch(err)
                 }
               >
-                Save draft
+                {tr('Save draft')}
               </Button>
               {sel.status !== 'CLOSED' && sel.status !== 'DECIDED' && (
                 <div className="mt">
                   <div className="grid cols-2">
-                    <Field label="Decision">
+                    <Field label={tr('Decision')}>
                       <Select value={decision.decision} onChange={(e) => setDecision({ ...decision, decision: e.target.value })}>
                         {(data.data?.decisions ?? ['NO_ACTION', 'CLEARED', 'SAR_FILED', 'ACCOUNT_RESTRICTED', 'ACCOUNT_CLOSED']).map((d: string) => (
                           <option key={d}>{d}</option>
                         ))}
                       </Select>
                     </Field>
-                    <Field label="Filing reference (SAR_FILED)">
+                    <Field label={tr('Filing reference (SAR_FILED)')}>
                       <Input value={decision.sarReference} onChange={(e) => setDecision({ ...decision, sarReference: e.target.value })} />
                     </Field>
                   </div>
-                  <Field label="Reason">
+                  <Field label={tr('Reason')}>
                     <Input value={decision.reason} onChange={(e) => setDecision({ ...decision, reason: e.target.value })} />
                   </Field>
                   <ConfirmButton
@@ -201,13 +204,13 @@ function Cases({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
                         .catch(err)
                     }
                   >
-                    Decide
+                    {tr('Decide')}
                   </ConfirmButton>
                 </div>
               )}
               {sel.status === 'DECIDED' && (
                 <div className="mt">
-                  <KV k="Decision" v={`${sel.decision}: ${sel.decisionReason}`} />
+                  <KV k={tr('Decision')} v={`${sel.decision}: ${sel.decisionReason}`} />
                   <ConfirmButton
                     variant="success"
                     onConfirm={() =>
@@ -221,7 +224,7 @@ function Cases({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
                         .catch(err)
                     }
                   >
-                    Close (four eyes)
+                    {tr('Close (four eyes)')}
                   </ConfirmButton>
                 </div>
               )}
@@ -251,7 +254,7 @@ function Fraud() {
       <div className="card">
         <div className="row mb">
           <Select value={band} onChange={(e) => setBand(e.target.value)} style={{ width: 200 }}>
-            <option value="">All bands</option>
+            <option value="">{tr('All bands')}</option>
             {['approve', 'step_up', 'review', 'block'].map((b) => (
               <option key={b} value={b}>
                 {b}
@@ -266,7 +269,7 @@ function Fraud() {
           </span>
         </div>
         <Table
-          head={['When', 'Account', 'Kind', 'Amount', 'Score', 'Band', 'Rule', 'Factors']}
+          head={[tr('When'), tr('Account'), tr('Kind'), tr('Amount'), tr('Score'), tr('Band'), tr('Rule'), tr('Factors')]}
           rows={(data.data?.items ?? []).map((s: any) => [
             <span className="tiny">{fmtDate(s.createdAt)}</span>,
             <span className="tiny">{s.userId ?? '—'}</span>,
@@ -277,7 +280,7 @@ function Fraud() {
             <span className="mono tiny">{s.policyRule ?? '—'}</span>,
             <span className="tiny">{s.factors.map((f: any) => `${f.code} +${f.points}`).join(', ')}</span>,
           ])}
-          empty="No scores yet"
+          empty={tr('No scores yet')}
         />
       </div>
     </div>
@@ -292,7 +295,7 @@ function Policies({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
     <div className="grid cols-2">
       <div className="card">
         <Table
-          head={['Version', 'Name', 'Status', 'Rules', '']}
+          head={[tr('Version'), tr('Name'), tr('Status'), tr('Rules'), '']}
           rows={(data.data?.items ?? []).map((p: any) => [
             `v${p.version}`,
             p.name,
@@ -312,7 +315,7 @@ function Policies({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
                       .catch(err)
                   }
                 >
-                  Approve
+                  {tr('Approve')}
                 </ConfirmButton>
               )}
               {p.status === 'APPROVED' && (
@@ -329,28 +332,28 @@ function Policies({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
                       .catch(err)
                   }
                 >
-                  Activate
+                  {tr('Activate')}
                 </ConfirmButton>
               )}
             </div>,
           ])}
-          empty="No policies"
+          empty={tr('No policies')}
         />
       </div>
       <div className="card">
-        <h4>Simulate the active policy</h4>
+        <h4>{tr('Simulate the active policy')}</h4>
         <div className="grid cols-3">
-          <Field label="Kind">
+          <Field label={tr('Kind')}>
             <Input value={sim.kind} onChange={(e) => setSim({ ...sim, kind: e.target.value })} />
           </Field>
-          <Field label="Base minor">
+          <Field label={tr('Base minor')}>
             <Input type="number" value={sim.baseMinor} onChange={(e) => setSim({ ...sim, baseMinor: Number(e.target.value) })} />
           </Field>
-          <Field label="Score">
+          <Field label={tr('Score')}>
             <Input type="number" value={sim.score} onChange={(e) => setSim({ ...sim, score: Number(e.target.value) })} />
           </Field>
         </div>
-        <Field label="Flags (comma separated)">
+        <Field label={tr('Flags (comma separated)')}>
           <Input value={sim.flags} onChange={(e) => setSim({ ...sim, flags: e.target.value })} placeholder="sanctions:name:X" />
         </Field>
         <Button
@@ -361,7 +364,7 @@ function Policies({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
               .catch(err)
           }
         >
-          Decide
+          {tr('Decide')}
         </Button>
         {out && (
           <Alert kind={out.action === 'block' ? 'error' : out.action === 'allow' ? 'success' : 'warning'}>
@@ -380,12 +383,14 @@ function Sanctions({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h4>Sources</h4>
+        <h4>{tr('Sources')}</h4>
         <p className="tiny muted">
-          The official consolidated lists (US OFAC, UK OFSI, UN, EU) are registered at first start and refreshed daily; Refresh reloads one now. Add your screening provider as a further source.
+          {tr(
+            'The official consolidated lists (US OFAC, UK OFSI, UN, EU) are registered at first start and refreshed daily; Refresh reloads one now. Add your screening provider as a further source.',
+          )}
         </p>
         <Table
-          head={['Source', 'Kind', 'Version', 'Entries', 'Refreshed', 'Error', '']}
+          head={[tr('Source'), tr('Kind'), tr('Version'), tr('Entries'), tr('Refreshed'), tr('Error'), '']}
           rows={(data.data?.items ?? []).map((s: any) => [
             <b>
               {s.name}
@@ -413,37 +418,37 @@ function Sanctions({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
                     .catch(err)
                 }
               >
-                Refresh
+                {tr('Refresh')}
               </Button>
             ) : null,
           ])}
-          empty="No sources"
+          empty={tr('No sources')}
         />
-        <h4 className="mt">Add / edit source</h4>
+        <h4 className="mt">{tr('Add / edit source')}</h4>
         <div className="grid cols-2">
-          <Field label="Id">
+          <Field label={tr('Id')}>
             <Input value={src.id} onChange={(e) => setSrc({ ...src, id: e.target.value })} />
           </Field>
-          <Field label="Name">
+          <Field label={tr('Name')}>
             <Input value={src.name} onChange={(e) => setSrc({ ...src, name: e.target.value })} />
           </Field>
-          <Field label="URL (optional)">
+          <Field label={tr('URL (optional)')}>
             <Input value={src.url} onChange={(e) => setSrc({ ...src, url: e.target.value })} />
           </Field>
-          <Field label="Kind">
+          <Field label={tr('Kind')}>
             <Select value={src.kind} onChange={(e) => setSrc({ ...src, kind: e.target.value })}>
               <option value="sanctions">sanctions</option>
               <option value="pep">pep</option>
             </Select>
           </Field>
-          <Field label="Format" hint="Official lists are parsed as published; csv accepts kind,value or the OFAC layout">
+          <Field label={tr('Format')} hint={tr('Official lists are parsed as published; csv accepts kind,value or the OFAC layout')}>
             <Select value={src.format} onChange={(e) => setSrc({ ...src, format: e.target.value })}>
               <option value="csv">csv (kind,value or OFAC layout)</option>
               <option value="json">json rows</option>
-              <option value="ofac_sdn">US OFAC SDN / consolidated</option>
-              <option value="uk_ofsi">UK OFSI consolidated list</option>
-              <option value="un_xml">UN Security Council XML</option>
-              <option value="eu_fsf">EU financial sanctions file</option>
+              <option value="ofac_sdn">{tr('US OFAC SDN / consolidated')}</option>
+              <option value="uk_ofsi">{tr('UK OFSI consolidated list')}</option>
+              <option value="un_xml">{tr('UN Security Council XML')}</option>
+              <option value="eu_fsf">{tr('EU financial sanctions file')}</option>
             </Select>
           </Field>
         </div>
@@ -459,16 +464,16 @@ function Sanctions({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
               .catch(err)
           }
         >
-          Save source
+          {tr('Save source')}
         </Button>
       </div>
       <div className="card">
-        <h4>Import a version (CSV: kind,value or OFAC SDN layout)</h4>
+        <h4>{tr('Import a version (CSV: kind,value or OFAC SDN layout)')}</h4>
         <div className="grid cols-2">
-          <Field label="Source id">
+          <Field label={tr('Source id')}>
             <Input value={imp.id} onChange={(e) => setImp({ ...imp, id: e.target.value })} />
           </Field>
-          <Field label="Version">
+          <Field label={tr('Version')}>
             <Input value={imp.version} onChange={(e) => setImp({ ...imp, version: e.target.value })} />
           </Field>
         </div>
@@ -487,9 +492,12 @@ function Sanctions({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
           }
           disabled={!imp.csv.trim()}
         >
-          Import
+          {tr('Import')}
         </Button>
-        <h5 className="mt">Entries ({data.data?.entries?.length ?? 0})</h5>
+        <h5 className="mt">
+          {tr('Entries (')}
+          {data.data?.entries?.length ?? 0})
+        </h5>
         <div style={{ maxHeight: 260, overflow: 'auto' }}>
           {(data.data?.entries ?? []).slice(0, 200).map((e: any) => (
             <div key={e.id} className="tiny">
@@ -511,7 +519,7 @@ function Kyc({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h4>Tier limits (base minor units)</h4>
+        <h4>{tr('Tier limits (base minor units)')}</h4>
         {tiers.data &&
           Object.entries(tiers.data.settings.default).map(([t, l]: any) => (
             <KV key={t} k={tiers.data.labels[t]} v={l ? `per tx ${l.perTransaction} · daily ${l.daily} · monthly ${l.monthly}` : 'no platform ceiling (business)'} />
@@ -521,7 +529,7 @@ function Kyc({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
           {tiers.data?.settings?.kybMonthlyVolumeThreshold}
         </p>
         <div className="row">
-          <Input type="number" placeholder="KYB monthly volume threshold" value={threshold} onChange={(e) => setThreshold(e.target.value === '' ? '' : Number(e.target.value))} />
+          <Input type="number" placeholder={tr('KYB monthly volume threshold')} value={threshold} onChange={(e) => setThreshold(e.target.value === '' ? '' : Number(e.target.value))} />
           <Button
             size="sm"
             onClick={() =>
@@ -535,15 +543,15 @@ function Kyc({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
             }
             disabled={threshold === ''}
           >
-            Save
+            {tr('Save')}
           </Button>
         </div>
-        <h4 className="mt">Set a user's tier</h4>
+        <h4 className="mt">{tr("Set a user's tier")}</h4>
         <div className="grid cols-3">
-          <Field label="User id">
+          <Field label={tr('User id')}>
             <Input value={userTier.userId} onChange={(e) => setUserTier({ ...userTier, userId: e.target.value })} />
           </Field>
-          <Field label="Tier">
+          <Field label={tr('Tier')}>
             <Select value={userTier.tier} onChange={(e) => setUserTier({ ...userTier, tier: Number(e.target.value) })}>
               {[0, 1, 2, 3, 4].map((t) => (
                 <option key={t} value={t}>
@@ -552,7 +560,7 @@ function Kyc({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
               ))}
             </Select>
           </Field>
-          <Field label="Reason">
+          <Field label={tr('Reason')}>
             <Input value={userTier.reason} onChange={(e) => setUserTier({ ...userTier, reason: e.target.value })} />
           </Field>
         </div>
@@ -566,13 +574,13 @@ function Kyc({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
           }
           disabled={!userTier.userId || userTier.reason.length < 3}
         >
-          Set tier
+          {tr('Set tier')}
         </Button>
       </div>
       <div className="card">
-        <h4>KYB queue</h4>
+        <h4>{tr('KYB queue')}</h4>
         <Table
-          head={['Business', 'Country', 'Registration', 'Directors', 'Volume', '']}
+          head={[tr('Business'), tr('Country'), tr('Registration'), tr('Directors'), tr('Volume'), '']}
           rows={(kyb.data?.items ?? []).map((k: any) => [
             <b>
               {k.legalName}
@@ -597,7 +605,7 @@ function Kyc({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
                     .catch(err)
                 }
               >
-                Verify
+                {tr('Verify')}
               </ConfirmButton>
               <ConfirmButton
                 size="sm"
@@ -613,11 +621,11 @@ function Kyc({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
                     .catch(err)
                 }
               >
-                Reject
+                {tr('Reject')}
               </ConfirmButton>
             </div>,
           ])}
-          empty="No pending KYB"
+          empty={tr('No pending KYB')}
         />
       </div>
     </div>
@@ -629,10 +637,10 @@ function Destinations({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
   return (
     <div className="card">
       <p className="small muted">
-        Cooling-off {data.data?.settings?.coolingOffHours}h · locked {data.data?.settings?.lockAfterCredentialChangeHours}h after a password change.
+        {tr('Cooling-off')} {data.data?.settings?.coolingOffHours}h · locked {data.data?.settings?.lockAfterCredentialChangeHours}h after a password change.
       </p>
       <Table
-        head={['When', 'Account', 'Kind', 'From → to', 'Flags', 'Status', 'Effective', '']}
+        head={[tr('When'), tr('Account'), tr('Kind'), 'From → to', tr('Flags'), tr('Status'), tr('Effective'), '']}
         rows={(data.data?.items ?? []).map((c: any) => [
           <span className="tiny">{fmtDate(c.createdAt)}</span>,
           <span className="tiny">{c.userId}</span>,
@@ -658,7 +666,7 @@ function Destinations({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
                     .catch(err)
                 }
               >
-                Approve
+                {tr('Approve')}
               </ConfirmButton>
             )}
             {c.status !== 'REVOKED' && (
@@ -675,12 +683,12 @@ function Destinations({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
                     .catch(err)
                 }
               >
-                Revoke
+                {tr('Revoke')}
               </ConfirmButton>
             )}
           </div>,
         ])}
-        empty="No destination changes"
+        empty={tr('No destination changes')}
       />
     </div>
   );
@@ -704,7 +712,7 @@ function AgentIntel({ ok, err, money }: { ok: (m: string) => void; err: (e: any)
               .catch(err)
           }
         >
-          Recompute trust & float alerts
+          {tr('Recompute trust & float alerts')}
         </Button>
         <span className="small muted">
           target {data.data?.settings?.targetDays} days · alert below {data.data?.settings?.alertDays} · bonuses {JSON.stringify(data.data?.settings?.bonusByBand)}
@@ -712,9 +720,9 @@ function AgentIntel({ ok, err, money }: { ok: (m: string) => void; err: (e: any)
       </div>
       <div className="grid cols-2">
         <div className="card">
-          <h4>Agents</h4>
+          <h4>{tr('Agents')}</h4>
           <Table
-            head={['Agent', 'Trust', 'Commission (cash-in)', 'Float']}
+            head={[tr('Agent'), tr('Trust'), tr('Commission (cash-in)'), tr('Float')]}
             rows={(data.data?.agents ?? []).map((a: any) => [
               <b>
                 {a.name}
@@ -727,7 +735,7 @@ function AgentIntel({ ok, err, money }: { ok: (m: string) => void; err: (e: any)
                 {a.trustScore ?? '—'} {a.band && <Chip>{a.band}</Chip>}
               </span>,
               <span className="tiny">
-                {a.commission?.bps} bps (base {a.commission?.base} + trust {a.commission?.trustBonus} + liquidity {a.commission?.liquidityBonus})
+                {a.commission?.bps} bps (base {a.commission?.base} {tr('+ trust')} {a.commission?.trustBonus} {tr('+ liquidity')} {a.commission?.liquidityBonus})
               </span>,
               <span className="tiny">
                 {a.float.map((f: any) => (
@@ -738,13 +746,13 @@ function AgentIntel({ ok, err, money }: { ok: (m: string) => void; err: (e: any)
                 ))}
               </span>,
             ])}
-            empty="No agents"
+            empty={tr('No agents')}
           />
         </div>
         <div className="card">
-          <h4>Float requests</h4>
+          <h4>{tr('Float requests')}</h4>
           <Table
-            head={['Agent', 'Amount', 'Method', 'Reference', '']}
+            head={[tr('Agent'), tr('Amount'), tr('Method'), tr('Reference'), '']}
             rows={(data.data?.requests ?? []).map((r: any) => [
               <span className="tiny">{r.agentId}</span>,
               money(r.amountMinor, r.currency),
@@ -765,7 +773,7 @@ function AgentIntel({ ok, err, money }: { ok: (m: string) => void; err: (e: any)
                       .catch(err)
                   }
                 >
-                  Fulfil
+                  {tr('Fulfil')}
                 </ConfirmButton>
                 <ConfirmButton
                   size="sm"
@@ -781,11 +789,11 @@ function AgentIntel({ ok, err, money }: { ok: (m: string) => void; err: (e: any)
                       .catch(err)
                   }
                 >
-                  Reject
+                  {tr('Reject')}
                 </ConfirmButton>
               </div>,
             ])}
-            empty="No open requests"
+            empty={tr('No open requests')}
           />
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Button, Empty, Input, Modal, PageHeader, Select, StatusBadge, Table, Textarea, UserCell, fmtDate, useAsync, Tabs, Field, ConfirmButton } from '../components/ui';
@@ -13,20 +14,20 @@ export function Support() {
   return (
     <div>
       <PageHeader
-        title="Support tickets"
-        subtitle="Manage and respond to user, merchant and agent tickets"
+        title={tr('Support tickets')}
+        subtitle={tr('Manage and respond to user, merchant and agent tickets')}
         actions={
           <Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 160 }}>
-            <option value="open">Open</option>
-            <option value="answered">Answered</option>
-            <option value="closed">Closed</option>
-            <option value="">All</option>
+            <option value="open">{tr('Open')}</option>
+            <option value="answered">{tr('Answered')}</option>
+            <option value="closed">{tr('Closed')}</option>
+            <option value="">{tr('All')}</option>
           </Select>
         }
       />
       <div className="card">
         <Table
-          head={['User', 'Subject', 'Category', 'Priority', 'Updated', 'Status', '']}
+          head={[tr('User'), tr('Subject'), tr('Category'), tr('Priority'), tr('Updated'), tr('Status'), '']}
           rows={(list.data?.items ?? []).map((t: any) => [
             <UserCell user={t.user} />,
             t.subject,
@@ -35,10 +36,10 @@ export function Support() {
             fmtDate(t.updatedAt),
             <StatusBadge status={t.status} />,
             <Button size="sm" variant="secondary" onClick={() => open(t.id)}>
-              Open
+              {tr('Open')}
             </Button>,
           ])}
-          empty="No tickets"
+          empty={tr('No tickets')}
         />
       </div>
       <Modal open={!!sel} onClose={() => setSel(null)} title={sel?.subject} wide>
@@ -54,7 +55,7 @@ export function Support() {
               {sel.messages.map((m: any) => (
                 <div key={m.id} className="card soft compact">
                   <div className="tiny bold">
-                    {m.isAdmin ? 'Support' : m.sender?.fullName} · {fmtDate(m.createdAt)}
+                    {m.isAdmin ? tr('Support') : m.sender?.fullName} · {fmtDate(m.createdAt)}
                   </div>
                   <div className="small" style={{ whiteSpace: 'pre-wrap' }}>
                     {m.body}
@@ -62,7 +63,7 @@ export function Support() {
                 </div>
               ))}
             </div>
-            <Textarea className="mt" value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Reply…" />
+            <Textarea className="mt" value={reply} onChange={(e) => setReply(e.target.value)} placeholder={tr('Reply…')} />
             <div className="row mt-sm">
               <Button
                 disabled={!reply.trim()}
@@ -71,11 +72,11 @@ export function Support() {
                     setSel(r.ticket);
                     setReply('');
                     list.reload();
-                    toast('Reply sent', 'success');
+                    toast(tr('Reply sent'), 'success');
                   })
                 }
               >
-                Send reply
+                {tr('Send reply')}
               </Button>
               {sel.status !== 'closed' ? (
                 <Button
@@ -87,7 +88,7 @@ export function Support() {
                     })
                   }
                 >
-                  Close ticket
+                  {tr('Close ticket')}
                 </Button>
               ) : (
                 <Button
@@ -99,7 +100,7 @@ export function Support() {
                     })
                   }
                 >
-                  Reopen
+                  {tr('Reopen')}
                 </Button>
               )}
             </div>
@@ -143,10 +144,10 @@ export function Chat() {
   };
   return (
     <div>
-      <PageHeader title="Live chat" subtitle="Real-time conversations with users, merchants and agents" />
+      <PageHeader title={tr('Live chat')} subtitle={tr('Real-time conversations with users, merchants and agents')} />
       <div className="grid cols-3" style={{ minHeight: 520 }}>
         <div className="card" style={{ overflowY: 'auto' }}>
-          {convos.data?.items.length === 0 && <Empty icon="💬" text="No conversations yet" />}
+          {convos.data?.items.length === 0 && <Empty icon="💬" text={tr('No conversations yet')} />}
           {convos.data?.items.map((c) => (
             <div key={c.userId} className={`list-item clickable`} style={{ background: userId === c.userId ? 'var(--bg-soft)' : undefined, borderRadius: 8 }} onClick={() => setUserId(c.userId)}>
               <UserCell user={c.user} />
@@ -157,7 +158,7 @@ export function Chat() {
         </div>
         <div className="card" style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column' }}>
           {!userId ? (
-            <Empty icon="👈" text="Select a conversation" />
+            <Empty icon="👈" text={tr('Select a conversation')} />
           ) : (
             <>
               <div className="row mb">
@@ -191,8 +192,8 @@ export function Chat() {
                   send();
                 }}
               >
-                <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Reply…" />
-                <Button>Send</Button>
+                <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={tr('Reply…')} />
+                <Button>{tr('Send')}</Button>
               </form>
             </>
           )}
@@ -211,11 +212,11 @@ export function Inbox() {
   const [reply, setReply] = useState('');
   return (
     <div>
-      <PageHeader title="Contact messages & newsletter" subtitle="Website contact form inbox and newsletter subscriber list" />
+      <PageHeader title={tr('Contact messages & newsletter')} subtitle={tr('Website contact form inbox and newsletter subscriber list')} />
       <Tabs
         tabs={[
-          { id: 'contact', label: 'Contact messages' },
-          { id: 'subscribers', label: 'Newsletter subscribers' },
+          { id: 'contact', label: tr('Contact messages') },
+          { id: 'subscribers', label: tr('Newsletter subscribers') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -223,7 +224,7 @@ export function Inbox() {
       <div className="card">
         {tab === 'contact' && (
           <Table
-            head={['From', 'Subject', 'Received', 'Status', '']}
+            head={['From', tr('Subject'), tr('Received'), tr('Status'), '']}
             rows={(messages.data?.items ?? []).map((m) => [
               <span className="small">
                 {m.name}
@@ -241,13 +242,13 @@ export function Inbox() {
                   setReply(m.reply ?? '');
                 }}
               >
-                Open
+                {tr('Open')}
               </Button>,
             ])}
-            empty="No messages"
+            empty={tr('No messages')}
           />
         )}
-        {tab === 'subscribers' && <Table head={['Email', 'Subscribed']} rows={(subs.data?.items ?? []).map((s) => [s.email, fmtDate(s.createdAt)])} empty="No subscribers" />}
+        {tab === 'subscribers' && <Table head={[tr('Email'), tr('Subscribed')]} rows={(subs.data?.items ?? []).map((s) => [s.email, fmtDate(s.createdAt)])} empty={tr('No subscribers')} />}
       </div>
       <Modal open={!!sel} onClose={() => setSel(null)} title={sel?.subject}>
         {sel && (
@@ -258,7 +259,7 @@ export function Inbox() {
             <div className="card soft compact mb" style={{ whiteSpace: 'pre-wrap' }}>
               {sel.message}
             </div>
-            <Field label="Reply (sent by email)">
+            <Field label={tr('Reply (sent by email)')}>
               <Textarea value={reply} onChange={(e) => setReply(e.target.value)} />
             </Field>
             <ConfirmButton
@@ -266,14 +267,14 @@ export function Inbox() {
                 api
                   .post(`/api/admin/contact-messages/${sel.id}/reply`, { reply })
                   .then(() => {
-                    toast('Reply sent', 'success');
+                    toast(tr('Reply sent'), 'success');
                     setSel(null);
                     messages.reload();
                   })
                   .catch((e) => toast(e.message, 'error'))
               }
             >
-              Send reply
+              {tr('Send reply')}
             </ConfirmButton>
           </>
         )}

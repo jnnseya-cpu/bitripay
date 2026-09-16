@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Button, Field, Input, PageHeader, Switch, Tabs, Textarea, useAsync, Select } from '../components/ui';
@@ -21,7 +22,7 @@ function ImageField({ label, value, onChange }: { label: string; value: string |
         />
         {value && (
           <Button size="sm" variant="ghost" onClick={() => onChange(null)}>
-            Remove
+            {tr('Remove')}
           </Button>
         )}
       </div>
@@ -41,7 +42,7 @@ export function Site() {
   const save = async () => {
     try {
       await api.put('/api/admin/site', site);
-      toast('Site settings saved', 'success');
+      toast(tr('Site settings saved'), 'success');
       refresh();
     } catch (err) {
       toast((err as Error).message, 'error');
@@ -51,18 +52,18 @@ export function Site() {
   return (
     <div>
       <PageHeader
-        title="Web, SEO & app settings"
-        subtitle="Branding, contact details, SEO, image assets, splash & onboarding screens, app URLs, useful links and GDPR cookie"
-        actions={<Button onClick={save}>Save all</Button>}
+        title={tr('Web, SEO & app settings')}
+        subtitle={tr('Branding, contact details, SEO, image assets, splash & onboarding screens, app URLs, useful links and GDPR cookie')}
+        actions={<Button onClick={save}>{tr('Save all')}</Button>}
       />
       <Tabs
         tabs={[
-          { id: 'basic', label: 'Basic web settings' },
-          { id: 'seo', label: 'SEO & images' },
-          { id: 'apps', label: 'App URLs & social' },
-          { id: 'onboarding', label: 'Splash & onboarding' },
-          { id: 'links', label: 'Useful links' },
-          { id: 'gdpr', label: 'GDPR cookie' },
+          { id: 'basic', label: tr('Basic web settings') },
+          { id: 'seo', label: tr('SEO & images') },
+          { id: 'apps', label: tr('App URLs & social') },
+          { id: 'onboarding', label: tr('Splash & onboarding') },
+          { id: 'links', label: tr('Useful links') },
+          { id: 'gdpr', label: tr('GDPR cookie') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -70,25 +71,25 @@ export function Site() {
       <div className="card">
         {tab === 'basic' && (
           <div className="grid cols-2">
-            <Field label="Site name">
+            <Field label={tr('Site name')}>
               <Input value={site.siteName} onChange={(e) => set('siteName', e.target.value)} />
             </Field>
-            <Field label="Tagline">
+            <Field label={tr('Tagline')}>
               <Input value={site.tagline} onChange={(e) => set('tagline', e.target.value)} />
             </Field>
-            <Field label="Contact email">
+            <Field label={tr('Contact email')}>
               <Input value={site.contactEmail} onChange={(e) => set('contactEmail', e.target.value)} />
             </Field>
-            <Field label="Contact phone">
+            <Field label={tr('Contact phone')}>
               <Input value={site.contactPhone} onChange={(e) => set('contactPhone', e.target.value)} />
             </Field>
-            <Field label="Address">
+            <Field label={tr('Address')}>
               <Input value={site.address} onChange={(e) => set('address', e.target.value)} />
             </Field>
-            <Field label="Primary color">
+            <Field label={tr('Primary color')}>
               <Input type="color" value={site.primaryColor} onChange={(e) => set('primaryColor', e.target.value)} />
             </Field>
-            <Field label="Default language">
+            <Field label={tr('Default language')}>
               <Select value={site.defaultLanguage} onChange={(e) => set('defaultLanguage', e.target.value)}>
                 {(config?.languages ?? []).map((l: any) => (
                   <option key={l.code} value={l.code}>
@@ -98,10 +99,10 @@ export function Site() {
               </Select>
             </Field>
             <div>
-              <Switch on={site.darkModeDefault} onChange={(v) => set('darkModeDefault', v)} label="Dark mode by default" />
+              <Switch on={site.darkModeDefault} onChange={(v) => set('darkModeDefault', v)} label={tr('Dark mode by default')} />
             </div>
             <div style={{ gridColumn: 'span 2' }}>
-              <Field label="Description (landing page)">
+              <Field label={tr('Description (landing page)')}>
                 <Textarea value={site.description} onChange={(e) => set('description', e.target.value)} />
               </Field>
             </div>
@@ -110,21 +111,21 @@ export function Site() {
         {tab === 'seo' && (
           <div>
             <div className="grid cols-2">
-              <Field label="SEO title">
+              <Field label={tr('SEO title')}>
                 <Input value={site.seo.title} onChange={(e) => set('seo', { ...site.seo, title: e.target.value })} />
               </Field>
-              <Field label="Keywords">
+              <Field label={tr('Keywords')}>
                 <Input value={site.seo.keywords} onChange={(e) => set('seo', { ...site.seo, keywords: e.target.value })} />
               </Field>
             </div>
-            <Field label="Meta description">
+            <Field label={tr('Meta description')}>
               <Textarea value={site.seo.description} onChange={(e) => set('seo', { ...site.seo, description: e.target.value })} />
             </Field>
-            <h4>Image assets</h4>
+            <h4>{tr('Image assets')}</h4>
             <div className="grid cols-3">
-              <ImageField label="Logo" value={site.logoUrl} onChange={(v) => set('logoUrl', v)} />
-              <ImageField label="Favicon" value={site.faviconUrl} onChange={(v) => set('faviconUrl', v)} />
-              <ImageField label="Social share image (og:image)" value={site.seo.ogImage} onChange={(v) => set('seo', { ...site.seo, ogImage: v })} />
+              <ImageField label={tr('Logo')} value={site.logoUrl} onChange={(v) => set('logoUrl', v)} />
+              <ImageField label={tr('Favicon')} value={site.faviconUrl} onChange={(v) => set('faviconUrl', v)} />
+              <ImageField label={tr('Social share image (og:image)')} value={site.seo.ogImage} onChange={(v) => set('seo', { ...site.seo, ogImage: v })} />
             </div>
           </div>
         )}
@@ -144,24 +145,24 @@ export function Site() {
         )}
         {tab === 'onboarding' && (
           <div>
-            <h4>Splash screen (mobile)</h4>
+            <h4>{tr('Splash screen (mobile)')}</h4>
             <div className="grid cols-3">
-              <Field label="Headline">
+              <Field label={tr('Headline')}>
                 <Input value={site.splash.headline} onChange={(e) => set('splash', { ...site.splash, headline: e.target.value })} />
               </Field>
-              <Field label="Sub-headline">
+              <Field label={tr('Sub-headline')}>
                 <Input value={site.splash.subheadline} onChange={(e) => set('splash', { ...site.splash, subheadline: e.target.value })} />
               </Field>
-              <Field label="Background color">
+              <Field label={tr('Background color')}>
                 <Input type="color" value={site.splash.backgroundColor} onChange={(e) => set('splash', { ...site.splash, backgroundColor: e.target.value })} />
               </Field>
             </div>
-            <ImageField label="Splash image" value={site.splash.imageUrl} onChange={(v) => set('splash', { ...site.splash, imageUrl: v })} />
-            <h4>Onboarding screens</h4>
+            <ImageField label={tr('Splash image')} value={site.splash.imageUrl} onChange={(v) => set('splash', { ...site.splash, imageUrl: v })} />
+            <h4>{tr('Onboarding screens')}</h4>
             {site.onboarding.map((o: any, i: number) => (
               <div key={i} className="card soft compact mb">
                 <div className="grid cols-3">
-                  <Field label="Title">
+                  <Field label={tr('Title')}>
                     <Input
                       value={o.title}
                       onChange={(e) =>
@@ -172,7 +173,7 @@ export function Site() {
                       }
                     />
                   </Field>
-                  <Field label="Body">
+                  <Field label={tr('Body')}>
                     <Input
                       value={o.body}
                       onChange={(e) =>
@@ -183,7 +184,7 @@ export function Site() {
                       }
                     />
                   </Field>
-                  <Field label="Color">
+                  <Field label={tr('Color')}>
                     <Input
                       type="color"
                       value={o.color}
@@ -198,7 +199,7 @@ export function Site() {
                 </div>
                 <div className="row">
                   <ImageField
-                    label="Illustration"
+                    label={tr('Illustration')}
                     value={o.imageUrl}
                     onChange={(v) =>
                       set(
@@ -217,13 +218,13 @@ export function Site() {
                       )
                     }
                   >
-                    Remove
+                    {tr('Remove')}
                   </Button>
                 </div>
               </div>
             ))}
             <Button variant="secondary" size="sm" onClick={() => set('onboarding', [...site.onboarding, { title: '', body: '', imageUrl: null, color: '#2563eb' }])}>
-              + Add screen
+              {tr('+ Add screen')}
             </Button>
           </div>
         )}
@@ -233,7 +234,7 @@ export function Site() {
               <div key={i} className="row mb-sm">
                 <Input
                   value={l.label}
-                  placeholder="Label"
+                  placeholder={tr('Label')}
                   onChange={(e) =>
                     set(
                       'usefulLinks',
@@ -266,17 +267,17 @@ export function Site() {
               </div>
             ))}
             <Button variant="secondary" size="sm" onClick={() => set('usefulLinks', [...site.usefulLinks, { label: '', url: '' }])}>
-              + Add link
+              {tr('+ Add link')}
             </Button>
           </div>
         )}
         {tab === 'gdpr' && (
           <div>
-            <Switch on={site.gdpr.enabled} onChange={(v) => set('gdpr', { ...site.gdpr, enabled: v })} label="Show cookie consent banner" />
-            <Field label="Message">
+            <Switch on={site.gdpr.enabled} onChange={(v) => set('gdpr', { ...site.gdpr, enabled: v })} label={tr('Show cookie consent banner')} />
+            <Field label={tr('Message')}>
               <Textarea value={site.gdpr.message} onChange={(e) => set('gdpr', { ...site.gdpr, message: e.target.value })} />
             </Field>
-            <Field label="Policy URL">
+            <Field label={tr('Policy URL')}>
               <Input value={site.gdpr.policyUrl} onChange={(e) => set('gdpr', { ...site.gdpr, policyUrl: e.target.value })} />
             </Field>
           </div>

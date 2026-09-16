@@ -223,7 +223,7 @@ export function SaleReceipt({
           ))}
         </tbody>
       </table>
-      <KV k="Subtotal" v={money(sale.subtotal, currency)} />
+      <KV k={tr('Subtotal')} v={money(sale.subtotal, currency)} />
       <KV k={`VAT ${sale.vatRate}%`} v={money(sale.vat, currency)} />
       <KV k={<b>{tr('Total')}</b>} v={<b>{money(sale.total, currency)}</b>} />
       {(reference || paidAt) && (
@@ -364,7 +364,7 @@ export function MerchantPos() {
                 </Button>
               </div>
               <div className="card soft compact mt">
-                <KV k="Subtotal" v={money(preview.subtotal, cur)} />
+                <KV k={tr('Subtotal')} v={money(preview.subtotal, cur)} />
                 <KV k={`VAT ${rate}%`} v={money(preview.vat, cur)} />
                 <KV k={<b>{tr('Total to pay')}</b>} v={<b>{money(preview.total, cur)}</b>} />
               </div>
@@ -600,7 +600,7 @@ export function MerchantGateway() {
           </Field>
           {gw.data?.webhookSecret && (
             <KV
-              k="Signing secret"
+              k={tr('Signing secret')}
               v={
                 <span className="row" style={{ justifyContent: 'flex-end' }}>
                   <span className="mono small">{gw.data.webhookSecret}</span>

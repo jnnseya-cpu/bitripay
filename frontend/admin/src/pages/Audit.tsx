@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api, qs } from '../lib/api';
 import { Input, PageHeader, Pager, Table, UserCell, fmtDate, useAsync, useDebounce } from '../components/ui';
 
@@ -9,10 +10,10 @@ export function Audit() {
   const data = useAsync(() => api.get<any>(`/api/admin/audit-logs${qs({ search: q, page, pageSize: 50 })}`), [q, page]);
   return (
     <div>
-      <PageHeader title="Audit logs" subtitle="Every administrative action, with who did it and the details" />
+      <PageHeader title={tr('Audit logs')} subtitle={tr('Every administrative action, with who did it and the details')} />
       <div className="card">
         <Input
-          placeholder="Filter by action or target"
+          placeholder={tr('Filter by action or target')}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -22,7 +23,7 @@ export function Audit() {
           className="mb"
         />
         <Table
-          head={['When', 'Admin', 'Action', 'Target', 'Details']}
+          head={[tr('When'), tr('Admin'), tr('Action'), tr('Target'), tr('Details')]}
           rows={(data.data?.items ?? []).map((l: any) => [
             fmtDate(l.createdAt),
             <UserCell user={l.admin} />,

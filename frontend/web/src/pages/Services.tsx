@@ -363,7 +363,7 @@ export function GiftCards() {
             <div className="brand-tile" style={{ background: bought.product.color, minHeight: 120, justifyContent: 'center', alignItems: 'center' }}>
               {bought.product.brand} · {money(bought.amount, bought.product.currency)}
             </div>
-            <KV k="Code" v={<span className="mono">{bought.code}</span>} />
+            <KV k={tr('Code')} v={<span className="mono">{bought.code}</span>} />
             <KV k="PIN" v={<span className="mono">{bought.pin}</span>} />
             <p className="small muted mt">{tr('Saved under “My gift cards”.')}</p>
           </div>

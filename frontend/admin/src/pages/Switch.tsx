@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { countryLabel } from '@bitripay/shared';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -17,23 +18,23 @@ export function SwitchConsole() {
   return (
     <div>
       <PageHeader
-        title="National switch"
-        subtitle="BitriPay initiates, orchestrates and reconciles; the switch settles. Every state here comes from an authenticated observation or a dual-approved correction."
+        title={tr('National switch')}
+        subtitle={tr('BitriPay initiates, orchestrates and reconciles; the switch settles. Every state here comes from an authenticated observation or a dual-approved correction.')}
       />
       <Tabs
         tabs={[
-          { id: 'national', label: 'National view' },
-          { id: 'config', label: 'Configuration' },
+          { id: 'national', label: tr('National view') },
+          { id: 'config', label: tr('Configuration') },
           { id: 'pra', label: 'PRA' },
-          { id: 'connections', label: 'Connections' },
-          { id: 'participants', label: 'Participants' },
-          { id: 'policies', label: 'Routing policies' },
-          { id: 'payments', label: 'Payments' },
-          { id: 'messages', label: 'Inbox / outbox' },
-          { id: 'recon', label: 'Reconciliation' },
-          { id: 'rails', label: 'Rails & Smart Route' },
-          { id: 'incidents', label: 'Incidents' },
-          { id: 'fees', label: 'Aggregation fees' },
+          { id: 'connections', label: tr('Connections') },
+          { id: 'participants', label: tr('Participants') },
+          { id: 'policies', label: tr('Routing policies') },
+          { id: 'payments', label: tr('Payments') },
+          { id: 'messages', label: tr('Inbox / outbox') },
+          { id: 'recon', label: tr('Reconciliation') },
+          { id: 'rails', label: tr('Rails & Smart Route') },
+          { id: 'incidents', label: tr('Incidents') },
+          { id: 'fees', label: tr('Aggregation fees') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -72,7 +73,7 @@ function Connections({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
           </div>
           <div className="grid cols-3 mt">
             <div>
-              <KV k="Emission gate" v={c.gate?.allowed ? <Chip kind="success">open</Chip> : <Chip kind="danger">closed</Chip>} />
+              <KV k={tr('Emission gate')} v={c.gate?.allowed ? <Chip kind="success">open</Chip> : <Chip kind="danger">closed</Chip>} />
               {c.gate?.reasons?.length ? (
                 <ul className="small">
                   {c.gate.reasons.map((r: string) => (
@@ -82,16 +83,16 @@ function Connections({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
               ) : null}
             </div>
             <div>
-              <KV k="Link" v={<StatusBadge status={c.linkState ?? c.link?.state ?? 'unknown'} />} />
-              <KV k="Certificate" v={c.certificate?.notAfter ? `until ${fmtDate(c.certificate.notAfter)}` : 'none'} />
+              <KV k={tr('Link')} v={<StatusBadge status={c.linkState ?? c.link?.state ?? 'unknown'} />} />
+              <KV k={tr('Certificate')} v={c.certificate?.notAfter ? `until ${fmtDate(c.certificate.notAfter)}` : 'none'} />
             </div>
             <div>
-              <KV k="Blockers to enable" v={c.blockers?.length ? c.blockers.join('; ') : 'none'} />
+              <KV k={tr('Blockers to enable')} v={c.blockers?.length ? c.blockers.join('; ') : 'none'} />
             </div>
           </div>
           <div className="row mt">
             <Button size="sm" variant="secondary" onClick={() => setCert({ id: c.id, status: 'INTERNAL_TESTS', evidenceRef: '', profileVersion: '' })}>
-              Certification step
+              {tr('Certification step')}
             </Button>
             <ConfirmButton
               size="sm"
@@ -106,7 +107,7 @@ function Connections({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
                   .catch(err)
               }
             >
-              {c.enabled ? 'Disable emission' : 'Enable emission'}
+              {c.enabled ? tr('Disable emission') : tr('Enable emission')}
             </ConfirmButton>
             <Button
               size="sm"
@@ -121,25 +122,25 @@ function Connections({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
                   .catch(err)
               }
             >
-              Probe link
+              {tr('Probe link')}
             </Button>
           </div>
         </div>
       ))}
-      <Modal open={!!cert} onClose={() => setCert(null)} title="Certification step">
+      <Modal open={!!cert} onClose={() => setCert(null)} title={tr('Certification step')}>
         {cert && (
           <>
-            <Field label="Status">
+            <Field label={tr('Status')}>
               <Select value={cert.status} onChange={(e) => setCert({ ...cert, status: e.target.value })}>
                 {['INTERNAL_TESTS', 'SANDBOX', 'CERTIFIED', 'REVOKED'].map((s) => (
                   <option key={s}>{s}</option>
                 ))}
               </Select>
             </Field>
-            <Field label="Evidence reference">
+            <Field label={tr('Evidence reference')}>
               <Input value={cert.evidenceRef} onChange={(e) => setCert({ ...cert, evidenceRef: e.target.value })} />
             </Field>
-            <Field label="Profile version">
+            <Field label={tr('Profile version')}>
               <Input value={cert.profileVersion} onChange={(e) => setCert({ ...cert, profileVersion: e.target.value })} />
             </Field>
             <Button
@@ -154,7 +155,7 @@ function Connections({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
                   .catch(err)
               }
             >
-              Record
+              {tr('Record')}
             </Button>
           </>
         )}
@@ -172,16 +173,16 @@ function Participants({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
     <div className="grid cols-2">
       <div className="card">
         <div className="row">
-          <h4 style={{ margin: 0 }}>Registry</h4>
+          <h4 style={{ margin: 0 }}>{tr('Registry')}</h4>
           <Input value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} style={{ width: 80, marginLeft: 'auto' }} />
         </div>
         {registry.data && (
           <Alert kind={registry.data.stale ? 'warning' : 'success'}>
-            {registry.data.stale ? 'Registry stale' : 'Registry fresh'} · {registry.data.contradictions?.length ?? 0} contradiction(s)
+            {registry.data.stale ? tr('Registry stale') : tr('Registry fresh')} · {registry.data.contradictions?.length ?? 0} contradiction(s)
           </Alert>
         )}
         <Table
-          head={['Participant', 'Type', 'Status', 'Services', '']}
+          head={[tr('Participant'), tr('Type'), tr('Status'), tr('Services'), '']}
           rows={(data.data?.items ?? []).map((p: any) => [
             <b>
               {p.name}
@@ -205,7 +206,7 @@ function Participants({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
                       .catch(err)
                   }
                 >
-                  Approve
+                  {tr('Approve')}
                 </ConfirmButton>
               )}
               <ConfirmButton
@@ -221,19 +222,19 @@ function Participants({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
                     .catch(err)
                 }
               >
-                {p.status === 'SUSPENDED' ? 'Reinstate' : 'Suspend'}
+                {p.status === 'SUSPENDED' ? tr('Reinstate') : tr('Suspend')}
               </ConfirmButton>
             </div>,
           ])}
-          empty="No participants"
+          empty={tr('No participants')}
         />
       </div>
       <div className="card">
-        <h4>Pairs (from → to, product)</h4>
+        <h4>{tr('Pairs (from → to, product)')}</h4>
         <Table
-          head={['From', 'To', 'Product', 'Status', 'Evidence']}
+          head={['From', 'To', tr('Product'), tr('Status'), tr('Evidence')]}
           rows={(pairs.data?.items ?? []).map((p: any) => [p.fromId ?? p.from, p.toId ?? p.to, p.product, <StatusBadge status={p.status} />, <span className="tiny">{p.evidenceRef ?? '—'}</span>])}
-          empty="No pairs"
+          empty={tr('No pairs')}
         />
       </div>
     </div>
@@ -248,9 +249,9 @@ function Policies({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h4>Policy versions</h4>
+        <h4>{tr('Policy versions')}</h4>
         <Table
-          head={['Version', 'Status', 'Author', 'Approver', '']}
+          head={[tr('Version'), tr('Status'), tr('Author'), tr('Approver'), '']}
           rows={(data.data?.items ?? []).map((p: any) => [
             p.version,
             <StatusBadge status={p.status} />,
@@ -270,7 +271,7 @@ function Policies({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
                       .catch(err)
                   }
                 >
-                  Approve
+                  {tr('Approve')}
                 </ConfirmButton>
               )}
               {p.status === 'APPROVED' && (
@@ -287,27 +288,27 @@ function Policies({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
                       .catch(err)
                   }
                 >
-                  Activate
+                  {tr('Activate')}
                 </ConfirmButton>
               )}
             </div>,
           ])}
-          empty="No policies"
+          empty={tr('No policies')}
         />
-        <h4 className="mt">Exceptions (two approvals + signature)</h4>
+        <h4 className="mt">{tr('Exceptions (two approvals + signature)')}</h4>
         <Table
-          head={['Id', 'Scope', 'Status', 'Approvals']}
+          head={[tr('Id'), tr('Scope'), tr('Status'), tr('Approvals')]}
           rows={(exceptions.data?.items ?? []).map((e: any) => [
             <span className="mono tiny">{e.id}</span>,
             <span className="tiny">{e.scope ?? e.reason}</span>,
             <StatusBadge status={e.status} />,
             <span className="tiny">{(e.approvals ?? []).length}/2</span>,
           ])}
-          empty="No exceptions"
+          empty={tr('No exceptions')}
         />
       </div>
       <div className="card">
-        <h4>Explain a route (RTE-001…006)</h4>
+        <h4>{tr('Explain a route (RTE-001…006)')}</h4>
         <div className="grid cols-2">
           <Field label="From">
             <Input value={sim.fromParticipant} onChange={(e) => setSim({ ...sim, fromParticipant: e.target.value })} />
@@ -315,14 +316,14 @@ function Policies({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
           <Field label="To">
             <Input value={sim.toParticipant} onChange={(e) => setSim({ ...sim, toParticipant: e.target.value })} />
           </Field>
-          <Field label="Product">
+          <Field label={tr('Product')}>
             <Input value={sim.product} onChange={(e) => setSim({ ...sim, product: e.target.value })} />
           </Field>
-          <Field label="Amount (minor)">
+          <Field label={tr('Amount (minor)')}>
             <Input type="number" value={sim.amountMinor} onChange={(e) => setSim({ ...sim, amountMinor: Number(e.target.value) })} />
           </Field>
         </div>
-        <Button onClick={() => api.post<any>('/api/admin/switch/policies/decide', sim).then(setDecision).catch(err)}>Decide</Button>
+        <Button onClick={() => api.post<any>('/api/admin/switch/policies/decide', sim).then(setDecision).catch(err)}>{tr('Decide')}</Button>
         {decision && (
           <pre className="mono tiny mt" style={{ whiteSpace: 'pre-wrap' }}>
             {JSON.stringify(decision, null, 2)}
@@ -344,7 +345,7 @@ function Payments({ ok, err, money }: { ok: (m: string) => void; err: (e: any) =
       <div className="card">
         <div className="row mb">
           <Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 200 }}>
-            <option value="">All states</option>
+            <option value="">{tr('All states')}</option>
             {['RECEIVED', 'VALIDATED', 'QUEUED', 'SENT', 'PENDING', 'AUTHORIZED', 'COMPLETED', 'REJECTED', 'UNKNOWN', 'EXPIRED', 'CANCELLED', 'QUARANTINED'].map((s) => (
               <option key={s}>{s}</option>
             ))}
@@ -366,11 +367,11 @@ function Payments({ ok, err, money }: { ok: (m: string) => void; err: (e: any) =
                 .catch(err)
             }
           >
-            Run recovery (inquiries only)
+            {tr('Run recovery (inquiries only)')}
           </Button>
         </div>
         <Table
-          head={['Payment', 'Order', 'Amount', 'Status', 'Dimensions', '']}
+          head={[tr('Payment'), tr('Order'), tr('Amount'), tr('Status'), tr('Dimensions'), '']}
           rows={(data.data?.items ?? []).map((p: any) => [
             <span className="mono tiny">{p.payment_id}</span>,
             <span className="tiny">{p.merchant_order_id}</span>,
@@ -384,14 +385,14 @@ function Payments({ ok, err, money }: { ok: (m: string) => void; err: (e: any) =
                 : ''}
             </span>,
             <Button size="sm" variant="secondary" onClick={() => setSel(p.payment_id)}>
-              Timeline
+              {tr('Timeline')}
             </Button>,
           ])}
-          empty="No payments"
+          empty={tr('No payments')}
         />
       </div>
       <div className="card">
-        {!timeline.data && <p className="muted small">Select a payment to see its journal, attempts, observations and linked operations.</p>}
+        {!timeline.data && <p className="muted small">{tr('Select a payment to see its journal, attempts, observations and linked operations.')}</p>}
         {timeline.data && (
           <pre className="mono tiny" style={{ whiteSpace: 'pre-wrap', maxHeight: 600, overflow: 'auto' }}>
             {JSON.stringify(timeline.data, null, 2)}
@@ -408,9 +409,9 @@ function Messages({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h4>Inbox (verified observations, quarantine)</h4>
+        <h4>{tr('Inbox (verified observations, quarantine)')}</h4>
         <Table
-          head={['Id', 'Connection', 'Outcome', 'Quarantine', 'Received', '']}
+          head={[tr('Id'), tr('Connection'), tr('Outcome'), tr('Quarantine'), tr('Received'), '']}
           rows={(inbox.data?.items ?? []).map((m: any) => [
             <span className="mono tiny">{m.id}</span>,
             m.connectionId,
@@ -432,17 +433,17 @@ function Messages({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
                     .catch(err)
                 }
               >
-                Discard
+                {tr('Discard')}
               </ConfirmButton>
             ) : null,
           ])}
-          empty="Inbox empty"
+          empty={tr('Inbox empty')}
         />
       </div>
       <div className="card">
-        <h4>Outbox (pending, dead letters)</h4>
+        <h4>{tr('Outbox (pending, dead letters)')}</h4>
         <Table
-          head={['Id', 'Kind', 'Attempts', 'Next', 'Dead', '']}
+          head={[tr('Id'), tr('Kind'), tr('Attempts'), tr('Next'), tr('Dead'), '']}
           rows={(outbox.data?.items ?? []).map((m: any) => [
             <span className="mono tiny">{m.id}</span>,
             m.kind,
@@ -463,11 +464,11 @@ function Messages({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
                     .catch(err)
                 }
               >
-                Retry
+                {tr('Retry')}
               </Button>
             ) : null,
           ])}
-          empty="Outbox empty"
+          empty={tr('Outbox empty')}
         />
       </div>
     </div>
@@ -507,7 +508,7 @@ function Recon({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
             </Select>
           </div>
           <Table
-            head={['Case', 'Class', 'Exposure', 'Age', 'Owner', '']}
+            head={[tr('Case'), tr('Class'), tr('Exposure'), tr('Age'), tr('Owner'), '']}
             rows={(cases.data?.data ?? []).map((c: any) => [
               <span className="mono tiny">
                 {c.id}
@@ -519,23 +520,23 @@ function Recon({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
               `${c.ageHours}h`,
               <span className="tiny">{c.ownerId ?? '—'}</span>,
               <Button size="sm" variant="secondary" onClick={() => setSel(c)}>
-                Open
+                {tr('Open')}
               </Button>,
             ])}
-            empty="No cases"
+            empty={tr('No cases')}
           />
         </div>
         <div className="card">
-          {!sel && <p className="small muted">Open a case: assign it, propose a resolution with documents, and a different administrator approves closure.</p>}
+          {!sel && <p className="small muted">{tr('Open a case: assign it, propose a resolution with documents, and a different administrator approves closure.')}</p>}
           {sel && (
             <>
               <h4>
                 {sel.class} · {sel.id}
               </h4>
-              <KV k="Status" v={<StatusBadge status={sel.status} />} />
-              <KV k="References" v={<span className="mono tiny">{JSON.stringify(sel.references)}</span>} />
-              <KV k="Sources" v={(sel.sources ?? []).join(', ')} />
-              {sel.resolution && <KV k="Proposed" v={sel.resolution} />}
+              <KV k={tr('Status')} v={<StatusBadge status={sel.status} />} />
+              <KV k={tr('References')} v={<span className="mono tiny">{JSON.stringify(sel.references)}</span>} />
+              <KV k={tr('Sources')} v={(sel.sources ?? []).join(', ')} />
+              {sel.resolution && <KV k={tr('Proposed')} v={sel.resolution} />}
               <div className="row mt">
                 <ConfirmButton
                   size="sm"
@@ -549,7 +550,7 @@ function Recon({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
                       .catch(err)
                   }
                 >
-                  Assign to me
+                  {tr('Assign to me')}
                 </ConfirmButton>
                 {sel.status === 'RESOLUTION_PROPOSED' && (
                   <ConfirmButton
@@ -566,11 +567,11 @@ function Recon({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
                         .catch(err)
                     }
                   >
-                    Approve closure
+                    {tr('Approve closure')}
                   </ConfirmButton>
                 )}
               </div>
-              <Field label="Resolution">
+              <Field label={tr('Resolution')}>
                 <Textarea rows={3} value={resolution} onChange={(e) => setResolution(e.target.value)} />
               </Field>
               <Button
@@ -586,7 +587,7 @@ function Recon({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
                 }
                 disabled={resolution.length < 10}
               >
-                Propose resolution
+                {tr('Propose resolution')}
               </Button>
             </>
           )}
@@ -601,7 +602,7 @@ function Rails({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
   return (
     <div className="card">
       <Table
-        head={['Rail', 'Kind', 'Country', 'Circuit', 'Success 24h', 'p95', 'Cost', '']}
+        head={[tr('Rail'), tr('Kind'), tr('Country'), tr('Circuit'), tr('Success 24h'), 'p95', tr('Cost'), '']}
         rows={(rails.data?.items ?? []).map((r: any) => [
           <b>
             {r.name}
@@ -631,7 +632,7 @@ function Rails({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
                     .catch(err)
                 }
               >
-                Resume
+                {tr('Resume')}
               </ConfirmButton>
             ) : (
               <ConfirmButton
@@ -648,12 +649,12 @@ function Rails({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) 
                     .catch(err)
                 }
               >
-                Pause
+                {tr('Pause')}
               </ConfirmButton>
             )}
           </div>,
         ])}
-        empty="No rails"
+        empty={tr('No rails')}
       />
     </div>
   );
@@ -664,7 +665,7 @@ function Incidents({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
   return (
     <div className="card">
       <Table
-        head={['Severity', 'Title', 'Status', 'Opened', '']}
+        head={[tr('Severity'), tr('Title'), tr('Status'), tr('Opened'), '']}
         rows={(data.data?.items ?? []).map((i: any) => [
           <Chip kind={i.severity === 'P1' ? 'danger' : i.severity === 'P2' ? 'warning' : undefined}>{i.severity}</Chip>,
           <span>
@@ -689,7 +690,7 @@ function Incidents({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
                     .catch(err)
                 }
               >
-                Acknowledge
+                {tr('Acknowledge')}
               </Button>
             )}
             {i.status !== 'RESOLVED' && (
@@ -707,12 +708,12 @@ function Incidents({ ok, err }: { ok: (m: string) => void; err: (e: any) => void
                     .catch(err)
                 }
               >
-                Resolve
+                {tr('Resolve')}
               </ConfirmButton>
             )}
           </div>,
         ])}
-        empty="No incidents"
+        empty={tr('No incidents')}
       />
     </div>
   );
@@ -733,7 +734,7 @@ function NationalView({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
     <div>
       <div className="card mb">
         <div className="row">
-          <h4 style={{ margin: 0 }}>Connection · last 24 hours</h4>
+          <h4 style={{ margin: 0 }}>{tr('Connection · last 24 hours')}</h4>
           <Select value={selected} onChange={(e) => setConn(e.target.value)} style={{ width: 260, marginLeft: 'auto' }}>
             {(connections.data?.items ?? []).map((c: any) => (
               <option key={c.id} value={c.id}>
@@ -745,22 +746,22 @@ function NationalView({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
         {v && (
           <div className="grid cols-4 mt">
             <div className="stat">
-              <span className="label">Payments</span>
+              <span className="label">{tr('Payments')}</span>
               <span className="value">{sum(v.byStatus, (r) => r.n)}</span>
               <span className="small muted">{(v.byStatus ?? []).map((r: any) => `${r.status} ${r.n}`).join(' · ') || 'none'}</span>
             </div>
             <div className="stat">
-              <span className="label">Uncertain / review</span>
+              <span className="label">{tr('Uncertain / review')}</span>
               <span className="value">{v.uncertain ?? 0}</span>
-              <span className="small muted">UNKNOWN or REVIEW_REQUIRED — inquiries only, never a resend</span>
+              <span className="small muted">{tr('UNKNOWN or REVIEW_REQUIRED — inquiries only, never a resend')}</span>
             </div>
             <div className="stat">
-              <span className="label">Switch latency</span>
+              <span className="label">{tr('Switch latency')}</span>
               <span className="value">{v.latency?.avg != null ? `${Math.round(v.latency.avg)} ms` : '—'}</span>
               <span className="small muted">{v.latency?.n ? `${v.latency.n} answered attempt(s), max ${Math.round(v.latency.max)} ms` : 'no answered attempt'}</span>
             </div>
             <div className="stat">
-              <span className="label">Emission gate</span>
+              <span className="label">{tr('Emission gate')}</span>
               <span className="value">{v.gate?.allowed ? <Chip kind="success">open</Chip> : <Chip kind="danger">closed</Chip>}</span>
               <span className="small muted">
                 {(v.openCases ?? []).map((c: any) => `${c.class} ${c.n}`).join(' · ') || 'no open reconciliation case'} · outbox{' '}
@@ -771,21 +772,22 @@ function NationalView({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
         )}
         {v?.participants && (
           <Table
-            head={['Participant', 'Kind', 'Status', 'Currencies', 'Payments 24h', 'Open pairs']}
+            head={[tr('Participant'), tr('Kind'), tr('Status'), tr('Currencies'), tr('Payments 24h'), tr('Open pairs')]}
             rows={v.participants.map((p: any) => [<b>{p.name}</b>, p.kind, <StatusBadge status={p.status} />, (p.currencies ?? []).join(', '), p.volume24h, p.pairsOpen])}
-            empty="No participant registered for this connection's country"
+            empty={tr("No participant registered for this connection's country")}
           />
         )}
       </div>
       <Participants ok={ok} err={err} />
       <div className="card mt">
-        <h4>Capability matrix (country × method × rail)</h4>
+        <h4>{tr('Capability matrix (country × method × rail)')}</h4>
         <p className="small muted">
-          A cell is enabled when the country allows the method and a rail serving it is enabled and usable (not paused, no open circuit, no maintenance). Edit country columns in Gateway controls →
-          Capability matrix; open a rail maintenance window in the Configuration tab.
+          {tr(
+            'A cell is enabled when the country allows the method and a rail serving it is enabled and usable (not paused, no open circuit, no maintenance). Edit country columns in Gateway controls → Capability matrix; open a rail maintenance window in the Configuration tab.',
+          )}
         </p>
         <Table
-          head={['Country', 'Phase', 'Ceiling / tx', ...(matrix.data?.methods ?? []).map((m: any) => m.label)]}
+          head={[tr('Country'), tr('Phase'), tr('Ceiling / tx'), ...(matrix.data?.methods ?? []).map((m: any) => m.label)]}
           rows={(matrix.data?.items ?? []).map((c: any) => [
             <b>{countryLabel(c.country)}</b>,
             <Chip kind={c.licencePhase === 'full' ? 'success' : 'warning'}>{c.licencePhase}</Chip>,
@@ -805,7 +807,7 @@ function NationalView({ ok, err }: { ok: (m: string) => void; err: (e: any) => v
               </span>
             )),
           ])}
-          empty="No country configured"
+          empty={tr('No country configured')}
         />
       </div>
     </div>
@@ -823,7 +825,7 @@ function Configuration({ ok, err }: { ok: (m: string) => void; err: (e: any) => 
       <Connections ok={ok} err={err} />
       <div className="card mb">
         <div className="row">
-          <h4 style={{ margin: 0 }}>Certificates</h4>
+          <h4 style={{ margin: 0 }}>{tr('Certificates')}</h4>
           <Button
             size="sm"
             variant="secondary"
@@ -839,7 +841,7 @@ function Configuration({ ok, err }: { ok: (m: string) => void; err: (e: any) => 
                 .catch(err)
             }
           >
-            Check expiry now
+            {tr('Check expiry now')}
           </Button>
         </div>
         {certCheck && (
@@ -848,7 +850,7 @@ function Configuration({ ok, err }: { ok: (m: string) => void; err: (e: any) => 
           </Alert>
         )}
         <Table
-          head={['Connection', 'Environment', 'Certificate', 'Valid until', 'Certification', 'Profile']}
+          head={[tr('Connection'), tr('Environment'), tr('Certificate'), tr('Valid until'), tr('Certification'), tr('Profile')]}
           rows={(connections.data?.items ?? []).map((c: any) => [
             <b>{c.name}</b>,
             c.environment,
@@ -857,14 +859,16 @@ function Configuration({ ok, err }: { ok: (m: string) => void; err: (e: any) => 
             <StatusBadge status={c.certification?.status ?? 'NOT_STARTED'} />,
             <span className="tiny">{c.profileVersion ?? c.certification?.profileVersion ?? '—'}</span>,
           ])}
-          empty="No connection"
+          empty={tr('No connection')}
         />
       </div>
       <Policies ok={ok} err={err} />
       <div className="card mt">
-        <h4>Rail maintenance windows</h4>
+        <h4>{tr('Rail maintenance windows')}</h4>
         <p className="small muted">
-          A maintenance window makes the rail report MAINTENANCE and Smart Route stops choosing it until the window is cleared. Pausing a rail is the incident control; maintenance is the planned one.
+          {tr(
+            'A maintenance window makes the rail report MAINTENANCE and Smart Route stops choosing it until the window is cleared. Pausing a rail is the incident control; maintenance is the planned one.',
+          )}
         </p>
         <RailMaintenance ok={ok} err={err} />
       </div>
@@ -884,7 +888,7 @@ function RailMaintenance({ ok, err }: { ok: (m: string) => void; err: (e: any) =
       .catch(err);
   return (
     <Table
-      head={['Rail', 'Kind', 'State', 'Maintenance', '']}
+      head={[tr('Rail'), tr('Kind'), tr('State'), tr('Maintenance'), '']}
       rows={(rails.data?.items ?? []).map((r: any) => [
         <b>
           {r.name}
@@ -904,15 +908,15 @@ function RailMaintenance({ ok, err }: { ok: (m: string) => void; err: (e: any) =
         ),
         r.health?.maintenance ? (
           <ConfirmButton size="sm" variant="success" onConfirm={() => toggle(r)}>
-            Clear maintenance
+            {tr('Clear maintenance')}
           </ConfirmButton>
         ) : (
           <ConfirmButton size="sm" variant="secondary" prompt="Reason" onConfirm={(reason) => toggle(r, reason)}>
-            Open maintenance window
+            {tr('Open maintenance window')}
           </ConfirmButton>
         ),
       ])}
-      empty="No rails"
+      empty={tr('No rails')}
     />
   );
 }
@@ -939,10 +943,10 @@ function Pra({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => voi
       <Incidents ok={ok} err={err} />
       <div className="grid cols-2 mt">
         <div className="card">
-          <h4>Continuity procedures (recovery runbook)</h4>
+          <h4>{tr('Continuity procedures (recovery runbook)')}</h4>
           {r && (
             <p className="small muted">
-              Database {r.database?.journalMode} · {r.database?.path} · {r.replication?.emissionJournal?.uncertainPayments ?? 0} uncertain payment(s),{' '}
+              {tr('Database')} {r.database?.journalMode} · {r.database?.path} · {r.replication?.emissionJournal?.uncertainPayments ?? 0} uncertain payment(s),{' '}
               {r.replication?.emissionJournal?.attemptsSentWithoutResponse ?? 0} attempt(s) sent without response · checklist updated {r.checklistUpdatedAt ? fmtDate(r.checklistUpdatedAt) : 'never'}
             </p>
           )}
@@ -955,9 +959,9 @@ function Pra({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => voi
               </li>
             ))}
           </ol>
-          <h4 className="mt">Exercises</h4>
+          <h4 className="mt">{tr('Exercises')}</h4>
           <Table
-            head={['When', 'Kind', 'Outcome', 'RTO', 'RPO']}
+            head={[tr('When'), tr('Kind'), tr('Outcome'), 'RTO', 'RPO']}
             rows={(r?.exercises ?? []).map((e: any) => [
               <span className="tiny">{fmtDate(e.created_at)}</span>,
               e.kind,
@@ -965,12 +969,12 @@ function Pra({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => voi
               e.rto_minutes != null ? `${e.rto_minutes} min` : '—',
               e.rpo_seconds != null ? `${e.rpo_seconds} s` : '—',
             ])}
-            empty="No recovery exercise recorded yet"
+            empty={tr('No recovery exercise recorded yet')}
           />
         </div>
         <div className="card">
           <div className="row">
-            <h4 style={{ margin: 0 }}>Reconciliation coverage</h4>
+            <h4 style={{ margin: 0 }}>{tr('Reconciliation coverage')}</h4>
             <Button
               size="sm"
               variant="secondary"
@@ -986,7 +990,7 @@ function Pra({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => voi
                   .catch(err)
               }
             >
-              Check yesterday's reports
+              {tr("Check yesterday's reports")}
             </Button>
           </div>
           {coverage && (
@@ -995,7 +999,7 @@ function Pra({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => voi
             </Alert>
           )}
           <Table
-            head={['Connection', 'Cycle', 'Matched', 'Cases', 'Complete', 'When']}
+            head={[tr('Connection'), tr('Cycle'), tr('Matched'), tr('Cases'), tr('Complete'), tr('When')]}
             rows={(workbench.data?.recentRuns ?? []).map((run: any) => [
               run.connectionId,
               run.cycleRef,
@@ -1004,13 +1008,13 @@ function Pra({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => voi
               run.complete ? <Chip kind="success">complete</Chip> : <Chip kind="warning">partial</Chip>,
               <span className="tiny">{fmtDate(run.createdAt)}</span>,
             ])}
-            empty="No reconciliation run yet"
+            empty={tr('No reconciliation run yet')}
           />
-          <h4 className="mt">Open exceptions</h4>
+          <h4 className="mt">{tr('Open exceptions')}</h4>
           <Table
-            head={['Connection', 'Class', 'Count', 'Exposure', 'Oldest']}
+            head={[tr('Connection'), tr('Class'), tr('Count'), tr('Exposure'), tr('Oldest')]}
             rows={(workbench.data?.exceptions ?? []).map((e: any) => [e.connectionId, e.class, e.count, e.currency ? money(e.exposureMinor, e.currency) : e.exposureMinor, `${e.oldestAgeHours}h`])}
-            empty="No open exception"
+            empty={tr('No open exception')}
           />
         </div>
       </div>
@@ -1032,11 +1036,11 @@ function AggregationFees({ ok, err, money }: { ok: (m: string) => void; err: (e:
     <div>
       <div className="card mb">
         <div className="row wrap">
-          <Field label="Close a period (YYYY-MM)">
+          <Field label={tr('Close a period (YYYY-MM)')}>
             <Input value={period} onChange={(e) => setPeriod(e.target.value)} style={{ width: 120 }} />
           </Field>
           <StepUpButton
-            title="Close period"
+            title={tr('Close period')}
             onConfirm={(pin) =>
               api
                 .post('/api/admin/switch/fees/close', { period, pin })
@@ -1044,7 +1048,7 @@ function AggregationFees({ ok, err, money }: { ok: (m: string) => void; err: (e:
                 .catch(err)
             }
           >
-            Close period and invoice
+            {tr('Close period and invoice')}
           </StepUpButton>
         </div>
         <p className="tiny muted">
@@ -1053,17 +1057,17 @@ function AggregationFees({ ok, err, money }: { ok: (m: string) => void; err: (e:
         </p>
       </div>
       <div className="card mb">
-        <h4>Accrued, not yet invoiced</h4>
+        <h4>{tr('Accrued, not yet invoiced')}</h4>
         <Table
-          head={['Period', 'Currency', 'Payments', 'Merchants', 'Total']}
+          head={[tr('Period'), tr('Currency'), tr('Payments'), tr('Merchants'), tr('Total')]}
           rows={(data.data?.accrued ?? []).map((a: any) => [a.period, a.currency, a.count, a.merchants, money(a.total, a.currency)])}
-          empty="Nothing accrued"
+          empty={tr('Nothing accrued')}
         />
       </div>
       <div className="card">
-        <h4>Invoices</h4>
+        <h4>{tr('Invoices')}</h4>
         <Table
-          head={['Number', 'Merchant', 'Period', 'Total', 'Status', '']}
+          head={[tr('Number'), tr('Merchant'), tr('Period'), tr('Total'), tr('Status'), '']}
           rows={(data.data?.invoices ?? []).map((i: any) => [
             <b className="mono">{i.number}</b>,
             i.merchant ? `${i.merchant.businessName || i.merchant.fullName} (@${i.merchant.tag})` : i.merchantUserId,
@@ -1076,33 +1080,33 @@ function AggregationFees({ ok, err, money }: { ok: (m: string) => void; err: (e:
             </span>,
             i.status === 'open' ? (
               <Button size="sm" variant="secondary" onClick={() => setSettle(i)}>
-                Settle / void
+                {tr('Settle / void')}
               </Button>
             ) : null,
           ])}
-          empty="No invoice yet"
+          empty={tr('No invoice yet')}
         />
       </div>
       <Modal open={!!settle} onClose={() => setSettle(null)} title={settle ? `Invoice ${settle.number}` : ''}>
         {settle && (
           <>
-            <Field label="Action">
+            <Field label={tr('Action')}>
               <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
-                <option value="paid">Record a bank settlement</option>
-                <option value="void">Void (entries return to accrued)</option>
+                <option value="paid">{tr('Record a bank settlement')}</option>
+                <option value="void">{tr('Void (entries return to accrued)')}</option>
               </Select>
             </Field>
             {form.kind === 'paid' ? (
-              <Field label="Bank reference">
+              <Field label={tr('Bank reference')}>
                 <Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
               </Field>
             ) : (
-              <Field label="Reason">
+              <Field label={tr('Reason')}>
                 <Input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
               </Field>
             )}
             <StepUpButton
-              title="Confirm"
+              title={tr('Confirm')}
               onConfirm={(pin) =>
                 api
                   .post(`/api/admin/switch/fees/invoices/${settle.id}/settle`, form.kind === 'paid' ? { kind: 'paid', reference: form.reference, pin } : { kind: 'void', reason: form.reason, pin })
@@ -1110,7 +1114,7 @@ function AggregationFees({ ok, err, money }: { ok: (m: string) => void; err: (e:
                   .catch(err)
               }
             >
-              Confirm
+              {tr('Confirm')}
             </StepUpButton>
           </>
         )}

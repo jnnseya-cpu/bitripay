@@ -146,7 +146,7 @@ export function Withdraw() {
           {fee != null && amount && (
             <div className="card soft compact mb">
               <KV k={t('common.fee')} v={money(fee, cur)} />
-              <KV k="You receive" v={`${amount} ${cur}`} />
+              <KV k={tr('You receive')} v={`${amount} ${cur}`} />
             </div>
           )}
           <Button
@@ -198,7 +198,7 @@ export function Withdraw() {
         onClose={() => setPinOpen(false)}
         onSubmit={(pin) => (pinFor === 'bank' ? addBank(pin) : submit(pin))}
         loading={loading}
-        summary={<KV k="Withdraw" v={`${amount} ${cur}`} />}
+        summary={<KV k={tr('Withdraw')} v={`${amount} ${cur}`} />}
       />
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title={tr('Add bank account')}>
         <Field label={tr('Bank name')}>

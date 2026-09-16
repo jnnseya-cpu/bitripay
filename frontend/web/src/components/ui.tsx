@@ -413,11 +413,11 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
 
 /** Lifecycle of an external payment: makes the difference between initiated, confirmed and settled explicit. */
 export const STAGE_STEPS: { id: string; label: string; stages: string[] }[] = [
-  { id: 'initiated', label: tr('Initiated'), stages: ['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED'] },
-  { id: 'sent', label: tr('Sent'), stages: ['PAYMENT_SENT'] },
-  { id: 'verifying', label: tr('Verifying'), stages: ['EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'] },
-  { id: 'confirmed', label: tr('Confirmed'), stages: ['CONFIRMED'] },
-  { id: 'settled', label: tr('Settled'), stages: ['SETTLED'] },
+  { id: 'initiated', label: 'Initiated', stages: ['CREATED', 'AUTHENTICATION_REQUIRED', 'INSTRUCTION_ISSUED'] },
+  { id: 'sent', label: 'Sent', stages: ['PAYMENT_SENT'] },
+  { id: 'verifying', label: 'Verifying', stages: ['EVIDENCE_RECEIVED', 'VERIFYING', 'MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE', 'DISPUTED'] },
+  { id: 'confirmed', label: 'Confirmed', stages: ['CONFIRMED'] },
+  { id: 'settled', label: 'Settled', stages: ['SETTLED'] },
 ];
 export function StageTimeline({ stage, stageLabel, stageDescription }: { stage?: string; stageLabel?: string; stageDescription?: string }) {
   const t = useT();
@@ -441,7 +441,7 @@ export function StageTimeline({ stage, stageLabel, stageDescription }: { stage?:
                 }}
               />
               <div className="tiny mt-sm" style={{ color: state === 'off' ? 'var(--muted)' : 'inherit', fontWeight: state === 'active' || state === 'warn' ? 700 : 400 }}>
-                {s.label}
+                {tr(s.label)}
               </div>
             </div>
           );
@@ -522,10 +522,10 @@ export function RouteDisclosure({ declaration, fx }: { declaration?: any; fx?: a
 
 /** Lifecycle of a cross-rail transfer: initiated → funded → paying out → settled. */
 export const ROUTE_STEPS: { id: string; label: string; stages: string[] }[] = [
-  { id: 'initiated', label: tr('Approved'), stages: ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'BIOMETRICALLY_APPROVED', 'FUNDING_PENDING'] },
-  { id: 'funded', label: tr('Funded · FX reserved'), stages: ['FUNDED', 'FX_RESERVED', 'AWAITING_CONFIRMATION', 'MANUAL_REVIEW', 'INSUFFICIENT_LIQUIDITY'] },
-  { id: 'paying', label: tr('Paying out'), stages: ['PAYOUT_ROUTED', 'PAYOUT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'VERIFIED', 'MISMATCHED', 'DUPLICATE'] },
-  { id: 'settled', label: tr('Settled'), stages: ['SETTLED'] },
+  { id: 'initiated', label: 'Approved', stages: ['CREATED', 'QUOTED', 'BIOMETRIC_APPROVAL_REQUIRED', 'BIOMETRICALLY_APPROVED', 'FUNDING_PENDING'] },
+  { id: 'funded', label: 'Funded · FX reserved', stages: ['FUNDED', 'FX_RESERVED', 'AWAITING_CONFIRMATION', 'MANUAL_REVIEW', 'INSUFFICIENT_LIQUIDITY'] },
+  { id: 'paying', label: 'Paying out', stages: ['PAYOUT_ROUTED', 'PAYOUT_SENT', 'EVIDENCE_RECEIVED', 'VERIFYING', 'VERIFIED', 'MISMATCHED', 'DUPLICATE'] },
+  { id: 'settled', label: 'Settled', stages: ['SETTLED'] },
 ];
 export function RouteTimeline({ stage, stageLabel, stageDescription }: { stage?: string; stageLabel?: string; stageDescription?: string }) {
   if (!stage) return null;
@@ -548,7 +548,7 @@ export function RouteTimeline({ stage, stageLabel, stageDescription }: { stage?:
                 }}
               />
               <div className="tiny mt-sm" style={{ color: state === 'off' ? 'var(--muted)' : 'inherit', fontWeight: state === 'active' || state === 'warn' ? 700 : 400 }}>
-                {s.label}
+                {tr(s.label)}
               </div>
             </div>
           );

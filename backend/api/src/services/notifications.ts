@@ -3,7 +3,7 @@ import { uuid, now } from '../lib/ids';
 import { parseJson } from '../lib/json';
 import { config } from '../config';
 import { badRequest } from '../lib/errors';
-import type { Notification } from '@bitripay/shared';
+import { translate, type Notification } from '@bitripay/shared';
 
 export function toNotification(row: any): Notification {
   return { id: row.id, title: row.title, body: row.body, data: parseJson(row.data, {}), read: !!row.read, createdAt: row.created_at };
@@ -249,6 +249,10 @@ export function notify(userId: string, title: string, body: string, data: Record
       body = rendered.body || body;
     }
   }
+  // the person's language: titles and fixed bodies come from the phrase packs, template bodies keep their variables
+  const lang = prefs?.language || 'en';
+  title = translate(lang, title);
+  body = translate(lang, body);
   const { id, loud } = insertNotification(userId, title, body, rest);
   const payload = { ...rest, loud };
   const pushed = (db.prepare('SELECT COUNT(*) c FROM push_tokens WHERE user_id = ?').get(userId) as { c: number }).c > 0;

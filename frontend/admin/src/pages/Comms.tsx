@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { Alert, Button, Chip, Field, Input, PageHeader, Select, Table, fmtDate, useAsync } from '../components/ui';
 
@@ -63,7 +64,7 @@ export function Comms() {
   const [filterCategory, setFilterCategory] = useState('');
   const [query, setQuery] = useState('');
 
-  if (!data.data) return <PageHeader title="Communication events" subtitle="Loading the catalogue…" />;
+  if (!data.data) return <PageHeader title={tr('Communication events')} subtitle={tr('Loading the catalogue…')} />;
   const { categories, channels, events, overview, deliveries } = data.data;
   const doPreview = async () => {
     setBusy(true);
@@ -94,36 +95,39 @@ export function Comms() {
 
   return (
     <div>
-      <PageHeader title="Communication events" subtitle={`One event engine: ${overview.events} events fan out across email, in-app, SMS, push and WhatsApp. Mandatory notices bypass opt-outs.`} />
+      <PageHeader
+        title={tr('Communication events')}
+        subtitle={`One event engine: ${overview.events} events fan out across email, in-app, SMS, push and WhatsApp. Mandatory notices bypass opt-outs.`}
+      />
 
       <div className="grid cols-4">
         <div className="card">
-          <div className="tiny muted">Catalogue events</div>
+          <div className="tiny muted">{tr('Catalogue events')}</div>
           <div style={{ fontSize: 28, fontWeight: 700 }}>{overview.events}</div>
           <div className="tiny">{overview.categories} categories</div>
         </div>
         <div className="card">
-          <div className="tiny muted">Mandatory notices</div>
+          <div className="tiny muted">{tr('Mandatory notices')}</div>
           <div style={{ fontSize: 28, fontWeight: 700 }}>{overview.mandatory}</div>
           <div className="tiny">bypass user opt-outs</div>
         </div>
         <div className="card">
-          <div className="tiny muted">Messages delivered</div>
+          <div className="tiny muted">{tr('Messages delivered')}</div>
           <div style={{ fontSize: 28, fontWeight: 700 }}>{overview.delivered}</div>
           <div className="tiny">of {overview.attempted} attempted (90-day log)</div>
         </div>
         <div className="card">
-          <div className="tiny muted">Channels wired</div>
+          <div className="tiny muted">{tr('Channels wired')}</div>
           <div style={{ fontSize: 28, fontWeight: 700 }}>{overview.channelsWired}</div>
           <div className="tiny">{channels.join(' · ')}</div>
         </div>
       </div>
 
       <div className="card mt">
-        <h4>Channel coverage</h4>
-        <p className="tiny muted">How many catalogue events fire on each channel by default, what was sent, and whether the channel is connected.</p>
+        <h4>{tr('Channel coverage')}</h4>
+        <p className="tiny muted">{tr('How many catalogue events fire on each channel by default, what was sent, and whether the channel is connected.')}</p>
         <Table
-          head={['Channel', 'Events', 'Sent', 'Attempted', 'Connection']}
+          head={[tr('Channel'), tr('Events'), tr('Sent'), tr('Attempted'), tr('Connection')]}
           rows={overview.coverage.map((c) => [
             <b>{c.channel}</b>,
             c.events,
@@ -137,10 +141,11 @@ export function Comms() {
       </div>
 
       <div className="card mt">
-        <h4>Template QA</h4>
+        <h4>{tr('Template QA')}</h4>
         <p className="tiny muted">
-          Preview the branded email (site logo, colour and contact details on every outbound email) or fire any event to yourself across its channels. Test sends are recorded in the log and marked as
-          tests.
+          {tr(
+            'Preview the branded email (site logo, colour and contact details on every outbound email) or fire any event to yourself across its channels. Test sends are recorded in the log and marked as tests.',
+          )}
         </p>
         <div className="row">
           <Select value={eventId} onChange={(e) => setEventId(e.target.value)} style={{ minWidth: 360 }}>
@@ -157,10 +162,10 @@ export function Comms() {
             ))}
           </Select>
           <Button variant="secondary" onClick={doPreview} disabled={busy}>
-            Preview email
+            {tr('Preview email')}
           </Button>
           <Button onClick={sendTest} disabled={busy}>
-            Send test to me
+            {tr('Send test to me')}
           </Button>
         </div>
         {selected && (
@@ -173,11 +178,11 @@ export function Comms() {
         {preview && (
           <div className="grid cols-2 mt">
             <div>
-              <h5>Email as received</h5>
-              <iframe title="Email preview" srcDoc={preview.html} style={{ width: '100%', height: 520, border: '1px solid var(--line)', borderRadius: 8, background: '#fff' }} />
+              <h5>{tr('Email as received')}</h5>
+              <iframe title={tr('Email preview')} srcDoc={preview.html} style={{ width: '100%', height: 520, border: '1px solid var(--line)', borderRadius: 8, background: '#fff' }} />
             </div>
             <div>
-              <h5>Every channel</h5>
+              <h5>{tr('Every channel')}</h5>
               {channels.map((ch) => (
                 <div key={ch} className="mt-sm">
                   <b>{ch}</b>
@@ -193,10 +198,10 @@ export function Comms() {
       </div>
 
       <div className="card mt">
-        <h4>Recent deliveries</h4>
-        <p className="tiny muted">Every event × channel × recipient with its delivery status. Contact details are masked.</p>
+        <h4>{tr('Recent deliveries')}</h4>
+        <p className="tiny muted">{tr('Every event × channel × recipient with its delivery status. Contact details are masked.')}</p>
         <Table
-          head={['Channel', 'Event', 'Status', 'Via', 'Recipient', 'When']}
+          head={[tr('Channel'), tr('Event'), tr('Status'), tr('Via'), tr('Recipient'), tr('When')]}
           rows={deliveries.map((d) => [
             d.channel,
             <span className="mono tiny">{d.eventId}</span>,
@@ -208,23 +213,23 @@ export function Comms() {
             <span className="tiny">{d.recipient ?? ''}</span>,
             <span className="tiny">{fmtDate(d.createdAt)}</span>,
           ])}
-          empty="No deliveries yet"
+          empty={tr('No deliveries yet')}
         />
       </div>
 
       <div className="card mt">
         <div className="row between">
-          <h4>Catalogue</h4>
+          <h4>{tr('Catalogue')}</h4>
           <div className="row">
             <Select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-              <option value="">All categories</option>
+              <option value="">{tr('All categories')}</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
                 </option>
               ))}
             </Select>
-            <Input placeholder="Search events" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <Input placeholder={tr('Search events')} value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
         </div>
         {categories
@@ -241,7 +246,7 @@ export function Comms() {
                   </span>
                 </h5>
                 <Table
-                  head={['Event', 'Id', 'Subject', 'Severity', 'Channels']}
+                  head={[tr('Event'), tr('Id'), tr('Subject'), tr('Severity'), tr('Channels')]}
                   rows={list.map((e) => [
                     <span>
                       <b>{e.label}</b>
@@ -261,7 +266,7 @@ export function Comms() {
               </div>
             );
           })}
-        <Field hint="Edit the wording of any event per channel and language under Email, SMS & push → Templates; the catalogue text is the shipped default.">
+        <Field hint={tr('Edit the wording of any event per channel and language under Email, SMS & push → Templates; the catalogue text is the shipped default.')}>
           <span />
         </Field>
       </div>

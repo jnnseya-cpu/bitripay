@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { PageHeader, useAsync, Loading, Table, StatusBadge, fmtDate } from '../components/ui';
@@ -25,38 +26,38 @@ export function Dashboard() {
   const daily = (s.daily as any[]).filter((d) => d.currency === base);
   return (
     <div>
-      <PageHeader title="Analytics dashboard" subtitle="Real-time overview of users, volume, revenue and pending work" />
+      <PageHeader title={tr('Analytics dashboard')} subtitle={tr('Real-time overview of users, volume, revenue and pending work')} />
       <div className="grid cols-4">
         <div className="card">
           <div className="stat">
-            <span className="label">Users</span>
+            <span className="label">{tr('Users')}</span>
             <span className="value">{s.users.user ?? 0}</span>
-            <span className="small muted">+{s.newUsers30d} accounts in 30 days</span>
+            <span className="small muted">{tr('+{0} accounts in 30 days', { 0: s.newUsers30d })}</span>
           </div>
         </div>
         <div className="card">
           <div className="stat">
-            <span className="label">Merchants</span>
+            <span className="label">{tr('Merchants')}</span>
             <span className="value">{s.users.merchant ?? 0}</span>
           </div>
         </div>
         <div className="card">
           <div className="stat">
-            <span className="label">Agents</span>
+            <span className="label">{tr('Agents')}</span>
             <span className="value">{s.users.agent ?? 0}</span>
           </div>
         </div>
         <div className="card">
           <div className="stat">
-            <span className="label">Admins</span>
+            <span className="label">{tr('Admins')}</span>
             <span className="value">{s.users.admin ?? 0}</span>
           </div>
         </div>
       </div>
       <div className="grid cols-3 mt">
         <div className="card">
-          <h4>Today</h4>
-          {(s.today as any[]).length === 0 && <div className="muted small">No completed transactions today</div>}
+          <h4>{tr('Today')}</h4>
+          {(s.today as any[]).length === 0 && <div className="muted small">{tr('No completed transactions today')}</div>}
           {(s.today as any[]).map((t) => (
             <div key={t.currency} className="kv">
               <span className="k">
@@ -69,7 +70,7 @@ export function Dashboard() {
           ))}
         </div>
         <div className="card">
-          <h4>Customer balances (liabilities)</h4>
+          <h4>{tr('Customer balances (liabilities)')}</h4>
           {(s.balances as any[]).map((b) => (
             <div key={b.currency} className="kv">
               <span className="k">{b.currency}</span>
@@ -78,8 +79,8 @@ export function Dashboard() {
           ))}
         </div>
         <div className="card">
-          <h4>Platform revenue (fees)</h4>
-          {(s.revenue as any[]).length === 0 && <div className="muted small">No fees collected yet</div>}
+          <h4>{tr('Platform revenue (fees)')}</h4>
+          {(s.revenue as any[]).length === 0 && <div className="muted small">{tr('No fees collected yet')}</div>}
           {(s.revenue as any[]).map((b) => (
             <div key={b.currency} className="kv">
               <span className="k">{b.currency}</span>
@@ -93,13 +94,13 @@ export function Dashboard() {
       <div className="grid cols-3 mt">
         <div className="card" style={{ gridColumn: 'span 2' }}>
           <div className="row between">
-            <h4>Daily volume · {base} (30 days)</h4>
+            <h4>{tr('Daily volume · {0} (30 days)', { 0: base })}</h4>
             <Link to="/analytics" className="small">
-              All charts →
+              {tr('All charts →')}
             </Link>
           </div>
           {daily.length === 0 ? (
-            <div className="muted small">No data</div>
+            <div className="muted small">{tr('No data')}</div>
           ) : (
             <Chart
               scene={areaChart(
@@ -114,7 +115,7 @@ export function Dashboard() {
           )}
         </div>
         <div className="card">
-          <h4>Pending work</h4>
+          <h4>{tr('Pending work')}</h4>
           {queues.map(([label, n, to]) => (
             <Link key={label as string} to={to as string} className="kv" style={{ color: 'inherit', textDecoration: 'none' }}>
               <span className="k">{label}</span>
@@ -124,9 +125,9 @@ export function Dashboard() {
         </div>
       </div>
       <div className="card mt">
-        <h4>Volume by type (30 days)</h4>
+        <h4>{tr('Volume by type (30 days)')}</h4>
         <Table
-          head={['Type', 'Currency', 'Count', 'Volume', 'Fees']}
+          head={[tr('Type'), tr('Currency'), tr('Count'), tr('Volume'), tr('Fees')]}
           rows={(s.txByType as any[]).map((t) => [
             TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS] ?? t.type,
             t.currency,
@@ -138,13 +139,13 @@ export function Dashboard() {
       </div>
       <div className="card mt">
         <div className="card-title">
-          <h4>Latest transactions</h4>
+          <h4>{tr('Latest transactions')}</h4>
           <Link to="/transactions" className="small">
-            All →
+            {tr('All →')}
           </Link>
         </div>
         <Table
-          head={['Reference', 'Type', 'Amount', 'Status', 'When']}
+          head={[tr('Reference'), tr('Type'), tr('Amount'), tr('Status'), tr('When')]}
           rows={(s.recent as any[]).map((t) => [
             <Link to={`/transactions?search=${t.reference}`}>{t.reference}</Link>,
             TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS],

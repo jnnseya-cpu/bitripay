@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { useSearchParams } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -45,16 +46,20 @@ export function Verification() {
   const p = kase?.payment;
   return (
     <div>
-      <PageHeader title="Verification console" subtitle="External payments never settle on their own word. Review the evidence, propose a decision, and let a second administrator approve it." />
+      <PageHeader
+        title={tr('Verification console')}
+        subtitle={tr('External payments never settle on their own word. Review the evidence, propose a decision, and let a second administrator approve it.')}
+      />
       <Alert kind="info">
-        Maker-checker is on: the person who proposes a decision cannot approve it. Approvals require your transaction PIN or a passkey step-up. Screenshots and typed references from payers are
-        supporting notes only.
+        {tr(
+          'Maker-checker is on: the person who proposes a decision cannot approve it. Approvals require your transaction PIN or a passkey step-up. Screenshots and typed references from payers are supporting notes only.',
+        )}
       </Alert>
       {(data.data?.pending ?? []).length > 0 && (
         <div className="card mb">
-          <h4>Awaiting a second approver</h4>
+          <h4>{tr('Awaiting a second approver')}</h4>
           <Table
-            head={['Item', 'Decision', 'Proposed by', 'Note', 'When', '']}
+            head={[tr('Item'), tr('Decision'), 'Proposed by', tr('Note'), tr('When'), '']}
             rows={data.data.pending.map((v: any) => [
               <span>
                 <Chip>{(v.subjectType ?? 'payment').replace('_', ' ')}</Chip>{' '}
@@ -89,7 +94,7 @@ export function Verification() {
                     title={`Approve ${v.action}`}
                     onConfirm={(pin) => act(api.post(`/api/admin/verifications/${v.id}/approve`, { pin }), `Decision approved – payment ${v.action === 'confirm' ? 'settled' : 'rejected'}`)}
                   >
-                    Approve {v.action}
+                    {tr('Approve {0}', { 0: v.action })}
                   </StepUpButton>
                   <ConfirmButton
                     size="sm"
@@ -97,7 +102,7 @@ export function Verification() {
                     prompt="Why are you declining?"
                     onConfirm={(r) => act(api.post(`/api/admin/verifications/${v.id}/decline`, { reason: r }), 'Proposal declined')}
                   >
-                    Decline
+                    {tr('Decline')}
                   </ConfirmButton>
                 </div>
               ),
@@ -108,9 +113,9 @@ export function Verification() {
       <div className="grid cols-2">
         <div className="card">
           <div className="row mb">
-            <h4 style={{ margin: 0 }}>Open intents</h4>
+            <h4 style={{ margin: 0 }}>{tr('Open intents')}</h4>
             <Select value={stage} onChange={(e) => setStage(e.target.value)} style={{ width: 200, marginLeft: 'auto' }}>
-              <option value="">All open stages</option>
+              <option value="">{tr('All open stages')}</option>
               {Object.keys(data.data?.stages ?? {}).map((s) => (
                 <option key={s} value={s}>
                   {data.data.stages[s].label}
@@ -119,7 +124,7 @@ export function Verification() {
             </Select>
           </div>
           <Table
-            head={['Amount', 'Rail', 'Payer', 'Stage', 'Created', '']}
+            head={[tr('Amount'), tr('Rail'), tr('Payer'), tr('Stage'), tr('Created'), '']}
             rows={(data.data?.queue ?? []).map((q: any) => [
               <b>{money(q.amount, q.currency)}</b>,
               <span className="small">
@@ -133,14 +138,14 @@ export function Verification() {
               <Stage stage={q.stage} label={q.stageLabel} />,
               <span className="small">{fmtDate(q.createdAt)}</span>,
               <Button size="sm" variant={selected === q.id ? undefined : 'secondary'} onClick={() => setParams({ payment: q.id })}>
-                Review
+                {tr('Review')}
               </Button>,
             ])}
-            empty="Nothing waiting for verification"
+            empty={tr('Nothing waiting for verification')}
           />
         </div>
         <div className="card">
-          {!p && <div className="muted small">Select a payment to see its evidence, decisions and full history.</div>}
+          {!p && <div className="muted small">{tr('Select a payment to see its evidence, decisions and full history.')}</div>}
           {p && (
             <>
               <div className="row mb">
@@ -152,16 +157,16 @@ export function Verification() {
               <div className="small muted mb">{p.stageDescription}</div>
               <div className="grid cols-2">
                 <div>
-                  <KV k="Gateway / rail" v={`${p.gatewayName}`} />
-                  <KV k="Reference" v={<span className="mono">{p.providerRef ?? '—'}</span>} />
-                  <KV k="Purpose" v={p.purpose} />
+                  <KV k={tr('Gateway / rail')} v={`${p.gatewayName}`} />
+                  <KV k={tr('Reference')} v={<span className="mono">{p.providerRef ?? '—'}</span>} />
+                  <KV k={tr('Purpose')} v={p.purpose} />
                   <KV k="Authorised by" v={p.authMethod ? `${p.authMethod} · ${fmtDate(p.authenticatedAt)}` : <Chip kind="danger">not authenticated</Chip>} />
-                  <KV k="Expires" v={fmtDate(p.expiresAt)} />
+                  <KV k={tr('Expires')} v={fmtDate(p.expiresAt)} />
                 </div>
                 <div>
-                  <KV k="Account" v={kase.user ? <UserCell user={kase.user} /> : 'guest'} />
+                  <KV k={tr('Account')} v={kase.user ? <UserCell user={kase.user} /> : 'guest'} />
                   <KV
-                    k="Payer"
+                    k={tr('Payer')}
                     v={
                       <span className="small">
                         {kase.payer.name ?? '—'}
@@ -170,11 +175,11 @@ export function Verification() {
                       </span>
                     }
                   />
-                  <KV k="Fee" v={money(p.fee, p.currency)} />
-                  <KV k="Ledger tx" v={p.transactionId ? <span className="mono tiny">{p.transactionId}</span> : '—'} />
+                  <KV k={tr('Fee')} v={money(p.fee, p.currency)} />
+                  <KV k={tr('Ledger tx')} v={p.transactionId ? <span className="mono tiny">{p.transactionId}</span> : '—'} />
                 </div>
               </div>
-              {kase.riskFlags?.length > 0 && <Alert kind="warning">Risk flags: {kase.riskFlags.join(', ')}</Alert>}
+              {kase.riskFlags?.length > 0 && <Alert kind="warning">{tr('Risk flags: {0}', { 0: kase.riskFlags.join(', ') })}</Alert>}
               {kase.proof && (
                 <Alert kind="info">
                   <b>Payer's sent-report (not authoritative):</b> reference {kase.proof.reference ?? '—'}
@@ -187,8 +192,8 @@ export function Verification() {
                   )}
                 </Alert>
               )}
-              <h5 className="mt">Evidence ({kase.evidence.length})</h5>
-              {kase.evidence.length === 0 && <div className="muted small">No operator/bank evidence received yet.</div>}
+              <h5 className="mt">{tr('Evidence ({0})', { 0: kase.evidence.length })}</h5>
+              {kase.evidence.length === 0 && <div className="muted small">{tr('No operator/bank evidence received yet.')}</div>}
               {kase.evidence.map((e: any) => (
                 <div key={e.id} className="card soft compact mb-sm">
                   <div className="row wrap">
@@ -202,7 +207,7 @@ export function Verification() {
                     {e.rawText}
                   </div>
                   <div className="tiny mt-sm">
-                    Parsed: ref <b>{e.parsed.reference ?? '—'}</b> · amount{' '}
+                    {tr('Parsed: ref')} <b>{e.parsed.reference ?? '—'}</b> · amount{' '}
                     <b>
                       {e.parsed.amount ?? '—'} {e.parsed.currency ?? ''}
                     </b>{' '}
@@ -224,11 +229,11 @@ export function Verification() {
               ))}
               <div className="row mb">
                 <Button size="sm" variant="secondary" onClick={() => setManualOpen(true)}>
-                  + Enter statement line / SMS manually
+                  {tr('+ Enter statement line / SMS manually')}
                 </Button>
               </div>
-              <h5>Decisions</h5>
-              {kase.verifications.length === 0 && <div className="muted small">No decision proposed yet.</div>}
+              <h5>{tr('Decisions')}</h5>
+              {kase.verifications.length === 0 && <div className="muted small">{tr('No decision proposed yet.')}</div>}
               {kase.verifications.map((v: any) => (
                 <div key={v.id} className="small mb-sm">
                   <Chip kind={v.status === 'approved' ? 'success' : v.status === 'declined' ? 'danger' : 'warning'}>{v.status}</Chip> <b>{v.action}</b> proposed by {v.proposedBy?.fullName ?? '?'}{' '}
@@ -240,24 +245,24 @@ export function Verification() {
               ))}
               {!['SETTLED', 'REJECTED', 'EXPIRED', 'REVERSED'].includes(p.stage) && !kase.verifications.some((v: any) => v.status === 'proposed') && (
                 <div className="card soft compact">
-                  <Field label="Verifier note (what you checked: statement line, operator portal, receipt id)">
+                  <Field label={tr('Verifier note (what you checked: statement line, operator portal, receipt id)')}>
                     <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
                   </Field>
                   <div className="row">
                     <ConfirmButton variant="success" onConfirm={() => act(api.post(`/api/admin/payments/${p.id}/confirm`, { note }), 'Confirmation proposed – a second admin must approve')}>
-                      Propose: confirm received
+                      {tr('Propose: confirm received')}
                     </ConfirmButton>
                     <ConfirmButton
                       variant="danger"
                       prompt="Reason shown to the payer"
                       onConfirm={(r) => act(api.post(`/api/admin/payments/${p.id}/reject`, { reason: r }), 'Rejection proposed – a second admin must approve')}
                     >
-                      Propose: reject
+                      {tr('Propose: reject')}
                     </ConfirmButton>
                   </div>
                 </div>
               )}
-              <h5 className="mt">History (immutable event log)</h5>
+              <h5 className="mt">{tr('History (immutable event log)')}</h5>
               <div style={{ maxHeight: 260, overflow: 'auto' }}>
                 {kase.events.map((e: any) => (
                   <div key={e.id} className="tiny mb-sm">
@@ -273,18 +278,20 @@ export function Verification() {
           )}
         </div>
       </div>
-      <Modal open={manualOpen} onClose={() => setManualOpen(false)} title="Manual evidence (needs maker-checker approval)">
+      <Modal open={manualOpen} onClose={() => setManualOpen(false)} title={tr('Manual evidence (needs maker-checker approval)')}>
         <Alert kind="warning">
-          Paste the exact SMS or statement line. It is parsed and matched like device evidence but is never authoritative on its own – a second administrator still has to approve the settlement.
+          {tr(
+            'Paste the exact SMS or statement line. It is parsed and matched like device evidence but is never authoritative on its own – a second administrator still has to approve the settlement.',
+          )}
         </Alert>
-        <Field label="Message / statement line">
+        <Field label={tr('Message / statement line')}>
           <Textarea rows={4} value={manual.text} onChange={(e) => setManual({ ...manual, text: e.target.value })} />
         </Field>
         <div className="grid cols-2">
-          <Field label="Operator id (optional)">
+          <Field label={tr('Operator id (optional)')}>
             <Input value={manual.operatorId} onChange={(e) => setManual({ ...manual, operatorId: e.target.value })} placeholder="mpesa_ke" />
           </Field>
-          <Field label="Sender (optional)">
+          <Field label={tr('Sender (optional)')}>
             <Input value={manual.from} onChange={(e) => setManual({ ...manual, from: e.target.value })} placeholder="MPESA" />
           </Field>
         </div>
@@ -297,7 +304,7 @@ export function Verification() {
             })
           }
         >
-          Record evidence
+          {tr('Record evidence')}
         </Button>
       </Modal>
     </div>

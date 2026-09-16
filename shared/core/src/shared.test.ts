@@ -106,7 +106,7 @@ test('phone normalisation is shared and prefix-tolerant', () => {
   assert.ok(!samePhone(null, '0812345678'));
 });
 
-test('the French phrase pack translates every phrase of the web app and keeps the placeholders', () => {
+test('the French phrase pack translates every phrase of the web app, the phone app, the console and the API and keeps the placeholders', () => {
   assert.ok(PHRASES.length > 900, `catalogue has ${PHRASES.length} phrases`);
   const placeholders = (s: string) => (s.match(/\{\d+\}/g) ?? []).sort().join(',');
   for (const p of PHRASES) {
@@ -118,5 +118,7 @@ test('the French phrase pack translates every phrase of the web app and keeps th
   assert.equal(frPhrases['No user found for "{0}"'].split('{0}').join('x'), 'Aucun utilisateur trouvé pour « x »');
   // nothing in the pack is left in English by accident (a few identical technical strings are expected)
   const identical = PHRASES.filter((p) => frPhrases[p] === p && /\s/.test(p) && !/^(GET|POST) |RFC|OpenAPI|Idempotency|BitriPay-/.test(p));
-  assert.ok(identical.length < 20, `untranslated: ${identical.join(' | ')}`); // proper nouns, store names and technical labels stay as they are
+  // proper nouns, store names, units (1 h, 24 h), sample operator SMS and technical labels stay as they are; the catalogue now covers
+  // the web app, the phone app, the console and the API messages, so the allowance is wider than for the web app alone
+  assert.ok(identical.length < 60, `untranslated: ${identical.join(' | ')}`);
 });

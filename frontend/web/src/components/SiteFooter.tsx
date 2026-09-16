@@ -5,44 +5,44 @@ import { useStore } from '../lib/store';
 /** Site-wide footer: product, company and every policy. Legal and company pages are server-rendered, so they use plain links. */
 export const FOOTER_LINKS = {
   product: [
-    { label: tr('Send money'), to: '/app/send' },
-    { label: tr('QR payments'), to: '/app/scan' },
-    { label: tr('Add money'), to: '/app/add-money' },
-    { label: tr('Virtual cards'), to: '/app/cards' },
-    { label: tr('Remittance'), to: '/app/remittance' },
-    { label: tr('Agents & cash'), to: '/app/agents' },
-    { label: tr('For merchants'), to: '/register?role=merchant' },
-    { label: tr('Become an agent'), to: '/register?role=agent' },
+    { label: 'Send money', to: '/app/send' },
+    { label: 'QR payments', to: '/app/scan' },
+    { label: 'Add money', to: '/app/add-money' },
+    { label: 'Virtual cards', to: '/app/cards' },
+    { label: 'Remittance', to: '/app/remittance' },
+    { label: 'Agents & cash', to: '/app/agents' },
+    { label: 'For merchants', to: '/register?role=merchant' },
+    { label: 'Become an agent', to: '/register?role=agent' },
   ],
   explore: [
-    { label: tr('How it works'), href: '/how-it-works' },
-    { label: tr('Industries'), href: '/industries' },
-    { label: tr('Enterprise groups'), href: '/enterprise' },
-    { label: tr('Developers'), href: '/developers' },
-    { label: tr('Get started'), href: '/get-started' },
-    { label: tr('Growth & influencers'), href: '/growth' },
-    { label: tr('Platform status'), href: '/status' },
+    { label: 'How it works', href: '/how-it-works' },
+    { label: 'Industries', href: '/industries' },
+    { label: 'Enterprise groups', href: '/enterprise' },
+    { label: 'Developers', href: '/developers' },
+    { label: 'Get started', href: '/get-started' },
+    { label: 'Growth & influencers', href: '/growth' },
+    { label: 'Platform status', href: '/status' },
   ],
   company: [
-    { label: tr('About us'), href: '/about' },
-    { label: tr('Blog'), href: '/blog' },
-    { label: tr('Security'), href: '/legal/security' },
-    { label: tr('Regulatory information'), href: '/legal/regulatory' },
-    { label: tr('Fees & charges'), href: '/legal/fees' },
-    { label: tr('Contact'), href: '/contact' },
+    { label: 'About us', href: '/about' },
+    { label: 'Blog', href: '/blog' },
+    { label: 'Security', href: '/legal/security' },
+    { label: 'Regulatory information', href: '/legal/regulatory' },
+    { label: 'Fees & charges', href: '/legal/fees' },
+    { label: 'Contact', href: '/contact' },
   ],
   legal: [
-    { label: tr('Privacy policy'), href: '/legal/privacy' },
-    { label: tr('Terms of service'), href: '/legal/terms' },
-    { label: tr('Cookie policy'), href: '/legal/cookies' },
-    { label: tr('Acceptable use'), href: '/legal/acceptable-use' },
-    { label: tr('AML, KYC & sanctions'), href: '/legal/aml-kyc' },
-    { label: tr('Safeguarding of funds'), href: '/legal/safeguarding' },
-    { label: tr('Refunds & cancellations'), href: '/legal/refunds' },
-    { label: tr('Complaints'), href: '/legal/complaints' },
-    { label: tr('Accessibility'), href: '/legal/accessibility' },
-    { label: tr('Agent & merchant agreement'), href: '/legal/agent-merchant-agreement' },
-    { label: tr('All policies'), href: '/policies' },
+    { label: 'Privacy policy', href: '/legal/privacy' },
+    { label: 'Terms of service', href: '/legal/terms' },
+    { label: 'Cookie policy', href: '/legal/cookies' },
+    { label: 'Acceptable use', href: '/legal/acceptable-use' },
+    { label: 'AML, KYC & sanctions', href: '/legal/aml-kyc' },
+    { label: 'Safeguarding of funds', href: '/legal/safeguarding' },
+    { label: 'Refunds & cancellations', href: '/legal/refunds' },
+    { label: 'Complaints', href: '/legal/complaints' },
+    { label: 'Accessibility', href: '/legal/accessibility' },
+    { label: 'Agent & merchant agreement', href: '/legal/agent-merchant-agreement' },
+    { label: 'All policies', href: '/policies' },
   ],
 };
 
@@ -92,7 +92,7 @@ export function SiteFooter() {
           <ul>
             {FOOTER_LINKS.product.map((l) => (
               <li key={l.to}>
-                <Link to={l.to}>{l.label}</Link>
+                <Link to={l.to}>{tr(l.label)}</Link>
               </li>
             ))}
           </ul>
@@ -102,7 +102,7 @@ export function SiteFooter() {
           <ul>
             {FOOTER_LINKS.explore.map((l) => (
               <li key={l.href}>
-                <a href={l.href}>{l.label}</a>
+                <a href={l.href}>{tr(l.label)}</a>
               </li>
             ))}
           </ul>
@@ -112,7 +112,7 @@ export function SiteFooter() {
           <ul>
             {FOOTER_LINKS.company.map((l) => (
               <li key={l.href}>
-                <a href={l.href}>{l.label}</a>
+                <a href={l.href}>{tr(l.label)}</a>
               </li>
             ))}
           </ul>
@@ -122,7 +122,7 @@ export function SiteFooter() {
           <ul>
             {FOOTER_LINKS.legal.map((l) => (
               <li key={l.href}>
-                <a href={l.href}>{l.label}</a>
+                <a href={l.href}>{tr(l.label)}</a>
               </li>
             ))}
           </ul>

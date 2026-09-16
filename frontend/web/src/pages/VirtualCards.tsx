@@ -196,10 +196,10 @@ export function VirtualCards() {
       <Modal open={!!revealed} onClose={() => setRevealed(null)} title={tr('Card details')}>
         {revealed && (
           <>
-            <KV k="Number" v={<span className="mono">{revealed.number.replace(/(.{4})/g, '$1 ').trim()}</span>} />
-            <KV k="Expiry" v={`${String(revealed.expMonth).padStart(2, '0')}/${revealed.expYear}`} />
+            <KV k={tr('Number')} v={<span className="mono">{revealed.number.replace(/(.{4})/g, '$1 ').trim()}</span>} />
+            <KV k={tr('Expiry')} v={`${String(revealed.expMonth).padStart(2, '0')}/${revealed.expYear}`} />
             <KV k="CVV" v={<span className="mono">{revealed.cvv}</span>} />
-            <KV k="Name" v={revealed.holderName} />
+            <KV k={tr('Name')} v={revealed.holderName} />
             <p className="small muted mt">{tr('Use these details at any BitriPay-powered checkout. Keep them private.')}</p>
           </>
         )}

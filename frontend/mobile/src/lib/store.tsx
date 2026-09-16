@@ -6,6 +6,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import type { User, Wallet, Notification, CurrencyInfo, MembershipSummary } from '@bitripay/shared';
 import { formatMoney, translate } from '@bitripay/shared';
+import { setOverrides as setTrOverrides, setTrLang } from './tr';
 import { api, loadToken, saveToken, onLogout } from './api';
 import { ringForNew, ringLoud, setLoudEnabled, VIBRATION_PATTERN } from './alerts';
 
@@ -146,9 +147,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     api
       .get<{ overrides: Record<string, string> }>(`/api/translations/${lang}`)
-      .then((r) => setOverrides(r.overrides))
-      .catch(() => setOverrides({}));
+      .then((r) => {
+        setOverrides(r.overrides);
+        setTrOverrides(lang, r.overrides || {});
+      })
+      .catch(() => {
+        setOverrides({});
+        setTrOverrides(lang, {});
+      });
   }, [lang]);
+  useEffect(() => setTrLang(lang), [lang]);
 
   useEffect(() => {
     if (!user) return;

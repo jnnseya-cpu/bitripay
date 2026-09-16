@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { View } from 'react-native';
 import { useStore } from '../lib/store';
 import { Screen, Card, Button, Input, Alert, T, KV, Row, Qr, useAsync, AmountInput, Chip } from '../components/ui';
@@ -36,44 +37,45 @@ export function Offline() {
   const isMerchant = user?.role === 'merchant';
   return (
     <Screen>
-      <Header title="Offline payments" />
+      <Header title={tr('Offline payments')} />
       <T muted>
-        Pay and get paid when the network is down. Each promise is signed on this phone and settled, in order, the moment you are back online. The server refuses replays and empties; a payment that
-        cannot settle restores your balance.
+        {tr(
+          'Pay and get paid when the network is down. Each promise is signed on this phone and settled, in order, the moment you are back online. The server refuses replays and empties; a payment that cannot settle restores your balance.',
+        )}
       </T>
       <Card>
-        <T bold>This phone</T>
+        <T bold>{tr('This phone')}</T>
         {s?.deviceId ? (
           <>
-            <KV k="Device" v={s.deviceId} />
-            <KV k="Key valid until" v={s.keyNotAfter ? new Date(s.keyNotAfter).toLocaleDateString() : '—'} />
-            <KV k="Queued payments" v={String(s.queued)} />
-            <KV k="Last sync" v={s.lastSync ? new Date(s.lastSync).toLocaleString() : 'never'} />
+            <KV k={tr('Device')} v={s.deviceId} />
+            <KV k={tr('Key valid until')} v={s.keyNotAfter ? new Date(s.keyNotAfter).toLocaleDateString() : '—'} />
+            <KV k={tr('Queued payments')} v={String(s.queued)} />
+            <KV k={tr('Last sync')} v={s.lastSync ? new Date(s.lastSync).toLocaleString() : 'never'} />
           </>
         ) : (
-          <Alert kind="info" text="Not set up yet. Provisioning creates a signing key on this phone and registers only its public half." />
+          <Alert kind="info" text={tr('Not set up yet. Provisioning creates a signing key on this phone and registers only its public half.')} />
         )}
         <Button
-          title={s?.deviceId ? 'Renew key' : 'Set up this phone'}
+          title={s?.deviceId ? tr('Renew key') : tr('Set up this phone')}
           loading={busy === 'prov'}
           onPress={() => run('prov', () => offlineDevice.provision(`${user?.fullName ?? 'phone'} · mobile`), 'Phone ready for offline payments')}
         />
       </Card>
       {isMerchant && (
         <Card>
-          <T bold>Show a code without network</T>
-          <KV k="Codes ready" v={String(s?.nonces ?? 0)} />
+          <T bold>{tr('Show a code without network')}</T>
+          <KV k={tr('Codes ready')} v={String(s?.nonces ?? 0)} />
           <Button
-            title="Fetch 20 codes (online)"
+            title={tr('Fetch 20 codes (online)')}
             variant="secondary"
             small
             loading={busy === 'nonce'}
             onPress={() => run('nonce', () => offlineDevice.prefetchNonces(20), 'Codes stored on this phone')}
           />
           <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} currencies={(config?.currencies ?? []).map((c: any) => c.code)} />
-          <Input label="Reference (optional)" value={reference} onChangeText={setReference} />
+          <Input label={tr('Reference (optional)')} value={reference} onChangeText={setReference} />
           <Button
-            title="Show offline code"
+            title={tr('Show offline code')}
             disabled={!amount}
             loading={busy === 'qr'}
             onPress={() =>
@@ -98,9 +100,9 @@ export function Offline() {
             <View style={{ alignItems: 'center', gap: 6 }}>
               <Qr value={shown.payload} size={230} />
               <T muted size={12}>
-                Valid until {new Date(shown.expiresAt).toLocaleTimeString()} · nonce {shown.nonce.slice(0, 8)}…
+                {tr('Valid until {0} · nonce {1}…', { 0: new Date(shown.expiresAt).toLocaleTimeString(), 1: shown.nonce.slice(0, 8) })}
               </T>
-              <Chip label="OFFLINE_CREATED" />
+              <Chip label={tr('OFFLINE_CREATED')} />
               <T muted size={12}>
                 {PENDING_CONFIRMATION_TEXT}
               </T>
@@ -110,10 +112,10 @@ export function Offline() {
       )}
       <Card>
         <Row between>
-          <T bold>Queued payments</T>
-          <Button title="Sync now" small loading={busy === 'sync'} disabled={!queue.data?.length} onPress={() => run('sync', async () => setResult(await offlineQueue.sync()), 'Synced')} />
+          <T bold>{tr('Queued payments')}</T>
+          <Button title={tr('Sync now')} small loading={busy === 'sync'} disabled={!queue.data?.length} onPress={() => run('sync', async () => setResult(await offlineQueue.sync()), 'Synced')} />
         </Row>
-        {(queue.data ?? []).length === 0 && <T muted>Nothing waiting.</T>}
+        {(queue.data ?? []).length === 0 && <T muted>{tr('Nothing waiting.')}</T>}
         {(queue.data ?? []).map((q) => (
           <Row key={q.hash} between>
             <View>

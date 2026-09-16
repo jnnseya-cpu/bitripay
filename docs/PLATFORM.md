@@ -322,6 +322,16 @@ Simulator scenarios are selected by the payer `account_token` suffix (`tok_ok`, 
 `tok_contradict`, `tok_badsig`, `tok_refund_unknown`). The acceptance matrix T01–T32 of the dossier runs in
 `src/tests/switch.test.ts`. Settings keys: `switch`, `routing`.
 
+### Languages on every surface
+
+Every string a person reads goes through `tr('English phrase')`: the web app, the phone app and the console each carry a
+module-level translator fed by the chosen language and the console overrides, and `scripts/i18n-extract.mjs` rewrites
+sources and regenerates one catalogue (`shared/core/src/locales/phrases/catalogue.ts`) from the three apps plus the API's
+user-facing sentences (error helpers, `notify()` titles, the communication catalogue). The clients translate API messages
+on arrival (`ApiError` message), the server translates notification titles/bodies and communication events in the
+account's language before sending. French ships hand-written and complete; the console's translation engine fills the
+other languages. Module-level tables (navigation, step labels) keep English text and translate at render.
+
 ### Profile and cover pictures
 
 Every account type has a profile picture and a cover picture (`user_pictures`, bytes kept apart from the users row; the

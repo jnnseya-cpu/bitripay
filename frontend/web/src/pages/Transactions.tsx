@@ -136,20 +136,20 @@ export function TransactionDetail() {
             }
           />
         )}
-        <KV k="Amount" v={money(tx.amount, tx.currency)} />
-        {tx.receiveCurrency && tx.receiveCurrency !== tx.currency && <KV k="Received" v={money(tx.receiveAmount ?? 0, tx.receiveCurrency)} />}
-        <KV k="Fee" v={`${money(tx.fee, tx.currency)}${meta?.feeFrom === 'receiver' ? ' (paid by receiver)' : ''}`} />
-        {tx.note && <KV k="Note" v={tx.note} />}
-        {meta?.method && <KV k="Method" v={String(meta.method).replace('_', ' ')} />}
-        {meta?.gateway && <KV k="Gateway" v={String(meta.gateway)} />}
-        {meta?.providerRef && <KV k="Provider ref" v={<span className="mono small">{String(meta.providerRef)}</span>} />}
-        {meta?.receiptNo && <KV k="Receipt" v={String(meta.receiptNo)} />}
+        <KV k={tr('Amount')} v={money(tx.amount, tx.currency)} />
+        {tx.receiveCurrency && tx.receiveCurrency !== tx.currency && <KV k={tr('Received')} v={money(tx.receiveAmount ?? 0, tx.receiveCurrency)} />}
+        <KV k={tr('Fee')} v={`${money(tx.fee, tx.currency)}${meta?.feeFrom === 'receiver' ? ' (paid by receiver)' : ''}`} />
+        {tx.note && <KV k={tr('Note')} v={tx.note} />}
+        {meta?.method && <KV k={tr('Method')} v={String(meta.method).replace('_', ' ')} />}
+        {meta?.gateway && <KV k={tr('Gateway')} v={String(meta.gateway)} />}
+        {meta?.providerRef && <KV k={tr('Provider ref')} v={<span className="mono small">{String(meta.providerRef)}</span>} />}
+        {meta?.receiptNo && <KV k={tr('Receipt')} v={String(meta.receiptNo)} />}
         {meta?.sale?.items && <SaleReceipt sale={meta.sale as Sale} currency={tx.currency} money={money} reference={String(meta.paymentRequestCode ?? '')} />}
-        {meta?.rate && <KV k="Rate" v={String(meta.rate)} />}
-        {meta?.reason && <KV k="Reason" v={String(meta.reason)} />}
-        {meta?.bankAccount && <KV k="Bank" v={`${meta.bankAccount.bankName} •••• ${String(meta.bankAccount.accountNumber).slice(-4)}`} />}
-        <KV k="Reference" v={<span className="mono">{tx.reference}</span>} />
-        <KV k="Completed" v={tx.completedAt ? new Date(tx.completedAt).toLocaleString() : '—'} />
+        {meta?.rate && <KV k={tr('Rate')} v={String(meta.rate)} />}
+        {meta?.reason && <KV k={tr('Reason')} v={String(meta.reason)} />}
+        {meta?.bankAccount && <KV k={tr('Bank')} v={`${meta.bankAccount.bankName} •••• ${String(meta.bankAccount.accountNumber).slice(-4)}`} />}
+        <KV k={tr('Reference')} v={<span className="mono">{tx.reference}</span>} />
+        <KV k={tr('Completed')} v={tx.completedAt ? new Date(tx.completedAt).toLocaleString() : '—'} />
       </div>
       {user && data.data.entries.length > 0 && (
         <div className="card mt">

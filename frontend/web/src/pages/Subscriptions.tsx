@@ -60,9 +60,9 @@ export function Subscriptions() {
             <div className="card" style={{ background: 'var(--bg-soft)' }}>
               <div className="main-text">{plan.name}</div>
               {plan.description && <div className="sub-text">{plan.description}</div>}
-              <KV k="Price" v={`${money(plan.amountMinor, plan.currency)} every ${every(plan)}${plan.taxBps ? ` + ${plan.taxBps / 100}% ${plan.taxLabel ?? 'tax'}` : ''}`} />
-              {plan.usageUnit && <KV k="Usage" v={`${money(plan.usagePriceMinor, plan.currency)} per ${plan.usageUnit}, billed with the period`} />}
-              {plan.trialDays > 0 && <KV k="Trial" v={`${plan.trialDays} days free`} />}
+              <KV k={tr('Price')} v={`${money(plan.amountMinor, plan.currency)} every ${every(plan)}${plan.taxBps ? ` + ${plan.taxBps / 100}% ${plan.taxLabel ?? 'tax'}` : ''}`} />
+              {plan.usageUnit && <KV k={tr('Usage')} v={`${money(plan.usagePriceMinor, plan.currency)} per ${plan.usageUnit}, billed with the period`} />}
+              {plan.trialDays > 0 && <KV k={tr('Trial')} v={`${plan.trialDays} days free`} />}
               <Button onClick={() => setPin(true)} disabled={plan.status !== 'ACTIVE'}>
                 {tr('Subscribe')}
               </Button>

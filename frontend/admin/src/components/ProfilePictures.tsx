@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react';
+import { tr } from '../lib/i18n';
 import type { User } from '@bitripay/shared';
 import { api } from '../lib/api';
 import { Avatar, Button } from './ui';
@@ -59,14 +60,14 @@ export function ProfilePictures({ user, onSaved, onError }: { user: User; onSave
   return (
     <div className="profile-pictures">
       <div className="cover-banner" style={user.coverUrl ? { backgroundImage: `url("${user.coverUrl}")` } : undefined}>
-        {!user.coverUrl && <span className="cover-hint">No cover picture yet</span>}
+        {!user.coverUrl && <span className="cover-hint">{tr('No cover picture yet')}</span>}
         <div className="cover-actions">
           <Button size="sm" variant="secondary" onClick={() => coverInput.current?.click()} disabled={busy !== null}>
-            {user.coverUrl ? 'Change cover' : 'Add cover'}
+            {user.coverUrl ? tr('Change cover') : tr('Add cover')}
           </Button>
           {user.coverUrl && (
             <Button size="sm" variant="ghost" onClick={() => void run('cover', () => api.del(`/api/account/picture/cover`))} disabled={busy !== null}>
-              Remove
+              {tr('Remove')}
             </Button>
           )}
           {state('cover') && <span className="tiny">{state('cover')}</span>}
@@ -78,17 +79,17 @@ export function ProfilePictures({ user, onSaved, onError }: { user: User; onSave
         </div>
         <div className="row wrap">
           <Button size="sm" variant="secondary" onClick={() => profileInput.current?.click()} disabled={busy !== null}>
-            {user.pictureUrl ? 'Change photo' : 'Add photo'}
+            {user.pictureUrl ? tr('Change photo') : tr('Add photo')}
           </Button>
           {user.pictureUrl && (
             <Button size="sm" variant="ghost" onClick={() => void run('profile', () => api.del(`/api/account/picture/profile`))} disabled={busy !== null}>
-              Remove
+              {tr('Remove')}
             </Button>
           )}
           {state('profile') && <span className="tiny">{state('profile')}</span>}
         </div>
       </div>
-      <div className="tiny muted">Pictures save as soon as you choose them (JPEG, PNG or WebP).</div>
+      <div className="tiny muted">{tr('Pictures save as soon as you choose them (JPEG, PNG or WebP).')}</div>
       <input ref={profileInput} type="file" accept="image/*" hidden onChange={(e) => upload('profile', e)} />
       <input ref={coverInput} type="file" accept="image/*" hidden onChange={(e) => upload('cover', e)} />
     </div>

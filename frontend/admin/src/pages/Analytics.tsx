@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Chip, PageHeader, Select, useAsync } from '../components/ui';
@@ -30,13 +31,13 @@ export function Analytics() {
   return (
     <div>
       <PageHeader
-        title="Analytics & charts"
-        subtitle="Comparison, trend, composition and distribution charts over the whole platform: settled volume, accounts, KYC tiers, countries, corridors and holds."
+        title={tr('Analytics & charts')}
+        subtitle={tr('Comparison, trend, composition and distribution charts over the whole platform: settled volume, accounts, KYC tiers, countries, corridors and holds.')}
         actions={
           <Select value={String(days)} onChange={(e) => setDays(Number(e.target.value))}>
             {[7, 30, 90, 365].map((d) => (
               <option key={d} value={d}>
-                Last {d} days
+                {tr('Last {0} days', { 0: d })}
               </option>
             ))}
           </Select>
@@ -45,19 +46,19 @@ export function Analytics() {
       {p && (
         <div className="grid cols-4">
           <div className="card">
-            <div className="tiny muted">Settled operations</div>
+            <div className="tiny muted">{tr('Settled operations')}</div>
             <div style={{ fontSize: 28, fontWeight: 700 }}>{p.totals.count}</div>
           </div>
           <div className="card">
-            <div className="tiny muted">Volume ({base})</div>
+            <div className="tiny muted">{tr('Volume ({0})', { 0: base })}</div>
             <div style={{ fontSize: 28, fontWeight: 700 }}>{money(p.totals.in, base)}</div>
           </div>
           <div className="card">
-            <div className="tiny muted">Fees earned</div>
+            <div className="tiny muted">{tr('Fees earned')}</div>
             <div style={{ fontSize: 28, fontWeight: 700 }}>{money(p.totals.fees, base)}</div>
           </div>
           <div className="card">
-            <div className="tiny muted">Generated</div>
+            <div className="tiny muted">{tr('Generated')}</div>
             <div style={{ fontSize: 16, fontWeight: 600 }}>{new Date(p.period.to).toLocaleString()}</div>
             <div className="tiny">{p.period.days}-day window</div>
           </div>
@@ -65,7 +66,7 @@ export function Analytics() {
       )}
       <div className="row wrap mt">
         <Chip selected={!family} onClick={() => setFamily('')}>
-          All charts
+          {tr('All charts')}
         </Chip>
         {(Object.keys(CHART_FAMILIES) as (keyof typeof CHART_FAMILIES)[]).map((f) => (
           <Chip key={f} selected={family === f} onClick={() => setFamily(f)}>
@@ -73,7 +74,7 @@ export function Analytics() {
           </Chip>
         ))}
       </div>
-      {!p && <div className="card mt">Loading…</div>}
+      {!p && <div className="card mt">{tr('Loading…')}</div>}
       <div className="grid cols-2 mt">
         {visible.map((c) => (
           <div className="card" key={c.id}>

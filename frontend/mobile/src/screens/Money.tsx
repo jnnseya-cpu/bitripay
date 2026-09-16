@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { Linking, View } from 'react-native';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -105,7 +106,7 @@ export function AddMoney() {
         const r = await api.get<{ payment: PaymentView }>(`/api/deposits/${payment.id}`);
         if (r.payment.stage !== payment.stage) setPayment(r.payment);
         if (r.payment.status === 'succeeded' && payment.status !== 'succeeded') {
-          toast('Money added', 'success');
+          toast(tr('Money added'), 'success');
           refreshWallets();
         }
       },
@@ -139,7 +140,7 @@ export function AddMoney() {
       setPayment(r.payment);
       setDeclaration(r.declaration ?? null);
       if (r.payment.status === 'succeeded') {
-        toast('Money added', 'success');
+        toast(tr('Money added'), 'success');
         refreshWallets();
       } else if (r.payment.next?.type === 'redirect' || r.payment.next?.type === 'stripe_payment_intent') Linking.openURL(r.payment.next.url ?? `${config?.webUrl}/add-money?payment=${r.payment.id}`);
     } catch (err) {
@@ -163,7 +164,7 @@ export function AddMoney() {
           <StageBar stage={payment.stage} label={payment.stageLabel} description={payment.stageDescription} />
           {error && <Alert kind="error" text={error} />}
           {payment.failureReason && <Alert kind="error" text={payment.failureReason} />}
-          {payment.stage === 'AUTHENTICATION_REQUIRED' && <Button title="🔐 Confirm with biometrics or PIN" onPress={() => setPin(true)} />}
+          {payment.stage === 'AUTHENTICATION_REQUIRED' && <Button title={tr('🔐 Confirm with biometrics or PIN')} onPress={() => setPin(true)} />}
           {payment.next?.type === 'prompt' && OPEN(payment) && <Alert text={payment.next.message} />}
           {payment.next?.type === 'bank_instructions' && OPEN(payment) && (
             <View style={{ alignSelf: 'stretch', gap: 8 }}>
@@ -177,42 +178,42 @@ export function AddMoney() {
               )}
               {payment.stage === 'INSTRUCTION_ISSUED' && (
                 <>
-                  <Input label={payment.method === 'mobile_money' ? 'Transaction ID from your receipt (optional)' : 'Transfer reference (optional)'} value={proof} onChangeText={setProof} />
+                  <Input label={payment.method === 'mobile_money' ? tr('Transaction ID from your receipt (optional)') : tr('Transfer reference (optional)')} value={proof} onChangeText={setProof} />
                   <T muted size={12}>
-                    Supporting note only – your wallet is credited when the operator/bank confirmation is matched, never from a typed reference or screenshot.
+                    {tr('Supporting note only – your wallet is credited when the operator/bank confirmation is matched, never from a typed reference or screenshot.')}
                   </T>
                   <Button
-                    title="I have sent the money"
+                    title={tr('I have sent the money')}
                     variant="secondary"
                     onPress={() =>
                       api
                         .post<{ payment: PaymentView }>(`/api/deposits/${payment.id}/sent`, { reference: proof || undefined })
                         .then((r) => {
                           setPayment(r.payment);
-                          toast('Waiting for confirmation', 'success');
+                          toast(tr('Waiting for confirmation'), 'success');
                         })
                         .catch((e) => setError(e.message))
                     }
                   />
                 </>
               )}
-              {payment.stage === 'PAYMENT_SENT' && <Alert kind="warning" text="Waiting for independent confirmation. Nothing has been credited yet." />}
+              {payment.stage === 'PAYMENT_SENT' && <Alert kind="warning" text={tr('Waiting for independent confirmation. Nothing has been credited yet.')} />}
               {['MANUAL_REVIEW', 'MISMATCHED', 'DUPLICATE'].includes(payment.stage ?? '') && (
-                <Alert kind="warning" text="A verifier is reviewing this payment. Nothing is credited until it is confirmed." />
+                <Alert kind="warning" text={tr('A verifier is reviewing this payment. Nothing is credited until it is confirmed.')} />
               )}
             </View>
           )}
           {declaration && (
             <Card soft>
               <T bold size={13}>
-                How this works · {declaration.processing} · {declaration.expectedCompletion}
+                {tr('How this works · {0} · {1}', { 0: declaration.processing, 1: declaration.expectedCompletion })}
               </T>
-              <T size={12}>Confirmation: {declaration.confirmation}</T>
-              <T size={12}>Settlement: {declaration.settlement}</T>
+              <T size={12}>{tr('Confirmation: {0}', { 0: declaration.confirmation })}</T>
+              <T size={12}>{tr('Settlement: {0}', { 0: declaration.settlement })}</T>
             </Card>
           )}
           <Button
-            title={OPEN(payment) ? 'Back' : 'Done'}
+            title={OPEN(payment) ? tr('Back') : tr('Done')}
             variant="secondary"
             onPress={() => {
               setPayment(null);
@@ -239,7 +240,7 @@ export function AddMoney() {
               {!savedCardId && gw?.provider !== 'stripe' && (
                 <>
                   <Input
-                    label="Card number"
+                    label={tr('Card number')}
                     value={card.number}
                     onChangeText={(v) =>
                       setCard({
@@ -265,11 +266,11 @@ export function AddMoney() {
                       <Input label="CVC" value={card.cvc} onChangeText={(v) => setCard({ ...card, cvc: v })} keyboardType="number-pad" maxLength={4} secureTextEntry />
                     </View>
                   </Row>
-                  <Input label="Name on card" value={card.holderName} onChangeText={(v) => setCard({ ...card, holderName: v })} />
+                  <Input label={tr('Name on card')} value={card.holderName} onChangeText={(v) => setCard({ ...card, holderName: v })} />
                 </>
               )}
-              {gw?.provider === 'stripe' && !savedCardId && <Alert text="You'll be taken to a secure Stripe page to enter your card." />}
-              {gw?.provider === 'sandbox' && <Alert text="Sandbox: use 4242 4242 4242 4242 with any future expiry." />}
+              {gw?.provider === 'stripe' && !savedCardId && <Alert text={tr("You'll be taken to a secure Stripe page to enter your card.")} />}
+              {gw?.provider === 'sandbox' && <Alert text={tr('Sandbox: use 4242 4242 4242 4242 with any future expiry.')} />}
             </>
           )}
           {method === 'mobile_money' && (
@@ -283,17 +284,17 @@ export function AddMoney() {
                   if ((config?.currencies ?? []).some((x: any) => x.code === c)) setCur(c);
                 }}
               />
-              <Input label="Your mobile money number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+233…" />
+              <Input label={tr('Your mobile money number')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+233…" />
             </>
           )}
-          {method === 'bank' && <Alert text="You'll receive bank details and a reference. Your wallet is credited only once the transfer is independently confirmed." />}
+          {method === 'bank' && <Alert text={tr("You'll receive bank details and a reference. Your wallet is credited only once the transfer is independently confirmed.")} />}
           <Button title={`🔐 Confirm and add ${amount ? `${amount} ${cur}` : 'money'}`} loading={loading} onPress={() => setPin(true)} disabled={!amount || !opt} />
         </Card>
       )}
       <PinSheet
         open={pin}
         onClose={() => setPin(false)}
-        title="Authorise this payment"
+        title={tr('Authorise this payment')}
         onSubmit={(p) =>
           payment?.stage === 'AUTHENTICATION_REQUIRED'
             ? api
@@ -336,23 +337,23 @@ export function OperatorPicker({
   return (
     <View style={{ gap: 8 }}>
       <Select
-        label="Country"
+        label={tr('Country')}
         value={country}
         onChange={(c) => {
           onCountry(c);
           onChange('');
         }}
-        options={[{ value: '', label: 'All countries' }, ...(config?.countries ?? []).map((c: any) => ({ value: c.code, label: countryLabel(c.code, c.name) }))]}
+        options={[{ value: '', label: tr('All countries') }, ...(config?.countries ?? []).map((c: any) => ({ value: c.code, label: countryLabel(c.code, c.name) }))]}
       />
       <Select
-        label="Mobile money operator"
+        label={tr('Mobile money operator')}
         value={value}
         onChange={(id) => {
           onChange(id);
           const o = items.find((x) => x.id === id);
           if (o && onCurrency) onCurrency(o.currency);
         }}
-        options={[{ value: '', label: 'Choose operator…' }, ...items.map((o) => ({ value: o.id, label: `${o.name} · ${o.country} (${o.currency})` }))]}
+        options={[{ value: '', label: tr('Choose operator…') }, ...items.map((o) => ({ value: o.id, label: `${o.name} · ${o.country} (${o.currency})` }))]}
       />
       {sel && (
         <Row style={{ flexWrap: 'wrap' }}>
@@ -403,7 +404,7 @@ export function Withdraw() {
     try {
       const destination = dest === 'mobile_money' ? { method: 'mobile_money', operatorId, phone } : { method: 'bank', bankAccountId: bankId || eligible[0]?.id };
       const r = await api.post<{ transaction: Transaction }>('/api/withdrawals', { amount, currency: cur, destination, pin: p });
-      toast('Withdrawal requested', 'success');
+      toast(tr('Withdrawal requested'), 'success');
       refreshWallets();
       setPin(false);
       nav.replace('TxDetail', { id: r.transaction.id });
@@ -420,7 +421,7 @@ export function Withdraw() {
         title={t('withdraw.title')}
         right={
           <Button
-            title="+ Bank"
+            title={tr('+ Bank')}
             small
             variant="secondary"
             onPress={() => {
@@ -435,8 +436,8 @@ export function Withdraw() {
         <AmountInput label={t('common.amount')} amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} />
         <Tabs
           tabs={[
-            { id: 'bank', label: '🏦 Bank account' },
-            { id: 'mobile_money', label: '📱 Mobile money (any operator)' },
+            { id: 'bank', label: tr('🏦 Bank account') },
+            { id: 'mobile_money', label: tr('📱 Mobile money (any operator)') },
           ]}
           value={dest}
           onChange={(v) => setDest(v as any)}
@@ -446,7 +447,7 @@ export function Withdraw() {
             <Alert kind="warning" text={`No ${cur} bank account saved yet.`} />
           ) : (
             <Select
-              label="Bank account"
+              label={tr('Bank account')}
               value={bankId || eligible[0].id}
               onChange={setBankId}
               options={eligible.map((a) => ({ value: a.id, label: `${a.bankName} · •••• ${a.accountNumber.slice(-4)}` }))}
@@ -455,7 +456,7 @@ export function Withdraw() {
         {dest === 'mobile_money' && (
           <>
             <OperatorPicker country={opCountry} onCountry={setOpCountry} value={operatorId} onChange={setOperatorId} />
-            <Input label="Mobile money number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+            <Input label={tr('Mobile money number')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
           </>
         )}
         {fee != null && (
@@ -463,15 +464,16 @@ export function Withdraw() {
             <KV k={t('common.fee')} v={money(fee, cur)} />
           </Card>
         )}
-        <Button title="Withdraw" onPress={() => setPin(true)} disabled={!amount || (dest === 'bank' ? eligible.length === 0 : !operatorId || !phone)} />
+        <Button title={tr('Withdraw')} onPress={() => setPin(true)} disabled={!amount || (dest === 'bank' ? eligible.length === 0 : !operatorId || !phone)} />
         <T muted size={12}>
-          Payouts are executed from the platform's bank / mobile money accounts by our treasury team under maker-checker approval, usually within one business day. New beneficiaries have a short
-          cooling-off period for larger amounts. Prefer cash? Use an agent.
+          {tr(
+            "Payouts are executed from the platform's bank / mobile money accounts by our treasury team under maker-checker approval, usually within one business day. New beneficiaries have a short cooling-off period for larger amounts. Prefer cash? Use an agent.",
+          )}
         </T>
       </Card>
       <Card>
-        <T bold>Bank accounts</T>
-        {accounts.data?.items.length === 0 && <Empty icon="🏦" text="No bank accounts yet" />}
+        <T bold>{tr('Bank accounts')}</T>
+        {accounts.data?.items.length === 0 && <Empty icon="🏦" text={tr('No bank accounts yet')} />}
         {accounts.data?.items.map((a) => (
           <Row key={a.id} between>
             <View>
@@ -482,22 +484,22 @@ export function Withdraw() {
                 {a.accountName} · {a.accountNumber}
               </T>
             </View>
-            <Button title="Remove" small variant="ghost" onPress={() => api.del(`/api/bank-accounts/${a.id}`).then(accounts.reload)} />
+            <Button title={tr('Remove')} small variant="ghost" onPress={() => api.del(`/api/bank-accounts/${a.id}`).then(accounts.reload)} />
           </Row>
         ))}
       </Card>
-      <PinSheet open={pin} onClose={() => setPin(false)} onSubmit={submit} loading={loading} summary={<KV k="Withdraw" v={`${amount} ${cur}`} />} />
-      <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Add bank account">
-        <Input label="Bank name" value={bank.bankName} onChangeText={(v) => setBank({ ...bank, bankName: v })} />
-        <Input label="Account holder" value={bank.accountName} onChangeText={(v) => setBank({ ...bank, accountName: v })} />
-        <Input label="Account number / IBAN" value={bank.accountNumber} onChangeText={(v) => setBank({ ...bank, accountNumber: v })} />
+      <PinSheet open={pin} onClose={() => setPin(false)} onSubmit={submit} loading={loading} summary={<KV k={tr('Withdraw')} v={`${amount} ${cur}`} />} />
+      <Sheet open={addOpen} onClose={() => setAddOpen(false)} title={tr('Add bank account')}>
+        <Input label={tr('Bank name')} value={bank.bankName} onChangeText={(v) => setBank({ ...bank, bankName: v })} />
+        <Input label={tr('Account holder')} value={bank.accountName} onChangeText={(v) => setBank({ ...bank, accountName: v })} />
+        <Input label={tr('Account number / IBAN')} value={bank.accountNumber} onChangeText={(v) => setBank({ ...bank, accountNumber: v })} />
         <Select
           label={t('common.currency')}
           value={bank.currency}
           onChange={(v) => setBank({ ...bank, currency: v })}
           options={(config?.currencies ?? []).map((c: any) => ({ value: c.code, label: c.code }))}
         />
-        <Input label="Transaction PIN (beneficiary changes are step-up protected)" value={bankPin} onChangeText={setBankPin} keyboardType="number-pad" secureTextEntry maxLength={6} />
+        <Input label={tr('Transaction PIN (beneficiary changes are step-up protected)')} value={bankPin} onChangeText={setBankPin} keyboardType="number-pad" secureTextEntry maxLength={6} />
         <Button
           title={t('common.save')}
           onPress={() =>
@@ -542,7 +544,7 @@ export function Exchange() {
     setLoading(true);
     try {
       await api.post('/api/wallets/exchange', { from, to, amount, pin: p });
-      toast('Exchange completed', 'success');
+      toast(tr('Exchange completed'), 'success');
       setAmount('');
       setPin(false);
       refreshWallets();
@@ -561,36 +563,36 @@ export function Exchange() {
         <Select label="To" value={to} onChange={setTo} options={(config?.currencies ?? []).map((c: any) => ({ value: c.code, label: `${c.code} – ${c.name}` }))} />
         {quote && (
           <Card soft>
-            <KV k="Rate" v={`1 ${from} = ${quote.rate.toFixed(4)} ${to}`} />
-            <KV k="You receive" v={money(quote.receive, to)} />
+            <KV k={tr('Rate')} v={`1 ${from} = ${quote.rate.toFixed(4)} ${to}`} />
+            <KV k={tr('You receive')} v={money(quote.receive, to)} />
           </Card>
         )}
-        <Button title="Exchange" onPress={() => setPin(true)} disabled={!quote} />
+        <Button title={tr('Exchange')} onPress={() => setPin(true)} disabled={!quote} />
       </Card>
       <Card>
-        <T bold>My wallets</T>
+        <T bold>{tr('My wallets')}</T>
         {wallets.map((w) => (
           <KV key={w.id} k={`${w.currency}${w.frozen ? ' · frozen' : ''}${(w.promoBalance ?? 0) > 0 ? ` · +${money(w.promoBalance ?? 0, w.currency)} promo` : ''}`} v={money(w.balance, w.currency)} />
         ))}
         {wallets[0]?.classification && (
           <T muted size={11}>
             {wallets[0].classification.class === 'sandbox'
-              ? '🧪 Sandbox balances – no real-world value.'
+              ? tr('🧪 Sandbox balances – no real-world value.')
               : `${wallets[0].classification.label} · issued by ${wallets[0].classification.issuer} · ${wallets[0].classification.backing}.`}
-            {wallets.some((w) => (w.promoBalance ?? 0) > 0) ? ' Promotional credit covers fees only and cannot be withdrawn.' : ''}
+            {wallets.some((w) => (w.promoBalance ?? 0) > 0) ? tr('Promotional credit covers fees only and cannot be withdrawn.') : ''}
           </T>
         )}
         <Select
-          label="Add a currency wallet"
+          label={tr('Add a currency wallet')}
           value={newCur}
           onChange={setNewCur}
           options={[
-            { value: '', label: 'Choose…' },
+            { value: '', label: tr('Choose…') },
             ...(config?.currencies ?? []).filter((c: any) => !wallets.some((w) => w.currency === c.code)).map((c: any) => ({ value: c.code, label: `${c.code} – ${c.name}` })),
           ]}
         />
         <Button
-          title="Add wallet"
+          title={tr('Add wallet')}
           variant="secondary"
           disabled={!newCur}
           onPress={() =>
@@ -643,8 +645,8 @@ export function Agents({ route }: ScreenProps<'Agents'>) {
     <Screen>
       <Header title={t('nav.agents')} />
       <Alert text={`Cash-in: hand cash to an agent and tell them @${user?.tag}. Cash-out: create a code below and show it to the agent.`} />
-      <Input placeholder="Search agents" value={q} onChangeText={setQ} />
-      {agents.data?.items.length === 0 && <Empty icon="🏪" text="No agents found" />}
+      <Input placeholder={tr('Search agents')} value={q} onChangeText={setQ} />
+      {agents.data?.items.length === 0 && <Empty icon="🏪" text={tr('No agents found')} />}
       {agents.data?.items.map((a) => (
         <Card key={a.id} style={{ borderColor: selected?.id === a.id ? '#2563eb' : undefined }}>
           <Row between>
@@ -657,19 +659,19 @@ export function Agents({ route }: ScreenProps<'Agents'>) {
                 </T>
               </View>
             </Row>
-            <Button title="Select" small variant={selected?.id === a.id ? undefined : 'secondary'} onPress={() => setSelected(a)} />
+            <Button title={tr('Select')} small variant={selected?.id === a.id ? undefined : 'secondary'} onPress={() => setSelected(a)} />
           </Row>
         </Card>
       ))}
       <Card>
-        <T bold>Withdraw cash (cash-out)</T>
-        {selected ? <T muted>at {selected.businessName || selected.fullName}</T> : <T muted>Select an agent first</T>}
+        <T bold>{tr('Withdraw cash (cash-out)')}</T>
+        {selected ? <T muted>at {selected.businessName || selected.fullName}</T> : <T muted>{tr('Select an agent first')}</T>}
         <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} />
-        <Button title="Create cash-out code" onPress={() => setPin(true)} disabled={!selected || !amount} />
+        <Button title={tr('Create cash-out code')} onPress={() => setPin(true)} disabled={!selected || !amount} />
       </Card>
       {(requests.data?.items ?? []).length > 0 && (
         <Card>
-          <T bold>My cash requests</T>
+          <T bold>{tr('My cash requests')}</T>
           {requests.data!.items.map((r) => (
             <Row key={r.id} between>
               <View>
@@ -685,18 +687,18 @@ export function Agents({ route }: ScreenProps<'Agents'>) {
           ))}
         </Card>
       )}
-      <PinSheet open={pin} onClose={() => setPin(false)} onSubmit={submit} loading={loading} summary={<KV k="Cash out" v={`${amount} ${cur}`} />} />
-      <Sheet open={!!result} onClose={() => setResult(null)} title="Show this code to the agent">
+      <PinSheet open={pin} onClose={() => setPin(false)} onSubmit={submit} loading={loading} summary={<KV k={tr('Cash out')} v={`${amount} ${cur}`} />} />
+      <Sheet open={!!result} onClose={() => setResult(null)} title={tr('Show this code to the agent')}>
         {result && (
           <View style={{ alignItems: 'center', gap: 8 }}>
             <T bold size={40} mono>
               {result.code}
             </T>
             <T muted>
-              {money(result.amount, result.currency)} + fee {money(result.fee, result.currency)}
+              {money(result.amount, result.currency)} {tr('+ fee')} {money(result.fee, result.currency)}
             </T>
             <T size={13} center>
-              Funds leave your wallet only when the agent confirms and hands you the cash.
+              {tr('Funds leave your wallet only when the agent confirms and hands you the cash.')}
             </T>
           </View>
         )}

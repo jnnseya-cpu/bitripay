@@ -287,8 +287,8 @@ function Marketplace() {
         {error && <Alert kind="error">{error}</Alert>}
         {openAd && (
           <>
-            <KV k="Rate" v={`1 ${openAd.currency} = ${openAd.rate} ${openAd.priceCurrency}`} />
-            <KV k="Limits" v={`${money(openAd.minAmount, openAd.currency)} – ${money(openAd.maxAmount, openAd.currency)}`} />
+            <KV k={tr('Rate')} v={`1 ${openAd.currency} = ${openAd.rate} ${openAd.priceCurrency}`} />
+            <KV k={tr('Limits')} v={`${money(openAd.minAmount, openAd.currency)} – ${money(openAd.maxAmount, openAd.currency)}`} />
             {openAd.terms && <p className="small muted mt-sm">{openAd.terms}</p>}
             <Field label={`Amount (${openAd.currency})`}>
               <Input className="amount-input" inputMode="decimal" value={tradeAmount} onChange={(e) => setTradeAmount(e.target.value.replace(/[^\d.]/g, ''))} />

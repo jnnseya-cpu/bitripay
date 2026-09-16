@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { countryFlag } from '@bitripay/shared';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -25,7 +26,7 @@ export function Catalogs() {
       }
       if (tab === 'billers') body.feeBps = Number(body.feeBps || 0);
       await api.put(`/api/admin/${tab}/${edit.id || 'new'}`, body);
-      toast('Saved', 'success');
+      toast(tr('Saved'), 'success');
       setEdit(null);
       list.reload();
     } catch (err) {
@@ -53,15 +54,15 @@ export function Catalogs() {
   return (
     <div>
       <PageHeader
-        title="Bill pay, mobile top-up & gift card catalogs"
-        subtitle="Manage what users can pay for. Connect a fulfilment provider (e.g. Reloadly) in the API to deliver live."
-        actions={<Button onClick={() => open()}>+ Add</Button>}
+        title={tr('Bill pay, mobile top-up & gift card catalogs')}
+        subtitle={tr('Manage what users can pay for. Connect a fulfilment provider (e.g. Reloadly) in the API to deliver live.')}
+        actions={<Button onClick={() => open()}>{tr('+ Add')}</Button>}
       />
       <Tabs
         tabs={[
-          { id: 'billers', label: 'Bill pay methods' },
-          { id: 'operators', label: 'Mobile top-up operators' },
-          { id: 'gift-products', label: 'Gift card products' },
+          { id: 'billers', label: tr('Bill pay methods') },
+          { id: 'operators', label: tr('Mobile top-up operators') },
+          { id: 'gift-products', label: tr('Gift card products') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as Kind)}
@@ -69,7 +70,7 @@ export function Catalogs() {
       <div className="card">
         {tab === 'billers' && (
           <Table
-            head={['Biller', 'Category', 'Country', 'Currency', 'Min–max', 'Fee bps', 'Enabled', '']}
+            head={[tr('Biller'), tr('Category'), tr('Country'), tr('Currency'), tr('Min–max'), tr('Fee bps'), tr('Enabled'), '']}
             rows={items.map((b) => [
               <b>{b.name}</b>,
               b.category,
@@ -80,10 +81,10 @@ export function Catalogs() {
               <Switch on={b.enabled} onChange={(v) => api.put(`/api/admin/billers/${b.id}`, { ...b, enabled: v }).then(list.reload)} />,
               <div className="row">
                 <Button size="sm" variant="secondary" onClick={() => open(b)}>
-                  Edit
+                  {tr('Edit')}
                 </Button>
                 <ConfirmButton size="sm" variant="ghost" onConfirm={() => api.del(`/api/admin/billers/${b.id}`).then(list.reload)}>
-                  Delete
+                  {tr('Delete')}
                 </ConfirmButton>
               </div>,
             ])}
@@ -91,7 +92,7 @@ export function Catalogs() {
         )}
         {tab === 'operators' && (
           <Table
-            head={['Operator', 'Country', 'Currency', 'Min–max', 'Denominations', 'Enabled', '']}
+            head={[tr('Operator'), tr('Country'), tr('Currency'), tr('Min–max'), tr('Denominations'), tr('Enabled'), '']}
             rows={items.map((o) => [
               <b>{o.name}</b>,
               o.country,
@@ -101,10 +102,10 @@ export function Catalogs() {
               <Switch on={o.enabled} onChange={(v) => api.put(`/api/admin/operators/${o.id}`, { ...o, enabled: v }).then(list.reload)} />,
               <div className="row">
                 <Button size="sm" variant="secondary" onClick={() => open(o)}>
-                  Edit
+                  {tr('Edit')}
                 </Button>
                 <ConfirmButton size="sm" variant="ghost" onConfirm={() => api.del(`/api/admin/operators/${o.id}`).then(list.reload)}>
-                  Delete
+                  {tr('Delete')}
                 </ConfirmButton>
               </div>,
             ])}
@@ -112,7 +113,7 @@ export function Catalogs() {
         )}
         {tab === 'gift-products' && (
           <Table
-            head={['Brand', 'Product', 'Category', 'Currency', 'Denominations', 'Enabled', '']}
+            head={[tr('Brand'), tr('Product'), tr('Category'), tr('Currency'), tr('Denominations'), tr('Enabled'), '']}
             rows={items.map((p) => [
               <b style={{ color: p.color }}>{p.brand}</b>,
               p.name,
@@ -122,34 +123,34 @@ export function Catalogs() {
               <Switch on={p.enabled} onChange={(v) => api.put(`/api/admin/gift-products/${p.id}`, { ...p, enabled: v }).then(list.reload)} />,
               <div className="row">
                 <Button size="sm" variant="secondary" onClick={() => open(p)}>
-                  Edit
+                  {tr('Edit')}
                 </Button>
                 <ConfirmButton size="sm" variant="ghost" onConfirm={() => api.del(`/api/admin/gift-products/${p.id}`).then(list.reload)}>
-                  Delete
+                  {tr('Delete')}
                 </ConfirmButton>
               </div>,
             ])}
           />
         )}
       </div>
-      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? 'Edit' : 'Add'}>
+      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? tr('Edit') : tr('Add')}>
         {edit && (
           <>
             {tab === 'gift-products' && (
-              <Field label="Brand">
+              <Field label={tr('Brand')}>
                 <Input value={edit.brand} onChange={(e) => setEdit({ ...edit, brand: e.target.value })} />
               </Field>
             )}
-            <Field label="Name">
+            <Field label={tr('Name')}>
               <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
             </Field>
             {tab === 'gift-products' && (
-              <Field label="Description">
+              <Field label={tr('Description')}>
                 <Input value={edit.description ?? ''} onChange={(e) => setEdit({ ...edit, description: e.target.value })} />
               </Field>
             )}
             {(tab === 'billers' || tab === 'gift-products') && (
-              <Field label="Category">
+              <Field label={tr('Category')}>
                 <Input
                   value={edit.category}
                   onChange={(e) => setEdit({ ...edit, category: e.target.value })}
@@ -159,7 +160,7 @@ export function Catalogs() {
             )}
             <div className="grid cols-2">
               {tab !== 'gift-products' && (
-                <Field label="Country">
+                <Field label={tr('Country')}>
                   <Select value={edit.country} onChange={(e) => setEdit({ ...edit, country: e.target.value })}>
                     {(config?.countries ?? []).map((c: any) => (
                       <option key={c.code} value={c.code}>
@@ -169,7 +170,7 @@ export function Catalogs() {
                   </Select>
                 </Field>
               )}
-              <Field label="Currency">
+              <Field label={tr('Currency')}>
                 <Select value={edit.currency} onChange={(e) => setEdit({ ...edit, currency: e.target.value })}>
                   {(config?.currencies ?? []).map((c: any) => (
                     <option key={c.code} value={c.code}>
@@ -181,35 +182,35 @@ export function Catalogs() {
             </div>
             {tab !== 'gift-products' && (
               <div className="grid cols-2">
-                <Field label="Min amount">
+                <Field label={tr('Min amount')}>
                   <Input value={edit.minAmount} onChange={(e) => setEdit({ ...edit, minAmount: e.target.value })} />
                 </Field>
-                <Field label="Max amount">
+                <Field label={tr('Max amount')}>
                   <Input value={edit.maxAmount} onChange={(e) => setEdit({ ...edit, maxAmount: e.target.value })} />
                 </Field>
               </div>
             )}
             {tab === 'billers' && (
               <div className="grid cols-2">
-                <Field label="Extra fee (bps)">
+                <Field label={tr('Extra fee (bps)')}>
                   <Input type="number" value={edit.feeBps} onChange={(e) => setEdit({ ...edit, feeBps: e.target.value })} />
                 </Field>
-                <Field label="Account field label">
+                <Field label={tr('Account field label')}>
                   <Input value={edit.accountLabel} onChange={(e) => setEdit({ ...edit, accountLabel: e.target.value })} />
                 </Field>
               </div>
             )}
             {tab !== 'billers' && (
-              <Field label="Denominations (comma separated, major units)">
+              <Field label={tr('Denominations (comma separated, major units)')}>
                 <Input value={edit.denominations} onChange={(e) => setEdit({ ...edit, denominations: e.target.value })} placeholder="10,25,50" />
               </Field>
             )}
-            <Field label="Tile color">
+            <Field label={tr('Tile color')}>
               <Input type="color" value={edit.color} onChange={(e) => setEdit({ ...edit, color: e.target.value })} />
             </Field>
-            <Switch on={edit.enabled} onChange={(v) => setEdit({ ...edit, enabled: v })} label="Enabled" />
+            <Switch on={edit.enabled} onChange={(v) => setEdit({ ...edit, enabled: v })} label={tr('Enabled')} />
             <div className="mt">
-              <Button onClick={save}>Save</Button>
+              <Button onClick={save}>{tr('Save')}</Button>
             </div>
           </>
         )}

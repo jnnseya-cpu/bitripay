@@ -99,9 +99,9 @@ export function Savings() {
                     <strong>{c.currency}</strong>
                     <Chip kind={stateKind(c.state)}>{c.state}</Chip>
                   </div>
-                  <KV k="Received" v={money(c.incomeMinor, c.currency)} />
-                  <KV k="Spent" v={money(c.spendMinor, c.currency)} />
-                  {c.ratio !== null && <KV k="Spend / income" v={`${Math.round(c.ratio * 100)}%`} />}
+                  <KV k={tr('Received')} v={money(c.incomeMinor, c.currency)} />
+                  <KV k={tr('Spent')} v={money(c.spendMinor, c.currency)} />
+                  {c.ratio !== null && <KV k={tr('Spend / income')} v={`${Math.round(c.ratio * 100)}%`} />}
                   {c.plan && (
                     <Alert kind={c.state === 'red' ? 'error' : 'warning'}>
                       <div>{c.plan.message}</div>

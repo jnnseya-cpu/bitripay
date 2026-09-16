@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, qs, API_BASE, getToken } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -43,12 +44,12 @@ export function Users() {
   const list = useAsync(() => api.get<any>(`/api/admin/users${qs({ role, search: q, status, page, pageSize: 20 })}`), [role, q, status, page]);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', password: '', role, businessName: '', country: '', permissions: [] as string[] });
-  const titles: Record<string, string> = { user: 'User care', merchant: 'Merchant care', agent: 'Agent care', admin: 'Admin care & role management' };
+  const titles: Record<string, string> = { user: tr('User care'), merchant: tr('Merchant care'), agent: tr('Agent care'), admin: tr('Admin care & role management') };
   useEffect(() => setForm((f) => ({ ...f, role })), [role]);
   const create = async () => {
     try {
       await api.post('/api/admin/users', { ...form, email: form.email || null, phone: form.phone || null, businessName: form.businessName || null, country: form.country || null });
-      toast('Account created', 'success');
+      toast(tr('Account created'), 'success');
       setCreateOpen(false);
       list.reload();
     } catch (err) {
@@ -59,15 +60,15 @@ export function Users() {
     <div>
       <PageHeader
         title={titles[role]}
-        subtitle="Search, review, adjust balances, suspend or edit accounts"
-        actions={(role !== 'admin' || can('admins')) && <Button onClick={() => setCreateOpen(true)}>+ Create {role}</Button>}
+        subtitle={tr('Search, review, adjust balances, suspend or edit accounts')}
+        actions={(role !== 'admin' || can('admins')) && <Button onClick={() => setCreateOpen(true)}>{tr('+ Create {0}', { 0: ({ user: tr('User'), merchant: tr('Merchant'), agent: tr('Agent'), admin: tr('Admin') } as Record<string, string>)[role] ?? role })}</Button>}
       />
       <Tabs
         tabs={[
-          { id: 'user', label: 'Users' },
-          { id: 'merchant', label: 'Merchants' },
-          { id: 'agent', label: 'Agents' },
-          { id: 'admin', label: 'Admins' },
+          { id: 'user', label: tr('Users') },
+          { id: 'merchant', label: tr('Merchants') },
+          { id: 'agent', label: tr('Agents') },
+          { id: 'admin', label: tr('Admins') },
         ]}
         value={role}
         onChange={(r) => {
@@ -78,7 +79,7 @@ export function Users() {
       <div className="card">
         <div className="row wrap mb">
           <Input
-            placeholder="Search name, email, phone, @tag"
+            placeholder={tr('Search name, email, phone, @tag')}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -87,13 +88,13 @@ export function Users() {
             style={{ maxWidth: 300 }}
           />
           <Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 150 }}>
-            <option value="">Any status</option>
-            <option value="active">Active</option>
-            <option value="suspended">Suspended</option>
+            <option value="">{tr('Any status')}</option>
+            <option value="active">{tr('Active')}</option>
+            <option value="suspended">{tr('Suspended')}</option>
           </Select>
         </div>
         <Table
-          head={['Account', 'Contact', 'KYC', 'Status', 'Balances', 'Joined', '']}
+          head={[tr('Account'), tr('Contact'), 'KYC', tr('Status'), tr('Balances'), tr('Joined'), '']}
           rows={(list.data?.items ?? []).map((u: any) => [
             <UserCell user={u} />,
             <div className="small">
@@ -110,10 +111,10 @@ export function Users() {
             </div>,
             <span className="small">{fmtDate(u.createdAt).split(',')[0]}</span>,
             <Button size="sm" variant="secondary" onClick={() => nav(`/users/${u.id}?role=${role}`)}>
-              Manage
+              {tr('Manage')}
             </Button>,
           ])}
-          empty="No accounts match"
+          empty={tr('No accounts match')}
         />
         <Pager page={page} total={list.data?.total ?? 0} pageSize={20} onPage={setPage} />
       </div>
@@ -126,27 +127,27 @@ export function Users() {
           }}
         />
       )}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={`Create ${role} account`}>
-        <Field label="Full name">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={tr('Create {0} account', { 0: ({ user: tr('User'), merchant: tr('Merchant'), agent: tr('Agent'), admin: tr('Admin') } as Record<string, string>)[role] ?? role })}>
+        <Field label={tr('Full name')}>
           <Input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
         </Field>
         <div className="grid cols-2">
-          <Field label="Email">
+          <Field label={tr('Email')}>
             <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </Field>
-          <Field label="Phone">
+          <Field label={tr('Phone')}>
             <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </Field>
         </div>
-        <Field label="Password">
+        <Field label={tr('Password')}>
           <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         </Field>
         {role !== 'user' && role !== 'admin' && (
-          <Field label="Business name">
+          <Field label={tr('Business name')}>
             <Input value={form.businessName} onChange={(e) => setForm({ ...form, businessName: e.target.value })} />
           </Field>
         )}
-        <Field label="Country">
+        <Field label={tr('Country')}>
           <Select value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })}>
             <option value="">—</option>
             {(config?.countries ?? []).map((c: any) => (
@@ -157,7 +158,7 @@ export function Users() {
           </Select>
         </Field>
         {role === 'admin' && (
-          <Field label="Permissions (none = super admin)">
+          <Field label={tr('Permissions (none = super admin)')}>
             <div className="row wrap">
               {PERMS.map((p) => (
                 <Chip
@@ -172,7 +173,7 @@ export function Users() {
           </Field>
         )}
         <Button block onClick={create} disabled={!form.fullName || !form.password || (!form.email && !form.phone)}>
-          Create
+          {tr('Create')}
         </Button>
       </Modal>
     </div>
@@ -241,7 +242,7 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
       };
       if (!body.password) delete body.password;
       await api.patch(`/api/admin/users/${id}`, body);
-      toast('Saved', 'success');
+      toast(tr('Saved'), 'success');
       detail.reload();
     } catch (err) {
       toast((err as Error).message, 'error');
@@ -250,7 +251,7 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const doAdjust = async () => {
     try {
       const r = await api.post<{ verification: { id: string } }>(`/api/admin/users/${id}/adjust`, adjust);
-      toast('Issuance proposed – a second administrator with the issuance permission must approve it in the verification console', 'success');
+      toast(tr('Issuance proposed – a second administrator with the issuance permission must approve it in the verification console'), 'success');
       setProposed(r.verification?.id ?? 'pending');
       setAdjust({ ...adjust, amount: '', reason: '' });
       detail.reload();
@@ -259,13 +260,13 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
     }
   };
   return (
-    <Modal open onClose={onClose} title={d ? `${d.user.fullName} (@${d.user.tag})` : 'Loading…'} wide>
+    <Modal open onClose={onClose} title={d ? `${d.user.fullName} (@${d.user.tag})` : tr('Loading…')} wide>
       {d && edit && (
         <>
           <div className="row wrap mb">
             <StatusBadge status={d.user.role} />
             <StatusBadge status={d.user.status} />
-            <Chip>KYC: {d.user.kycStatus}</Chip>
+            <Chip>{tr('KYC: {0}', { 0: d.user.kycStatus })}</Chip>
             {d.user.twoFactorEnabled && <Chip kind="success">2FA</Chip>}
             {d.user.emailVerified && <Chip kind="success">email ✓</Chip>}
             {d.user.phoneVerified && <Chip kind="success">phone ✓</Chip>}
@@ -273,9 +274,9 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
           <Tabs
             pills
             tabs={[
-              { id: 'overview', label: 'Overview' },
-              { id: 'edit', label: 'Edit account' },
-              { id: 'balance', label: 'Adjust balance' },
+              { id: 'overview', label: tr('Overview') },
+              { id: 'edit', label: tr('Edit account') },
+              { id: 'balance', label: tr('Adjust balance') },
             ]}
             value={tab}
             onChange={(v) => setTab(v as any)}
@@ -289,39 +290,39 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     <Avatar user={d.user} size="sm" />
                     {d.user.pictureUrl && (
                       <Button size="sm" variant="ghost" onClick={() => removePicture('profile')}>
-                        Remove photo
+                        {tr('Remove photo')}
                       </Button>
                     )}
                     {d.user.coverUrl && (
                       <Button size="sm" variant="ghost" onClick={() => removePicture('cover')}>
-                        Remove cover
+                        {tr('Remove cover')}
                       </Button>
                     )}
-                    {!d.user.pictureUrl && !d.user.coverUrl && <span className="tiny muted">No pictures</span>}
+                    {!d.user.pictureUrl && !d.user.coverUrl && <span className="tiny muted">{tr('No pictures')}</span>}
                   </div>
                 </div>
-                <KV k="Email" v={d.user.email ?? '—'} />
-                <KV k="Phone" v={d.user.phone ?? '—'} />
-                <KV k="Country" v={countryLabel(d.user.country)} />
-                <KV k="Referral code" v={d.user.referralCode} />
+                <KV k={tr('Email')} v={d.user.email ?? '—'} />
+                <KV k={tr('Phone')} v={d.user.phone ?? '—'} />
+                <KV k={tr('Country')} v={countryLabel(d.user.country)} />
+                <KV k={tr('Referral code')} v={d.user.referralCode} />
                 <KV k="Referred by" v={d.referrer ? `@${d.referrer.tag}` : '—'} />
-                <KV k="Joined" v={fmtDate(d.user.createdAt)} />
-                <KV k="Last login" v={fmtDate(d.user.lastLoginAt)} />
+                <KV k={tr('Joined')} v={fmtDate(d.user.createdAt)} />
+                <KV k={tr('Last login')} v={fmtDate(d.user.lastLoginAt)} />
                 {d.user.role === 'merchant' && (
                   <>
-                    <KV k="Webhook" v={d.user.webhookUrl ?? '—'} />
-                    <KV k="API keys" v={d.apiKeys.length} />
+                    <KV k={tr('Webhook')} v={d.user.webhookUrl ?? '—'} />
+                    <KV k={tr('API keys')} v={d.apiKeys.length} />
                   </>
                 )}
                 {d.user.role === 'agent' && (
-                  <KV k="Commission" v={d.user.agentCommissionBps != null ? `${d.user.agentCommissionBps / 100}%` : `default (${(config?.agentCommissionBps ?? 0) / 100}%)`} />
+                  <KV k={tr('Commission')} v={d.user.agentCommissionBps != null ? `${d.user.agentCommissionBps / 100}%` : `default (${(config?.agentCommissionBps ?? 0) / 100}%)`} />
                 )}
-                <h4 className="mt">Wallets</h4>
+                <h4 className="mt">{tr('Wallets')}</h4>
                 {d.wallets.map((w: any) => (
                   <KV key={w.id} k={w.currency} v={money(w.balance, w.currency)} />
                 ))}
-                <h4 className="mt">Bank accounts</h4>
-                {d.bankAccounts.length === 0 && <div className="small muted">None</div>}
+                <h4 className="mt">{tr('Bank accounts')}</h4>
+                {d.bankAccounts.length === 0 && <div className="small muted">{tr('None')}</div>}
                 {d.bankAccounts.map((b: any) => (
                   <div key={b.id} className="small">
                     {b.bank_name} · {b.account_number} · {b.currency}
@@ -329,7 +330,7 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                 ))}
               </div>
               <div>
-                <h4>Recent transactions</h4>
+                <h4>{tr('Recent transactions')}</h4>
                 {d.transactions.map((t: any) => (
                   <div key={t.id} className="kv">
                     <span className="k small">
@@ -351,37 +352,37 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
           {tab === 'edit' && (
             <div>
               <div className="grid cols-2">
-                <Field label="Full name">
+                <Field label={tr('Full name')}>
                   <Input value={edit.fullName} onChange={(e) => setEdit({ ...edit, fullName: e.target.value })} />
                 </Field>
-                <Field label="Role">
+                <Field label={tr('Role')}>
                   <Select value={edit.role} onChange={(e) => setEdit({ ...edit, role: e.target.value })} disabled={!can('admins') && edit.role === 'admin'}>
-                    <option value="user">User</option>
-                    <option value="merchant">Merchant</option>
-                    <option value="agent">Agent</option>
-                    {can('admins') && <option value="admin">Admin</option>}
+                    <option value="user">{tr('User')}</option>
+                    <option value="merchant">{tr('Merchant')}</option>
+                    <option value="agent">{tr('Agent')}</option>
+                    {can('admins') && <option value="admin">{tr('Admin')}</option>}
                   </Select>
                 </Field>
-                <Field label="Email">
+                <Field label={tr('Email')}>
                   <Input value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} />
                 </Field>
-                <Field label="Phone">
+                <Field label={tr('Phone')}>
                   <Input value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} />
                 </Field>
-                <Field label="Status">
+                <Field label={tr('Status')}>
                   <Select value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })}>
-                    <option value="active">Active</option>
-                    <option value="suspended">Suspended</option>
+                    <option value="active">{tr('Active')}</option>
+                    <option value="suspended">{tr('Suspended')}</option>
                   </Select>
                 </Field>
-                <Field label="KYC status">
+                <Field label={tr('KYC status')}>
                   <Select value={edit.kycStatus} onChange={(e) => setEdit({ ...edit, kycStatus: e.target.value })}>
                     {['none', 'pending', 'verified', 'rejected'].map((s) => (
                       <option key={s}>{s}</option>
                     ))}
                   </Select>
                 </Field>
-                <Field label="Country">
+                <Field label={tr('Country')}>
                   <Select value={edit.country} onChange={(e) => setEdit({ ...edit, country: e.target.value })}>
                     <option value="">—</option>
                     {(config?.countries ?? []).map((c: any) => (
@@ -391,20 +392,20 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     ))}
                   </Select>
                 </Field>
-                <Field label="Business name">
+                <Field label={tr('Business name')}>
                   <Input value={edit.businessName} onChange={(e) => setEdit({ ...edit, businessName: e.target.value })} />
                 </Field>
                 {edit.role === 'agent' && (
-                  <Field label="Agent commission (bps, blank = default)">
+                  <Field label={tr('Agent commission (bps, blank = default)')}>
                     <Input value={edit.agentCommissionBps} onChange={(e) => setEdit({ ...edit, agentCommissionBps: e.target.value })} />
                   </Field>
                 )}
-                <Field label="Reset password (optional)">
+                <Field label={tr('Reset password (optional)')}>
                   <Input type="password" value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} />
                 </Field>
               </div>
               {edit.role === 'admin' && can('admins') && (
-                <Field label="Admin permissions (none selected = super admin)">
+                <Field label={tr('Admin permissions (none selected = super admin)')}>
                   <div className="row wrap">
                     {PERMS.map((p) => (
                       <Chip
@@ -419,23 +420,23 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                 </Field>
               )}
               <div className="row wrap">
-                <Button onClick={save}>Save changes</Button>
+                <Button onClick={save}>{tr('Save changes')}</Button>
                 {d.user.twoFactorEnabled && (
                   <ConfirmButton
                     variant="secondary"
                     onConfirm={() =>
                       api.patch(`/api/admin/users/${id}`, { twoFactorEnabled: false }).then(() => {
-                        toast('2FA reset', 'success');
+                        toast(tr('2FA reset'), 'success');
                         detail.reload();
                       })
                     }
                   >
-                    Reset 2FA
+                    {tr('Reset 2FA')}
                   </ConfirmButton>
                 )}
                 {!d.user.emailVerified && d.user.email && (
                   <Button variant="secondary" onClick={() => api.patch(`/api/admin/users/${id}`, { emailVerified: true }).then(detail.reload)}>
-                    Mark email verified
+                    {tr('Mark email verified')}
                   </Button>
                 )}
               </div>
@@ -443,18 +444,18 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
           )}
           {tab === 'balance' && (
             <div>
-              <Alert kind="warning">Manual adjustments are recorded in the audit log and shown to the user as an admin adjustment.</Alert>
+              <Alert kind="warning">{tr('Manual adjustments are recorded in the audit log and shown to the user as an admin adjustment.')}</Alert>
               <div className="grid cols-3">
-                <Field label="Direction">
+                <Field label={tr('Direction')}>
                   <Select value={adjust.direction} onChange={(e) => setAdjust({ ...adjust, direction: e.target.value })}>
-                    <option value="credit">Credit (add)</option>
-                    <option value="debit">Debit (remove)</option>
+                    <option value="credit">{tr('Credit (add)')}</option>
+                    <option value="debit">{tr('Debit (remove)')}</option>
                   </Select>
                 </Field>
-                <Field label="Amount">
+                <Field label={tr('Amount')}>
                   <Input inputMode="decimal" value={adjust.amount} onChange={(e) => setAdjust({ ...adjust, amount: e.target.value })} />
                 </Field>
-                <Field label="Currency">
+                <Field label={tr('Currency')}>
                   <Select value={adjust.currency} onChange={(e) => setAdjust({ ...adjust, currency: e.target.value })}>
                     {(config?.currencies ?? []).map((c: any) => (
                       <option key={c.code} value={c.code}>
@@ -464,22 +465,22 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                   </Select>
                 </Field>
               </div>
-              <Field label="Reason (shown to the user)">
+              <Field label={tr('Reason (shown to the user)')}>
                 <Input value={adjust.reason} onChange={(e) => setAdjust({ ...adjust, reason: e.target.value })} />
               </Field>
               <Button onClick={doAdjust} disabled={!adjust.amount || adjust.reason.length < 3}>
-                Propose adjustment
+                {tr('Propose adjustment')}
               </Button>
               {proposed && (
                 <Alert kind="info">
                   Waiting for approval. Nothing is credited yet: a <strong>different</strong> administrator with the issuance permission approves it under PIN step-up in the{' '}
-                  <Link to="/verification">Verification console</Link> (section "Awaiting a second approver"). The person who proposed it cannot approve it.
+                  <Link to="/verification">{tr('Verification console')}</Link> (section "Awaiting a second approver"). The person who proposed it cannot approve it.
                 </Alert>
               )}
               <div className="divider" />
-              <h4>Balances, freezes & statements</h4>
+              <h4>{tr('Balances, freezes & statements')}</h4>
               <Table
-                head={['Currency', 'Balance', 'Promotional credit', 'Class', 'Frozen', '']}
+                head={[tr('Currency'), tr('Balance'), tr('Promotional credit'), tr('Class'), tr('Frozen'), '']}
                 rows={(d.wallets ?? []).map((w: any) => [
                   w.currency,
                   money(w.balance, w.currency),
@@ -496,13 +497,13 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                           api
                             .post(`/api/admin/users/${id}/wallets/${w.currency}/freeze`, { freeze: false, reason: reason || 'Released', pin })
                             .then(() => {
-                              toast('Balance released', 'success');
+                              toast(tr('Balance released'), 'success');
                               detail.reload();
                             })
                             .catch((e) => toast(e.message, 'error'))
                         }
                       >
-                        Release
+                        {tr('Release')}
                       </StepUpButton>
                     ) : (
                       <StepUpButton
@@ -513,21 +514,21 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                           api
                             .post(`/api/admin/users/${id}/wallets/${w.currency}/freeze`, { freeze: true, reason: reason || 'Frozen by administrator', pin })
                             .then(() => {
-                              toast('Balance frozen', 'success');
+                              toast(tr('Balance frozen'), 'success');
                               detail.reload();
                             })
                             .catch((e) => toast(e.message, 'error'))
                         }
                       >
-                        Freeze
+                        {tr('Freeze')}
                       </StepUpButton>
                     )
                   ) : null,
                 ])}
-                empty="No wallets"
+                empty={tr('No wallets')}
               />
               <div className="grid cols-3 mt">
-                <Field label="Statement currency">
+                <Field label={tr('Statement currency')}>
                   <Select value={stmt.currency} onChange={(e) => setStmt({ ...stmt, currency: e.target.value })}>
                     {(d.wallets ?? []).map((w: any) => (
                       <option key={w.id} value={w.currency}>
@@ -545,12 +546,12 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
               </div>
               <div className="row wrap">
                 <Button variant="secondary" onClick={() => downloadStatement('pdf')}>
-                  ⬇ Statement PDF
+                  {tr('⬇ Statement PDF')}
                 </Button>
                 <Button variant="secondary" onClick={() => downloadStatement('csv')}>
-                  ⬇ Statement CSV
+                  {tr('⬇ Statement CSV')}
                 </Button>
-                <span className="tiny muted">Every statement generated for a holder is numbered, hashed and written to the audit log.</span>
+                <span className="tiny muted">{tr('Every statement generated for a holder is numbered, hashed and written to the audit log.')}</span>
               </div>
             </div>
           )}

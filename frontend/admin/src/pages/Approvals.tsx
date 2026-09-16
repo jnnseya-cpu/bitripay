@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { countryLabel } from '@bitripay/shared';
 import { useSearchParams } from 'react-router-dom';
 import { api, qs } from '../lib/api';
@@ -33,13 +34,13 @@ export function Approvals() {
       .catch((e) => toast(e.message, 'error'));
   return (
     <div>
-      <PageHeader title="Approvals" subtitle="Withdrawals, bank deposits, remittance payouts and merchant settlements" />
+      <PageHeader title={tr('Approvals')} subtitle={tr('Withdrawals, bank deposits, remittance payouts and merchant settlements')} />
       <Tabs
         tabs={[
-          { id: 'withdrawals', label: 'Withdrawals' },
-          { id: 'deposits', label: 'Bank & mobile money deposits' },
-          { id: 'remittances', label: 'Remittances' },
-          { id: 'settlements', label: 'Settlements' },
+          { id: 'withdrawals', label: tr('Withdrawals') },
+          { id: 'deposits', label: tr('Bank & mobile money deposits') },
+          { id: 'remittances', label: tr('Remittances') },
+          { id: 'settlements', label: tr('Settlements') },
         ]}
         value={tab}
         onChange={(t) => setParams({ tab: t })}
@@ -48,18 +49,18 @@ export function Approvals() {
         {tab !== 'settlements' && (
           <div className="row mb">
             <Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 160 }}>
-              <option value="pending">Pending</option>
-              <option value="completed">Completed</option>
-              <option value="succeeded">Succeeded</option>
-              <option value="rejected">Rejected</option>
-              <option value="failed">Failed</option>
-              <option value="">All</option>
+              <option value="pending">{tr('Pending')}</option>
+              <option value="completed">{tr('Completed')}</option>
+              <option value="succeeded">{tr('Succeeded')}</option>
+              <option value="rejected">{tr('Rejected')}</option>
+              <option value="failed">{tr('Failed')}</option>
+              <option value="">{tr('All')}</option>
             </Select>
           </div>
         )}
         {tab === 'withdrawals' && (
           <Table
-            head={['User', 'Amount', 'Fee', 'Destination', 'Requested', 'Status', '']}
+            head={[tr('User'), tr('Amount'), tr('Fee'), tr('Destination'), tr('Requested'), tr('Status'), '']}
             rows={(withdrawals.data?.items ?? []).map((t: any) => [
               <UserCell user={t.sender} />,
               <b>{money(t.amount, t.currency)}</b>,
@@ -85,19 +86,19 @@ export function Approvals() {
                     size="sm"
                     variant="success"
                     prompt="Payout reference (bank / operator transaction id)"
-                    title="Confirm payout was executed"
+                    title={tr('Confirm payout was executed')}
                     onConfirm={(pin, r) => act(api.post(`/api/admin/withdrawals/${t.id}/approve`, { payoutReference: r, pin }), 'Withdrawal approved')}
                   >
-                    Approve
+                    {tr('Approve')}
                   </StepUpButton>
                   <StepUpButton
                     size="sm"
                     variant="danger"
                     prompt="Reason"
-                    title="Reject payout"
+                    title={tr('Reject payout')}
                     onConfirm={(pin, r) => act(api.post(`/api/admin/withdrawals/${t.id}/reject`, { reason: r, pin }), 'Withdrawal rejected')}
                   >
-                    Reject
+                    {tr('Reject')}
                   </StepUpButton>
                 </div>
               ) : null,
@@ -111,7 +112,7 @@ export function Approvals() {
               under step-up.
             </Alert>
             <Table
-              head={['User / payer', 'Amount', 'Method', 'Gateway', 'Sent-report', 'Created', 'Stage', '']}
+              head={[tr('User / payer'), tr('Amount'), tr('Method'), tr('Gateway'), tr('Sent-report'), tr('Created'), tr('Stage'), '']}
               rows={(deposits.data?.items ?? []).map((p: any) => [
                 p.user ? (
                   <UserCell user={p.user} />
@@ -141,7 +142,7 @@ export function Approvals() {
                 <StatusBadge status={p.stageLabel ?? p.status} />,
                 ['pending', 'initiated'].includes(p.status) ? (
                   <Link className="btn sm secondary" to={`/verification?payment=${p.id}`}>
-                    Review in console
+                    {tr('Review in console')}
                   </Link>
                 ) : null,
               ])}
@@ -150,7 +151,7 @@ export function Approvals() {
         )}
         {tab === 'remittances' && (
           <Table
-            head={['Sender', 'Recipient', 'Send', 'Payout', 'Method', 'Created', 'Status', '']}
+            head={[tr('Sender'), tr('Recipient'), tr('Send'), tr('Payout'), tr('Method'), tr('Created'), tr('Status'), '']}
             rows={(remittances.data?.items ?? []).map((r: any) => [
               <UserCell user={r.sender} />,
               <span className="small">
@@ -176,19 +177,19 @@ export function Approvals() {
                   <StepUpButton
                     size="sm"
                     variant="success"
-                    title="Confirm payout executed"
+                    title={tr('Confirm payout executed')}
                     onConfirm={(pin) => act(api.post(`/api/admin/remittances/${r.id}/settle`, { outcome: 'completed', pin }), 'Marked as paid out')}
                   >
-                    Paid out
+                    {tr('Paid out')}
                   </StepUpButton>
                   <StepUpButton
                     size="sm"
                     variant="danger"
                     prompt="Reason"
-                    title="Refund remittance"
+                    title={tr('Refund remittance')}
                     onConfirm={(pin, reason) => act(api.post(`/api/admin/remittances/${r.id}/settle`, { outcome: 'rejected', reason, pin }), 'Remittance refunded')}
                   >
-                    Refund
+                    {tr('Refund')}
                   </StepUpButton>
                 </div>
               ) : r.status === 'ready_for_pickup' ? (
@@ -196,10 +197,10 @@ export function Approvals() {
                   size="sm"
                   variant="danger"
                   prompt="Reason"
-                  title="Cancel remittance"
+                  title={tr('Cancel remittance')}
                   onConfirm={(pin, reason) => act(api.post(`/api/admin/remittances/${r.id}/settle`, { outcome: 'rejected', reason, pin }), 'Remittance cancelled')}
                 >
-                  Cancel & refund
+                  {tr('Cancel & refund')}
                 </StepUpButton>
               ) : null,
             ])}
@@ -209,12 +210,12 @@ export function Approvals() {
           <>
             <div className="row mb">
               <Button variant="secondary" onClick={() => act(api.post('/api/admin/settlements/run'), 'Settlement run completed')}>
-                Run automated settlement now
+                {tr('Run automated settlement now')}
               </Button>
-              <span className="small muted">Sweeps merchant balances above the threshold into pending withdrawals (Fees & limits → automated settlement).</span>
+              <span className="small muted">{tr('Sweeps merchant balances above the threshold into pending withdrawals (Fees & limits → automated settlement).')}</span>
             </div>
             <Table
-              head={['Merchant', 'Amount', 'Reference', 'Created', 'Status']}
+              head={[tr('Merchant'), tr('Amount'), tr('Reference'), tr('Created'), tr('Status')]}
               rows={(settlements.data?.items ?? []).map((s: any) => [
                 s.merchant ?? s.userId,
                 money(s.amount, s.currency),
@@ -248,20 +249,20 @@ export function Kyc() {
   return (
     <div>
       <PageHeader
-        title="KYC verification"
-        subtitle="Review identity documents and approve or reject submissions"
+        title={tr('KYC verification')}
+        subtitle={tr('Review identity documents and approve or reject submissions')}
         actions={
           <Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 160 }}>
-            <option value="pending">Pending</option>
-            <option value="verified">Verified</option>
-            <option value="rejected">Rejected</option>
-            <option value="">All</option>
+            <option value="pending">{tr('Pending')}</option>
+            <option value="verified">{tr('Verified')}</option>
+            <option value="rejected">{tr('Rejected')}</option>
+            <option value="">{tr('All')}</option>
           </Select>
         }
       />
       <div className="card">
         <Table
-          head={['User', 'Document', 'Name', 'Submitted', 'Status', '']}
+          head={[tr('User'), tr('Document'), tr('Name'), tr('Submitted'), tr('Status'), '']}
           rows={(list.data?.items ?? []).map((k: any) => [
             <UserCell user={k.user} />,
             <span>
@@ -271,31 +272,31 @@ export function Kyc() {
             fmtDate(k.createdAt),
             <StatusBadge status={k.status} />,
             <Button size="sm" variant="secondary" onClick={() => open(k.id)}>
-              Review
+              {tr('Review')}
             </Button>,
           ])}
-          empty="No submissions"
+          empty={tr('No submissions')}
         />
       </div>
-      <Modal open={!!sel} onClose={() => setSel(null)} title="KYC submission" wide>
+      <Modal open={!!sel} onClose={() => setSel(null)} title={tr('KYC submission')} wide>
         {sel && (
           <div className="grid cols-2">
             <div>
-              <KV k="User" v={<UserCell user={sel.user} />} />
-              <KV k="Document" v={`${sel.docType} · ${sel.docNumber}`} />
-              <KV k="Legal name" v={sel.fullName} />
-              <KV k="Date of birth" v={sel.dob ?? '—'} />
-              <KV k="Address" v={sel.address ?? '—'} />
-              <KV k="Submitted" v={fmtDate(sel.createdAt)} />
-              <KV k="Status" v={<StatusBadge status={sel.status} />} />
-              {sel.note && <Alert kind="info">Note: {sel.note}</Alert>}
+              <KV k={tr('User')} v={<UserCell user={sel.user} />} />
+              <KV k={tr('Document')} v={`${sel.docType} · ${sel.docNumber}`} />
+              <KV k={tr('Legal name')} v={sel.fullName} />
+              <KV k={tr('Date of birth')} v={sel.dob ?? '—'} />
+              <KV k={tr('Address')} v={sel.address ?? '—'} />
+              <KV k={tr('Submitted')} v={fmtDate(sel.createdAt)} />
+              <KV k={tr('Status')} v={<StatusBadge status={sel.status} />} />
+              {sel.note && <Alert kind="info">{tr('Note: {0}', { 0: sel.note })}</Alert>}
               {sel.status === 'pending' && (
                 <div className="row mt">
                   <ConfirmButton variant="success" onConfirm={() => review('verified')}>
-                    Approve
+                    {tr('Approve')}
                   </ConfirmButton>
                   <ConfirmButton variant="danger" prompt="Rejection reason (shown to user)" onConfirm={(r) => review('rejected', r)}>
-                    Reject
+                    {tr('Reject')}
                   </ConfirmButton>
                 </div>
               )}
@@ -311,7 +312,7 @@ export function Kyc() {
                   {src ? (
                     <img src={src as string} alt={label as string} style={{ maxWidth: '100%', borderRadius: 8, border: '1px solid var(--border)' }} />
                   ) : (
-                    <div className="muted small">Not provided</div>
+                    <div className="muted small">{tr('Not provided')}</div>
                   )}
                 </div>
               ))}

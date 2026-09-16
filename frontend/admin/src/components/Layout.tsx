@@ -5,6 +5,7 @@ import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import { ErrorBoundary } from './ErrorBoundary';
 import { useStore } from '../lib/store';
 import { Avatar } from './ui';
+import { tr, useTrKey } from '../lib/i18n';
 
 const NAV: { section: string; items: { to: string; label: string; ico: string; perm: string }[] }[] = [
   {
@@ -90,7 +91,8 @@ const NAV: { section: string; items: { to: string; label: string; ico: string; p
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { user, logout, theme, toggleTheme, can, config } = useStore();
+  const { user, logout, theme, toggleTheme, can, config, lang, setLang } = useStore();
+  const trKey = useTrKey();
   const nav = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -115,11 +117,11 @@ export function Layout({ children }: { children: ReactNode }) {
       {open && <div className="backdrop" onClick={() => setOpen(false)} />}
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <Link to="/" className="brand" style={{ color: 'inherit' }}>
-          <img className="brand-img swap" src="/brand/logo.svg" alt="BitriPay" width={120} height={30} style={{ height: 30 }} /> <span className="chip primary">Admin</span>
+          <img className="brand-img swap" src="/brand/logo.svg" alt="BitriPay" width={120} height={30} style={{ height: 30 }} /> <span className="chip primary">{tr('Admin')}</span>
         </Link>
         {NAV.map((s) => (
           <div key={s.section}>
-            <div className="nav-section">{s.section}</div>
+            <div className="nav-section">{tr(s.section)}</div>
             {s.items
               .filter((i) => !i.perm || can(i.perm))
               .map((i) => (
@@ -131,7 +133,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   onClick={() => setOpen(false)}
                 >
                   <span className="ico">{i.ico}</span>
-                  {i.label}
+                  {tr(i.label)}
                 </NavLink>
               ))}
           </div>
@@ -145,7 +147,8 @@ export function Layout({ children }: { children: ReactNode }) {
             nav('/login');
           }}
         >
-          <span className="ico">🚪</span>Sign out
+          <span className="ico">🚪</span>
+          {tr('Sign out')}
         </button>
       </aside>
       <div className="main">
@@ -158,8 +161,20 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
           <div className="row">
             <a className="btn ghost sm hide-mobile" href={config?.webUrl} target="_blank" rel="noreferrer">
-              Open web app ↗
+              {tr('Open web app ↗')}
             </a>
+            <select className="input" style={{ width: 'auto', padding: '6px 8px' }} value={lang} onChange={(e) => setLang(e.target.value)} aria-label={tr('Language')}>
+              {(
+                config?.languages ?? [
+                  { code: 'en', nativeName: 'English' },
+                  { code: 'fr', nativeName: 'Français' },
+                ]
+              ).map((l: any) => (
+                <option key={l.code} value={l.code}>
+                  {l.nativeName ?? l.name ?? l.code}
+                </option>
+              ))}
+            </select>
             <button className="btn secondary icon" onClick={toggleTheme}>
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
@@ -170,7 +185,9 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main className="content" style={{ maxWidth: 1400 }}>
-          <ErrorBoundary resetKey={location.pathname}>{children}</ErrorBoundary>
+          <ErrorBoundary key={trKey} resetKey={location.pathname}>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

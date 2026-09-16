@@ -198,7 +198,7 @@ export function Banks() {
                   {income.monthsCovered} month(s) of statements · computed {new Date(income.computedAt).toLocaleString()}
                 </span>
               </div>
-              <KV k="Verified monthly income" v={money(income.monthlyIncomeBase, income.baseCurrency)} />
+              <KV k={tr('Verified monthly income')} v={money(income.monthlyIncomeBase, income.baseCurrency)} />
               {income.streams.map((s: any) => (
                 <KV key={s.label + s.currency} k={`${s.label} (${s.months} months)`} v={`${money(s.medianMinor, s.currency)} / month${s.regular ? '' : ' · irregular'}`} />
               ))}

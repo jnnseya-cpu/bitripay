@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { Linking, Share, View } from 'react-native';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -102,7 +103,7 @@ export function Move() {
       setRoute(r.route);
       setPin(false);
       refreshWallets();
-      if (r.route.status === 'completed') toast('Money delivered', 'success');
+      if (r.route.status === 'completed') toast(tr('Money delivered'), 'success');
       else if (r.route.payment?.next?.type === 'redirect' && r.route.payment.next.url) Linking.openURL(r.route.payment.next.url);
     } catch (err) {
       toast((err as Error).message, 'error');
@@ -117,8 +118,9 @@ export function Move() {
     <Screen>
       <Header title={t('nav.move')} />
       <T muted size={13}>
-        Fund from a card, bank, mobile money or your wallet; deliver to a wallet, QR code, bank, mobile money number or agent. External legs move through your own bank, operator or a licensed
-        processor and are credited only after independent confirmation.
+        {tr(
+          'Fund from a card, bank, mobile money or your wallet; deliver to a wallet, QR code, bank, mobile money number or agent. External legs move through your own bank, operator or a licensed processor and are credited only after independent confirmation.',
+        )}
       </T>
       {route ? (
         <Card style={{ alignItems: 'center' }}>
@@ -130,7 +132,7 @@ export function Move() {
           {route.error && !['SETTLED'].includes(route.stage) && <Alert kind="error" text={route.error} />}
           {['FUNDED', 'PAYOUT_ROUTED', 'INSUFFICIENT_LIQUIDITY', 'MANUAL_REVIEW', 'FAILED', 'EXPIRED'].includes(route.stage) && (
             <Button
-              title="Cancel & refund"
+              title={tr('Cancel & refund')}
               variant="ghost"
               onPress={() => {
                 setPinFor('cancel');
@@ -143,7 +145,7 @@ export function Move() {
             <>
               <Alert kind="warning" text={`The recipient must confirm receiving ${route.targetCurrency} before the payout is executed. Share the confirmation link.`} />
               <Button
-                title="Share confirmation link"
+                title={tr('Share confirmation link')}
                 variant="secondary"
                 onPress={() => Share.share({ message: `Please confirm the currency for the money I am sending you: ${route.consent.url}` })}
               />
@@ -151,7 +153,7 @@ export function Move() {
           )}
           {route.confirmationMethod && (
             <T size={11} muted center>
-              Settled on {String(route.confirmationMethod).replace(/_/g, ' ').toLowerCase()}
+              {tr('Settled on {0}', { 0: String(route.confirmationMethod).replace(/_/g, ' ').toLowerCase() })}
             </T>
           )}
           {route.corridor && (
@@ -163,10 +165,10 @@ export function Move() {
           {route.payout && (
             <Card soft>
               <T size={12}>
-                <T bold>Local payout</T> · {route.payout.operatorName ?? route.payout.rail} · {route.payout.recipientMasked}
+                <T bold>{tr('Local payout')}</T> · {route.payout.operatorName ?? route.payout.rail} · {route.payout.recipientMasked}
               </T>
               <T size={12}>
-                Ref {route.payout.reference}
+                {tr('Ref')} {route.payout.reference}
                 {route.payout.externalRef ? ` · operator ${route.payout.externalRef}` : ''}
               </T>
             </Card>
@@ -183,9 +185,9 @@ export function Move() {
             </View>
           )}
           {route.status === 'funding' && route.payment?.next?.type === 'prompt' && <Alert text={route.payment.next.message} />}
-          {route.status === 'pending' && <Alert text="Money arrived and is held in escrow; the payout is executed by our treasury team or a local agent under maker-checker approval." />}
+          {route.status === 'pending' && <Alert text={tr('Money arrived and is held in escrow; the payout is executed by our treasury team or a local agent under maker-checker approval.')} />}
           {route.destinationDetails?.cashOutCode && <Alert kind="success" text={`Cash-out code for the agent: ${route.destinationDetails.cashOutCode}`} />}
-          <Button title="New transfer" variant="secondary" onPress={() => setRoute(null)} />
+          <Button title={tr('New transfer')} variant="secondary" onPress={() => setRoute(null)} />
         </Card>
       ) : (
         <Card>
@@ -193,7 +195,7 @@ export function Move() {
           <Tabs tabs={(Object.keys(S) as Source[]).map((k) => ({ id: k, label: S[k] }))} value={source} onChange={(v) => setSource(v as Source)} />
           {source === 'card' && (
             <>
-              <Input label="Card number" value={card.number} onChangeText={(v) => setCard({ ...card, number: v })} keyboardType="number-pad" />
+              <Input label={tr('Card number')} value={card.number} onChangeText={(v) => setCard({ ...card, number: v })} keyboardType="number-pad" />
               <Row>
                 <View style={{ flex: 1 }}>
                   <Input label="MM" value={card.expMonth} onChangeText={(v) => setCard({ ...card, expMonth: v })} keyboardType="number-pad" />
@@ -210,33 +212,33 @@ export function Move() {
           {source === 'mobile_money' && (
             <>
               <OperatorPicker country={src.country} onCountry={(c) => setSrc({ ...src, country: c })} value={src.operatorId} onChange={(id) => setSrc({ ...src, operatorId: id })} />
-              <Input label="Your mobile money number" value={src.phone} onChangeText={(v) => setSrc({ ...src, phone: v })} keyboardType="phone-pad" />
+              <Input label={tr('Your mobile money number')} value={src.phone} onChangeText={(v) => setSrc({ ...src, phone: v })} keyboardType="phone-pad" />
             </>
           )}
           <AmountInput label={t('common.amount')} amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} currencies={(config?.currencies ?? []).map((c: any) => c.code)} />
           <T bold>To</T>
           <Tabs tabs={(Object.keys(D) as Dest[]).map((k) => ({ id: k, label: D[k] }))} value={dest} onChange={(v) => setDest(v as Dest)} />
-          {dest === 'wallet' && <Input label="Recipient (@tag, email or phone)" value={to} onChangeText={setTo} autoCapitalize="none" />}
-          {dest === 'qr' && <Input label="Payment link or QR content" value={qr} onChangeText={setQr} autoCapitalize="none" />}
+          {dest === 'wallet' && <Input label={tr('Recipient (@tag, email or phone)')} value={to} onChangeText={setTo} autoCapitalize="none" />}
+          {dest === 'qr' && <Input label={tr('Payment link or QR content')} value={qr} onChangeText={setQr} autoCapitalize="none" />}
           {dest === 'mobile_money' && (
             <>
               <OperatorPicker country={dst.country} onCountry={(c) => setDst({ ...dst, country: c })} value={dst.operatorId} onChange={(id) => setDst({ ...dst, operatorId: id })} />
-              <Input label="Recipient number" value={dst.phone} onChangeText={(v) => setDst({ ...dst, phone: v })} keyboardType="phone-pad" />
-              <Input label="Recipient name" value={dst.name} onChangeText={(v) => setDst({ ...dst, name: v })} />
+              <Input label={tr('Recipient number')} value={dst.phone} onChangeText={(v) => setDst({ ...dst, phone: v })} keyboardType="phone-pad" />
+              <Input label={tr('Recipient name')} value={dst.name} onChangeText={(v) => setDst({ ...dst, name: v })} />
             </>
           )}
           {dest === 'bank' && (
             <>
-              <Input label="Bank name" value={bank.bankName} onChangeText={(v) => setBank({ ...bank, bankName: v })} />
-              <Input label="Account holder" value={bank.accountName} onChangeText={(v) => setBank({ ...bank, accountName: v })} />
-              <Input label="Account number / IBAN" value={bank.accountNumber} onChangeText={(v) => setBank({ ...bank, accountNumber: v })} />
+              <Input label={tr('Bank name')} value={bank.bankName} onChangeText={(v) => setBank({ ...bank, bankName: v })} />
+              <Input label={tr('Account holder')} value={bank.accountName} onChangeText={(v) => setBank({ ...bank, accountName: v })} />
+              <Input label={tr('Account number / IBAN')} value={bank.accountNumber} onChangeText={(v) => setBank({ ...bank, accountNumber: v })} />
             </>
           )}
-          {dest === 'agent' && <Input label="Agent @tag" value={agent} onChangeText={setAgent} autoCapitalize="none" />}
+          {dest === 'agent' && <Input label={tr('Agent @tag')} value={agent} onChangeText={setAgent} autoCapitalize="none" />}
           {preview?.quote?.receivingCurrencies ? (
             <View>
               <T size={12} muted>
-                Recipient receives in (default: local currency {preview.quote.receivingCurrencies.defaultCurrency})
+                {tr('Recipient receives in (default: local currency {0})', { 0: preview.quote.receivingCurrencies.defaultCurrency })}
               </T>
               <Row style={{ flexWrap: 'wrap' }}>
                 {preview.quote.receivingCurrencies.options.map((o: any) => (
@@ -271,28 +273,31 @@ export function Move() {
                 {preview.destination.user && <Avatar user={preview.destination.user} size={30} />}
                 <T bold>{preview.destination.label}</T>
               </Row>
-              {preview.quote.rate !== 1 && <KV k="Rate" v={`${preview.quote.rate.toFixed(4)} · ${preview.fx?.guaranteed ? 'guaranteed' : 'indicative'}`} />}
+              {preview.quote.rate !== 1 && <KV k={tr('Rate')} v={`${preview.quote.rate.toFixed(4)} · ${preview.fx?.guaranteed ? 'guaranteed' : 'indicative'}`} />}
               {preview.fx && preview.fx.sourceCurrency !== preview.fx.targetCurrency && (
                 <T size={11} muted>
-                  Reference {preview.fx.midRate.toFixed(4)} · {preview.fx.providerLabel} · markup {(preview.fx.markupBps / 100).toFixed(2)}%
+                  {tr('Reference {0} · {1} · markup {2}%', { 0: preview.fx.midRate.toFixed(4), 1: preview.fx.providerLabel, 2: (preview.fx.markupBps / 100).toFixed(2) })}
                 </T>
               )}
-              <KV k="Recipient gets" v={money(preview.quote.targetAmount, preview.quote.targetCurrency)} />
-              <KV k="Guaranteed" v={preview.quote.guaranteedRecipientAmount != null ? money(preview.quote.guaranteedRecipientAmount, preview.quote.targetCurrency) : 'indicative only'} />
-              <KV k="Estimated payout" v={preview.quote.estimatedPayoutTime} />
+              <KV k={tr('Recipient gets')} v={money(preview.quote.targetAmount, preview.quote.targetCurrency)} />
+              <KV k={tr('Guaranteed')} v={preview.quote.guaranteedRecipientAmount != null ? money(preview.quote.guaranteedRecipientAmount, preview.quote.targetCurrency) : 'indicative only'} />
+              <KV k={tr('Estimated payout')} v={preview.quote.estimatedPayoutTime} />
               {preview.quote.confirmation && (
                 <T size={11} muted>
-                  Confirmed by: funding {preview.quote.confirmation.funding.replace(/_/g, ' ').toLowerCase()} · payout {preview.quote.confirmation.payout.replace(/_/g, ' ').toLowerCase()}
+                  {tr('Confirmed by: funding {0} · payout {1}', {
+                    0: preview.quote.confirmation.funding.replace(/_/g, ' ').toLowerCase(),
+                    1: preview.quote.confirmation.payout.replace(/_/g, ' ').toLowerCase(),
+                  })}
                 </T>
               )}
               {preview.quote.recipientConsentRequired && <Alert kind="warning" text={`The recipient must confirm receiving ${preview.quote.targetCurrency} before the payout is executed.`} />}
               {preview.quote.corridor && (
                 <T size={11} muted>
-                  {preview.quote.corridor.status === 'live' ? 'Authorised corridor' : 'Sandbox corridor – no real funds'} · {preview.quote.corridor.destCountry}
+                  {preview.quote.corridor.status === 'live' ? tr('Authorised corridor') : tr('Sandbox corridor – no real funds')} · {preview.quote.corridor.destCountry}
                 </T>
               )}
               <T size={11} muted>
-                Refunds: {preview.quote.refundConditions}
+                {tr('Refunds: {0}', { 0: preview.quote.refundConditions })}
               </T>
               {preview.declaration && (
                 <T size={11} muted>
@@ -302,7 +307,7 @@ export function Move() {
             </Card>
           )}
           <Button
-            title="🔐 Confirm and send"
+            title={tr('🔐 Confirm and send')}
             loading={loading}
             disabled={!preview}
             onPress={() => {
@@ -314,7 +319,7 @@ export function Move() {
       )}
       {(history.data?.items ?? []).length > 0 && (
         <Card>
-          <T bold>Recent</T>
+          <T bold>{tr('Recent')}</T>
           {history.data!.items.slice(0, 8).map((r) => (
             <Row key={r.id} between>
               <View>
@@ -340,7 +345,7 @@ export function Move() {
                   setPin(false);
                   setRoute(r.route);
                   refreshWallets();
-                  toast('Transfer cancelled', 'success');
+                  toast(tr('Transfer cancelled'), 'success');
                 })
                 .catch((e) => {
                   setPin(false);
@@ -349,10 +354,10 @@ export function Move() {
             : submit(p)
         }
         loading={loading}
-        title={pinFor === 'cancel' ? 'Confirm cancellation' : undefined}
+        title={pinFor === 'cancel' ? tr('Confirm cancellation') : undefined}
         summary={
           pinFor === 'cancel' && route ? (
-            <KV k="Cancel transfer" v={money(route.amount, route.currency)} />
+            <KV k={tr('Cancel transfer')} v={money(route.amount, route.currency)} />
           ) : (
             preview && <KV k={`Send to ${preview.destination.label}`} v={money(preview.quote.targetAmount, preview.quote.targetCurrency)} />
           )

@@ -77,10 +77,10 @@ export function MerchantCentre() {
                 </div>
                 <div className="mt small">
                   <KV k="Pending in" v={money(b.pending, b.currency)} />
-                  <KV k="Awaiting settlement" v={money(b.settlement_pending, b.currency)} />
-                  <KV k="Held" v={money(b.held, b.currency)} />
-                  <KV k="Disputed" v={money(b.disputed, b.currency)} />
-                  {b.frozen ? <KV k="Frozen" v={<Chip kind="danger">{money(b.frozen, b.currency)}</Chip>} /> : null}
+                  <KV k={tr('Awaiting settlement')} v={money(b.settlement_pending, b.currency)} />
+                  <KV k={tr('Held')} v={money(b.held, b.currency)} />
+                  <KV k={tr('Disputed')} v={money(b.disputed, b.currency)} />
+                  {b.frozen ? <KV k={tr('Frozen')} v={<Chip kind="danger">{money(b.frozen, b.currency)}</Chip>} /> : null}
                 </div>
               </div>
             ))}
@@ -143,7 +143,7 @@ export function MerchantCentre() {
                     <p className="small muted">{tr('Legacy limits apply.')}</p>
                   )}
                   <p className="small">{verification.data.next}</p>
-                  <KV k="Business (KYB)" v={<StatusBadge status={verification.data.kybStatus} />} />
+                  <KV k={tr('Business (KYB)')} v={<StatusBadge status={verification.data.kybStatus} />} />
                   <Link className="btn secondary" to="/app/settings?tab=kyc">
                     {tr('Verification →')}
                   </Link>
@@ -378,21 +378,21 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
               {preview.itemCount} item{preview.itemCount === 1 ? '' : 's'} since {String(preview.periodFrom).slice(0, 10)}
               {preview.wouldSkip ? ' — nothing to settle yet' : ''}
             </p>
-            <KV k="Gross collections" v={preview.totals.formatted.gross} />
-            <KV k="Provider (rail) fee" v={preview.totals.formatted.providerFees} />
-            <KV k="BitriPay fee" v={preview.totals.formatted.platformFees} />
+            <KV k={tr('Gross collections')} v={preview.totals.formatted.gross} />
+            <KV k={tr('Provider (rail) fee')} v={preview.totals.formatted.providerFees} />
+            <KV k={tr('BitriPay fee')} v={preview.totals.formatted.platformFees} />
             <KV k={`Tax on BitriPay fee (${pct(preview.taxRateBps)})`} v={preview.totals.formatted.feeTax} />
-            <KV k="Refunds" v={preview.totals.formatted.refunds} />
-            <KV k="Splits" v={preview.totals.formatted.splits} />
-            <KV k="Holds" v={preview.totals.formatted.holds} />
+            <KV k={tr('Refunds')} v={preview.totals.formatted.refunds} />
+            <KV k={tr('Splits')} v={preview.totals.formatted.splits} />
+            <KV k={tr('Holds')} v={preview.totals.formatted.holds} />
             <KV k={`Net in ${preview.collectionCurrency}`} v={<b>{preview.totals.formatted.net}</b>} />
             {preview.settlement.conversion ? (
               <>
                 <KV
-                  k="Rate"
+                  k={tr('Rate')}
                   v={`1 ${preview.collectionCurrency} = ${Number(preview.settlement.conversion.rate).toFixed(6)} ${preview.settlementCurrency} (mid ${Number(preview.settlement.conversion.midRate).toFixed(6)})`}
                 />
-                <KV k="Margin" v={`${preview.settlement.conversion.marginBps} bps (${pct(preview.settlement.conversion.marginBps)})`} />
+                <KV k={tr('Margin')} v={`${preview.settlement.conversion.marginBps} bps (${pct(preview.settlement.conversion.marginBps)})`} />
                 <KV k={`Paid in ${preview.settlementCurrency}`} v={<b>{preview.settlement.formatted}</b>} />
                 <p className="small muted">
                   {tr('Converted')} {preview.settlement.convertsAt === 'close' ? 'when the cycle closes' : 'when the cycle is paid'}; the exchange is posted in your ledger with this rate.
@@ -464,20 +464,20 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
         <Modal open={!!statement} onClose={() => setStatement(null)} title={statement?.number} wide>
           {statement && (
             <>
-              <KV k="Merchant" v={statement.merchant.name} />
-              <KV k="Period" v={`${statement.cycle.periodFrom.slice(0, 10)} → ${statement.cycle.periodTo.slice(0, 10)}`} />
-              <KV k="Gross" v={statement.totals.formatted.gross} />
-              <KV k="Provider (rail) fee" v={statement.totals.formatted.providerFees} />
-              <KV k="BitriPay fee" v={statement.totals.formatted.platformFees} />
+              <KV k={tr('Merchant')} v={statement.merchant.name} />
+              <KV k={tr('Period')} v={`${statement.cycle.periodFrom.slice(0, 10)} → ${statement.cycle.periodTo.slice(0, 10)}`} />
+              <KV k={tr('Gross')} v={statement.totals.formatted.gross} />
+              <KV k={tr('Provider (rail) fee')} v={statement.totals.formatted.providerFees} />
+              <KV k={tr('BitriPay fee')} v={statement.totals.formatted.platformFees} />
               <KV k={`Tax on BitriPay fee (${statement.totals.taxLabel ?? 'tax'} ${pct(statement.totals.taxRateBps ?? 0)})`} v={statement.totals.formatted.feeTax} />
-              <KV k="Net" v={statement.totals.formatted.net} />
+              <KV k={tr('Net')} v={statement.totals.formatted.net} />
               {statement.settlement && statement.settlement.currency !== statement.currency && (
                 <KV
                   k={`Paid in ${statement.settlement.currency}`}
                   v={`${statement.settlement.formatted}${statement.settlement.conversion ? ` at ${Number(statement.settlement.conversion.rate).toFixed(6)} (margin ${statement.settlement.conversion.marginBps} bps)` : ''}`}
                 />
               )}
-              <KV k="Hash" v={<span className="mono tiny">{statement.hash}</span>} />
+              <KV k={tr('Hash')} v={<span className="mono tiny">{statement.hash}</span>} />
               <div className="list mt">
                 {statement.items.map((i: any) => (
                   <div key={i.id} className="list-item">
@@ -502,22 +502,22 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
         <Modal open={!!detail} onClose={() => setDetail(null)} title={detail ? `Settlement ${detail.statement?.number ?? detail.id}` : undefined} wide>
           {detail && (
             <>
-              <KV k="Status" v={<StatusBadge status={detail.status} />} />
-              <KV k="Business date" v={detail.businessDate} />
-              <KV k="Gross" v={detail.statement.totals.formatted.gross} />
-              <KV k="Provider (rail) fee" v={detail.statement.totals.formatted.providerFees} />
-              <KV k="BitriPay fee" v={detail.statement.totals.formatted.platformFees} />
+              <KV k={tr('Status')} v={<StatusBadge status={detail.status} />} />
+              <KV k={tr('Business date')} v={detail.businessDate} />
+              <KV k={tr('Gross')} v={detail.statement.totals.formatted.gross} />
+              <KV k={tr('Provider (rail) fee')} v={detail.statement.totals.formatted.providerFees} />
+              <KV k={tr('BitriPay fee')} v={detail.statement.totals.formatted.platformFees} />
               <KV k={`Tax on BitriPay fee (${detail.statement.totals.taxLabel ?? 'tax'} ${pct(detail.statement.totals.taxRateBps ?? 0)})`} v={detail.statement.totals.formatted.feeTax} />
-              <KV k="Refunds" v={detail.statement.totals.formatted.refunds} />
-              <KV k="Splits" v={detail.statement.totals.formatted.splits} />
-              <KV k="Holds" v={detail.statement.totals.formatted.holds} />
+              <KV k={tr('Refunds')} v={detail.statement.totals.formatted.refunds} />
+              <KV k={tr('Splits')} v={detail.statement.totals.formatted.splits} />
+              <KV k={tr('Holds')} v={detail.statement.totals.formatted.holds} />
               <KV k={`Net in ${detail.currency}`} v={<b>{detail.statement.totals.formatted.net}</b>} />
               {detail.settlementCurrency !== detail.currency && (
                 <>
                   <KV k={`Paid in ${detail.settlementCurrency}`} v={<b>{detail.statement.settlement.formatted}</b>} />
                   {detail.conversion && (
                     <KV
-                      k="Conversion"
+                      k={tr('Conversion')}
                       v={`1 ${detail.currency} = ${Number(detail.conversion.rate).toFixed(6)} ${detail.settlementCurrency} · mid ${Number(detail.conversion.midRate).toFixed(6)} · margin ${detail.conversion.marginBps} bps · ${
                         detail.conversion.transactionId ? `posted ${detail.conversion.transactionId}` : 'quoted, posted at payment'
                       }`}
@@ -525,8 +525,8 @@ function Settlement({ calendar, money, toast, currencies }: { calendar: any; mon
                   )}
                 </>
               )}
-              {detail.dueAt && <KV k="Due" v={String(detail.dueAt).slice(0, 10)} />}
-              <KV k="Hash" v={<span className="mono tiny">{detail.hash}</span>} />
+              {detail.dueAt && <KV k={tr('Due')} v={String(detail.dueAt).slice(0, 10)} />}
+              <KV k={tr('Hash')} v={<span className="mono tiny">{detail.hash}</span>} />
             </>
           )}
         </Modal>
@@ -583,10 +583,10 @@ function Disputes({ disputes, money, toast }: { disputes: any; money: (m: number
             <h3>
               {detail.data.reasonCode.replace(/_/g, ' ')} · <StatusBadge status={detail.data.status} />
             </h3>
-            <KV k="Amount" v={money(detail.data.amount.valueMinor, detail.data.amount.currency)} />
+            <KV k={tr('Amount')} v={money(detail.data.amount.valueMinor, detail.data.amount.currency)} />
             <KV k="Opened by" v={detail.data.openedBy} />
-            <KV k="Deadline" v={new Date(detail.data.deadlineAt).toLocaleString()} />
-            {detail.data.decision && <KV k="Decision" v={`${detail.data.decision}: ${detail.data.decisionReason ?? ''}`} />}
+            <KV k={tr('Deadline')} v={new Date(detail.data.deadlineAt).toLocaleString()} />
+            {detail.data.decision && <KV k={tr('Decision')} v={`${detail.data.decision}: ${detail.data.decisionReason ?? ''}`} />}
             <h4 className="mt">{tr('Evidence')}</h4>
             {detail.data.evidence.map((e: any, i: number) => (
               <div key={i} className="card soft compact small">
@@ -682,10 +682,10 @@ function OfflineKit({ toast, err }: { toast: any; err: (e: any) => void }) {
           final before that. Ceiling per payment: {settings.data?.maxPerPromiseBase} base minor units; device keys last {settings.data ? Math.round(settings.data.promiseValidityHours) : 72} hours.
         </p>
         {!local.supported && <Alert kind="warning">{tr('This browser cannot generate the device key (Ed25519 WebCrypto). Use a recent Chrome, Edge, Safari or the mobile app.')}</Alert>}
-        <KV k="This device" v={local.deviceId ? <span className="mono small">{local.deviceId}</span> : <span className="muted">not provisioned</span>} />
-        <KV k="Key" v={local.keyId ? <span className="mono small">{local.keyId}</span> : '—'} />
-        <KV k="Offline codes stored" v={local.nonces} />
-        <KV k="Promises waiting to sync" v={local.queued} />
+        <KV k={tr('This device')} v={local.deviceId ? <span className="mono small">{local.deviceId}</span> : <span className="muted">not provisioned</span>} />
+        <KV k={tr('Key')} v={local.keyId ? <span className="mono small">{local.keyId}</span> : '—'} />
+        <KV k={tr('Offline codes stored')} v={local.nonces} />
+        <KV k={tr('Promises waiting to sync')} v={local.queued} />
         <div className="row mt">
           <Button onClick={provision} disabled={!local.supported}>
             {local.deviceId ? tr('Renew device key') : tr('Provision this device')}
@@ -876,10 +876,10 @@ function BulkPayouts({
               </div>
             </div>
             <div className="grid cols-2">
-              <KV k="Rows" v={`${b.rowCount} (${b.validRows} valid, ${b.invalidRows} invalid)`} />
-              <KV k="Total + fees" v={`${money(b.totalMinor, b.currency)} + ${money(b.feeMinor, b.currency)}`} />
-              <KV k="Paid" v={`${b.paidRows} rows · ${money(b.paidMinor, b.currency)}`} />
-              <KV k="Approval" v={b.approvalMethod ? `${b.approvalMethod.replace('_', ' ')} · ${new Date(b.approvedAt).toLocaleString()}` : 'pending'} />
+              <KV k={tr('Rows')} v={`${b.rowCount} (${b.validRows} valid, ${b.invalidRows} invalid)`} />
+              <KV k={tr('Total + fees')} v={`${money(b.totalMinor, b.currency)} + ${money(b.feeMinor, b.currency)}`} />
+              <KV k={tr('Paid')} v={`${b.paidRows} rows · ${money(b.paidMinor, b.currency)}`} />
+              <KV k={tr('Approval')} v={b.approvalMethod ? `${b.approvalMethod.replace('_', ' ')} · ${new Date(b.approvedAt).toLocaleString()}` : 'pending'} />
             </div>
             {readiness?.blockedByInvalidRows && <Alert kind="warning">{readiness.invalidRows} row(s) are invalid. Fix the file, or upload again with "Skip invalid rows".</Alert>}
             {(readiness?.shortfallMinor ?? 0) > 0 && <Alert kind="error">{tr('Available balance is {0} short of the total with fees.', { 0: money(readiness.shortfallMinor, b.currency) })}</Alert>}

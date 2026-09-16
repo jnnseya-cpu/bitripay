@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { countryFlag } from '@bitripay/shared';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -39,7 +40,7 @@ export function MobileMoney() {
         enabled: !!edit.enabled,
         sortOrder: Number(edit.sortOrder ?? 0),
       });
-      toast('Operator saved', 'success');
+      toast(tr('Operator saved'), 'success');
       setEdit(null);
       list.reload();
     } catch (err) {
@@ -51,7 +52,7 @@ export function MobileMoney() {
   return (
     <div>
       <PageHeader
-        title="Mobile money – all world operators"
+        title={tr('Mobile money – all world operators')}
         subtitle={`${list.data?.items.length ?? 0} operators across ${new Set((list.data?.items ?? []).map((o) => o.country)).size} countries. Add your collection number to accept an operator directly – no operator API required.`}
         actions={
           <Button
@@ -73,16 +74,16 @@ export function MobileMoney() {
               })
             }
           >
-            + Add operator
+            {tr('+ Add operator')}
           </Button>
         }
       />
       <Tabs
         tabs={[
-          { id: 'operators', label: 'Operators & collection numbers' },
-          { id: 'devices', label: 'Evidence devices (SMS forwarders)' },
-          { id: 'templates', label: 'SMS parsing templates' },
-          { id: 'routes', label: 'Any-to-any money routes' },
+          { id: 'operators', label: tr('Operators & collection numbers') },
+          { id: 'devices', label: tr('Evidence devices (SMS forwarders)') },
+          { id: 'templates', label: tr('SMS parsing templates') },
+          { id: 'routes', label: tr('Any-to-any money routes') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -90,7 +91,7 @@ export function MobileMoney() {
       {tab === 'operators' && (
         <>
           <div className="card mb">
-            <h4>How the direct rail works</h4>
+            <h4>{tr('How the direct rail works')}</h4>
             <p className="small muted">
               1. Register a merchant / collection number with each operator you want to accept (your normal business mobile money account). 2. Enter it below. 3. Customers authorise the intent with
               biometrics/PIN and pay from their own mobile money app or USSD to that number with the reference we show them. 4. The operator's receipt SMS is forwarded by a{' '}
@@ -100,19 +101,19 @@ export function MobileMoney() {
             </p>
             <div className="grid cols-2">
               <div>
-                <KVLine k="Signed evidence endpoint" v={<code>POST {config?.apiUrl}/api/evidence/sms</code>} />
-                <KVLine k="Legacy shared-secret webhook" v={<code>POST {config?.apiUrl}/api/webhooks/manual_momo</code>} />
-                <KVLine k="Body" v={<code>{'{"secret":"<smsSecret>","text":"<forwarded SMS>"}'}</code>} />
-                <KVLine k="Gateway status" v={direct ? <StatusBadge status={direct.enabled ? 'active' : 'pending'} /> : '—'} />
-                <KVLine k="Configured operators" v={`${configured} with a collection number`} />
+                <KVLine k={tr('Signed evidence endpoint')} v={<code>POST {config?.apiUrl}/api/evidence/sms</code>} />
+                <KVLine k={tr('Legacy shared-secret webhook')} v={<code>POST {config?.apiUrl}/api/webhooks/manual_momo</code>} />
+                <KVLine k={tr('Body')} v={<code>{'{"secret":"<smsSecret>","text":"<forwarded SMS>"}'}</code>} />
+                <KVLine k={tr('Gateway status')} v={direct ? <StatusBadge status={direct.enabled ? 'active' : 'pending'} /> : '—'} />
+                <KVLine k={tr('Configured operators')} v={`${configured} with a collection number`} />
               </div>
               <div>
                 <Field
-                  label="SMS webhook shared secret"
+                  label={tr('SMS webhook shared secret')}
                   hint={
                     direct?.configuredKeys?.includes('smsSecret')
-                      ? 'Configured – enter a new value to rotate. Not authoritative unless enabled in Gateway controls.'
-                      : 'Not configured – the legacy webhook is rejected until set'
+                      ? tr('Configured – enter a new value to rotate. Not authoritative unless enabled in Gateway controls.')
+                      : tr('Not configured – the legacy webhook is rejected until set')
                   }
                 >
                   <div className="row">
@@ -131,14 +132,14 @@ export function MobileMoney() {
                             credentials: { smsSecret: secret },
                           })
                           .then(() => {
-                            toast('Secret saved', 'success');
+                            toast(tr('Secret saved'), 'success');
                             setSecret('');
                             gateway.reload();
                           })
                           .catch((e) => toast(e.message, 'error'))
                       }
                     >
-                      Save
+                      {tr('Save')}
                     </Button>
                   </div>
                 </Field>
@@ -147,9 +148,9 @@ export function MobileMoney() {
           </div>
           <div className="card">
             <div className="row wrap mb">
-              <Input placeholder="Search operator, brand, country" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} />
+              <Input placeholder={tr('Search operator, brand, country')} value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} />
               <Select value={country} onChange={(e) => setCountry(e.target.value)} style={{ width: 220 }}>
-                <option value="">All countries</option>
+                <option value="">{tr('All countries')}</option>
                 {(config?.countries ?? []).map((c: any) => (
                   <option key={c.code} value={c.code}>
                     {countryFlag(c.code)} {c.name}
@@ -157,11 +158,11 @@ export function MobileMoney() {
                 ))}
               </Select>
               <Chip kind={onlyDirect ? 'primary' : undefined} onClick={() => setOnlyDirect(!onlyDirect)}>
-                Only configured
+                {tr('Only configured')}
               </Chip>
             </div>
             <Table
-              head={['Operator', 'Country', 'Currency', 'USSD', 'Collection number', 'Payouts', 'Enabled', '']}
+              head={[tr('Operator'), tr('Country'), tr('Currency'), 'USSD', tr('Collection number'), tr('Payouts'), tr('Enabled'), '']}
               rows={items.map((o) => [
                 <span className="row">
                   <span className="chip" style={{ background: o.color, color: '#fff' }}>
@@ -185,14 +186,14 @@ export function MobileMoney() {
                 <Switch on={o.enabled} onChange={(v) => api.put(`/api/admin/momo-operators/${o.id}`, { ...o, enabled: v }).then(list.reload)} />,
                 <div className="row">
                   <Button size="sm" variant="secondary" onClick={() => setEdit({ ...o })}>
-                    Configure
+                    {tr('Configure')}
                   </Button>
                   <ConfirmButton size="sm" variant="ghost" onConfirm={() => api.del(`/api/admin/momo-operators/${o.id}`).then(list.reload)}>
-                    Delete
+                    {tr('Delete')}
                   </ConfirmButton>
                 </div>,
               ])}
-              empty="No operators match"
+              empty={tr('No operators match')}
             />
           </div>
         </>
@@ -200,22 +201,24 @@ export function MobileMoney() {
       {tab === 'devices' && (
         <div className="grid cols-2">
           <div className="card">
-            <h4>Register an SMS-forwarder device</h4>
+            <h4>{tr('Register an SMS-forwarder device')}</h4>
             <p className="small muted">
-              The forwarder app on the collection phone generates an Ed25519 key pair and keeps the private key in the device's secure storage. Paste its public key (PEM or raw base64). Every
-              forwarded SMS is signed over <code>deviceId\nnonce\nreceivedAt\nfrom\noperatorId\ntext</code> and posted to <code>POST {config?.apiUrl}/api/evidence/sms</code>. Nonces are single-use;
-              bad signatures raise the device's risk score.
+              {tr(
+                "The forwarder app on the collection phone generates an Ed25519 key pair and keeps the private key in the device's secure storage. Paste its public key (PEM or raw base64). Every forwarded SMS is signed over",
+              )}{' '}
+              <code>deviceId\nnonce\nreceivedAt\nfrom\noperatorId\ntext</code> and posted to <code>POST {config?.apiUrl}/api/evidence/sms</code>. Nonces are single-use; bad signatures raise the
+              device's risk score.
             </p>
-            <Field label="Device name">
-              <Input value={dev.name} onChange={(e) => setDev({ ...dev, name: e.target.value })} placeholder="Collection phone – Nairobi" />
+            <Field label={tr('Device name')}>
+              <Input value={dev.name} onChange={(e) => setDev({ ...dev, name: e.target.value })} placeholder={tr('Collection phone – Nairobi')} />
             </Field>
-            <Field label="Public key">
+            <Field label={tr('Public key')}>
               <Textarea rows={4} value={dev.publicKey} onChange={(e) => setDev({ ...dev, publicKey: e.target.value })} placeholder="-----BEGIN PUBLIC KEY----- …" />
             </Field>
-            <Field label="Operators this device may confirm (comma-separated ids, blank = any)">
+            <Field label={tr('Operators this device may confirm (comma-separated ids, blank = any)')}>
               <Input value={dev.operatorIds} onChange={(e) => setDev({ ...dev, operatorIds: e.target.value })} placeholder="mpesa_ke, airtel_ke" />
             </Field>
-            <Field label="Device kind">
+            <Field label={tr('Device kind')}>
               <Select value={dev.kind} onChange={(e) => setDev({ ...dev, kind: e.target.value })}>
                 <option value="collection">collection – forwards receipts for money in</option>
                 <option value="payout">payout – approved Android device with a merchant SIM</option>
@@ -223,16 +226,16 @@ export function MobileMoney() {
             </Field>
             {dev.kind === 'payout' && (
               <div className="grid cols-2">
-                <Field label="SIM MSISDN">
+                <Field label={tr('SIM MSISDN')}>
                   <Input value={dev.simMsisdn} onChange={(e) => setDev({ ...dev, simMsisdn: e.target.value })} />
                 </Field>
-                <Field label="SIM ICCID">
+                <Field label={tr('SIM ICCID')}>
                   <Input value={dev.simIccid} onChange={(e) => setDev({ ...dev, simIccid: e.target.value })} />
                 </Field>
-                <Field label="Payout account id">
+                <Field label={tr('Payout account id')}>
                   <Input value={dev.payoutAccountId} onChange={(e) => setDev({ ...dev, payoutAccountId: e.target.value })} />
                 </Field>
-                <Field label="Operating agent user id">
+                <Field label={tr('Operating agent user id')}>
                   <Input value={dev.agentUserId} onChange={(e) => setDev({ ...dev, agentUserId: e.target.value })} />
                 </Field>
               </div>
@@ -255,20 +258,20 @@ export function MobileMoney() {
                     agentUserId: dev.agentUserId || null,
                   })
                   .then(() => {
-                    toast('Device registered', 'success');
+                    toast(tr('Device registered'), 'success');
                     setDev({ name: '', publicKey: '', operatorIds: '', kind: 'collection', simMsisdn: '', simIccid: '', payoutAccountId: '', agentUserId: '' });
                     devices.reload();
                   })
                   .catch((e) => toast(e.message, 'error'))
               }
             >
-              Register device
+              {tr('Register device')}
             </Button>
           </div>
           <div className="card">
-            <h4>Registered devices</h4>
+            <h4>{tr('Registered devices')}</h4>
             <Table
-              head={['Name', 'Id', 'Kind / SIM', 'Operators', 'Status', 'Risk', 'Last seen', '']}
+              head={[tr('Name'), tr('Id'), tr('Kind / SIM'), tr('Operators'), tr('Status'), tr('Risk'), tr('Last seen'), '']}
               rows={(devices.data?.items ?? []).map((d: any) => [
                 <b>{d.name}</b>,
                 <span className="mono tiny">{d.id}</span>,
@@ -292,11 +295,11 @@ export function MobileMoney() {
                       })
                     }
                   >
-                    Revoke
+                    {tr('Revoke')}
                   </ConfirmButton>
                 ) : null,
               ])}
-              empty="No devices registered – signed evidence cannot be received yet"
+              empty={tr('No devices registered – signed evidence cannot be received yet')}
             />
           </div>
         </div>
@@ -305,7 +308,7 @@ export function MobileMoney() {
         <div className="grid cols-2">
           <div className="card">
             <div className="row mb">
-              <h4 style={{ margin: 0 }}>Operator parsing templates</h4>
+              <h4 style={{ margin: 0 }}>{tr('Operator parsing templates')}</h4>
               <Button
                 size="sm"
                 style={{ marginLeft: 'auto' }}
@@ -320,15 +323,15 @@ export function MobileMoney() {
                   })
                 }
               >
-                + New template
+                {tr('+ New template')}
               </Button>
             </div>
             <p className="small muted">
-              Regular expressions (group 1 = value; sender uses group 1 = name, group 2 = phone). Templates for a specific operator take priority over the generic <code>*</code> templates. Confidence:
-              reference 50, amount 25, currency 10, operator transaction id 10, sender 5.
+              {tr('Regular expressions (group 1 = value; sender uses group 1 = name, group 2 = phone). Templates for a specific operator take priority over the generic')} <code>*</code> templates.
+              Confidence: reference 50, amount 25, currency 10, operator transaction id 10, sender 5.
             </p>
             <Table
-              head={['Operator', 'Name', 'Priority', 'Enabled', '']}
+              head={[tr('Operator'), tr('Name'), tr('Priority'), tr('Enabled'), '']}
               rows={(templates.data?.items ?? []).map((t: any) => [
                 <span className="mono">{t.operatorId}</span>,
                 t.name,
@@ -336,23 +339,23 @@ export function MobileMoney() {
                 <StatusBadge status={t.enabled ? 'active' : 'disabled'} />,
                 <div className="row">
                   <Button size="sm" variant="secondary" onClick={() => setTpl({ ...t, patterns: { ...t.patterns } })}>
-                    Edit
+                    {tr('Edit')}
                   </Button>
                   <ConfirmButton size="sm" variant="ghost" onConfirm={() => api.del(`/api/admin/evidence/templates/${t.id}`).then(templates.reload)}>
-                    Delete
+                    {tr('Delete')}
                   </ConfirmButton>
                 </div>,
               ])}
             />
           </div>
           <div className="card">
-            <h4>Test a message</h4>
-            <Field label="Paste an operator SMS">
+            <h4>{tr('Test a message')}</h4>
+            <Field label={tr('Paste an operator SMS')}>
               <Textarea
                 rows={4}
                 value={testText}
                 onChange={(e) => setTestText(e.target.value)}
-                placeholder="QX7A1B2C3D Confirmed. You have received Ksh1,000.00 from JOHN DOE 254712345678 … Ref MMABC123"
+                placeholder={tr('QX7A1B2C3D Confirmed. You have received Ksh1,000.00 from JOHN DOE 254712345678 … Ref MMABC123')}
               />
             </Field>
             <Button
@@ -365,7 +368,7 @@ export function MobileMoney() {
                   .catch((e) => toast(e.message, 'error'))
               }
             >
-              Parse
+              {tr('Parse')}
             </Button>
             {testOut && (
               <pre className="tiny mono mt" style={{ whiteSpace: 'pre-wrap' }}>
@@ -375,20 +378,20 @@ export function MobileMoney() {
           </div>
         </div>
       )}
-      <Modal open={!!tpl} onClose={() => setTpl(null)} title={tpl?.id === 'new' ? 'New parsing template' : `Edit ${tpl?.name}`} wide>
+      <Modal open={!!tpl} onClose={() => setTpl(null)} title={tpl?.id === 'new' ? tr('New parsing template') : `Edit ${tpl?.name}`} wide>
         {tpl && (
           <>
             <div className="grid cols-2">
-              <Field label="Operator id (* = any)">
+              <Field label={tr('Operator id (* = any)')}>
                 <Input value={tpl.operatorId} onChange={(e) => setTpl({ ...tpl, operatorId: e.target.value })} />
               </Field>
-              <Field label="Name">
+              <Field label={tr('Name')}>
                 <Input value={tpl.name} onChange={(e) => setTpl({ ...tpl, name: e.target.value })} />
               </Field>
-              <Field label="Priority">
+              <Field label={tr('Priority')}>
                 <Input type="number" value={tpl.priority} onChange={(e) => setTpl({ ...tpl, priority: Number(e.target.value) })} />
               </Field>
-              <Field label="Keywords (comma-separated, message must contain one)">
+              <Field label={tr('Keywords (comma-separated, message must contain one)')}>
                 <Input
                   value={(tpl.patterns.keywords ?? []).join(', ')}
                   onChange={(e) =>
@@ -411,7 +414,7 @@ export function MobileMoney() {
                 <Input className="mono" value={tpl.patterns[k] ?? ''} onChange={(e) => setTpl({ ...tpl, patterns: { ...tpl.patterns, [k]: e.target.value } })} />
               </Field>
             ))}
-            <Switch on={!!tpl.enabled} onChange={(v) => setTpl({ ...tpl, enabled: v })} label="Enabled" />
+            <Switch on={!!tpl.enabled} onChange={(v) => setTpl({ ...tpl, enabled: v })} label={tr('Enabled')} />
             <div className="mt">
               <Button
                 disabled={!tpl.name || !tpl.operatorId}
@@ -420,14 +423,14 @@ export function MobileMoney() {
                   api
                     .put(`/api/admin/evidence/templates/${tpl.id}`, { operatorId: tpl.operatorId, name: tpl.name, priority: tpl.priority, enabled: tpl.enabled, patterns })
                     .then(() => {
-                      toast('Template saved', 'success');
+                      toast(tr('Template saved'), 'success');
                       setTpl(null);
                       templates.reload();
                     })
                     .catch((e) => toast(e.message, 'error'));
                 }}
               >
-                Save
+                {tr('Save')}
               </Button>
             </div>
           </>
@@ -436,11 +439,12 @@ export function MobileMoney() {
       {tab === 'routes' && (
         <div className="card">
           <Alert kind="info">
-            Every any-to-any movement (card → mobile money, mobile money → bank, bank → QR…). Funding legs settle through gateways or the direct rails; payout legs to bank / mobile money appear in
-            Approvals → Withdrawals.
+            {tr(
+              'Every any-to-any movement (card → mobile money, mobile money → bank, bank → QR…). Funding legs settle through gateways or the direct rails; payout legs to bank / mobile money appear in Approvals → Withdrawals.',
+            )}
           </Alert>
           <Table
-            head={['User', 'From', 'To', 'Amount', 'Deliver in', 'Status', 'Created', 'Error']}
+            head={[tr('User'), 'From', 'To', tr('Amount'), 'Deliver in', tr('Status'), tr('Created'), tr('Error')]}
             rows={(routes.data?.items ?? []).map((r: any) => [
               <UserCell user={r.user} />,
               r.source.replace('_', ' '),
@@ -457,26 +461,26 @@ export function MobileMoney() {
                 {r.error ?? ''}
               </span>,
             ])}
-            empty="No routes yet"
+            empty={tr('No routes yet')}
           />
         </div>
       )}
-      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? `Configure ${edit.name}` : 'Add operator'}>
+      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? `Configure ${edit.name}` : tr('Add operator')}>
         {edit && (
           <>
             {!edit.id && (
-              <Field label="ID (lowercase, e.g. mtn_gh)">
+              <Field label={tr('ID (lowercase, e.g. mtn_gh)')}>
                 <Input value={edit.id} onChange={(e) => setEdit({ ...edit, id: e.target.value })} />
               </Field>
             )}
             <div className="grid cols-2">
-              <Field label="Name">
+              <Field label={tr('Name')}>
                 <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
               </Field>
-              <Field label="Brand">
+              <Field label={tr('Brand')}>
                 <Input value={edit.brand} onChange={(e) => setEdit({ ...edit, brand: e.target.value })} />
               </Field>
-              <Field label="Country">
+              <Field label={tr('Country')}>
                 <Select value={edit.country} onChange={(e) => setEdit({ ...edit, country: e.target.value })}>
                   {(config?.countries ?? []).map((c: any) => (
                     <option key={c.code} value={c.code}>
@@ -485,35 +489,37 @@ export function MobileMoney() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Currency">
+              <Field label={tr('Currency')}>
                 <Input value={edit.currency} onChange={(e) => setEdit({ ...edit, currency: e.target.value.toUpperCase() })} />
               </Field>
-              <Field label="USSD code">
+              <Field label={tr('USSD code')}>
                 <Input value={edit.ussd ?? ''} onChange={(e) => setEdit({ ...edit, ussd: e.target.value })} />
               </Field>
-              <Field label="Color">
+              <Field label={tr('Color')}>
                 <Input type="color" value={edit.color} onChange={(e) => setEdit({ ...edit, color: e.target.value })} />
               </Field>
             </div>
-            <Alert kind="success">Direct rail: customers pay to this number with a reference. Leave blank to route this operator only through API gateways (or the sandbox in development).</Alert>
+            <Alert kind="success">
+              {tr('Direct rail: customers pay to this number with a reference. Leave blank to route this operator only through API gateways (or the sandbox in development).')}
+            </Alert>
             <div className="grid cols-2">
-              <Field label="Your collection / merchant number">
+              <Field label={tr('Your collection / merchant number')}>
                 <Input value={edit.collectionNumber ?? ''} onChange={(e) => setEdit({ ...edit, collectionNumber: e.target.value })} placeholder="0244000000" />
               </Field>
-              <Field label="Account name shown to payers">
-                <Input value={edit.collectionName ?? ''} onChange={(e) => setEdit({ ...edit, collectionName: e.target.value })} placeholder="BitriPay Ltd" />
+              <Field label={tr('Account name shown to payers')}>
+                <Input value={edit.collectionName ?? ''} onChange={(e) => setEdit({ ...edit, collectionName: e.target.value })} placeholder={tr('BitriPay Ltd')} />
               </Field>
             </div>
-            <Field label="Custom instructions (optional)">
+            <Field label={tr('Custom instructions (optional)')}>
               <Textarea value={edit.instructions ?? ''} onChange={(e) => setEdit({ ...edit, instructions: e.target.value })} />
             </Field>
-            <Switch on={!!edit.payoutEnabled} onChange={(v) => setEdit({ ...edit, payoutEnabled: v })} label="Allow payouts to this operator" />
+            <Switch on={!!edit.payoutEnabled} onChange={(v) => setEdit({ ...edit, payoutEnabled: v })} label={tr('Allow payouts to this operator')} />
             <div className="mt-sm">
-              <Switch on={!!edit.enabled} onChange={(v) => setEdit({ ...edit, enabled: v })} label="Enabled" />
+              <Switch on={!!edit.enabled} onChange={(v) => setEdit({ ...edit, enabled: v })} label={tr('Enabled')} />
             </div>
             <div className="mt">
               <Button onClick={save} disabled={!edit.id || !edit.name}>
-                Save
+                {tr('Save')}
               </Button>
             </div>
           </>

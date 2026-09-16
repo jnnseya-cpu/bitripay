@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, ConfirmButton, Field, Input, KV, PageHeader, Select, StatusBadge, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
@@ -11,16 +12,19 @@ export function Finops() {
   const ok = (m: string) => toast(m, 'success');
   return (
     <div>
-      <PageHeader title="Finance operations" subtitle="Fees with a history, settlement obligations, disputes as objects, holds, the commission ledger and the three-way reconciliation workbench." />
+      <PageHeader
+        title={tr('Finance operations')}
+        subtitle={tr('Fees with a history, settlement obligations, disputes as objects, holds, the commission ledger and the three-way reconciliation workbench.')}
+      />
       <Tabs
         tabs={[
-          { id: 'fees', label: 'Fee schedules' },
-          { id: 'settlements', label: 'Settlements' },
-          { id: 'disputes', label: 'Disputes' },
-          { id: 'holds', label: 'Holds' },
-          { id: 'commissions', label: 'Commissions' },
-          { id: 'batches', label: 'Payout batches' },
-          { id: 'recon', label: 'Processor reconciliation' },
+          { id: 'fees', label: tr('Fee schedules') },
+          { id: 'settlements', label: tr('Settlements') },
+          { id: 'disputes', label: tr('Disputes') },
+          { id: 'holds', label: tr('Holds') },
+          { id: 'commissions', label: tr('Commissions') },
+          { id: 'batches', label: tr('Payout batches') },
+          { id: 'recon', label: tr('Processor reconciliation') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -44,9 +48,9 @@ function Fees({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h4>Schedules (draft → approve by another administrator → activate)</h4>
+        <h4>{tr('Schedules (draft → approve by another administrator → activate)')}</h4>
         <Table
-          head={['Scope', 'Version', 'Status', 'Effective', 'Author / approver', '']}
+          head={[tr('Scope'), tr('Version'), tr('Status'), tr('Effective'), tr('Author / approver'), '']}
           rows={(data.data?.items ?? []).map((s: any) => [
             <span>
               {s.scope}
@@ -75,7 +79,7 @@ function Fees({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
                       .catch(err)
                   }
                 >
-                  Approve
+                  {tr('Approve')}
                 </ConfirmButton>
               )}
               {s.status === 'APPROVED' && (
@@ -92,7 +96,7 @@ function Fees({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
                       .catch(err)
                   }
                 >
-                  Activate
+                  {tr('Activate')}
                 </ConfirmButton>
               )}
               {s.status === 'ACTIVE' && (
@@ -109,14 +113,14 @@ function Fees({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
                       .catch(err)
                   }
                 >
-                  Retire
+                  {tr('Retire')}
                 </ConfirmButton>
               )}
             </div>,
           ])}
-          empty="No schedules: the flat fee setting applies"
+          empty={tr('No schedules: the flat fee setting applies')}
         />
-        <h4 className="mt">Explain a fee</h4>
+        <h4 className="mt">{tr('Explain a fee')}</h4>
         <div className="row">
           <Input placeholder="user id (optional)" value={explain.user} onChange={(e) => setExplain({ ...explain, user: e.target.value })} />
           <Select value={explain.type} onChange={(e) => setExplain({ ...explain, type: e.target.value })}>
@@ -133,29 +137,29 @@ function Fees({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
                 .catch(err)
             }
           >
-            Resolve
+            {tr('Resolve')}
           </Button>
         </div>
         {resolved && <pre className="mono tiny mt">{JSON.stringify(resolved, null, 2)}</pre>}
       </div>
       <div className="card">
-        <h4>New draft</h4>
+        <h4>{tr('New draft')}</h4>
         <div className="grid cols-2">
-          <Field label="Scope">
+          <Field label={tr('Scope')}>
             <Select value={draft.scope} onChange={(e) => setDraft({ ...draft, scope: e.target.value })}>
               {['platform', 'country', 'tier', 'merchant'].map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Scope reference">
-            <Input value={draft.scopeRef} onChange={(e) => setDraft({ ...draft, scopeRef: e.target.value })} placeholder="CD / gold / user id" />
+          <Field label={tr('Scope reference')}>
+            <Input value={draft.scopeRef} onChange={(e) => setDraft({ ...draft, scopeRef: e.target.value })} placeholder={tr('CD / gold / user id')} />
           </Field>
         </div>
-        <Field label="Rules (JSON: fee type → fixed, bps, min, max in base minor units)">
+        <Field label={tr('Rules (JSON: fee type → fixed, bps, min, max in base minor units)')}>
           <Textarea rows={8} value={draft.rulesText} onChange={(e) => setDraft({ ...draft, rulesText: e.target.value })} />
         </Field>
-        <Field label="Notes">
+        <Field label={tr('Notes')}>
           <Input value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
         </Field>
         <Button
@@ -175,7 +179,7 @@ function Fees({ ok, err }: { ok: (m: string) => void; err: (e: any) => void }) {
               .catch(err);
           }}
         >
-          Create draft
+          {tr('Create draft')}
         </Button>
       </div>
     </div>
@@ -193,7 +197,7 @@ function Settlements({ ok, err, money }: { ok: (m: string) => void; err: (e: any
         {Object.entries(obligations.data?.byCurrency ?? {}).map(([cur, v]: any) => (
           <div className="card" key={cur}>
             <div className="stat">
-              <span className="label">Owed · {cur}</span>
+              <span className="label">{tr('Owed · {0}', { 0: cur })}</span>
               <span className="value">{money(v.netMinor, cur)}</span>
               <span className="small muted">
                 {v.count} cycle(s) · {v.overdue} overdue
@@ -202,7 +206,7 @@ function Settlements({ ok, err, money }: { ok: (m: string) => void; err: (e: any
           </div>
         ))}
         <div className="card">
-          <h4>Close a cycle</h4>
+          <h4>{tr('Close a cycle')}</h4>
           <div className="row">
             <Input placeholder="merchant user id" value={close.userId} onChange={(e) => setClose({ ...close, userId: e.target.value })} />
             <Input style={{ width: 80 }} value={close.currency} onChange={(e) => setClose({ ...close, currency: e.target.value.toUpperCase() })} />
@@ -225,7 +229,7 @@ function Settlements({ ok, err, money }: { ok: (m: string) => void; err: (e: any
               }
               disabled={!close.userId}
             >
-              Close
+              {tr('Close')}
             </Button>
             <Button
               size="sm"
@@ -240,7 +244,7 @@ function Settlements({ ok, err, money }: { ok: (m: string) => void; err: (e: any
                   .catch(err)
               }
             >
-              Run schedules now
+              {tr('Run schedules now')}
             </Button>
           </div>
         </div>
@@ -248,14 +252,14 @@ function Settlements({ ok, err, money }: { ok: (m: string) => void; err: (e: any
       <div className="card">
         <div className="row mb">
           <Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 200 }}>
-            <option value="">All statuses</option>
+            <option value="">{tr('All statuses')}</option>
             {['CLOSED', 'PAYING', 'PAID', 'FAILED', 'SKIPPED'].map((s) => (
               <option key={s}>{s}</option>
             ))}
           </Select>
         </div>
         <Table
-          head={['Cycle', 'Merchant', 'Period', 'Gross', 'Net', 'Status', 'Due', '']}
+          head={[tr('Cycle'), tr('Merchant'), tr('Period'), tr('Gross'), tr('Net'), tr('Status'), tr('Due'), '']}
           rows={(cycles.data?.items ?? []).map((c: any) => [
             <span className="mono tiny">{c.id}</span>,
             <span className="tiny">{c.userId}</span>,
@@ -285,12 +289,12 @@ function Settlements({ ok, err, money }: { ok: (m: string) => void; err: (e: any
                       .catch(err)
                   }
                 >
-                  Pay
+                  {tr('Pay')}
                 </ConfirmButton>
               )}
             </div>,
           ])}
-          empty="No cycles"
+          empty={tr('No cycles')}
         />
       </div>
     </div>
@@ -308,14 +312,14 @@ function Disputes({ ok, err, money }: { ok: (m: string) => void; err: (e: any) =
       <div className="card">
         <div className="row mb">
           <Select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 220 }}>
-            <option value="">All</option>
+            <option value="">{tr('All')}</option>
             {['OPEN', 'EVIDENCE_REQUESTED', 'UNDER_REVIEW', 'WON', 'LOST', 'WITHDRAWN', 'EXPIRED'].map((s) => (
               <option key={s}>{s}</option>
             ))}
           </Select>
         </div>
         <Table
-          head={['Dispute', 'Amount', 'Reason', 'Opened by', 'Deadline', 'Status', '']}
+          head={[tr('Dispute'), tr('Amount'), tr('Reason'), 'Opened by', tr('Deadline'), tr('Status'), '']}
           rows={(data.data?.items ?? []).map((d: any) => [
             <span className="mono tiny">{d.id}</span>,
             money(d.amount.valueMinor, d.amount.currency),
@@ -324,10 +328,10 @@ function Disputes({ ok, err, money }: { ok: (m: string) => void; err: (e: any) =
             <span className="tiny">{fmtDate(d.deadlineAt)}</span>,
             <StatusBadge status={d.status} />,
             <Button size="sm" variant="secondary" onClick={() => setSel(d.id)}>
-              Open
+              {tr('Open')}
             </Button>,
           ])}
-          empty="No disputes"
+          empty={tr('No disputes')}
         />
       </div>
       <div className="card">
@@ -336,11 +340,11 @@ function Disputes({ ok, err, money }: { ok: (m: string) => void; err: (e: any) =
             <h4>
               {detail.data.reasonCode} · <StatusBadge status={detail.data.status} />
             </h4>
-            <KV k="Merchant" v={detail.data.merchantId} />
-            <KV k="Amount" v={money(detail.data.amount.valueMinor, detail.data.amount.currency)} />
-            <KV k="Rail" v={detail.data.rail} />
-            <KV k="Hold" v={detail.data.holdId ?? '—'} />
-            <KV k="Refund" v={detail.data.refundId ?? '—'} />
+            <KV k={tr('Merchant')} v={detail.data.merchantId} />
+            <KV k={tr('Amount')} v={money(detail.data.amount.valueMinor, detail.data.amount.currency)} />
+            <KV k={tr('Rail')} v={detail.data.rail} />
+            <KV k={tr('Hold')} v={detail.data.holdId ?? '—'} />
+            <KV k={tr('Refund')} v={detail.data.refundId ?? '—'} />
             {detail.data.evidence.map((e: any, i: number) => (
               <div key={i} className="card soft compact small">
                 <b>{e.role}</b> · {fmtDate(e.at)}
@@ -350,7 +354,7 @@ function Disputes({ ok, err, money }: { ok: (m: string) => void; err: (e: any) =
             ))}
             {!['WON', 'LOST', 'WITHDRAWN'].includes(detail.data.status) && (
               <>
-                <Field label="Decision reason">
+                <Field label={tr('Decision reason')}>
                   <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
                 </Field>
                 <div className="row">
@@ -367,7 +371,7 @@ function Disputes({ ok, err, money }: { ok: (m: string) => void; err: (e: any) =
                         .catch(err)
                     }
                   >
-                    Merchant wins
+                    {tr('Merchant wins')}
                   </ConfirmButton>
                   <ConfirmButton
                     size="sm"
@@ -382,7 +386,7 @@ function Disputes({ ok, err, money }: { ok: (m: string) => void; err: (e: any) =
                         .catch(err)
                     }
                   >
-                    Merchant loses (refund)
+                    {tr('Merchant loses (refund)')}
                   </ConfirmButton>
                   <ConfirmButton
                     size="sm"
@@ -398,12 +402,12 @@ function Disputes({ ok, err, money }: { ok: (m: string) => void; err: (e: any) =
                         .catch(err)
                     }
                   >
-                    Request evidence
+                    {tr('Request evidence')}
                   </ConfirmButton>
                 </div>
               </>
             )}
-            <h5 className="mt">Chronology</h5>
+            <h5 className="mt">{tr('Chronology')}</h5>
             {(detail.data.chronology ?? []).map((e: any, i: number) => (
               <div key={i} className="tiny">
                 {fmtDate(e.at)} · {e.event} · {e.actor}
@@ -411,7 +415,7 @@ function Disputes({ ok, err, money }: { ok: (m: string) => void; err: (e: any) =
             ))}
           </>
         )}
-        {!detail.data && <p className="small muted">Select a dispute.</p>}
+        {!detail.data && <p className="small muted">{tr('Select a dispute.')}</p>}
       </div>
     </div>
   );
@@ -424,7 +428,7 @@ function Holds({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
     <div className="grid cols-2">
       <div className="card">
         <Table
-          head={['Hold', 'User', 'Amount', 'Kind', 'Reason', 'Created', '']}
+          head={[tr('Hold'), tr('User'), tr('Amount'), tr('Kind'), tr('Reason'), tr('Created'), '']}
           rows={(data.data?.items ?? []).map((h: any) => [
             <span className="mono tiny">{h.id}</span>,
             <span className="tiny">{h.userId}</span>,
@@ -446,25 +450,25 @@ function Holds({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
                   .catch(err)
               }
             >
-              Release
+              {tr('Release')}
             </ConfirmButton>,
           ])}
-          empty="No active holds"
+          empty={tr('No active holds')}
         />
       </div>
       <div className="card">
-        <h4>Place a hold</h4>
-        <Field label="User id">
+        <h4>{tr('Place a hold')}</h4>
+        <Field label={tr('User id')}>
           <Input value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} />
         </Field>
         <div className="grid cols-3">
-          <Field label="Currency">
+          <Field label={tr('Currency')}>
             <Input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} />
           </Field>
-          <Field label="Amount (minor)">
+          <Field label={tr('Amount (minor)')}>
             <Input type="number" value={form.amountMinor} onChange={(e) => setForm({ ...form, amountMinor: Number(e.target.value) })} />
           </Field>
-          <Field label="Kind">
+          <Field label={tr('Kind')}>
             <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
               {['reserve', 'review', 'settlement', 'compliance', 'dispute'].map((k) => (
                 <option key={k}>{k}</option>
@@ -472,7 +476,7 @@ function Holds({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
             </Select>
           </Field>
         </div>
-        <Field label="Reason">
+        <Field label={tr('Reason')}>
           <Input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
         </Field>
         <Button
@@ -487,7 +491,7 @@ function Holds({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
           }
           disabled={!form.userId || form.amountMinor <= 0 || form.reason.length < 3}
         >
-          Place hold
+          {tr('Place hold')}
         </Button>
       </div>
     </div>
@@ -506,7 +510,7 @@ function Commissions({ money }: { money: (m: number, c: string) => string }) {
         </span>
       </div>
       <Table
-        head={['Agent', 'Kind', 'Currency', 'Count', 'Earned', 'Platform share']}
+        head={[tr('Agent'), tr('Kind'), tr('Currency'), tr('Count'), tr('Earned'), tr('Platform share')]}
         rows={(data.data?.rows ?? []).map((r: any, _i: number) => [
           <span className="tiny">{r.agentUserId}</span>,
           r.kind,
@@ -515,7 +519,7 @@ function Commissions({ money }: { money: (m: number, c: string) => string }) {
           money(r.amountMinor, r.currency),
           money(r.platformShareMinor, r.currency),
         ])}
-        empty="No commissions this period"
+        empty={tr('No commissions this period')}
       />
     </div>
   );
@@ -527,19 +531,19 @@ function Recon({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
   return (
     <div className="grid cols-2">
       <div className="card">
-        <h4>Import a processor statement</h4>
+        <h4>{tr('Import a processor statement')}</h4>
         <div className="grid cols-3">
-          <Field label="Gateway">
+          <Field label={tr('Gateway')}>
             <Input value={form.gatewayId} onChange={(e) => setForm({ ...form, gatewayId: e.target.value })} />
           </Field>
-          <Field label="Cycle">
+          <Field label={tr('Cycle')}>
             <Input value={form.cycleRef} onChange={(e) => setForm({ ...form, cycleRef: e.target.value })} />
           </Field>
-          <Field label="Currency">
+          <Field label={tr('Currency')}>
             <Input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} />
           </Field>
         </div>
-        <Field label="CSV export (columns: reference, amountMinor, status, feeMinor; optional currency, settlementRef, occurredAt; quoted fields allowed)">
+        <Field label={tr('CSV export (columns: reference, amountMinor, status, feeMinor; optional currency, settlementRef, occurredAt; quoted fields allowed)')}>
           <Textarea rows={8} value={form.csv} onChange={(e) => setForm({ ...form, csv: e.target.value })} />
         </Field>
         <Button
@@ -553,16 +557,16 @@ function Recon({ ok, err, money }: { ok: (m: string) => void; err: (e: any) => v
               .catch(err)
           }
         >
-          Import & run
+          {tr('Import & run')}
         </Button>
       </div>
       <div className="card">
-        <h4>Workbench</h4>
+        <h4>{tr('Workbench')}</h4>
         {(wb.data?.exceptions ?? []).map((e: any) => (
           <KV key={`${e.connectionId}-${e.class}`} k={`${e.connectionId} · ${e.class}`} v={`${e.count} · ${money(e.exposureMinor, e.currency ?? 'USD')} · oldest ${e.oldestAgeHours}h`} />
         ))}
-        {wb.data?.exceptions?.length === 0 && <Alert kind="success">No open exceptions.</Alert>}
-        <h5 className="mt">Recent runs</h5>
+        {wb.data?.exceptions?.length === 0 && <Alert kind="success">{tr('No open exceptions.')}</Alert>}
+        <h5 className="mt">{tr('Recent runs')}</h5>
         {(wb.data?.recentRuns ?? []).map((r: any) => (
           <div key={r.id} className="tiny">
             {fmtDate(r.createdAt)} · {r.connectionId} · {r.cycleRef} · matched {r.matched} · cases {r.casesOpened} · {r.complete ? 'complete' : 'incomplete'}
@@ -602,9 +606,9 @@ function PayoutBatches({ ok, err, money }: { ok: (m: string) => void; err: (e: a
     <div className="grid cols-2">
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3>Batches</h3>
+          <h3>{tr('Batches')}</h3>
           <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All</option>
+            <option value="">{tr('All')}</option>
             {['PENDING_APPROVAL', 'EXECUTED', 'PARTIAL', 'FAILED', 'CANCELLED'].map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -613,8 +617,8 @@ function PayoutBatches({ ok, err, money }: { ok: (m: string) => void; err: (e: a
           </Select>
         </div>
         <Table
-          head={['Merchant', 'Reference', 'Rows', 'Total', 'Status', 'Created']}
-          empty="No batches"
+          head={[tr('Merchant'), tr('Reference'), tr('Rows'), tr('Total'), tr('Status'), tr('Created')]}
+          empty={tr('No batches')}
           rows={(list.data?.items ?? []).map((x: any) => [
             <a onClick={() => open(x.id)}>{x.owner?.name}</a>,
             x.reference ?? x.id,
@@ -626,7 +630,7 @@ function PayoutBatches({ ok, err, money }: { ok: (m: string) => void; err: (e: a
         />
       </div>
       <div className="card">
-        {!b && <Alert kind="info">Select a batch. Approving here is the second pair of eyes for the merchant's upload: no step-up, but the decision is audited.</Alert>}
+        {!b && <Alert kind="info">{tr("Select a batch. Approving here is the second pair of eyes for the merchant's upload: no step-up, but the decision is audited.")}</Alert>}
         {b && (
           <>
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -636,24 +640,24 @@ function PayoutBatches({ ok, err, money }: { ok: (m: string) => void; err: (e: a
               {b.status === 'PENDING_APPROVAL' && (
                 <div className="row" style={{ gap: 6 }}>
                   <ConfirmButton size="sm" prompt={`Approve and pay ${b.validRows} rows, ${money(b.totalMinor + b.feeMinor, b.currency)} including fees?`} onConfirm={() => approve(b.id)}>
-                    Approve (four-eyes)
+                    {tr('Approve (four-eyes)')}
                   </ConfirmButton>
                   <ConfirmButton size="sm" variant="ghost" prompt="Cancel this batch?" onConfirm={() => cancel(b.id)}>
-                    Cancel
+                    {tr('Cancel')}
                   </ConfirmButton>
                 </div>
               )}
             </div>
             <div className="grid cols-2">
               <KV k="Created by" v={b.createdBy} />
-              <KV k="Rows" v={`${b.rowCount} (${b.validRows} valid, ${b.invalidRows} invalid)`} />
-              <KV k="Total + fees" v={`${money(b.totalMinor, b.currency)} + ${money(b.feeMinor, b.currency)}`} />
-              <KV k="Approval" v={b.approvalMethod ? `${b.approvalMethod} by ${b.approvedBy} · ${fmtDate(b.approvedAt)}` : 'pending'} />
-              {selected.readiness && <KV k="Available / needed" v={`${money(selected.readiness.available, b.currency)} / ${money(selected.readiness.needed, b.currency)}`} />}
+              <KV k={tr('Rows')} v={`${b.rowCount} (${b.validRows} valid, ${b.invalidRows} invalid)`} />
+              <KV k={tr('Total + fees')} v={`${money(b.totalMinor, b.currency)} + ${money(b.feeMinor, b.currency)}`} />
+              <KV k={tr('Approval')} v={b.approvalMethod ? `${b.approvalMethod} by ${b.approvedBy} · ${fmtDate(b.approvedAt)}` : 'pending'} />
+              {selected.readiness && <KV k={tr('Available / needed')} v={`${money(selected.readiness.available, b.currency)} / ${money(selected.readiness.needed, b.currency)}`} />}
             </div>
             <Table
-              head={['#', 'Method', 'Destination', 'Amount', 'Status', 'Outcome']}
-              empty="No rows"
+              head={['#', tr('Method'), tr('Destination'), tr('Amount'), tr('Status'), tr('Outcome')]}
+              empty={tr('No rows')}
               rows={(b.rows ?? []).map((r: any) => [
                 r.lineNo,
                 r.method,

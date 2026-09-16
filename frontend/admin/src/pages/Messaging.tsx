@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, Field, Input, Modal, PageHeader, Select, Switch, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
@@ -40,19 +41,19 @@ export function Messaging() {
   const save = (key: string, value: unknown) =>
     api
       .put(`/api/admin/settings/${key}`, { value })
-      .then(() => toast('Saved', 'success'))
+      .then(() => toast(tr('Saved'), 'success'))
       .catch((e) => toast(e.message, 'error'));
   return (
     <div>
-      <PageHeader title="Email, SMS, push & newsletter" subtitle="SMTP for verification and notifications, SMS provider for phone OTP, push broadcasts and newsletters" />
+      <PageHeader title={tr('Email, SMS, push & newsletter')} subtitle={tr('SMTP for verification and notifications, SMS provider for phone OTP, push broadcasts and newsletters')} />
       <Tabs
         tabs={[
-          { id: 'smtp', label: 'SMTP email' },
-          { id: 'sms', label: 'SMS / phone auth' },
-          { id: 'push', label: 'Push notifications' },
-          { id: 'newsletter', label: 'Newsletter' },
-          { id: 'templates', label: 'Templates' },
-          { id: 'outbox', label: 'Message log' },
+          { id: 'smtp', label: tr('SMTP email') },
+          { id: 'sms', label: tr('SMS / phone auth') },
+          { id: 'push', label: tr('Push notifications') },
+          { id: 'newsletter', label: tr('Newsletter') },
+          { id: 'templates', label: tr('Templates') },
+          { id: 'outbox', label: tr('Message log') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -61,30 +62,30 @@ export function Messaging() {
         {tab === 'smtp' && smtp && (
           <>
             <Alert kind="info">
-              Without SMTP, verification codes are printed to the API console (and returned as <code>devCode</code> outside production).
+              {tr('Without SMTP, verification codes are printed to the API console (and returned as')} <code>devCode</code> outside production).
             </Alert>
             <div className="grid cols-2">
-              <Field label="Host">
+              <Field label={tr('Host')}>
                 <Input value={smtp.host} onChange={(e) => setSmtp({ ...smtp, host: e.target.value })} placeholder="smtp.sendgrid.net" />
               </Field>
-              <Field label="Port">
+              <Field label={tr('Port')}>
                 <Input type="number" value={smtp.port} onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) })} />
               </Field>
-              <Field label="Username">
+              <Field label={tr('Username')}>
                 <Input value={smtp.user} onChange={(e) => setSmtp({ ...smtp, user: e.target.value })} />
               </Field>
-              <Field label="Password">
+              <Field label={tr('Password')}>
                 <Input type="password" value={smtp.pass} onChange={(e) => setSmtp({ ...smtp, pass: e.target.value })} />
               </Field>
               <Field label="From">
                 <Input value={smtp.from} onChange={(e) => setSmtp({ ...smtp, from: e.target.value })} />
               </Field>
               <div>
-                <Switch on={!!smtp.secure} onChange={(v) => setSmtp({ ...smtp, secure: v })} label="Use TLS (port 465)" />
+                <Switch on={!!smtp.secure} onChange={(v) => setSmtp({ ...smtp, secure: v })} label={tr('Use TLS (port 465)')} />
               </div>
             </div>
             <div className="row wrap">
-              <Button onClick={() => save('smtp', smtp)}>Save SMTP</Button>
+              <Button onClick={() => save('smtp', smtp)}>{tr('Save SMTP')}</Button>
               <Input value={test} onChange={(e) => setTest(e.target.value)} placeholder="test@example.com" style={{ maxWidth: 240 }} />
               <Button
                 variant="secondary"
@@ -95,64 +96,64 @@ export function Messaging() {
                     .catch((e) => toast(e.message, 'error'))
                 }
               >
-                Send test
+                {tr('Send test')}
               </Button>
             </div>
           </>
         )}
         {tab === 'sms' && sms && (
           <>
-            <Field label="Provider">
+            <Field label={tr('Provider')}>
               <Select value={sms.provider} onChange={(e) => setSms({ ...sms, provider: e.target.value })}>
-                <option value="console">Console (development)</option>
-                <option value="twilio">Twilio</option>
-                <option value="africastalking">Africa's Talking (Kinshasa and most African routes)</option>
+                <option value="console">{tr('Console (development)')}</option>
+                <option value="twilio">{tr('Twilio')}</option>
+                <option value="africastalking">{tr("Africa's Talking (Kinshasa and most African routes)")}</option>
               </Select>
             </Field>
             {sms.provider === 'africastalking' && (
               <div className="grid cols-3">
-                <Field label="Username" hint={`"sandbox" targets the Africa's Talking sandbox; your app username targets live routes`}>
+                <Field label={tr('Username')} hint={`"sandbox" targets the Africa's Talking sandbox; your app username targets live routes`}>
                   <Input value={sms.africasTalkingUsername} onChange={(e) => setSms({ ...sms, africasTalkingUsername: e.target.value })} />
                 </Field>
-                <Field label="API key">
+                <Field label={tr('API key')}>
                   <Input type="password" value={sms.africasTalkingApiKey} onChange={(e) => setSms({ ...sms, africasTalkingApiKey: e.target.value })} />
                 </Field>
-                <Field label="Sender ID (optional)" hint="An approved alphanumeric sender such as BitriPay, or a short code; empty uses the shared sender">
+                <Field label={tr('Sender ID (optional)')} hint={tr('An approved alphanumeric sender such as BitriPay, or a short code; empty uses the shared sender')}>
                   <Input value={sms.africasTalkingFrom} onChange={(e) => setSms({ ...sms, africasTalkingFrom: e.target.value })} />
                 </Field>
               </div>
             )}
             {sms.provider === 'twilio' && (
               <div className="grid cols-3">
-                <Field label="Account SID">
+                <Field label={tr('Account SID')}>
                   <Input value={sms.twilioSid} onChange={(e) => setSms({ ...sms, twilioSid: e.target.value })} />
                 </Field>
-                <Field label="Auth token">
+                <Field label={tr('Auth token')}>
                   <Input type="password" value={sms.twilioToken} onChange={(e) => setSms({ ...sms, twilioToken: e.target.value })} />
                 </Field>
-                <Field label="From number">
+                <Field label={tr('From number')}>
                   <Input value={sms.twilioFrom} onChange={(e) => setSms({ ...sms, twilioFrom: e.target.value })} />
                 </Field>
               </div>
             )}
-            <Button onClick={() => save('sms', sms)}>Save SMS settings</Button>
+            <Button onClick={() => save('sms', sms)}>{tr('Save SMS settings')}</Button>
           </>
         )}
         {tab === 'push' && (
           <>
-            <Alert kind="info">Push notifications are delivered through the Expo push service to the mobile apps, and stored as in-app notifications for everyone.</Alert>
-            <Field label="Title">
+            <Alert kind="info">{tr('Push notifications are delivered through the Expo push service to the mobile apps, and stored as in-app notifications for everyone.')}</Alert>
+            <Field label={tr('Title')}>
               <Input value={push.title} onChange={(e) => setPush({ ...push, title: e.target.value })} />
             </Field>
-            <Field label="Message">
+            <Field label={tr('Message')}>
               <Textarea value={push.body} onChange={(e) => setPush({ ...push, body: e.target.value })} />
             </Field>
-            <Field label="Audience">
+            <Field label={tr('Audience')}>
               <Select value={push.role} onChange={(e) => setPush({ ...push, role: e.target.value })}>
-                <option value="">Everyone</option>
-                <option value="user">Users</option>
-                <option value="merchant">Merchants</option>
-                <option value="agent">Agents</option>
+                <option value="">{tr('Everyone')}</option>
+                <option value="user">{tr('Users')}</option>
+                <option value="merchant">{tr('Merchants')}</option>
+                <option value="agent">{tr('Agents')}</option>
               </Select>
             </Field>
             <Button
@@ -164,19 +165,19 @@ export function Messaging() {
               }
               disabled={!push.title || !push.body}
             >
-              Send broadcast
+              {tr('Send broadcast')}
             </Button>
           </>
         )}
         {tab === 'newsletter' && (
           <>
-            <Field label="Subject">
+            <Field label={tr('Subject')}>
               <Input value={news.subject} onChange={(e) => setNews({ ...news, subject: e.target.value })} />
             </Field>
-            <Field label="Body (plain text)">
+            <Field label={tr('Body (plain text)')}>
               <Textarea value={news.body} onChange={(e) => setNews({ ...news, body: e.target.value })} style={{ minHeight: 200 }} />
             </Field>
-            <Switch on={news.includeUsers} onChange={(v) => setNews({ ...news, includeUsers: v })} label="Include all registered users (in addition to newsletter subscribers)" />
+            <Switch on={news.includeUsers} onChange={(v) => setNews({ ...news, includeUsers: v })} label={tr('Include all registered users (in addition to newsletter subscribers)')} />
             <div className="mt">
               <Button
                 onClick={() =>
@@ -187,7 +188,7 @@ export function Messaging() {
                 }
                 disabled={!news.subject || !news.body}
               >
-                Send newsletter
+                {tr('Send newsletter')}
               </Button>
             </div>
           </>
@@ -197,12 +198,12 @@ export function Messaging() {
           <>
             <div className="row mb">
               <Button size="sm" variant="secondary" onClick={outbox.reload}>
-                Refresh
+                {tr('Refresh')}
               </Button>
-              <span className="small muted">Last 200 emails/SMS the API tried to send (useful without SMTP configured).</span>
+              <span className="small muted">{tr('Last 200 emails/SMS the API tried to send (useful without SMTP configured).')}</span>
             </div>
             <Table
-              head={['When', 'Channel', 'To', 'Subject / body']}
+              head={[tr('When'), tr('Channel'), 'To', tr('Subject / body')]}
               rows={(outbox.data?.items ?? []).map((m) => [
                 fmtDate(m.at),
                 m.channel,
@@ -217,7 +218,7 @@ export function Messaging() {
                   {m.body}
                 </span>,
               ])}
-              empty="Nothing sent yet"
+              empty={tr('Nothing sent yet')}
             />
           </>
         )}
@@ -268,7 +269,7 @@ function Templates() {
     api
       .put('/api/admin/messaging/templates', { key: t.key, channel: t.channel, lang: t.lang, reset: true })
       .then(() => {
-        toast('Default text restored', 'success');
+        toast(tr('Default text restored'), 'success');
         data.reload();
       })
       .catch(fail);
@@ -282,19 +283,19 @@ function Templates() {
       (data.data?.items ?? []).find((t) => t.key === variant.key && t.channel === variant.channel && t.lang === 'en') ??
       (data.data?.items ?? []).find((t) => t.key === variant.key && t.channel === variant.channel);
     const lang = variant.lang.trim().toLowerCase();
-    if (!variant.key || lang.length < 2) return toast('Choose an event and a language code', 'error');
+    if (!variant.key || lang.length < 2) return toast(tr('Choose an event and a language code'), 'error');
     openEditor(base ?? { id: '', key: variant.key, channel: variant.channel, lang, subject: null, body: '', updatedBy: null, updatedAt: '', isDefault: false }, true, lang);
   };
   return (
     <>
       <Alert kind="info">
-        Every OTP, payment, payout, KYC and security message is rendered from these templates. Use <code>{'{{placeholder}}'}</code> for the values listed per event; a language without its own text
-        falls back to English.
+        {tr('Every OTP, payment, payout, KYC and security message is rendered from these templates. Use')} <code>{'{{placeholder}}'}</code> for the values listed per event; a language without its own
+        text falls back to English.
       </Alert>
       <div className="row wrap mb">
-        <Field label="Event">
+        <Field label={tr('Event')}>
           <Select value={filter.key} onChange={(e) => setFilter({ ...filter, key: e.target.value })}>
-            <option value="">All events</option>
+            <option value="">{tr('All events')}</option>
             {events.map((e) => (
               <option key={e.key} value={e.key}>
                 {e.key}
@@ -302,9 +303,9 @@ function Templates() {
             ))}
           </Select>
         </Field>
-        <Field label="Channel">
+        <Field label={tr('Channel')}>
           <Select value={filter.channel} onChange={(e) => setFilter({ ...filter, channel: e.target.value })}>
-            <option value="">All channels</option>
+            <option value="">{tr('All channels')}</option>
             {channels.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -313,11 +314,11 @@ function Templates() {
           </Select>
         </Field>
         <Button size="sm" variant="secondary" onClick={data.reload}>
-          Refresh
+          {tr('Refresh')}
         </Button>
       </div>
       <Table
-        head={['Event', 'Channel', 'Lang', 'Subject / body', 'Updated', '']}
+        head={[tr('Event'), tr('Channel'), tr('Lang'), tr('Subject / body'), tr('Updated'), '']}
         rows={items.map((t) => [
           <span>
             <b>{t.key}</b>
@@ -340,26 +341,26 @@ function Templates() {
           </span>,
           <div className="row wrap">
             <Button size="sm" variant="secondary" onClick={() => openEditor(t)}>
-              Edit
+              {tr('Edit')}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => renderPreview({ key: t.key, channel: t.channel, lang: t.lang })}>
-              Preview
+              {tr('Preview')}
             </Button>
             {!t.isDefault && t.lang === 'en' && (
               <Button size="sm" variant="ghost" onClick={() => reset(t)}>
-                Reset
+                {tr('Reset')}
               </Button>
             )}
           </div>,
         ])}
-        empty="No templates match"
+        empty={tr('No templates match')}
       />
       <div className="card mt">
-        <h4>Add a language variant</h4>
+        <h4>{tr('Add a language variant')}</h4>
         <div className="row wrap">
-          <Field label="Event">
+          <Field label={tr('Event')}>
             <Select value={variant.key} onChange={(e) => setVariant({ ...variant, key: e.target.value })}>
-              <option value="">Choose…</option>
+              <option value="">{tr('Choose…')}</option>
               {events.map((e) => (
                 <option key={e.key} value={e.key}>
                   {e.key}
@@ -367,7 +368,7 @@ function Templates() {
               ))}
             </Select>
           </Field>
-          <Field label="Channel">
+          <Field label={tr('Channel')}>
             <Select value={variant.channel} onChange={(e) => setVariant({ ...variant, channel: e.target.value })}>
               {channels.map((c) => (
                 <option key={c} value={c}>
@@ -376,27 +377,27 @@ function Templates() {
               ))}
             </Select>
           </Field>
-          <Field label="Language code" hint="fr, sw, ln, ar…">
+          <Field label={tr('Language code')} hint="fr, sw, ln, ar…">
             <Input value={variant.lang} onChange={(e) => setVariant({ ...variant, lang: e.target.value })} style={{ width: 90 }} maxLength={5} />
           </Field>
           <Button variant="secondary" onClick={addVariant}>
-            Write variant
+            {tr('Write variant')}
           </Button>
         </div>
       </div>
       {preview && !editing && (
         <div className="card mt">
-          <h4>Preview (sample values)</h4>
+          <h4>{tr('Preview (sample values)')}</h4>
           {preview.subject ? <b>{preview.subject}</b> : null}
           <p className="small" style={{ whiteSpace: 'pre-wrap' }}>
             {preview.body}
           </p>
           <Button size="sm" variant="ghost" onClick={() => setPreview(null)}>
-            Close
+            {tr('Close')}
           </Button>
         </div>
       )}
-      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing ? `${editing.isNew ? 'New' : 'Edit'} template · ${editing.key} · ${editing.channel} · ${editing.lang}` : ''} wide>
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing ? `${editing.isNew ? tr('New') : tr('Edit')} template · ${editing.key} · ${editing.channel} · ${editing.lang}` : ''} wide>
         {editing && (
           <>
             <p className="small muted">
@@ -409,11 +410,11 @@ function Templates() {
               <code>{'{{appName}}'}</code>
             </p>
             {editing.channel !== 'sms' && editing.channel !== 'whatsapp' && (
-              <Field label={editing.channel === 'email' ? 'Subject' : 'Title'}>
+              <Field label={editing.channel === 'email' ? tr('Subject') : tr('Title')}>
                 <Input value={editing.subject} onChange={(e) => setEditing({ ...editing, subject: e.target.value })} maxLength={200} />
               </Field>
             )}
-            <Field label="Body" hint={editing.channel === 'sms' ? 'Keep SMS under 160 characters where possible' : undefined}>
+            <Field label={tr('Body')} hint={editing.channel === 'sms' ? tr('Keep SMS under 160 characters where possible') : undefined}>
               <Textarea value={editing.body} onChange={(e) => setEditing({ ...editing, body: e.target.value })} style={{ minHeight: 120 }} maxLength={4000} />
             </Field>
             {preview && (
@@ -429,13 +430,13 @@ function Templates() {
             )}
             <div className="row wrap">
               <Button onClick={save} disabled={!editing.body.trim()}>
-                Save
+                {tr('Save')}
               </Button>
               <Button variant="secondary" onClick={() => renderPreview({ key: editing.key, channel: editing.channel, lang: editing.lang, subject: editing.subject || null, body: editing.body })}>
-                Preview with sample values
+                {tr('Preview with sample values')}
               </Button>
               <Button variant="ghost" onClick={() => setEditing(null)}>
-                Cancel
+                {tr('Cancel')}
               </Button>
             </div>
           </>

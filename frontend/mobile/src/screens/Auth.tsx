@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { Dimensions, Image, ScrollView, Text, View, Pressable } from 'react-native';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -17,9 +18,9 @@ export function Onboarding() {
   const screens: any[] = config?.site?.onboarding?.length
     ? config.site.onboarding
     : [
-        { title: 'Scan & pay in seconds', body: 'Point your camera at any BitriPay QR code to pay a friend, a shop or an agent.', color: '#2563eb' },
-        { title: 'One wallet, every currency', body: 'Hold multiple currencies and send money across borders.', color: '#7c3aed' },
-        { title: 'Cards, bills & top-ups', body: 'Add money by card or mobile money, pay bills and create virtual cards.', color: '#16a34a' },
+        { title: tr('Scan & pay in seconds'), body: 'Point your camera at any BitriPay QR code to pay a friend, a shop or an agent.', color: '#2563eb' },
+        { title: tr('One wallet, every currency'), body: 'Hold multiple currencies and send money across borders.', color: '#7c3aed' },
+        { title: tr('Cards, bills & top-ups'), body: 'Add money by card or mobile money, pay bills and create virtual cards.', color: '#16a34a' },
       ];
   const s = screens[idx];
   const width = Dimensions.get('window').width;
@@ -45,7 +46,7 @@ export function Onboarding() {
           {idx < screens.length - 1 && (
             <Pressable onPress={() => setIdx(screens.length - 1)}>
               <T muted center>
-                Skip
+                {tr('Skip')}
               </T>
             </Pressable>
           )}
@@ -175,7 +176,7 @@ export function Register({ route }: ScreenProps<'Register'>) {
           ]}
         />
         <Input label={t('auth.fullName')} value={form.fullName} onChangeText={(v) => set('fullName', v)} />
-        {form.role !== 'user' && <Input label="Business name" value={form.businessName} onChangeText={(v) => set('businessName', v)} />}
+        {form.role !== 'user' && <Input label={tr('Business name')} value={form.businessName} onChangeText={(v) => set('businessName', v)} />}
         <Input label={t('auth.phone')} value={form.phone} onChangeText={(v) => set('phone', v)} keyboardType="phone-pad" placeholder="+1555…" />
         <Input label={t('auth.email')} value={form.email} onChangeText={(v) => set('email', v)} autoCapitalize="none" keyboardType="email-address" />
         <Input label={t('auth.password')} value={form.password} onChangeText={(v) => set('password', v)} secureTextEntry />
@@ -188,7 +189,7 @@ export function Register({ route }: ScreenProps<'Register'>) {
         <Input label={t('auth.referral')} value={form.referralCode} onChangeText={(v) => set('referralCode', v)} autoCapitalize="characters" />
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
           <View style={{ flex: 1 }}>
-            <Input label={t('auth.code')} value={form.otpCode} onChangeText={(v) => set('otpCode', v)} keyboardType="number-pad" hint={otpInfo ?? 'Optional: verify your phone or email now'} />
+            <Input label={t('auth.code')} value={form.otpCode} onChangeText={(v) => set('otpCode', v)} keyboardType="number-pad" hint={otpInfo ?? tr('Optional: verify your phone or email now')} />
           </View>
           <Button title={t('auth.sendCode')} variant="secondary" small onPress={sendCode} disabled={!form.phone && !form.email} />
         </View>

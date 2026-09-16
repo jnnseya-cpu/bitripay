@@ -1,5 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal as RNModal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle, KeyboardAvoidingView, Platform } from 'react-native';
+import { tr } from '../lib/i18n';
+import {
+  ActivityIndicator,
+  Image,
+  Modal as RNModal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInputProps,
+  type ViewStyle,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCodeSvg from 'react-native-qrcode-svg';
 import { useStore } from '../lib/store';
@@ -291,7 +306,7 @@ export function PinSheet({
       {summary}
       {biometrics && user?.hasPin && (
         <Button
-          title="🔐 Confirm with biometrics"
+          title={tr('🔐 Confirm with biometrics')}
           variant="secondary"
           onPress={() =>
             biometricPin().then((p) => {
@@ -301,7 +316,7 @@ export function PinSheet({
         />
       )}
       {!user?.hasPin ? (
-        <Alert kind="warning" text="Set a transaction PIN in Settings → Security first." />
+        <Alert kind="warning" text={tr('Set a transaction PIN in Settings → Security first.')} />
       ) : (
         <>
           <Input

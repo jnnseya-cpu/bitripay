@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Button, Field, Input, Modal, PageHeader, Select, Switch, Table, useAsync, Alert, Chip } from '../components/ui';
@@ -49,14 +50,14 @@ export function Currencies() {
   const saveApp = async (patch: any) => {
     await api.put('/api/admin/settings/app', { value: { ...settings.data.app, ...patch } });
     settings.reload();
-    toast('Saved', 'success');
+    toast(tr('Saved'), 'success');
   };
   const items = (list.data?.items ?? []).filter((c) => (filter === 'all' || c.enabled) && (!q || c.code.includes(q.toUpperCase()) || c.name.toLowerCase().includes(q.toLowerCase())));
   const base = list.data?.items.find((c) => c.isBase);
   return (
     <div>
       <PageHeader
-        title="Currencies & exchange rates"
+        title={tr('Currencies & exchange rates')}
         subtitle={`All ${list.data?.items.length ?? 0} ISO currencies are available. Base currency: ${base?.code ?? ''}. Rates are units per 1 ${base?.code ?? 'base'}.`}
         actions={
           <Button loading={refreshing} onClick={refreshRates}>
@@ -66,11 +67,11 @@ export function Currencies() {
       />
       {settings.data && (
         <div className="card mb">
-          <h4>Exchange rate management</h4>
+          <h4>{tr('Exchange rate management')}</h4>
           <div className="grid cols-3">
-            <Field label="Rate provider (automatic updates)">
+            <Field label={tr('Rate provider (automatic updates)')}>
               <Select value={settings.data.app.rateProvider} onChange={(e) => saveApp({ rateProvider: e.target.value })}>
-                <option value="manual">Manual only (administrator-approved rates)</option>
+                <option value="manual">{tr('Manual only (administrator-approved rates)')}</option>
                 {(status.data?.providers ?? []).map((p: any) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -79,19 +80,19 @@ export function Currencies() {
               </Select>
             </Field>
             {(status.data?.providers ?? []).find((p: any) => p.id === settings.data.app.rateProvider)?.keyed && (
-              <Field label="Provider API key" hint={settings.data.app.rateProviderKey ? 'Configured (encrypted) – enter a new value to rotate' : 'Required for this provider'}>
+              <Field label={tr('Provider API key')} hint={settings.data.app.rateProviderKey ? tr('Configured (encrypted) – enter a new value to rotate') : tr('Required for this provider')}>
                 <div className="row">
-                  <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={settings.data.app.rateProviderKey ? '••••••••' : 'API key'} />
+                  <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={settings.data.app.rateProviderKey ? '••••••••' : tr('API key')} />
                   <Button variant="secondary" disabled={!key} onClick={() => saveApp({ rateProviderKey: key }).then(() => setKey(''))}>
-                    Save
+                    {tr('Save')}
                   </Button>
                 </div>
               </Field>
             )}
-            <Field label="Auto-refresh every (hours, 0 = off)">
+            <Field label={tr('Auto-refresh every (hours, 0 = off)')}>
               <Input type="number" defaultValue={settings.data.app.rateAutoRefreshHours} onBlur={(e) => saveApp({ rateAutoRefreshHours: Number(e.target.value) })} />
             </Field>
-            <Field label="Exchange margin (bps) applied on conversions">
+            <Field label={tr('Exchange margin (bps) applied on conversions')}>
               <Input type="number" defaultValue={settings.data.app.exchangeMarginBps} onBlur={(e) => saveApp({ exchangeMarginBps: Number(e.target.value) })} />
             </Field>
           </div>
@@ -99,15 +100,19 @@ export function Currencies() {
             <div className="mt">
               {status.data.freshness.live && status.data.freshness.fresh ? (
                 <Alert kind="success">
-                  Live rates from {status.data.freshness.source}; oldest update {new Date(status.data.freshness.oldestUpdatedAt).toLocaleString()}. Guaranteed quotes are enabled.
+                  {tr('Live rates from {0}; oldest update {1}. Guaranteed quotes are enabled.', {
+                    0: status.data.freshness.source,
+                    1: new Date(status.data.freshness.oldestUpdatedAt).toLocaleString(),
+                  })}
                 </Alert>
               ) : (
                 <Alert kind="warning">
-                  Rates in use are <b>not live</b> ({status.data.freshness.source || 'none'}). Customers see them labelled as test / administrator rates and no rate is guaranteed.{' '}
+                  {tr('Rates in use are')} <b>not live</b> ({status.data.freshness.source || 'none'}). Customers see them labelled as test / administrator rates and no rate is guaranteed.{' '}
                   {status.data.status.lastError ? (
                     <>
                       <br />
-                      Last refresh error ({status.data.status.consecutiveFailures}×): {status.data.status.lastError}
+                      {tr('Last refresh error (')}
+                      {status.data.status.consecutiveFailures}×): {status.data.status.lastError}
                     </>
                   ) : null}
                 </Alert>
@@ -115,7 +120,7 @@ export function Currencies() {
               <div className="row wrap">
                 <span className="small muted">Last success: {status.data.status.lastSuccessAt ? new Date(status.data.status.lastSuccessAt).toLocaleString() : 'never'}</span>
                 <Button size="sm" variant="secondary" onClick={() => setImportOpen(true)}>
-                  Import a versioned rate batch
+                  {tr('Import a versioned rate batch')}
                 </Button>
               </div>
               {status.data.snapshots.length > 0 && (
@@ -131,15 +136,16 @@ export function Currencies() {
           )}
         </div>
       )}
-      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Import a versioned rate batch (non-live)">
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title={tr('Import a versioned rate batch (non-live)')}>
         <Alert kind="warning">
-          Use this when the API cannot reach a rate provider. The batch is stored as a numbered snapshot and every quote built on it is labelled as an administrator-imported, non-live rate; guaranteed
-          quotes stay disabled.
+          {tr(
+            'Use this when the API cannot reach a rate provider. The batch is stored as a numbered snapshot and every quote built on it is labelled as an administrator-imported, non-live rate; guaranteed quotes stay disabled.',
+          )}
         </Alert>
         <Field label={`One rate per line: CODE=units per 1 ${base?.code ?? 'base'}`}>
           <textarea className="input" rows={6} value={importText} onChange={(e) => setImportText(e.target.value)} />
         </Field>
-        <Field label="Note (source, desk, date)">
+        <Field label={tr('Note (source, desk, date)')}>
           <Input value={importNote} onChange={(e) => setImportNote(e.target.value)} />
         </Field>
         <Button
@@ -160,21 +166,21 @@ export function Currencies() {
               .catch((e) => toast(e.message, 'error'));
           }}
         >
-          Import
+          {tr('Import')}
         </Button>
       </Modal>
       <div className="card">
         <div className="row wrap mb">
-          <Input placeholder="Search code or name" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 240 }} />
+          <Input placeholder={tr('Search code or name')} value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 240 }} />
           <Chip kind={filter === 'enabled' ? 'primary' : undefined} onClick={() => setFilter('enabled')}>
-            Enabled
+            {tr('Enabled')}
           </Chip>
           <Chip kind={filter === 'all' ? 'primary' : undefined} onClick={() => setFilter('all')}>
-            All currencies
+            {tr('All currencies')}
           </Chip>
         </div>
         <Table
-          head={['Code', 'Name', 'Symbol', 'Decimals', `Rate (per 1 ${base?.code ?? ''})`, 'Source', 'Enabled', '']}
+          head={[tr('Code'), tr('Name'), tr('Symbol'), tr('Decimals'), `Rate (per 1 ${base?.code ?? ''})`, tr('Source'), tr('Enabled'), '']}
           rows={items.map((c) => [
             <b>
               {c.code}
@@ -191,7 +197,7 @@ export function Currencies() {
             </span>,
             <Switch on={c.enabled} onChange={(v) => save({ ...c, enabled: v })} />,
             <Button size="sm" variant="secondary" onClick={() => setEdit({ ...c })}>
-              Edit
+              {tr('Edit')}
             </Button>,
           ])}
         />
@@ -199,27 +205,27 @@ export function Currencies() {
       <Modal open={!!edit} onClose={() => setEdit(null)} title={`Edit ${edit?.code}`}>
         {edit && (
           <>
-            {edit.isBase && <Alert kind="info">This is the base currency; its rate is always 1.</Alert>}
-            <Field label="Name">
+            {edit.isBase && <Alert kind="info">{tr('This is the base currency; its rate is always 1.')}</Alert>}
+            <Field label={tr('Name')}>
               <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
             </Field>
             <div className="grid cols-3">
-              <Field label="Symbol">
+              <Field label={tr('Symbol')}>
                 <Input value={edit.symbol} onChange={(e) => setEdit({ ...edit, symbol: e.target.value })} />
               </Field>
-              <Field label="Decimals">
+              <Field label={tr('Decimals')}>
                 <Input type="number" value={edit.decimals} onChange={(e) => setEdit({ ...edit, decimals: e.target.value })} />
               </Field>
-              <Field label="Sort order">
+              <Field label={tr('Sort order')}>
                 <Input type="number" value={edit.sortOrder} onChange={(e) => setEdit({ ...edit, sortOrder: e.target.value })} />
               </Field>
             </div>
             <Field label={`Rate: 1 ${base?.code} = ? ${edit.code}`}>
               <Input value={edit.rateToBase} onChange={(e) => setEdit({ ...edit, rateToBase: e.target.value })} disabled={edit.isBase} />
             </Field>
-            <Switch on={!!edit.enabled} onChange={(v) => setEdit({ ...edit, enabled: v })} label="Enabled for users" />
+            <Switch on={!!edit.enabled} onChange={(v) => setEdit({ ...edit, enabled: v })} label={tr('Enabled for users')} />
             <div className="mt">
-              <Button onClick={() => save(edit)}>Save</Button>
+              <Button onClick={() => save(edit)}>{tr('Save')}</Button>
             </div>
           </>
         )}

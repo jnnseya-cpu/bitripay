@@ -1,4 +1,5 @@
 import React from 'react';
+import { tr } from '../lib/i18n';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -98,12 +99,12 @@ export function Home() {
             </Pressable>
           ))}
       </View>
-      <Button title="🧭 Command centre · ask your agents" variant="secondary" onPress={() => nav.navigate('Assist')} />
-      {user?.role === 'merchant' && <Button title="🏪 Merchant tools · POS & gateway" variant="secondary" onPress={() => nav.navigate('Merchant')} />}
-      {(user?.role === 'agent' || memberships.some((mb) => mb.kind === 'agent')) && <Button title="🧑‍💼 Agent tools · cash in / out" variant="secondary" onPress={() => nav.navigate('Agent')} />}
+      <Button title={tr('🧭 Command centre · ask your agents')} variant="secondary" onPress={() => nav.navigate('Assist')} />
+      {user?.role === 'merchant' && <Button title={tr('🏪 Merchant tools · POS & gateway')} variant="secondary" onPress={() => nav.navigate('Merchant')} />}
+      {(user?.role === 'agent' || memberships.some((mb) => mb.kind === 'agent')) && <Button title={tr('🧑‍💼 Agent tools · cash in / out')} variant="secondary" onPress={() => nav.navigate('Agent')} />}
       {user?.kycStatus !== 'verified' && m.kyc !== false && (
         <Pressable onPress={() => nav.navigate('Kyc')}>
-          <Chip label={user?.kycStatus === 'pending' ? 'KYC under review' : 'Verify your identity to raise limits →'} kind="warning" />
+          <Chip label={user?.kycStatus === 'pending' ? tr('KYC under review') : tr('Verify your identity to raise limits →')} kind="warning" />
         </Pressable>
       )}
       <Card>
@@ -162,7 +163,7 @@ export function More() {
   if (user?.role === 'merchant') items.unshift(['Merchant', '🏪', t('nav.merchant')], ['MerchantGateway', '🔌', 'Gateway & API keys']);
   if (user?.role === 'agent' || memberships.some((mb) => mb.kind === 'agent')) items.unshift(['Agent', '🧑‍💼', t('nav.agentTools')]);
   return (
-    <Screen title="More">
+    <Screen title={tr('More')}>
       <Card>
         <Row>
           <Avatar user={user} size={52} />
@@ -201,7 +202,7 @@ export function Notifications() {
   const th = useTheme();
   return (
     <Screen>
-      <Header title="Notifications" right={<Button title="Mark all read" small variant="ghost" onPress={() => api.post('/api/account/notifications/read').then(refreshWallets)} />} />
+      <Header title={tr('Notifications')} right={<Button title={tr('Mark all read')} small variant="ghost" onPress={() => api.post('/api/account/notifications/read').then(refreshWallets)} />} />
       {notifications.length === 0 && <Empty icon="🔔" />}
       {notifications.map((n) => (
         <Card key={n.id} style={{ opacity: n.read ? 0.65 : 1 }}>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { useSearchParams } from 'react-router-dom';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -16,8 +17,8 @@ export function Transactions() {
   return (
     <div>
       <PageHeader
-        title="All transactions"
-        subtitle="Complete ledger of every transaction for auditing and troubleshooting"
+        title={tr('All transactions')}
+        subtitle={tr('Complete ledger of every transaction for auditing and troubleshooting')}
         actions={
           <a
             className="btn secondary"
@@ -27,15 +28,15 @@ export function Transactions() {
               downloadCsv(f.currency);
             }}
           >
-            Export CSV
+            {tr('Export CSV')}
           </a>
         }
       />
       <div className="card">
         <div className="row wrap mb">
-          <Input placeholder="Reference or note" value={f.search} onChange={(e) => setF({ ...f, search: e.target.value, page: 1 })} style={{ maxWidth: 220 }} />
+          <Input placeholder={tr('Reference or note')} value={f.search} onChange={(e) => setF({ ...f, search: e.target.value, page: 1 })} style={{ maxWidth: 220 }} />
           <Select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value, page: 1 })} style={{ width: 200 }}>
-            <option value="">All types</option>
+            <option value="">{tr('All types')}</option>
             {TRANSACTION_TYPES.map((t) => (
               <option key={t} value={t}>
                 {TRANSACTION_TYPE_LABELS[t]}
@@ -43,13 +44,13 @@ export function Transactions() {
             ))}
           </Select>
           <Select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value, page: 1 })} style={{ width: 140 }}>
-            <option value="">All statuses</option>
+            <option value="">{tr('All statuses')}</option>
             {['pending', 'completed', 'failed', 'rejected', 'cancelled', 'reversed'].map((s) => (
               <option key={s}>{s}</option>
             ))}
           </Select>
           <Select value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value, page: 1 })} style={{ width: 110 }}>
-            <option value="">All</option>
+            <option value="">{tr('All')}</option>
             {(config?.currencies ?? []).map((c: any) => (
               <option key={c.code} value={c.code}>
                 {c.code}
@@ -60,7 +61,7 @@ export function Transactions() {
           <Input type="date" onChange={(e) => setF({ ...f, to: e.target.value ? new Date(e.target.value + 'T23:59:59').toISOString() : '', page: 1 })} style={{ width: 160 }} />
         </div>
         <Table
-          head={['Reference', 'Type', 'From', 'To', 'Amount', 'Fee', 'Status', 'When', '']}
+          head={[tr('Reference'), tr('Type'), 'From', 'To', tr('Amount'), tr('Fee'), tr('Status'), tr('When'), '']}
           rows={(data.data?.items ?? []).map((t: any) => [
             <span className="mono small">{t.reference}</span>,
             TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS],
@@ -74,7 +75,7 @@ export function Transactions() {
             <StatusBadge status={t.status} />,
             <span className="small">{fmtDate(t.createdAt)}</span>,
             <Button size="sm" variant="secondary" onClick={() => open(t.id)}>
-              View
+              {tr('View')}
             </Button>,
           ])}
         />
@@ -84,16 +85,16 @@ export function Transactions() {
         {sel && (
           <div className="grid cols-2">
             <div>
-              <KV k="Type" v={TRANSACTION_TYPE_LABELS[sel.transaction.type as keyof typeof TRANSACTION_TYPE_LABELS]} />
-              <KV k="Status" v={<StatusBadge status={sel.transaction.status} />} />
-              <KV k="Amount" v={money(sel.transaction.amount, sel.transaction.currency)} />
-              <KV k="Fee" v={money(sel.transaction.fee, sel.transaction.currency)} />
-              {sel.transaction.receiveCurrency && <KV k="Received" v={money(sel.transaction.receiveAmount, sel.transaction.receiveCurrency)} />}
+              <KV k={tr('Type')} v={TRANSACTION_TYPE_LABELS[sel.transaction.type as keyof typeof TRANSACTION_TYPE_LABELS]} />
+              <KV k={tr('Status')} v={<StatusBadge status={sel.transaction.status} />} />
+              <KV k={tr('Amount')} v={money(sel.transaction.amount, sel.transaction.currency)} />
+              <KV k={tr('Fee')} v={money(sel.transaction.fee, sel.transaction.currency)} />
+              {sel.transaction.receiveCurrency && <KV k={tr('Received')} v={money(sel.transaction.receiveAmount, sel.transaction.receiveCurrency)} />}
               <KV k="From" v={<UserCell user={sel.sender} />} />
               <KV k="To" v={<UserCell user={sel.receiver} />} />
-              <KV k="Note" v={sel.transaction.note ?? '—'} />
-              <KV k="Created" v={fmtDate(sel.transaction.createdAt)} />
-              <KV k="Completed" v={fmtDate(sel.transaction.completedAt)} />
+              <KV k={tr('Note')} v={sel.transaction.note ?? '—'} />
+              <KV k={tr('Created')} v={fmtDate(sel.transaction.createdAt)} />
+              <KV k={tr('Completed')} v={fmtDate(sel.transaction.completedAt)} />
               {sel.transaction.status === 'completed' && (
                 <div className="mt">
                   <ConfirmButton
@@ -103,24 +104,24 @@ export function Transactions() {
                       api
                         .post(`/api/admin/transactions/${sel.transaction.id}/refund`, { refundFee: true })
                         .then(() => {
-                          toast('Refunded', 'success');
+                          toast(tr('Refunded'), 'success');
                           setSel(null);
                           data.reload();
                         })
                         .catch((e) => toast(e.message, 'error'))
                     }
                   >
-                    Refund (incl. fee)
+                    {tr('Refund (incl. fee)')}
                   </ConfirmButton>
                 </div>
               )}
             </div>
             <div>
-              <h4>Metadata</h4>
+              <h4>{tr('Metadata')}</h4>
               <pre className="card soft compact tiny" style={{ overflowX: 'auto' }}>
                 {JSON.stringify(sel.transaction.metadata, null, 2)}
               </pre>
-              <h4>Ledger entries</h4>
+              <h4>{tr('Ledger entries')}</h4>
               {sel.entries.map((e: any, i: number) => (
                 <KV
                   key={i}

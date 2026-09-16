@@ -213,7 +213,7 @@ export function Checkout() {
   const disclosureBlock = disclosure && (
     <div className="card soft compact mb" data-testid="checkout-disclosure">
       <div className="small bold mb-sm">{t('checkout.disclosureTitle')}</div>
-      {disclosure.feeMinor != null && <KV k={disclosure.feeFrom === 'receiver' ? t('checkout.feePaidByReceiver') : 'Fee'} v={money(disclosure.feeMinor)} />}
+      {disclosure.feeMinor != null && <KV k={disclosure.feeFrom === 'receiver' ? t('checkout.feePaidByReceiver') : tr('Fee')} v={money(disclosure.feeMinor)} />}
       {crossCurrency && (
         <>
           <KV k={t('checkout.fxRate')} v={`1 ${cur.code} = ${Number(disclosure.fxRate).toFixed(6)} ${disclosure.receiverCurrency} · ${disclosure.fxProvider}`} />
@@ -256,9 +256,9 @@ export function Checkout() {
             </h1>
             <p className="muted">{pr.description}</p>
             {pr.sale && <SaleReceipt sale={pr.sale} currency={pr.currency} money={(n) => money(n)} />}
-            <KV k="Reference" v={<span className="mono">{pr.code}</span>} />
-            <KV k="Status" v={<StatusBadge status={pr.status} />} />
-            {pr.expiresAt && <KV k="Expires" v={new Date(pr.expiresAt).toLocaleString()} />}
+            <KV k={tr('Reference')} v={<span className="mono">{pr.code}</span>} />
+            <KV k={tr('Status')} v={<StatusBadge status={pr.status} />} />
+            {pr.expiresAt && <KV k={tr('Expires')} v={new Date(pr.expiresAt).toLocaleString()} />}
             <div className="center mt">
               <QrImage value={pr.link!} size={160} />
               <div className="tiny muted mt-sm">{tr('Scan with the BitriPay app')}</div>
@@ -341,7 +341,7 @@ export function Checkout() {
                           <Input className="amount-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} />
                         </Field>
                       )}
-                      <KV k="Your balance" v={wallet ? money(wallet.balance) : `No ${cur.code} wallet`} />
+                      <KV k={tr('Your balance')} v={wallet ? money(wallet.balance) : `No ${cur.code} wallet`} />
                       <Button
                         block
                         size="lg"

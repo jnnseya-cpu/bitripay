@@ -67,13 +67,13 @@ export function Exchange() {
           </Field>
           {quote && (
             <div className="card soft compact mb">
-              <KV k="Rate" v={`1 ${from} = ${quote.rate.toFixed(6)} ${to}`} />
-              <KV k="Mid-market" v={`${quote.midRate.toFixed(6)} (margin ${(quote.marginBps / 100).toFixed(2)}%)`} />
-              <KV k="Fee" v={money(quote.fee ?? 0, from)} />
-              <KV k="You receive" v={<b style={{ color: 'var(--success)' }}>{money(quote.receive, to)}</b>} />
+              <KV k={tr('Rate')} v={`1 ${from} = ${quote.rate.toFixed(6)} ${to}`} />
+              <KV k={tr('Mid-market')} v={`${quote.midRate.toFixed(6)} (margin ${(quote.marginBps / 100).toFixed(2)}%)`} />
+              <KV k={tr('Fee')} v={money(quote.fee ?? 0, from)} />
+              <KV k={tr('You receive')} v={<b style={{ color: 'var(--success)' }}>{money(quote.receive, to)}</b>} />
               {quote.fx && (
                 <KV
-                  k="Rate source"
+                  k={tr('Rate source')}
                   v={
                     <span className="small">
                       {quote.fx.providerLabel}
@@ -84,7 +84,7 @@ export function Exchange() {
               )}
               {quote.fx && (
                 <KV
-                  k="Guarantee"
+                  k={tr('Guarantee')}
                   v={
                     quote.fx.guaranteed ? (
                       <span className="chip success">locked until {new Date(quote.fx.expiresAt).toLocaleTimeString()}</span>

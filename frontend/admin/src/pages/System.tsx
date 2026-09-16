@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { tr } from '../lib/i18n';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Alert, Button, Chip, ConfirmButton, Field, Input, KV, Modal, PageHeader, Select, Table, Tabs, fmtDate, useAsync } from '../components/ui';
@@ -16,16 +17,16 @@ export function System() {
   return (
     <div>
       <PageHeader
-        title="System health & SLOs"
-        subtitle="What the platform measured about itself and its counterparties. Targets are met or missed on real traffic; without traffic they are neither."
+        title={tr('System health & SLOs')}
+        subtitle={tr('What the platform measured about itself and its counterparties. Targets are met or missed on real traffic; without traffic they are neither.')}
       />
       <Tabs
         tabs={[
-          { id: 'health', label: 'Health' },
-          { id: 'slo', label: 'SLOs' },
-          { id: 'api', label: 'API operations' },
-          { id: 'sla', label: 'SLA register' },
-          { id: 'gate', label: 'Gate to scale' },
+          { id: 'health', label: tr('Health') },
+          { id: 'slo', label: tr('SLOs') },
+          { id: 'api', label: tr('API operations') },
+          { id: 'sla', label: tr('SLA register') },
+          { id: 'gate', label: tr('Gate to scale') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as any)}
@@ -47,14 +48,14 @@ const Verdict = ({ met }: { met: boolean | null }) => (met === true ? <Chip kind
 function Health() {
   const data = useAsync(() => api.get<any>('/api/admin/system/health'), []);
   const h = data.data;
-  if (!h) return data.error ? <Alert kind="error">{data.error}</Alert> : <p className="muted small">Loading…</p>;
+  if (!h) return data.error ? <Alert kind="error">{data.error}</Alert> : <p className="muted small">{tr('Loading…')}</p>;
   const stateKind = (s: string) => (s === 'HEALTHY' ? 'success' : s === 'DEGRADED' ? 'warning' : 'danger');
   return (
     <div>
       <div className="grid cols-4 mb">
         <div className="card">
           <div className="stat">
-            <span className="label">Uptime</span>
+            <span className="label">{tr('Uptime')}</span>
             <span className="value">
               {Math.floor(h.process.uptimeSeconds / 3600)}h {Math.floor((h.process.uptimeSeconds % 3600) / 60)}m
             </span>
@@ -65,7 +66,7 @@ function Health() {
         </div>
         <div className="card">
           <div className="stat">
-            <span className="label">Memory (RSS)</span>
+            <span className="label">{tr('Memory (RSS)')}</span>
             <span className="value">{mb(h.memory.rssBytes)}</span>
             <span className="small muted">
               heap {mb(h.memory.heapUsedBytes)} / {mb(h.memory.heapTotalBytes)}
@@ -74,7 +75,7 @@ function Health() {
         </div>
         <div className="card">
           <div className="stat">
-            <span className="label">Database</span>
+            <span className="label">{tr('Database')}</span>
             <span className="value">{mb(h.database.fileBytes ?? h.database.logicalBytes)}</span>
             <span className="small muted">
               {h.database.journalMode} · WAL {mb(h.database.walBytes)} · {h.database.migrations.count} migrations (last {h.database.migrations.last})
@@ -83,7 +84,7 @@ function Health() {
         </div>
         <div className="card">
           <div className="stat">
-            <span className="label">SLOs (24 h)</span>
+            <span className="label">{tr('SLOs (24 h)')}</span>
             <span className="value">
               {h.slo.summary.met} met · {h.slo.summary.missed} missed
             </span>
@@ -95,24 +96,24 @@ function Health() {
       </div>
       <div className="grid cols-3">
         <div className="card">
-          <h4>Database (PRAGMA)</h4>
-          <KV k="Journal mode" v={h.database.journalMode} />
-          <KV k="Pages" v={`${h.database.pageCount} × ${h.database.pageSize} B (${h.database.freelistPages} free)`} />
-          <KV k="WAL checkpoint" v={h.database.walCheckpoint ? <span className="mono tiny">{JSON.stringify(h.database.walCheckpoint)}</span> : 'not in WAL mode'} />
-          <KV k="Storage" v={h.database.path} />
-          <KV k="Scheduler" v={`${h.scheduler.enabled ? 'enabled' : 'disabled'} · last runs: ${h.scheduler.lastRuns}`} />
+          <h4>{tr('Database (PRAGMA)')}</h4>
+          <KV k={tr('Journal mode')} v={h.database.journalMode} />
+          <KV k={tr('Pages')} v={`${h.database.pageCount} × ${h.database.pageSize} B (${h.database.freelistPages} free)`} />
+          <KV k={tr('WAL checkpoint')} v={h.database.walCheckpoint ? <span className="mono tiny">{JSON.stringify(h.database.walCheckpoint)}</span> : 'not in WAL mode'} />
+          <KV k={tr('Storage')} v={h.database.path} />
+          <KV k={tr('Scheduler')} v={`${h.scheduler.enabled ? 'enabled' : 'disabled'} · last runs: ${h.scheduler.lastRuns}`} />
         </div>
         <div className="card">
-          <h4>Backlogs</h4>
-          <KV k="Webhook deliveries pending" v={h.webhooks.pending} />
-          <KV k="Webhook deliveries retrying" v={h.webhooks.retrying} />
-          <KV k="Webhook dead letters" v={h.webhooks.dead ? <Chip kind="danger">{h.webhooks.dead}</Chip> : 0} />
-          <KV k="Switch outbox pending" v={h.switchOutbox.pending} />
-          <KV k="Switch outbox dead" v={h.switchOutbox.dead ? <Chip kind="danger">{h.switchOutbox.dead}</Chip> : 0} />
-          <KV k="Open incidents" v={h.incidents.open} />
+          <h4>{tr('Backlogs')}</h4>
+          <KV k={tr('Webhook deliveries pending')} v={h.webhooks.pending} />
+          <KV k={tr('Webhook deliveries retrying')} v={h.webhooks.retrying} />
+          <KV k={tr('Webhook dead letters')} v={h.webhooks.dead ? <Chip kind="danger">{h.webhooks.dead}</Chip> : 0} />
+          <KV k={tr('Switch outbox pending')} v={h.switchOutbox.pending} />
+          <KV k={tr('Switch outbox dead')} v={h.switchOutbox.dead ? <Chip kind="danger">{h.switchOutbox.dead}</Chip> : 0} />
+          <KV k={tr('Open incidents')} v={h.incidents.open} />
         </div>
         <div className="card">
-          <h4>Rails & Guardian</h4>
+          <h4>{tr('Rails & Guardian')}</h4>
           <div className="row wrap mb">
             {Object.entries(h.rails.byState).map(([s, n]) => (
               <Chip key={s} kind={(n as number) > 0 ? stateKind(s) : undefined}>
@@ -130,8 +131,11 @@ function Health() {
               ))}
             </ul>
           )}
-          <KV k="Operating mode" v={<Chip kind={h.guardian.operatingMode === 'normal' ? 'success' : 'danger'}>{h.guardian.operatingMode}</Chip>} />
-          <KV k="Last Guardian check" v={h.guardian.lastCheck ? `${h.guardian.lastCheck.ok ? 'ok' : `${h.guardian.lastCheck.findings} finding(s)`} · ${fmtDate(h.guardian.lastCheck.at)}` : 'never'} />
+          <KV k={tr('Operating mode')} v={<Chip kind={h.guardian.operatingMode === 'normal' ? 'success' : 'danger'}>{h.guardian.operatingMode}</Chip>} />
+          <KV
+            k={tr('Last Guardian check')}
+            v={h.guardian.lastCheck ? `${h.guardian.lastCheck.ok ? 'ok' : `${h.guardian.lastCheck.findings} finding(s)`} · ${fmtDate(h.guardian.lastCheck.at)}` : 'never'}
+          />
           {h.guardian.openViolations.length > 0 && (
             <Alert kind="error">
               {h.guardian.openViolations.length} open Guardian violation(s):{' '}
@@ -145,7 +149,7 @@ function Health() {
       </div>
       <div className="row mt">
         <Button variant="secondary" onClick={data.reload}>
-          Refresh
+          {tr('Refresh')}
         </Button>
         <span className="small muted">generated {fmtDate(h.generatedAt)}</span>
       </div>
@@ -156,35 +160,35 @@ function Health() {
 function Slo() {
   const data = useAsync(() => api.get<any>('/api/admin/system/slo'), []);
   const r = data.data?.report;
-  if (!r) return data.error ? <Alert kind="error">{data.error}</Alert> : <p className="muted small">Loading…</p>;
+  if (!r) return data.error ? <Alert kind="error">{data.error}</Alert> : <p className="muted small">{tr('Loading…')}</p>;
   const win = (c: any, w: '1h' | '24h') => c.windows[w];
   return (
     <div>
       <div className="grid cols-2 mb">
         <div className="card">
           <div className="stat">
-            <span className="label">National switch availability (target {pctOf(r.switchAvailability.target)})</span>
+            <span className="label">{tr('National switch availability (target {0})', { 0: pctOf(r.switchAvailability.target) })}</span>
             <span className="value">
               {pctOf(r.switchAvailability['24h'].availability)} <Verdict met={r.switchAvailability['24h'].met} />
             </span>
             <span className="small muted">
-              24 h on {r.switchAvailability['24h'].requests} request(s) · 1 h {pctOf(r.switchAvailability['1h'].availability)} on {r.switchAvailability['1h'].requests}
+              {tr('24 h on {0} request(s) · 1 h {1} on {2}', { 0: r.switchAvailability['24h'].requests, 1: pctOf(r.switchAvailability['1h'].availability), 2: r.switchAvailability['1h'].requests })}
             </span>
           </div>
         </div>
         <div className="card">
           <div className="stat">
-            <span className="label">Targets over 24 h</span>
+            <span className="label">{tr('Targets over 24 h')}</span>
             <span className="value">
               {r.summary.met} met · {r.summary.missed} missed · {r.summary.noTraffic} no traffic
             </span>
-            <span className="small muted">Health-aware failover keeps the switch target; the ring buffers hold the last 10 000 samples per class.</span>
+            <span className="small muted">{tr('Health-aware failover keeps the switch target; the ring buffers hold the last 10 000 samples per class.')}</span>
           </div>
         </div>
       </div>
       <div className="card">
         <Table
-          head={['Class', 'Target', '1 h p50 / p95 / p99', '1 h errors', '1 h', '24 h p50 / p95 / p99', '24 h requests', '24 h error rate', '24 h']}
+          head={[tr('Class'), tr('Target'), tr('1 h p50 / p95 / p99'), tr('1 h errors'), tr('1 h'), tr('24 h p50 / p95 / p99'), tr('24 h requests'), tr('24 h error rate'), tr('24 h')]}
           rows={r.classes.map((c: any) => [
             <b>{c.class}</b>,
             <span className="tiny">{c.target ? c.target.label : c.class === 'switch' ? `availability ≥ ${pctOf(r.switchAvailability.target)}` : '—'}</span>,
@@ -207,7 +211,7 @@ function Slo() {
         />
         <div className="row mt">
           <Button variant="secondary" onClick={data.reload}>
-            Refresh
+            {tr('Refresh')}
           </Button>
           <span className="small muted">generated {fmtDate(r.generatedAt)}</span>
         </div>
@@ -229,32 +233,32 @@ function ApiOps() {
           <option value={168}>last 7 days</option>
         </Select>
         <Button size="sm" variant="secondary" onClick={data.reload}>
-          Refresh
+          {tr('Refresh')}
         </Button>
       </div>
       {d && (
         <div className="grid cols-4 mb">
           <div className="card">
             <div className="stat">
-              <span className="label">Requests</span>
+              <span className="label">{tr('Requests')}</span>
               <span className="value">{d.totals.requests}</span>
             </div>
           </div>
           <div className="card">
             <div className="stat">
-              <span className="label">Server errors</span>
+              <span className="label">{tr('Server errors')}</span>
               <span className="value">{d.totals.serverErrors}</span>
             </div>
           </div>
           <div className="card">
             <div className="stat">
-              <span className="label">Client errors</span>
+              <span className="label">{tr('Client errors')}</span>
               <span className="value">{d.totals.clientErrors}</span>
             </div>
           </div>
           <div className="card">
             <div className="stat">
-              <span className="label">Rate-limited (429)</span>
+              <span className="label">{tr('Rate-limited (429)')}</span>
               <span className="value">{d.totals.rateLimited}</span>
             </div>
           </div>
@@ -262,9 +266,9 @@ function ApiOps() {
       )}
       <div className="grid cols-2">
         <div className="card">
-          <h4>Usage per API key</h4>
+          <h4>{tr('Usage per API key')}</h4>
           <Table
-            head={['Key', 'Mode', 'Requests', 'Errors', 'Rate-limited', 'Last seen']}
+            head={[tr('Key'), tr('Mode'), tr('Requests'), tr('Errors'), tr('Rate-limited'), tr('Last seen')]}
             rows={(d?.keys ?? []).map((k: any) => [
               <span>
                 <b>{k.label ?? 'unknown key'}</b> {k.revoked && <Chip kind="danger">revoked</Chip>}
@@ -277,12 +281,12 @@ function ApiOps() {
               k.rateLimited,
               <span className="tiny">{k.lastMinute}</span>,
             ])}
-            empty="No API-key traffic in this window"
+            empty={tr('No API-key traffic in this window')}
           />
         </div>
         <div className="card">
-          <h4>Top error codes</h4>
-          <Table head={['Code', 'Count']} rows={(d?.topErrorCodes ?? []).map((c: any) => [<span className="mono small">{c.code}</span>, c.count])} empty="No errors in this window" />
+          <h4>{tr('Top error codes')}</h4>
+          <Table head={[tr('Code'), tr('Count')]} rows={(d?.topErrorCodes ?? []).map((c: any) => [<span className="mono small">{c.code}</span>, c.count])} empty={tr('No errors in this window')} />
         </div>
       </div>
     </div>
@@ -364,13 +368,13 @@ function SlaRegister({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
       )}
       <div className="card">
         <div className="row mb">
-          <h4 style={{ margin: 0 }}>Counterparty commitments</h4>
+          <h4 style={{ margin: 0 }}>{tr('Counterparty commitments')}</h4>
           <Button size="sm" style={{ marginLeft: 'auto' }} onClick={() => open()}>
-            Add SLA
+            {tr('Add SLA')}
           </Button>
         </div>
         <Table
-          head={['Counterparty', 'Kind', 'Service / rail', 'Committed', 'Measured', 'Contacts', 'Review', '']}
+          head={[tr('Counterparty'), tr('Kind'), tr('Service / rail'), tr('Committed'), tr('Measured'), tr('Contacts'), tr('Review'), '']}
           rows={(list.data?.items ?? []).map((e: any) => {
             const m = measurementFor(e.id);
             return [
@@ -427,7 +431,7 @@ function SlaRegister({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
               </span>,
               <div className="row">
                 <Button size="sm" variant="secondary" onClick={() => open(e)}>
-                  Edit
+                  {tr('Edit')}
                 </Button>
                 <ConfirmButton
                   size="sm"
@@ -442,20 +446,20 @@ function SlaRegister({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
                       .catch(err)
                   }
                 >
-                  Remove
+                  {tr('Remove')}
                 </ConfirmButton>
               </div>,
             ];
           })}
-          empty="No SLA registered yet — add every processor, operator, switch, bank and vendor commitment with its contacts"
+          empty={tr('No SLA registered yet — add every processor, operator, switch, bank and vendor commitment with its contacts')}
         />
       </div>
-      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? 'Edit SLA' : 'Add SLA'} wide>
+      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? tr('Edit SLA') : tr('Add SLA')} wide>
         {edit && (
           <>
             <div className="grid cols-2">
               {text('counterparty', 'Counterparty')}
-              <Field label="Kind">
+              <Field label={tr('Kind')}>
                 <Select value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value })}>
                   {(list.data?.kinds ?? ['processor', 'operator', 'switch', 'bank', 'vendor']).map((k: string) => (
                     <option key={k} value={k}>
@@ -465,7 +469,7 @@ function SlaRegister({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
                 </Select>
               </Field>
               {text('service', 'Service')}
-              <Field label="Rail (measured against its health)" hint="Leave empty for commitments without a rail; kind 'switch' is measured against the switch SLO">
+              <Field label={tr('Rail (measured against its health)')} hint={tr("Leave empty for commitments without a rail; kind 'switch' is measured against the switch SLO")}>
                 <Select value={edit.railId} onChange={(e) => setEdit({ ...edit, railId: e.target.value })}>
                   <option value="">none</option>
                   {(list.data?.rails ?? []).map((r: any) => (
@@ -485,7 +489,7 @@ function SlaRegister({ ok, err }: { ok: (m: string) => void; err: (e: any) => vo
               {text('documentRef', 'Document reference')}
             </div>
             <Button onClick={save} disabled={edit.counterparty.length < 2 || edit.service.length < 2}>
-              Save
+              {tr('Save')}
             </Button>
           </>
         )}
@@ -504,12 +508,12 @@ function GateToScale() {
         <Alert kind={g.ready ? 'success' : 'warning'}>
           {g.ready ? (
             <>
-              <b>Gate to scale open.</b> Every threshold has been met on the last {g.windowDays} days of real data.
+              <b>{tr('Gate to scale open.')}</b> {tr('Every threshold has been met on the last')} {g.windowDays} days of real data.
             </>
           ) : (
             <>
-              <b>Gate to scale closed.</b> Marketing spend waits until 95 % auto-reconciliation, under 2 % exceptions, zero Guardian halts and fraud loss under 25 bps hold over {g.windowDays} days of
-              real data (since {fmtDate(g.since)}).
+              <b>{tr('Gate to scale closed.')}</b> {tr('Marketing spend waits until 95 % auto-reconciliation, under 2 % exceptions, zero Guardian halts and fraud loss under 25 bps hold over')}{' '}
+              {g.windowDays} days of real data (since {fmtDate(g.since)}).
             </>
           )}
         </Alert>
@@ -522,18 +526,18 @@ function GateToScale() {
             <option value={90}>last 90 days</option>
           </Select>
           <Button size="sm" variant="secondary" onClick={data.reload}>
-            Re-check
+            {tr('Re-check')}
           </Button>
         </div>
         <Table
-          head={['', 'Threshold', 'Measured', 'What to do']}
+          head={['', tr('Threshold'), tr('Measured'), tr('What to do')]}
           rows={(g?.items ?? []).map((i: any) => [
             i.ok ? <Chip kind="success">ok</Chip> : <Chip kind="danger">not met</Chip>,
             <b>{i.label}</b>,
             <span className="tiny">{i.detail}</span>,
             <span className="tiny muted">{i.ok ? '' : (i.fix ?? '')}</span>,
           ])}
-          empty="Loading…"
+          empty={tr('Loading…')}
         />
       </div>
     </div>

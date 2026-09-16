@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { tr } from '../lib/i18n';
 import { StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Button, useTheme } from './ui';
@@ -16,8 +17,8 @@ export function Scanner({ onScan, active = true }: { onScan: (data: string) => v
   if (!permission.granted) {
     return (
       <View style={{ padding: 20, alignItems: 'center', gap: 12 }}>
-        <Text style={{ color: th.text, textAlign: 'center' }}>BitriPay needs camera access to scan QR codes.</Text>
-        <Button title="Allow camera" onPress={requestPermission} />
+        <Text style={{ color: th.text, textAlign: 'center' }}>{tr('BitriPay needs camera access to scan QR codes.')}</Text>
+        <Button title={tr('Allow camera')} onPress={requestPermission} />
       </View>
     );
   }

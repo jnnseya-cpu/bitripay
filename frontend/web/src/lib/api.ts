@@ -1,4 +1,5 @@
 import { currentStepUpToken } from './passkeys';
+import { tr } from './tr';
 export class ApiError extends Error {
   code: string;
   status: number;
@@ -72,7 +73,7 @@ async function request<T>(method: Method, path: string, body?: unknown, opts: { 
       setToken(null);
       window.dispatchEvent(new Event('bitripay:logout'));
     }
-    throw new ApiError(res.status, err.code ?? 'error', err.message ?? `Request failed (${res.status})`, err.details);
+    throw new ApiError(res.status, err.code ?? 'error', tr(err.message ?? `Request failed (${res.status})`), err.details);
   }
   return json as T;
 }

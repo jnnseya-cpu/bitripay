@@ -215,10 +215,10 @@ export function AgentDashboard() {
             </Field>
             {pickup && (
               <div className="card soft compact mb">
-                <KV k="Recipient" v={pickup.recipient?.name} />
-                <KV k="Amount to pay" v={<b>{money(pickup.targetAmount, pickup.targetCurrency)}</b>} />
-                <KV k="Sender" v={pickup.sender?.fullName} />
-                <KV k="Status" v={<StatusBadge status={pickup.status} />} />
+                <KV k={tr('Recipient')} v={pickup.recipient?.name} />
+                <KV k={tr('Amount to pay')} v={<b>{money(pickup.targetAmount, pickup.targetCurrency)}</b>} />
+                <KV k={tr('Sender')} v={pickup.sender?.fullName} />
+                <KV k={tr('Status')} v={<StatusBadge status={pickup.status} />} />
               </div>
             )}
             {pickup?.status === 'ready_for_pickup' && (
