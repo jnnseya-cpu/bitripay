@@ -60,7 +60,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<'light' | 'dark'>(
     () => (localStorage.getItem('bitripay.theme') as 'light' | 'dark') || (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
   );
-  const [lang, setLangState] = useState(() => localStorage.getItem('bitripay.lang') || 'en');
+  // A first visit follows the browser's language (French browsers get French: guests on a hosted checkout page included); the choice is then kept.
+  const [lang, setLangState] = useState(() => localStorage.getItem('bitripay.lang') || (typeof navigator !== 'undefined' && /^fr\b/i.test(navigator.language || '') ? 'fr' : 'en'));
   const [toasts, setToasts] = useState<Store['toasts']>([]);
   const [hasPasskeys, setHasPasskeys] = useState(false);
 

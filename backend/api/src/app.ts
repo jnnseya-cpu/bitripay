@@ -19,6 +19,7 @@ import { transfersRouter } from './routes/transfers';
 import { qrRouter } from './routes/qr';
 import { paymentRequestsRouter } from './routes/paymentRequests';
 import { checkoutRouter } from './routes/checkout';
+import { payRouter } from './routes/pay';
 import { depositsRouter, cardsRouter } from './routes/payments';
 import { webhooksRouter } from './routes/webhooks';
 import { virtualCardsRouter } from './routes/virtualCards';
@@ -155,6 +156,7 @@ export function createApp() {
   app.use('/api/qr', qrRouter);
   app.use('/api/payment-requests', paymentRequestsRouter);
   app.use('/api/checkout', checkoutRouter);
+  app.use('/api/pay', requireModule('qrPayments'), payRouter);
   app.use('/api/deposits', depositsRouter);
   app.use('/api/cards', cardsRouter);
   app.use('/api/webhooks', webhooksRouter);

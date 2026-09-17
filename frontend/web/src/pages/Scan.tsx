@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT, tr } from '../lib/i18n';
 import { Scanner } from '../components/Scanner';
+import { InstitutionPay } from '../components/InstitutionPay';
 import { Alert, AmountInput, Avatar, Button, Field, Input, KV, Loading, PageHeader, PinModal, StatusBadge } from '../components/ui';
 import { decodeQr, toMinor, type PaymentRequest, type PublicUser, type Transaction } from '@bitripay/shared';
 import * as bitriqr from '@bitripay/bitriqr';
@@ -132,6 +133,8 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fee, setFee] = useState<number>(0);
+  /** Set once the customer's institution confirmed the payment through the switch: the sale is paid, no wallet action remains. */
+  const [paidByInstitution, setPaidByInstitution] = useState(false);
   const wallet = wallets.find((w) => w.currency === cur);
   let minor = 0;
   try {
@@ -220,7 +223,7 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
             {isPr && (
               <>
                 {' '}
-                · <StatusBadge status={pr!.status} />
+                · <StatusBadge status={paidByInstitution ? 'paid' : pr!.status} />
               </>
             )}
           </div>
@@ -255,14 +258,32 @@ export function PayTarget({ resolved, onBack }: { resolved: Resolved; onBack?: (
       </Field>
       {minor > 0 && (
         <div className="card soft compact mb">
-          <KV k={t('common.fee')} v={feeOnMe ? money(fee, cur) : 'Paid by merchant'} />
+          <KV k={t('common.fee')} v={feeOnMe ? money(fee, cur) : tr('Paid by merchant')} />
           <KV k={t('common.total')} v={money(total, cur)} />
         </div>
       )}
+      {/* Aggregator perimeter: an acceptor with a settlement account at a participating institution is paid from the customer's own bank or mobile money through the national switch. */}
+      {isMerchantClass(target.role) && target.id !== user?.id && (isPr ? pr!.status === 'open' : isBq && minor > 0) && (
+        <InstitutionPay
+          intentId={isPr ? (resolved.intent?.id ?? null) : null}
+          code={isPr && !resolved.intent?.id ? pr!.code : null}
+          qrId={isBq ? resolved.qrId : null}
+          amount={isBq ? amount : null}
+          amountLabel={money(minor, cur)}
+          merchantName={target.businessName || target.fullName}
+          onPaid={() => {
+            setPaidByInstitution(true);
+            toast(tr('Payment confirmed by your institution'), 'success');
+            void refreshWallets();
+          }}
+        />
+      )}
       <div className="row">
-        <Button size="lg" className="flex1" disabled={minor <= 0 || !wallet || wallet.balance < total || (isPr && pr!.status !== 'open') || target.id === user?.id} onClick={() => setPinOpen(true)}>
-          {tr('Pay')} {minor > 0 ? money(total, cur) : ''}
-        </Button>
+        {!paidByInstitution && (
+          <Button size="lg" className="flex1" disabled={minor <= 0 || !wallet || wallet.balance < total || (isPr && pr!.status !== 'open') || target.id === user?.id} onClick={() => setPinOpen(true)}>
+            {wallet ? tr('Pay from wallet') : tr('Pay')} {minor > 0 ? money(total, cur) : ''}
+          </Button>
+        )}
         {onBack && (
           <Button variant="secondary" onClick={onBack}>
             {t('common.back')}

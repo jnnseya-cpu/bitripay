@@ -9,6 +9,7 @@ import { PaymentStatus, type PaymentView } from './AddMoney';
 import { formatMoney, type PaymentRequest } from '@bitripay/shared';
 import { OperatorPicker } from './AddMoney';
 import { SaleReceipt } from './Merchant';
+import { InstitutionPay } from '../components/InstitutionPay';
 
 /** Hosted checkout page for payment links, invoices and API-created requests (guest friendly). */
 export function Checkout() {
@@ -187,7 +188,14 @@ export function Checkout() {
     }
   };
   const wallet = wallets.find((w) => w.currency === cur.code);
-  const labels: Record<string, string> = { wallet: 'BitriPay wallet', card: 'Card', mobile_money: 'Mobile money', bank: 'Bank transfer', virtual_card: 'BitriPay virtual card' };
+  const labels: Record<string, string> = {
+    national_switch: tr('My bank or mobile money'),
+    wallet: tr('BitriPay wallet'),
+    card: tr('Card'),
+    mobile_money: tr('Mobile money'),
+    bank: tr('Bank transfer'),
+    virtual_card: tr('BitriPay virtual card'),
+  };
   /** What the payer sees before confirming: fee, FX rate + margin, receiver currency and exact amount, total, ETA per method (from the API, never computed here). */
   const disclosure = info.disclosure ?? null;
   const receiverCur = disclosure
@@ -333,6 +341,18 @@ export function Checkout() {
                 <Tabs pills tabs={info.methods.map((m: string) => ({ id: m, label: labels[m] ?? m }))} value={method} onChange={setMethod} />
                 <div className="mt" />
                 {disclosureBlock}
+                {method === 'national_switch' && (
+                  <InstitutionPay
+                    code={code}
+                    amountLabel={fixed ? money(pr.amount!) : `${amount} ${cur.code}`}
+                    merchantName={merchant.businessName || merchant.fullName}
+                    disabled={!fixed}
+                    onPaid={() => {
+                      notifyParent('succeeded');
+                      load();
+                    }}
+                  />
+                )}
                 {method === 'wallet' &&
                   (user ? (
                     <>

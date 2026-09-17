@@ -859,6 +859,19 @@ credited back, art. 23). A point-of-sale sale gets its intent bound on first use
 and a capture through the national switch marks the sale paid so the point of sale shows it. Every intent creation now
 emits the catalogued `payment_intent.created` webhook.
 
+**Pay from your own institution (aggregator perimeter).** The customer never needs a BitriPay balance: on the
+scan page, on a hosted checkout page (guests included) and in the mobile app, an acceptor that has an active
+settlement account at a participating institution shows "Pay from your bank or mobile money". The customer picks
+the institution (`GET /api/pay/institutions?intent=|code=|qr=`: the participants with an open pair to the
+acceptor's account in that currency, never the aggregator) and gives their identifier there; `POST /api/pay/institution`
+records the consent request, creates the switch payment as the acceptor's order and dispatches it under the
+customer's own lease owner; the institution's answer comes back as a state (`COMPLETED`, `REJECTED`, `PENDING`…)
+with the customer wording in both languages, and `GET /api/pay/institution/:id?intent=` polls a pending answer.
+A rejection leaves the intent open (each attempt has its own order id) so the customer can try another
+institution. Nothing is posted on any BitriPay ledger; the aggregation fee accrues on the acceptor. The console's
+payer simulator is the same route driven from the institution's side (`services/switch/customerPayment.ts`,
+`routes/pay.ts`, `frontend/web/src/components/InstitutionPay.tsx`).
+
 **Simulator institutions in production.** The fictitious institutions and open pairs of the certification profile (source
 SIMULATION) are seeded at boot wherever the DRC connection runs on the simulator adapter, production included, and can be
 re-seeded from the console (National switch & rails → Connections → "Seed the simulator institutions",

@@ -64,7 +64,7 @@ export function Scan() {
 
 export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Checkout'>) {
   const params = route.params as { data?: string; code?: string };
-  const { t, money, wallets, currency, refreshWallets, toast, user, config } = useStore();
+  const { t, money, wallets, currency, refreshWallets, toast, user, config, lang } = useStore();
   const nav = useNav();
   const [resolved, setResolved] = useState<Resolved | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +74,12 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
   const [fee, setFee] = useState(0);
   const [pin, setPin] = useState(false);
   const [loading, setLoading] = useState(false);
+  /** Aggregator perimeter: the institutions (banks, mobile money) the customer can pay this acceptor from, through the national switch. */
+  const [institutions, setInstitutions] = useState<{ participant_id: string; name: string; kind: string }[]>([]);
+  const [institution, setInstitution] = useState('');
+  const [account, setAccount] = useState('');
+  const [instResult, setInstResult] = useState<{ status: string; message: { fr: string; en: string }; reference: string; masked: string | null } | null>(null);
+  const [instLoading, setInstLoading] = useState(false);
   useEffect(() => {
     const data = params.data ?? (params.code ? `${config?.webUrl}/pay/${params.code}` : '');
     if (!data) return;
@@ -127,6 +133,39 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
   const target = resolved ? (resolved.kind === 'payment_request' ? resolved.merchant : resolved.user) : null;
   const isPr = resolved?.kind === 'payment_request';
   const pr = isPr ? ((resolved as any).paymentRequest as PaymentRequest) : null;
+  const intentId: string | null = isPr ? ((resolved as any).intent?.id ?? null) : null;
+  const qrId: string | null = resolved?.kind === 'bitriqr' ? (resolved.qrId ?? null) : null;
+  useEffect(() => {
+    const q = intentId ? `intent=${intentId}` : pr ? `code=${pr.code}` : qrId ? `qr=${qrId}` : '';
+    if (!q) return setInstitutions([]);
+    api
+      .get<{ available: boolean; institutions: { participant_id: string; name: string; kind: string }[] }>(`/api/pay/institutions?${q}`)
+      .then((r) => {
+        setInstitutions(r.available ? r.institutions : []);
+        if (r.institutions[0]) setInstitution((cur) => cur || r.institutions[0].participant_id);
+      })
+      .catch(() => setInstitutions([]));
+  }, [intentId, pr?.code, qrId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const payFromInstitution = async () => {
+    setInstLoading(true);
+    setError(null);
+    try {
+      const r = await api.post<any>('/api/pay/institution', {
+        intent_id: intentId ?? undefined,
+        code: !intentId && pr ? pr.code : undefined,
+        qr_id: qrId ?? undefined,
+        amount: qrId ? amount : undefined,
+        participant_id: institution,
+        account_token: account.trim(),
+      });
+      setInstResult({ status: r.payment.status, message: r.payment.customer_message, reference: r.payment.tracking_reference, masked: r.payment.payer?.account_masked ?? null });
+      if (r.payment.status === 'COMPLETED') toast(tr('Payment confirmed by your institution'), 'success');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setInstLoading(false);
+    }
+  };
   let minor = 0;
   try {
     minor = amount ? toMinor(amount, currency(cur).decimals) : 0;
@@ -268,8 +307,50 @@ export function PayTarget({ route }: ScreenProps<'PayTarget'> | ScreenProps<'Che
             <KV k={t('common.balance')} v={wallet ? money(wallet.balance, wallet.currency) : `No ${cur} wallet`} />
           </Card>
         )}
+        {institutions.length > 0 && target.id !== user?.id && (!pr || pr.status === 'open') && (
+          <Card soft>
+            <T bold>{tr('Pay from your bank or mobile money')}</T>
+            <T muted size={12}>
+              {tr('The money leaves the account you already hold at your institution and reaches {0} at its institution through the national switch. BitriPay holds nothing.', {
+                0: target.businessName || target.fullName,
+              })}
+            </T>
+            {instResult ? (
+              <View>
+                <KV k={tr('Status')} v={instResult.status} />
+                <KV k={tr('Account')} v={instResult.masked ?? '•••'} />
+                <KV k={tr('Reference')} v={instResult.reference} />
+                <T muted size={13}>
+                  {lang === 'fr' ? instResult.message.fr : instResult.message.en}
+                </T>
+                {instResult.status === 'REJECTED' && <Button title={tr('Try another institution')} variant="secondary" small onPress={() => setInstResult(null)} />}
+              </View>
+            ) : (
+              <View>
+                <Row style={{ flexWrap: 'wrap', gap: 6 }}>
+                  {institutions.map((i) => (
+                    <Chip key={i.participant_id} label={i.name} selected={institution === i.participant_id} onPress={() => setInstitution(i.participant_id)} />
+                  ))}
+                </Row>
+                <Input
+                  label={tr('Your identifier at this institution')}
+                  hint={tr('Mobile money number or account number. Your institution asks for your own PIN; BitriPay never sees it.')}
+                  value={account}
+                  onChangeText={setAccount}
+                  keyboardType="phone-pad"
+                />
+                <Button
+                  title={tr('Pay {0} from my institution', { 0: money(minor > 0 ? minor : (pr?.amount ?? 0), cur) })}
+                  loading={instLoading}
+                  disabled={minor <= 0 || !institution || account.trim().length < 4}
+                  onPress={payFromInstitution}
+                />
+              </View>
+            )}
+          </Card>
+        )}
         <Button
-          title={`Pay ${minor > 0 ? money(total, cur) : ''}`}
+          title={`${wallet ? tr('Pay from wallet') : tr('Pay')} ${minor > 0 ? money(total, cur) : ''}`}
           onPress={() => setPin(true)}
           disabled={minor <= 0 || !wallet || wallet.balance < total || (!!pr && pr.status !== 'open') || target.id === user?.id}
         />

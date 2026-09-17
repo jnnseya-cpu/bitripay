@@ -6,6 +6,7 @@ import { formatMoney, type PaymentRequest, type Sale, type SaleItem } from '@bit
 import { getCurrency } from './currencies';
 import { calculateFee, enforceLimits, postTransaction, type TransactionRow } from './ledger';
 import { ensureWallet, getUserWallet } from './wallets';
+import { switchAvailableFor } from './switch/customerPayment';
 import { findUserByIdentifier, findUserById, getGatewaySettings, toPublicUser, usersById, type UserRow } from './users';
 import { notify } from './notifications';
 import { dispatchWebhook } from './webhooks';
@@ -296,7 +297,9 @@ export function checkoutInfo(code: string) {
   const requester = findUserById(row.requester_user_id)!;
   const gateway = getGatewaySettings(requester);
   const allowed = parseJson<string[]>(row.allowed_methods, []);
-  const methods = isMerchantRole(requester.role) ? gateway.methods.filter((m) => allowed.length === 0 || allowed.includes(m)) : ['wallet'];
+  const methods: string[] = isMerchantRole(requester.role) ? gateway.methods.filter((m) => allowed.length === 0 || allowed.includes(m)) : ['wallet'];
+  // Aggregator perimeter: an acceptor with an active settlement account at a participating institution is paid from the customer's own institution through the switch.
+  if (isMerchantRole(requester.role) && (allowed.length === 0 || allowed.includes('national_switch')) && switchAvailableFor(requester.id, row.currency)) methods.unshift('national_switch');
   return {
     paymentRequest: toPaymentRequest(row),
     currency: getCurrency(row.currency, false),
