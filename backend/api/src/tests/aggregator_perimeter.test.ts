@@ -201,3 +201,36 @@ describe('QR intent settled through the national switch', () => {
     expect(getPaymentRow(pay.body.payment_id).status).toBe('COMPLETED');
   });
 });
+
+describe('hosted checkout under the aggregator perimeter', () => {
+  it('offers only the switch rail (nothing that would put funds in BitriPay hands) and refuses card, mobile money, bank and wallet payments', async () => {
+    const applied = await request(app).post('/api/admin/settings/modules/aggregator-perimeter').set(admin.auth).send({});
+    expect(applied.status, JSON.stringify(applied.body)).toBe(200);
+    const merchant = await registerUser(app, { role: 'merchant', businessName: 'Sans Compte Périmètre', country: 'CD' });
+    const sale = await request(app).post('/api/payment-requests').set(merchant.auth).send({ amount: '4.00', currency: 'CDF', note: 'Périmètre' });
+    expect(sale.status, JSON.stringify(sale.body)).toBe(201);
+    const code = sale.body.paymentRequest.code as string;
+    // no settlement account yet: no method at all (the page explains), never card / mobile money / bank / wallet
+    const none = await request(app).get(`/api/checkout/${code}`);
+    expect(none.body.methods).toEqual([]);
+    for (const method of ['mobile_money', 'card', 'bank']) {
+      const r = await request(app).post(`/api/checkout/${code}/pay`).send({ method, phone: '+243811234567', operatorId: 'mpesa_cd', email: 'x@example.com' });
+      expect(r.status, method).toBe(422);
+      expect(r.body.error.code).toBe('module_disabled');
+    }
+    const customer = await registerUser(app, { country: 'CD' });
+    const wallet = await request(app).post(`/api/checkout/${code}/wallet`).set(customer.auth).send({ pin: '1234' });
+    expect(wallet.status).toBe(422);
+    expect(wallet.body.error.code).toBe('module_disabled');
+    // with an active settlement account at a participating institution: the switch rail, and only it
+    const b = await request(app).post('/api/v1/beneficiary_bindings').set(merchant.auth).send({ participant_id: 'DEMO_MMO_B', account_token: '+243990000654', account_name: 'Sans Compte Périmètre' });
+    expect(b.status, JSON.stringify(b.body)).toBe(201);
+    await request(app).post(`/api/admin/switch/bindings/${b.body.id}/verify`).set(admin.auth).send({ method: 'institution_confirmation', reference: 'MMO-B-CONF-P' });
+    await request(app).post(`/api/admin/switch/bindings/${b.body.id}/activate`).set(checker.auth);
+    const only = await request(app).get(`/api/checkout/${code}`);
+    expect(only.body.methods).toEqual(['national_switch']);
+    const paid = await request(app).post('/api/pay/institution').send({ code, participant_id: 'DEMO_BANK_A', account_token: '+243811234567' });
+    expect(paid.status, JSON.stringify(paid.body)).toBe(201);
+    expect(paid.body.payment.status).toBe('COMPLETED');
+  });
+});

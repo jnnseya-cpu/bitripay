@@ -53,7 +53,7 @@ export function Checkout() {
       .get<any>(`/api/checkout/${code}`)
       .then((r) => {
         setInfo(r);
-        if (!method) setMethod(r.methods[0] ?? 'wallet');
+        if (!method && r.methods[0]) setMethod(r.methods[0]);
       })
       .catch((e) => setError(e.message));
   useEffect(() => {
@@ -336,8 +336,13 @@ export function Checkout() {
               </>
             ) : (
               <>
-                <h3>Pay with</h3>
+                <h3>{tr('Pay with')}</h3>
                 {error && <Alert kind="error">{error}</Alert>}
+                {info.methods.length === 0 && (
+                  <Alert kind="info">
+                    {tr('This acceptor cannot receive payments online yet: its settlement account at a participating institution is being activated. Pay at the counter, or come back shortly.')}
+                  </Alert>
+                )}
                 <Tabs pills tabs={info.methods.map((m: string) => ({ id: m, label: labels[m] ?? m }))} value={method} onChange={setMethod} />
                 <div className="mt" />
                 {disclosureBlock}

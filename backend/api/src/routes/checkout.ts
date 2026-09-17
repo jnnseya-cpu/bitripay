@@ -9,7 +9,8 @@ import { chargeVirtualCard } from '../services/virtualCards';
 import { assertPin } from '../services/auth';
 import { toTransaction } from '../services/ledger';
 import { findUserById } from '../services/users';
-import { badRequest, conflict } from '../lib/errors';
+import { AppError, badRequest, conflict } from '../lib/errors';
+import { aggregatorPerimeterApplied, MODULE_OFF_MESSAGE } from '../services/modules';
 import { rateLimit } from '../middleware/rateLimit';
 import { dispatchWebhook } from '../services/webhooks';
 import { parseJson } from '../lib/json';
@@ -95,6 +96,7 @@ checkoutRouter.post(
   requireAuth,
   wrap(async (req, res) => {
     const body = validate(z.object({ pin: z.string().optional(), amount: z.string().optional().nullable() }), req.body);
+    if (aggregatorPerimeterApplied()) throw new AppError(422, 'module_disabled', MODULE_OFF_MESSAGE, { method: 'wallet', available: ['national_switch'] });
     assertPin(req.user!, body.pin, req);
     const row = getPaymentRequestByCode(String(req.params.code));
     const { getCurrency } = await import('../services/currencies');
@@ -136,6 +138,8 @@ checkoutRouter.post(
     const row = getPaymentRequestByCode(String(req.params.code));
     const view = toPaymentRequest(row);
     if (view.status !== 'open') throw conflict(`This payment request is ${view.status}`, 'request_not_open');
+    // Aggregator perimeter: cards, mobile money or bank transfers to a platform account would put funds in BitriPay's hands; only the switch rail (`/api/pay/institution`) is open.
+    if (aggregatorPerimeterApplied()) throw new AppError(422, 'module_disabled', MODULE_OFF_MESSAGE, { method: body.method, available: ['national_switch'] });
     if (!row.amount) throw badRequest('This request has no fixed amount; pay it from a BitriPay wallet');
     if (body.method === 'virtual_card') {
       if (!body.card) throw badRequest('Card details are required');

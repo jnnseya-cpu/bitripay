@@ -4684,4 +4684,7 @@ export const frPhrases: Record<string, string> = {
   'Waiting for your institution to answer…': 'En attente de la réponse de votre institution…',
   'Your identifier at this institution': 'Votre identifiant chez cette institution',
   'Your institution': 'Votre institution',
+  'Pay with': 'Payer avec',
+  'This acceptor cannot receive payments online yet: its settlement account at a participating institution is being activated. Pay at the counter, or come back shortly.':
+    "Cet accepteur ne peut pas encore recevoir de paiements en ligne : son compte de règlement chez une institution participante est en cours d'activation. Payez au comptoir, ou revenez un peu plus tard.",
 };
