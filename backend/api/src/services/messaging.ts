@@ -92,6 +92,16 @@ export function smsProvider(): { provider: string; twilio: { sid: string; token:
   };
 }
 
+/**
+ * A keyed SMS provider (Twilio, Africa's Talking) that refuses, fails or has no credentials must never make the
+ * message disappear: it is queued for an enrolled phone, which sends it from its own SIM. This is the same no-key
+ * path the platform uses by default, so a country where the provider does not deliver (or is not sold) keeps working.
+ */
+function deviceFallback(to: string, body: string, provider: string): { delivered: boolean; via: string } {
+  queueSmsForDevice(to, body);
+  return { delivered: true, via: `${provider}_to_device` };
+}
+
 /** Africa's Talking messaging endpoint: the sandbox host for the "sandbox" username, the live host otherwise. */
 export const africasTalkingUrl = (username: string) => `https://api.${username === 'sandbox' ? 'sandbox.' : ''}africastalking.com/version1/messaging`;
 
@@ -115,10 +125,12 @@ export async function sendSms(to: string, body: string, template?: TemplatedMess
         },
         body: new URLSearchParams({ To: to, From: twilio.from, Body: body }).toString(),
       });
-      return { delivered: res.ok, via: 'twilio' };
+      if (res.ok) return { delivered: true, via: 'twilio' };
+      console.error('[sms] twilio refused', `HTTP ${res.status}`);
+      return deviceFallback(to, body, 'twilio');
     } catch (err) {
       console.error('[sms] twilio failed', (err as Error).message);
-      return { delivered: false, via: 'twilio_error' };
+      return deviceFallback(to, body, 'twilio');
     }
   }
   if (provider === 'africastalking' && africasTalking) {
@@ -134,13 +146,15 @@ export async function sendSms(to: string, body: string, template?: TemplatedMess
       const json = (await res.json().catch(() => ({}))) as { SMSMessageData?: { Message?: string; Recipients?: { statusCode?: number; status?: string }[] } };
       const recipients = json.SMSMessageData?.Recipients ?? [];
       const delivered = res.ok && recipients.some((r) => [100, 101, 102].includes(Number(r.statusCode)));
-      if (!delivered) console.error('[sms] africastalking refused', json.SMSMessageData?.Message ?? `HTTP ${res.status}`, recipients.map((r) => r.status).join(', '));
-      return { delivered, via: 'africastalking' };
+      if (delivered) return { delivered, via: 'africastalking' };
+      console.error('[sms] africastalking refused', json.SMSMessageData?.Message ?? `HTTP ${res.status}`, recipients.map((r) => r.status).join(', '));
+      return deviceFallback(to, body, 'africastalking');
     } catch (err) {
       console.error('[sms] africastalking failed', (err as Error).message);
-      return { delivered: false, via: 'africastalking_error' };
+      return deviceFallback(to, body, 'africastalking');
     }
   }
+  if (provider === 'twilio' || provider === 'africastalking') return deviceFallback(to, body, `${provider}_unconfigured`);
   if (!config.isTest) console.log(`[sms → ${to}] ${body}`);
   return { delivered: false, via: 'console' };
 }

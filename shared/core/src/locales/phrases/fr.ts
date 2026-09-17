@@ -4687,4 +4687,14 @@ export const frPhrases: Record<string, string> = {
   'Pay with': 'Payer avec',
   'This acceptor cannot receive payments online yet: its settlement account at a participating institution is being activated. Pay at the counter, or come back shortly.':
     "Cet accepteur ne peut pas encore recevoir de paiements en ligne : son compte de règlement chez une institution participante est en cours d'activation. Payez au comptoir, ou revenez un peu plus tard.",
+  '@tag (optional)': '@identifiant (facultatif)',
+  '4 to 8 digits, needed where a step-up is required': '4 à 8 chiffres, nécessaires là où une confirmation renforcée est demandée',
+  'Code sent. (Sandbox code: {0})': 'Code envoyé. (Code de test : {0})',
+  'The account is created verified: the person signs in with this password at once, with no verification code. Give them the password by a channel you trust; they can change it in their settings.':
+    'Le compte est créé vérifié : la personne se connecte immédiatement avec ce mot de passe, sans code de vérification. Communiquez-lui le mot de passe par un canal de confiance ; elle pourra le changer dans ses paramètres.',
+  'The code could not be sent to this number. Create your account without it: verification stays possible later from your settings.':
+    "Le code n'a pas pu être envoyé à ce numéro. Créez votre compte sans lui : la vérification reste possible plus tard depuis vos paramètres.",
+  'The handle on the QR codes and payment links of the account': "L'identifiant qui figure sur les QR codes et les liens de paiement du compte",
+  'Transaction PIN (optional)': 'Code PIN de transaction (facultatif)',
+  'Verification code sent.': 'Code de vérification envoyé.',
 };

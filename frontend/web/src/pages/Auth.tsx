@@ -186,8 +186,16 @@ export function Register() {
   const sendCode = async () => {
     setError(null);
     try {
-      const r = await api.post<{ devCode?: string }>('/api/auth/otp/request', { identifier: form.phone || form.email, purpose: 'register' });
-      setOtpInfo(r.devCode ? `Code sent. (Sandbox code: ${r.devCode})` : 'Verification code sent.');
+      const r = await api.post<{ devCode?: string; sent?: boolean }>('/api/auth/otp/request', { identifier: form.phone || form.email, purpose: 'register' });
+      // The code is optional: when the channel cannot deliver it (an operator or a country the provider does not serve),
+      // say so plainly instead of leaving the person waiting for a message that will never arrive.
+      setOtpInfo(
+        r.devCode
+          ? tr('Code sent. (Sandbox code: {0})', { 0: r.devCode })
+          : r.sent === false
+            ? tr('The code could not be sent to this number. Create your account without it: verification stays possible later from your settings.')
+            : tr('Verification code sent.'),
+      );
     } catch (err) {
       setError((err as Error).message);
     }

@@ -275,15 +275,27 @@ adminRouter.post(
         permissions: z.array(z.string()).optional(),
         businessName: z.string().optional().nullable(),
         country: z.string().length(2).optional().nullable(),
+        /** Public handle (@tag) of the account: the merchant's QR and payment links carry it. */
+        tag: z.string().min(3).max(20).optional().nullable(),
+        /** Transaction PIN, so the person can act at once where a step-up is required (no SMS involved). */
+        pin: z
+          .string()
+          .regex(/^\d{4,8}$/, 'The PIN is 4 to 8 digits')
+          .optional()
+          .nullable(),
       }),
       req.body,
     );
-    const user = createUser({ ...body, emailVerified: true });
+    const { pin, ...input } = body;
+    // An administrator opening an account vouches for the contact details: the account starts verified, so a country
+    // where the SMS provider does not deliver never blocks onboarding (the person signs in with their password).
+    const user = createUser({ ...input, tag: input.tag ?? undefined, emailVerified: true, phoneVerified: true });
+    if (pin) updateUser(user.id, { pin_hash: hashPassword(pin) } as any);
     if (body.role === 'admin') {
       updateUser(user.id, { permissions: JSON.stringify(body.permissions ?? []) } as any);
       emitAsync('admin.created', { userId: user.id, vars: { actor: req.user!.email ?? req.user!.full_name, permissions: (body.permissions ?? []).join(', ') || 'no permissions yet' } });
     }
-    audit(req.user!.id, 'user.create', 'user', user.id, { role: body.role });
+    audit(req.user!.id, 'user.create', 'user', user.id, { role: body.role, tag: user.tag, pinSet: !!pin, verified: 'email+phone (administrator)' });
     res.status(201).json({ user: toUser(getUserById(user.id)) });
   }),
 );

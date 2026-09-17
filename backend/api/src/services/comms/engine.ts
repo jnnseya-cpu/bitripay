@@ -171,7 +171,7 @@ export function channelStatus(): Record<CommsChannel, { wired: boolean; detail: 
       ? 'Enrolled phone SIM: no active payout device yet, SMS wait in the outbox'
       : smsCfg.provider === 'console'
         ? 'No SMS provider selected: SMS are logged, not sent'
-        : `${smsCfg.provider}: credentials missing, SMS are logged, not sent`;
+        : `${smsCfg.provider}: credentials missing, SMS wait in the outbox for an enrolled phone`;
   const wa = getWhatsAppSettings();
   return {
     email: { wired: !!smtp.host, detail: smtp.host ? `SMTP ${smtp.host}:${smtp.port} as ${smtp.from}` : 'No SMTP host: emails are logged, not sent' },

@@ -43,7 +43,7 @@ export function Users() {
   const q = useDebounce(search, 300);
   const list = useAsync(() => api.get<any>(`/api/admin/users${qs({ role, search: q, status, page, pageSize: 20 })}`), [role, q, status, page]);
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ fullName: '', email: '', phone: '', password: '', role, businessName: '', country: '', permissions: [] as string[] });
+  const [form, setForm] = useState({ fullName: '', email: '', phone: '', password: '', role, businessName: '', country: '', tag: '', pin: '', permissions: [] as string[] });
   const titles: Record<string, string> = { user: tr('User care'), merchant: tr('Merchant care'), agent: tr('Agent care'), admin: tr('Admin care & role management') };
   useEffect(() => setForm((f) => ({ ...f, role })), [role]);
   const create = async () => {
@@ -152,6 +152,14 @@ export function Users() {
         <Field label={tr('Password')}>
           <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         </Field>
+        <div className="grid cols-2">
+          <Field label={tr('@tag (optional)')} hint={tr('The handle on the QR codes and payment links of the account')}>
+            <Input value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() })} placeholder="marchandtest" />
+          </Field>
+          <Field label={tr('Transaction PIN (optional)')} hint={tr('4 to 8 digits, needed where a step-up is required')}>
+            <Input value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '').slice(0, 8) })} inputMode="numeric" placeholder="1234" />
+          </Field>
+        </div>
         {role !== 'user' && role !== 'admin' && (
           <Field label={tr('Business name')}>
             <Input value={form.businessName} onChange={(e) => setForm({ ...form, businessName: e.target.value })} />
@@ -182,7 +190,12 @@ export function Users() {
             </div>
           </Field>
         )}
-        <Button block onClick={create} disabled={!form.fullName || !form.password || (!form.email && !form.phone)}>
+        <p className="tiny muted">
+          {tr(
+            'The account is created verified: the person signs in with this password at once, with no verification code. Give them the password by a channel you trust; they can change it in their settings.',
+          )}
+        </p>
+        <Button block onClick={create} disabled={!form.fullName || !form.password || (!form.email && !form.phone) || (!!form.pin && form.pin.length < 4)}>
           {tr('Create')}
         </Button>
       </Modal>

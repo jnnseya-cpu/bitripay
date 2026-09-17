@@ -1,10 +1,12 @@
 /**
  * SMS providers: Twilio and Africa's Talking are selected by SMS_PROVIDER (or the console settings), each called with
- * its own credentials and wire format; a delivery counts only when the provider accepted the message for the recipient.
+ * its own credentials and wire format. A provider that accepted the message reports its own name; one that refuses,
+ * fails or has no credentials never makes the message disappear: it is queued for an enrolled phone, which sends it
+ * from its own SIM (the countries these providers do not serve, the Democratic Republic of the Congo among them).
  */
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { setupApp } from './helpers';
-import { sendSms, smsProvider, africasTalkingUrl } from '../services/messaging';
+import { sendSms, smsProvider, africasTalkingUrl, listSmsOutbox } from '../services/messaging';
 import { setSetting } from '../services/settings';
 import { channelStatus } from '../services/comms/engine';
 
@@ -37,7 +39,7 @@ describe('SMS providers', () => {
     expect(body.get('message')).toContain('123456');
   });
 
-  it('reports a refusal as not delivered and targets the sandbox host for the sandbox username', async () => {
+  it('queues a refused message for an enrolled phone and targets the sandbox host for the sandbox username', async () => {
     setSetting('sms', { provider: 'africastalking', africasTalkingUsername: 'sandbox', africasTalkingApiKey: 'atsk_sandbox' });
     expect(africasTalkingUrl('sandbox')).toBe('https://api.sandbox.africastalking.com/version1/messaging');
     expect(channelStatus().sms.detail).toBe("Africa's Talking (sandbox)");
@@ -45,16 +47,20 @@ describe('SMS providers', () => {
       'fetch',
       async () => new Response(JSON.stringify({ SMSMessageData: { Message: 'InvalidPhoneNumber', Recipients: [{ statusCode: 403, status: 'InvalidPhoneNumber' }] } }), { status: 201 }),
     );
-    expect(await sendSms('+2438', 'x')).toEqual({ delivered: false, via: 'africastalking' });
+    const before = listSmsOutbox().length;
+    expect(await sendSms('+243810000009', 'Refusé par le fournisseur')).toEqual({ delivered: true, via: 'africastalking_to_device' });
+    const queued = listSmsOutbox();
+    expect(queued.length).toBe(before + 1);
+    expect(queued[0]).toMatchObject({ to: '+243810000009', status: 'queued' });
   });
 
-  it('keeps Twilio as before and logs when the selected provider has no credentials', async () => {
+  it('keeps Twilio as before and queues for an enrolled phone when the selected provider has no credentials', async () => {
     setSetting('sms', { provider: 'twilio', twilioSid: 'AC1', twilioToken: 't', twilioFrom: '+15550000000' });
     expect(channelStatus().sms).toEqual({ wired: true, detail: 'Twilio' });
     vi.stubGlobal('fetch', async (url: string) => new Response(url.includes('api.twilio.com/2010-04-01/Accounts/AC1/Messages.json') ? '{}' : 'wrong', { status: 201 }));
     expect(await sendSms('+243810000000', 'hi')).toEqual({ delivered: true, via: 'twilio' });
     setSetting('sms', { provider: 'africastalking' });
-    expect(channelStatus().sms).toEqual({ wired: false, detail: 'africastalking: credentials missing, SMS are logged, not sent' });
-    expect((await sendSms('+243810000000', 'hi')).delivered).toBe(false);
+    expect(channelStatus().sms).toEqual({ wired: false, detail: 'africastalking: credentials missing, SMS wait in the outbox for an enrolled phone' });
+    expect(await sendSms('+243810000000', 'hi')).toEqual({ delivered: true, via: 'africastalking_unconfigured_to_device' });
   });
 });
