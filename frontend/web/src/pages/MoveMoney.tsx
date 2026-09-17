@@ -8,7 +8,7 @@ import { Alert, AmountInput, Avatar, Button, Empty, Field, Input, KV, PageHeader
 import { CardForm, type CardValues } from '../components/CardForm';
 import { OperatorPicker, PaymentStatus, type PaymentView } from './AddMoney';
 import type { BankAccount } from '@bitripay/shared';
-import { currencyFlag, countryFlag } from '@bitripay/shared';
+import { currencyFlag } from '@bitripay/shared';
 
 type Source = 'wallet' | 'card' | 'mobile_money' | 'bank';
 type Dest = 'wallet' | 'qr' | 'mobile_money' | 'bank' | 'agent';
@@ -313,7 +313,7 @@ export function MoveMoney() {
           ) : (
             <>
               {error && <Alert kind="error">{error}</Alert>}
-              <Field label="From">
+              <Field label={tr('From')}>
                 <Tabs pills tabs={(Object.keys(sourceLabels) as Source[]).map((k) => ({ id: k, label: sourceLabels[k] }))} value={source} onChange={(v) => setSource(v as Source)} />
               </Field>
               {source === 'card' && <CardForm value={card} onChange={setCard} />}
@@ -337,7 +337,7 @@ export function MoveMoney() {
               <Field label={t('common.amount')} hint={source === 'wallet' && wallet ? `${t('common.balance')}: ${money(wallet.balance, wallet.currency)}` : undefined}>
                 <AmountInput amount={amount} currency={cur} onAmount={setAmount} onCurrency={setCur} big currencies={(config?.currencies ?? []).map((c) => c.code)} />
               </Field>
-              <Field label="To">
+              <Field label={tr('To')}>
                 <Tabs pills tabs={(Object.keys(destLabels) as Dest[]).map((k) => ({ id: k, label: destLabels[k] }))} value={dest} onChange={(v) => setDest(v as Dest)} />
               </Field>
               {dest === 'wallet' && (
@@ -398,7 +398,7 @@ export function MoveMoney() {
                           <option value="">—</option>
                           {(config?.countries ?? []).map((c) => (
                             <option key={c.code} value={c.code}>
-                              {countryFlag(c.code)} {c.name}
+                              {countryLabel(c.code, c.name)}
                             </option>
                           ))}
                         </Select>

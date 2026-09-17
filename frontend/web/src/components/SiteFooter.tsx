@@ -24,11 +24,11 @@ export const FOOTER_LINKS = {
     { label: 'Platform status', href: '/status' },
   ],
   company: [
-    { label: 'About us', href: '/about' },
-    { label: 'Blog', href: '/blog' },
+    { label: tr('About us'), href: '/about' },
+    { label: tr('Blog'), href: '/blog' },
     { label: 'Security', href: '/legal/security' },
     { label: 'Regulatory information', href: '/legal/regulatory' },
-    { label: 'Fees & charges', href: '/legal/fees' },
+    { label: tr('Fees & charges'), href: '/legal/fees' },
     { label: 'Contact', href: '/contact' },
   ],
   legal: [

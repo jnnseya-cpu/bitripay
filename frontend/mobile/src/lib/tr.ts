@@ -3,9 +3,10 @@
  * language packs (shared) and the console overrides, and falls back to the phrase itself. Module state, not a hook,
  * so every component can call it; the layout remounts pages when the language or the overrides change.
  */
-import { translate } from '@bitripay/shared';
+import { setDisplayLanguage, translate } from '@bitripay/shared';
 
 let currentLang = 'en';
+setDisplayLanguage(currentLang);
 const overrides: Record<string, Record<string, string>> = {};
 let version = 0;
 const listeners = new Set<() => void>();
@@ -14,6 +15,7 @@ export function tr(phrase: string, vars?: Record<string, string | number>): stri
   return translate(currentLang, phrase, vars, overrides[currentLang]);
 }
 export function setTrLang(lang: string): void {
+  setDisplayLanguage(lang); // country names follow the same language
   if (lang === currentLang) return;
   currentLang = lang;
   bump();

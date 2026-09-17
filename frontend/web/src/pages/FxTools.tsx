@@ -93,14 +93,14 @@ export function FxTools() {
           <div className="card">
             <h3>{tr('New alert')}</h3>
             <div className="grid cols-2">
-              <Field label="From">
+              <Field label={tr('From')}>
                 <Select value={alert.baseCurrency} onChange={(e) => setAlert({ ...alert, baseCurrency: e.target.value })}>
                   {currencies.map((c) => (
                     <option key={c}>{c}</option>
                   ))}
                 </Select>
               </Field>
-              <Field label="To">
+              <Field label={tr('To')}>
                 <Select value={alert.quoteCurrency} onChange={(e) => setAlert({ ...alert, quoteCurrency: e.target.value })}>
                   {currencies.map((c) => (
                     <option key={c}>{c}</option>
@@ -234,14 +234,14 @@ export function FxTools() {
             <h3>{tr('Lock a rate')}</h3>
             {view.data?.forwardSettings && !view.data.forwardSettings.enabled && <Alert kind="warning">{tr('Forwards are paused by the platform right now.')}</Alert>}
             <div className="grid cols-2">
-              <Field label="From">
+              <Field label={tr('From')}>
                 <Select value={fwd.fromCurrency} onChange={(e) => setFwd({ ...fwd, fromCurrency: e.target.value })}>
                   {currencies.map((c) => (
                     <option key={c}>{c}</option>
                   ))}
                 </Select>
               </Field>
-              <Field label="To">
+              <Field label={tr('To')}>
                 <Select value={fwd.toCurrency} onChange={(e) => setFwd({ ...fwd, toCurrency: e.target.value })}>
                   {currencies.map((c) => (
                     <option key={c}>{c}</option>

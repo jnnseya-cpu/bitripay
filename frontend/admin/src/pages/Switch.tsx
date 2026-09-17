@@ -689,10 +689,10 @@ function Policies({ ok, err }: { ok: (m: string) => void; err: (e: any) => void 
       <div className="card">
         <h4>{tr('Explain a route (RTE-001…006)')}</h4>
         <div className="grid cols-2">
-          <Field label="From">
+          <Field label={tr('From')}>
             <Input value={sim.fromParticipant} onChange={(e) => setSim({ ...sim, fromParticipant: e.target.value })} />
           </Field>
-          <Field label="To">
+          <Field label={tr('To')}>
             <Input value={sim.toParticipant} onChange={(e) => setSim({ ...sim, toParticipant: e.target.value })} />
           </Field>
           <Field label={tr('Product')}>

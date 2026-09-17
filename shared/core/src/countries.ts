@@ -261,7 +261,41 @@ export const COUNTRIES: Country[] = [
 
 export const COUNTRY_BY_CODE: Record<string, Country> = Object.fromEntries(COUNTRIES.map((c) => [c.code, c]));
 
+/**
+ * The language the surfaces show country names in. Each application sets it when the person changes language (next to
+ * `setTrLang`), so the 200-odd country names never have to live in a phrase pack: the platform asks the runtime for
+ * the name in that language and falls back to the English name it ships with.
+ */
+let displayLanguage = 'en';
+export function setDisplayLanguage(lang: string): void {
+  displayLanguage = (lang || 'en').trim() || 'en';
+  regionNames = null;
+}
+export function getDisplayLanguage(): string {
+  return displayLanguage;
+}
+let regionNames: { of: (code: string) => string | undefined } | null = null;
+function regionNamesFor(lang: string): { of: (code: string) => string | undefined } | null {
+  if (regionNames) return regionNames;
+  try {
+    const DisplayNames = (globalThis as { Intl?: { DisplayNames?: new (l: string[], o: { type: string }) => { of: (c: string) => string | undefined } } }).Intl?.DisplayNames;
+    if (!DisplayNames) return null;
+    regionNames = new DisplayNames([lang, 'en'], { type: 'region' });
+    return regionNames;
+  } catch {
+    return null;
+  }
+}
+
+/** The country's name in the display language ("Congo - Kinshasa" in English, « Congo-Kinshasa » in French). */
 export function countryName(code?: string | null): string {
   if (!code) return '';
-  return COUNTRY_BY_CODE[code.toUpperCase()]?.name ?? code;
+  const c = code.toUpperCase();
+  const known = COUNTRY_BY_CODE[c];
+  const fallback = known?.name ?? code;
+  // Only a country the platform ships is asked of the runtime: an unknown code must come back as it was given, not as
+  // the runtime's "unknown region" wording.
+  if (!known || displayLanguage.startsWith('en')) return fallback;
+  const localised = regionNamesFor(displayLanguage)?.of(c);
+  return localised && localised !== c ? localised : fallback;
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { tr } from '../lib/i18n';
-import { countryFlag, countryLabel } from '@bitripay/shared';
+import { countryLabel } from '@bitripay/shared';
 import { api, qs } from '../lib/api';
 import { useStore } from '../lib/store';
 import {
@@ -566,7 +566,7 @@ export function Corridors() {
                 <Select value={corridorEdit.destCountry} onChange={(e) => setCorridorEdit({ ...corridorEdit, destCountry: e.target.value })}>
                   {(config?.countries ?? []).map((c: any) => (
                     <option key={c.code} value={c.code}>
-                      {countryFlag(c.code)} {c.name}
+                      {countryLabel(c.code, c.name)}
                     </option>
                   ))}
                 </Select>

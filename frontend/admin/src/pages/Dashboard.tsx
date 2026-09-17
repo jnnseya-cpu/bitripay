@@ -129,7 +129,7 @@ export function Dashboard() {
         <Table
           head={[tr('Type'), tr('Currency'), tr('Count'), tr('Volume'), tr('Fees')]}
           rows={(s.txByType as any[]).map((t) => [
-            TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS] ?? t.type,
+            tr(TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS] ?? t.type),
             t.currency,
             t.c,
             money(t.volume, t.currency),
@@ -148,7 +148,7 @@ export function Dashboard() {
           head={[tr('Reference'), tr('Type'), tr('Amount'), tr('Status'), tr('When')]}
           rows={(s.recent as any[]).map((t) => [
             <Link to={`/transactions?search=${t.reference}`}>{t.reference}</Link>,
-            TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS],
+            tr(TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS]),
             money(t.amount, t.currency),
             <StatusBadge status={t.status} />,
             fmtDate(t.createdAt),

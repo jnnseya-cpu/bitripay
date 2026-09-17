@@ -39,7 +39,7 @@ export function Transactions() {
             <option value="">{tr('All types')}</option>
             {TRANSACTION_TYPES.map((t) => (
               <option key={t} value={t}>
-                {TRANSACTION_TYPE_LABELS[t]}
+                {tr(TRANSACTION_TYPE_LABELS[t])}
               </option>
             ))}
           </Select>
@@ -64,7 +64,7 @@ export function Transactions() {
           head={[tr('Reference'), tr('Type'), 'From', 'To', tr('Amount'), tr('Fee'), tr('Status'), tr('When'), '']}
           rows={(data.data?.items ?? []).map((t: any) => [
             <span className="mono small">{t.reference}</span>,
-            TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS],
+            tr(TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS]),
             <UserCell user={t.sender} />,
             <UserCell user={t.receiver} />,
             <b>
@@ -85,7 +85,7 @@ export function Transactions() {
         {sel && (
           <div className="grid cols-2">
             <div>
-              <KV k={tr('Type')} v={TRANSACTION_TYPE_LABELS[sel.transaction.type as keyof typeof TRANSACTION_TYPE_LABELS]} />
+              <KV k={tr('Type')} v={tr(TRANSACTION_TYPE_LABELS[sel.transaction.type as keyof typeof TRANSACTION_TYPE_LABELS])} />
               <KV k={tr('Status')} v={<StatusBadge status={sel.transaction.status} />} />
               <KV k={tr('Amount')} v={money(sel.transaction.amount, sel.transaction.currency)} />
               <KV k={tr('Fee')} v={money(sel.transaction.fee, sel.transaction.currency)} />

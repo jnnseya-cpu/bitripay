@@ -36,10 +36,10 @@ export function Reports() {
       />
       <div className="card mb">
         <div className="row wrap">
-          <Field label="From">
+          <Field label={tr('From')}>
             <Input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />
           </Field>
-          <Field label="To">
+          <Field label={tr('To')}>
             <Input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />
           </Field>
           <Field label={tr('Currency')}>
@@ -74,7 +74,7 @@ export function Reports() {
             <Table
               head={[tr('Type'), tr('Status'), tr('Currency'), tr('Count'), tr('Volume'), tr('Fees')]}
               rows={d.byType.map((t: any) => [
-                TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS] ?? t.type,
+                tr(TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS] ?? t.type),
                 <StatusBadge status={t.status} />,
                 t.currency,
                 t.c,

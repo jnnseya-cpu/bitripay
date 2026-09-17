@@ -207,7 +207,7 @@ export function QrCentre() {
                   <option value="dynamic">{tr('Dynamic (fixed amount)')}</option>
                 </Select>
               </Field>
-              <Field label={tr('Currency')} hint={walletCurrencies.length ? `Your wallets: ${walletCurrencies.join(', ')}` : undefined}>
+              <Field label={tr('Currency')} hint={walletCurrencies.length ? tr('Your wallets: {0}', { 0: walletCurrencies.join(', ') }) : undefined}>
                 <Select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
                   {currencyOptions.map((c) => (
                     <option key={c}>{c}</option>

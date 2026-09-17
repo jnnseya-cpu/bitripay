@@ -5,7 +5,7 @@ import { useStore } from '../lib/store';
 import { useT, tr } from '../lib/i18n';
 import { Alert, Button, Field, Input, Select, Tabs } from '../components/ui';
 import type { User } from '@bitripay/shared';
-import { countryFlag } from '@bitripay/shared';
+import { countryLabel } from '@bitripay/shared';
 import { loginWithPasskey, passkeysSupported } from '../lib/passkeys';
 
 type AuthResult = { token: string; user: User; requiresTwoFactor?: boolean };
@@ -271,7 +271,7 @@ export function Register() {
               <option value="">—</option>
               {(config?.countries ?? []).map((c) => (
                 <option key={c.code} value={c.code}>
-                  {countryFlag(c.code)} {c.name}
+                  {countryLabel(c.code, c.name)}
                 </option>
               ))}
             </Select>

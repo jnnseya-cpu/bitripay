@@ -92,10 +92,10 @@ export function Supervision() {
       />
       <div className="card mb">
         <div className="row wrap">
-          <Field label="From">
+          <Field label={tr('From')}>
             <Input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />
           </Field>
-          <Field label="To">
+          <Field label={tr('To')}>
             <Input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />
           </Field>
           <Field label={tr('Currency (export)')}>
@@ -106,7 +106,7 @@ export function Supervision() {
               <option value="">{tr('All types')}</option>
               {Object.entries(TRANSACTION_TYPE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>
-                  {v}
+                  {tr(v)}
                 </option>
               ))}
             </Select>
@@ -197,7 +197,7 @@ export function Supervision() {
             <Table
               head={[tr('Type'), tr('Status'), tr('Currency'), tr('Count'), tr('Volume'), tr('Fees')]}
               rows={r.transactions.byTypeStatus.map((x) => [
-                (TRANSACTION_TYPE_LABELS as Record<string, string>)[x.type] ?? x.type,
+                tr((TRANSACTION_TYPE_LABELS as Record<string, string>)[x.type] ?? x.type),
                 <Chip kind={x.status === 'completed' ? 'success' : x.status === 'pending' ? 'warning' : x.status === 'failed' || x.status === 'rejected' ? 'danger' : undefined}>{x.status}</Chip>,
                 x.currency,
                 x.count,

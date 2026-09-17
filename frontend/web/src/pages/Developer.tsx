@@ -75,8 +75,8 @@ export function Developer() {
           <div className="card">
             <h3>{tr('New key')}</h3>
             <p className="small muted">
-              <b>sk_</b> secret keys act for your whole account; <b>rk_</b> restricted keys carry only the scopes you tick; <b>pk_</b> publishable keys are safe in browsers and apps. Test keys only
-              touch the sandbox.
+              <b>sk_</b> {tr('secret keys act for your whole account;')} <b>rk_</b> {tr('restricted keys carry only the scopes you tick;')} <b>pk_</b>{' '}
+              {tr('publishable keys are safe in browsers and apps. Test keys only touch the sandbox.')}
             </p>
             <div className="grid cols-2">
               <Field label={tr('Label')}>
@@ -147,7 +147,7 @@ export function Developer() {
                     </div>
                     <div className="sub-text mono">
                       {k.prefix} · {(k.scopes ?? ['*']).join(', ')}
-                      {k.lastUsedAt ? ` · last used ${new Date(k.lastUsedAt).toLocaleString()}` : ''}
+                      {k.lastUsedAt ? ` · ${tr('last used {0}', { 0: new Date(k.lastUsedAt).toLocaleString() })}` : ''}
                     </div>
                   </div>
                   <Button size="sm" variant="ghost" onClick={() => api.del(`/api/v1/api_keys/${k.id}`).then(keys.reload).catch(err)}>

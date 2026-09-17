@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { tr } from '../lib/i18n';
-import { countryFlag } from '@bitripay/shared';
+import { countryLabel } from '@bitripay/shared';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Button, ConfirmButton, Field, Input, Modal, PageHeader, Select, Switch, Table, Tabs, useAsync } from '../components/ui';
@@ -166,7 +166,7 @@ export function Catalogs() {
                   <Select value={edit.country} onChange={(e) => setEdit({ ...edit, country: e.target.value })}>
                     {(config?.countries ?? []).map((c: any) => (
                       <option key={c.code} value={c.code}>
-                        {countryFlag(c.code)} {c.name}
+                        {countryLabel(c.code, c.name)}
                       </option>
                     ))}
                   </Select>

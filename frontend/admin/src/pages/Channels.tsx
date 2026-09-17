@@ -157,7 +157,7 @@ function Sms({ d, err }: { d: any; err: (e: any) => void }) {
       <div className="card">
         <h4>{tr('SMS simulator')}</h4>
         <p className="tiny muted">{tr('Commands: BAL PIN · SEND amount [CUR] @code PIN · PAY amount @merchant PIN · CASH amount @agent PIN · STMT PIN · CODE · REG name PIN · HELP')}</p>
-        <Field label="From">
+        <Field label={tr('From')}>
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
         </Field>
         <form

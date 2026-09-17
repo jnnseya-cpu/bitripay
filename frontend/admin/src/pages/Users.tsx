@@ -25,7 +25,7 @@ import {
   useAsync,
   useDebounce,
 } from '../components/ui';
-import { TRANSACTION_TYPE_LABELS, countryFlag, countryLabel } from '@bitripay/shared';
+import { TRANSACTION_TYPE_LABELS, countryLabel } from '@bitripay/shared';
 
 const PERMS = ['users', 'transactions', 'approvals', 'kyc', 'settings', 'gateways', 'catalogs', 'cms', 'support', 'p2p', 'reports', 'admins', 'issuance', 'treasury', 'agents'];
 /** Labels for the permission chips; the treasury permission is the TREASURY_SUPER_ADMIN role of the e-money console. */
@@ -170,7 +170,7 @@ export function Users() {
             <option value="">—</option>
             {(config?.countries ?? []).map((c: any) => (
               <option key={c.code} value={c.code}>
-                {countryFlag(c.code)} {c.name}
+                {countryLabel(c.code, c.name)}
               </option>
             ))}
           </Select>
@@ -357,7 +357,7 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                 {d.transactions.map((t: any) => (
                   <div key={t.id} className="kv">
                     <span className="k small">
-                      {TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS]}
+                      {tr(TRANSACTION_TYPE_LABELS[t.type as keyof typeof TRANSACTION_TYPE_LABELS])}
                       <br />
                       <span className="tiny muted">{fmtDate(t.createdAt)}</span>
                     </span>
@@ -418,7 +418,7 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     <option value="">—</option>
                     {(config?.countries ?? []).map((c: any) => (
                       <option key={c.code} value={c.code}>
-                        {countryFlag(c.code)} {c.name}
+                        {countryLabel(c.code, c.name)}
                       </option>
                     ))}
                   </Select>
@@ -568,10 +568,10 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     ))}
                   </Select>
                 </Field>
-                <Field label="From">
+                <Field label={tr('From')}>
                   <Input type="date" value={stmt.from} onChange={(e) => setStmt({ ...stmt, from: e.target.value })} />
                 </Field>
-                <Field label="To">
+                <Field label={tr('To')}>
                   <Input type="date" value={stmt.to} onChange={(e) => setStmt({ ...stmt, to: e.target.value })} />
                 </Field>
               </div>

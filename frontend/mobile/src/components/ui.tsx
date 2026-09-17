@@ -427,7 +427,7 @@ export function TxRow({ tx, onPress }: { tx: Transaction; onPress?: () => void }
   const th = useTheme();
   const { money } = useStore();
   const isIn = tx.direction === 'in';
-  const who = tx.counterparty ? tx.counterparty.businessName || tx.counterparty.fullName : TRANSACTION_TYPE_LABELS[tx.type];
+  const who = tx.counterparty ? tx.counterparty.businessName || tx.counterparty.fullName : tr(TRANSACTION_TYPE_LABELS[tx.type]);
   const shown = isIn ? (tx.receiveAmount ?? tx.amount) : tx.amount + (tx.direction === 'out' && (tx.metadata as any)?.feeFrom !== 'receiver' ? tx.fee : 0);
   return (
     <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: th.border }}>
@@ -439,7 +439,7 @@ export function TxRow({ tx, onPress }: { tx: Transaction; onPress?: () => void }
           {who}
         </Text>
         <Text numberOfLines={1} style={{ color: th.muted, fontSize: 12 }}>
-          {TRANSACTION_TYPE_LABELS[tx.type]} · {new Date(tx.createdAt).toLocaleDateString()}
+          {tr(TRANSACTION_TYPE_LABELS[tx.type])} · {new Date(tx.createdAt).toLocaleDateString()}
         </Text>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 4 }}>

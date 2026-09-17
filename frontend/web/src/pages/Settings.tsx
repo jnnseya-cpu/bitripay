@@ -6,7 +6,7 @@ import { useStore } from '../lib/store';
 import { useT, tr } from '../lib/i18n';
 import { Alert, Button, Chip, CopyButton, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, Tabs, Textarea, useAsync } from '../components/ui';
 import type { User } from '@bitripay/shared';
-import { countryFlag } from '@bitripay/shared';
+import { countryLabel } from '@bitripay/shared';
 import { registerPasskey, passkeysSupported, biometricsAvailable } from '../lib/passkeys';
 import { ProfilePictures } from '../components/ProfilePictures';
 
@@ -70,7 +70,7 @@ function Profile() {
             {user?.fullName}
           </div>
           <div className="sub-text">
-            @{user?.tag} · {user?.role} · referral code {user?.referralCode}
+            @{user?.tag} · {tr(user?.role ?? '')} · {tr('referral code {0}', { 0: user?.referralCode ?? '' })}
           </div>
         </div>
       </div>
@@ -91,7 +91,7 @@ function Profile() {
             <option value="">—</option>
             {(config?.countries ?? []).map((c) => (
               <option key={c.code} value={c.code}>
-                {countryFlag(c.code)} {c.name}
+                {countryLabel(c.code, c.name)}
               </option>
             ))}
           </Select>
@@ -196,7 +196,7 @@ function Passkeys() {
               </div>
               <div className="sub-text">
                 {tr('Added')} {new Date(k.createdAt).toLocaleDateString()}
-                {k.lastUsedAt ? ` · last used ${new Date(k.lastUsedAt).toLocaleString()}` : ''}
+                {k.lastUsedAt ? ` · ${tr('last used {0}', { 0: new Date(k.lastUsedAt).toLocaleString() })}` : ''}
               </div>
             </div>
             <Button size="sm" variant="ghost" onClick={() => api.del(`/api/account/passkeys/${k.id}`).then(list.reload)}>

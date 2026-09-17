@@ -4,6 +4,8 @@ import { toMinor, fromMinor, formatMoney, convertMinor, applyBps } from './money
 import { encodeQr, decodeQr, encodeQrLink } from './qr.ts';
 import { luhnCheck, luhnCheckDigit, detectCardBrand, isExpiryValid } from './cards.ts';
 import { PHRASES } from './locales/phrases/catalogue.ts';
+import { TRANSACTION_TYPE_LABELS } from './constants.ts';
+import { countryName, setDisplayLanguage } from './countries.ts';
 import { frPhrases } from './locales/phrases/fr.ts';
 import { normalizePhone, nationalSignificant, samePhone } from './phone.ts';
 import { en } from './locales/en.ts';
@@ -121,4 +123,32 @@ test('the French phrase pack translates every phrase of the web app, the phone a
   // proper nouns, store names, units (1 h, 24 h), sample operator SMS and technical labels stay as they are; the catalogue now covers
   // the web app, the phone app, the console and the API messages, so the allowance is wider than for the web app alone
   assert.ok(identical.length < 60, `untranslated: ${identical.join(' | ')}`);
+});
+
+/**
+ * The data the surfaces show alongside the interface has to follow the language too: a statement row, a chart series
+ * and a country list came from the API in English and were rendered raw, so most of an account stayed English however
+ * the person set their language. Every transaction type now has its French, and country names come from the runtime
+ * in the display language.
+ */
+test('every transaction type label has a French translation', () => {
+  // a few labels are the same word in both languages; everything else must differ
+  const sameInBoth = new Set(['Distribution']);
+  const missing = Object.values(TRANSACTION_TYPE_LABELS).filter((label) => !frPhrases[label] || (frPhrases[label] === label && !sameInBoth.has(label)));
+  assert.deepEqual(missing, [], `transaction types still in English: ${missing.join(' | ')}`);
+  assert.equal(frPhrases[TRANSACTION_TYPE_LABELS.merchant_payment], 'Paiement marchand');
+  assert.equal(frPhrases[TRANSACTION_TYPE_LABELS.card_deposit], 'Ajout de fonds (carte)');
+});
+
+test('country names follow the display language, and fall back to the shipped name', () => {
+  setDisplayLanguage('en');
+  assert.equal(countryName('CD'), 'Congo, Democratic Republic of the'); // the name the package ships
+  setDisplayLanguage('fr');
+  const fr = countryName('CD');
+  assert.ok(/congo/i.test(fr), `French name for CD looks wrong: ${fr}`);
+  // an English name handed in by the API does not win over the display language (countryLabel builds on this)
+  assert.ok(!/Saudi Arabia/.test(countryName('SA')), 'the API name should be replaced in French');
+  // an unknown code keeps whatever it was given, and nothing throws without Intl data
+  assert.equal(countryName('ZZ'), 'ZZ');
+  setDisplayLanguage('en');
 });

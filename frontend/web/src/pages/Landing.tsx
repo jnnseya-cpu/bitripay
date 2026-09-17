@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useStore } from '../lib/store';
 import { api } from '../lib/api';
 import { useMeta } from '../lib/seo';
-import { useT } from '../lib/i18n';
+import { useT, tr } from '../lib/i18n';
 import { SiteFooter } from '../components/SiteFooter';
 import '../landing.css';
 
@@ -187,28 +187,28 @@ export function Landing() {
           </Link>
           <nav>
             <a href="/blog" className="hide-sm">
-              Blog
+              {tr('Blog')}
             </a>
             <a href="/about" className="hide-sm">
-              About
+              {tr('About')}
             </a>
             <a href="/legal/fees" className="hide-sm">
-              Fees
+              {tr('Fees')}
             </a>
             <button type="button" className="lp-btn ghost" onClick={toggleTheme} aria-label="Toggle dark mode" aria-pressed={theme === 'dark'} style={{ padding: '8px 10px' }}>
-              {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+              {theme === 'dark' ? `☀️ ${tr('Light')}` : `🌙 ${tr('Dark')}`}
             </button>
             {user ? (
               <Link to="/app" className="lp-btn light">
-                Open app
+                {tr('Open app')}
               </Link>
             ) : (
               <>
                 <Link to="/login" className="hide-sm" style={{ textDecoration: 'none' }}>
-                  Sign in
+                  {tr('Sign in')}
                 </Link>
                 <Link to="/register" className="lp-btn light">
-                  Open an account
+                  {tr('Open an account')}
                 </Link>
               </>
             )}
@@ -219,14 +219,14 @@ export function Landing() {
           </nav>
           {menuOpen && (
             <div id="lp-menu" className="lp-menu-sheet" onClick={() => setMenuOpen(false)}>
-              <a href="/how-it-works">How it works</a>
-              <a href="/developers">Developers</a>
-              <a href="/blog">Blog</a>
-              <a href="/about">About</a>
-              <a href="/legal/fees">Fees</a>
+              <a href="/how-it-works">{tr('How it works')}</a>
+              <a href="/developers">{tr('Developers')}</a>
+              <a href="/blog">{tr('Blog')}</a>
+              <a href="/about">{tr('About')}</a>
+              <a href="/legal/fees">{tr('Fees')}</a>
               {user ? (
                 <Link to="/app" className="lp-menu-cta">
-                  Open app
+                  {tr('Open app')}
                 </Link>
               ) : (
                 <>

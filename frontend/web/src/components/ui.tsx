@@ -349,7 +349,9 @@ const TX_ICONS: Record<string, string> = {
 
 export function TxRow({ tx, onClick }: { tx: Transaction; onClick?: () => void }) {
   const { money } = useStore();
-  const who = tx.counterparty ? tx.counterparty.businessName || tx.counterparty.fullName : TRANSACTION_TYPE_LABELS[tx.type];
+  // A counterparty that is a platform account ("BitriPay Treasury") and a system note are data in English: `tr` translates
+  // the ones the packs know and returns anything else — a person's or a shop's name — untouched.
+  const who = tx.counterparty ? tr(tx.counterparty.businessName || tx.counterparty.fullName) : tr(TRANSACTION_TYPE_LABELS[tx.type]);
   const isIn = tx.direction === 'in';
   const shown = isIn ? (tx.receiveAmount ?? tx.amount) : tx.amount + (tx.direction === 'out' && (tx.metadata as any)?.feeFrom !== 'receiver' ? tx.fee : 0);
   const cur = isIn ? (tx.receiveCurrency ?? tx.currency) : tx.currency;
@@ -361,7 +363,7 @@ export function TxRow({ tx, onClick }: { tx: Transaction; onClick?: () => void }
       <div className="flex1">
         <div className="main-text truncate">{who}</div>
         <div className="sub-text truncate">
-          {TRANSACTION_TYPE_LABELS[tx.type]} · {new Date(tx.createdAt).toLocaleString()} {tx.note ? `· ${tx.note}` : ''}
+          {tr(TRANSACTION_TYPE_LABELS[tx.type])} · {new Date(tx.createdAt).toLocaleString()} {tx.note ? `· ${tr(tx.note)}` : ''}
         </div>
       </div>
       <div className="right">

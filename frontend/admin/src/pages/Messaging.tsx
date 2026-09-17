@@ -77,7 +77,7 @@ export function Messaging() {
               <Field label={tr('Password')}>
                 <Input type="password" value={smtp.pass} onChange={(e) => setSmtp({ ...smtp, pass: e.target.value })} />
               </Field>
-              <Field label="From">
+              <Field label={tr('From')}>
                 <Input value={smtp.from} onChange={(e) => setSmtp({ ...smtp, from: e.target.value })} />
               </Field>
               <div>

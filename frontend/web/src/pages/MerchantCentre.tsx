@@ -60,7 +60,7 @@ export function MerchantCentre() {
           { id: 'overview', label: tr('Overview') },
           { id: 'kyb', label: tr('Business verification (KYB)') },
           { id: 'settlement', label: tr('Settlement') },
-          { id: 'disputes', label: `Disputes${open.length ? ` (${open.length})` : ''}` },
+          { id: 'disputes', label: `${tr('Disputes')}${open.length ? ` (${open.length})` : ''}` },
           { id: 'fees', label: tr('My fees') },
           { id: 'payouts', label: tr('Bulk payouts') },
           { id: 'plans', label: tr('Plans & billing') },
@@ -81,7 +81,7 @@ export function MerchantCentre() {
                   <span className="small muted">balance {money(b.balance, b.currency)}</span>
                 </div>
                 <div className="mt small">
-                  <KV k="Pending in" v={money(b.pending, b.currency)} />
+                  <KV k={tr('Pending in')} v={money(b.pending, b.currency)} />
                   <KV k={tr('Awaiting settlement')} v={money(b.settlement_pending, b.currency)} />
                   <KV k={tr('Held')} v={money(b.held, b.currency)} />
                   <KV k={tr('Disputed')} v={money(b.disputed, b.currency)} />
@@ -147,7 +147,7 @@ export function MerchantCentre() {
                   ) : (
                     <p className="small muted">{tr('Legacy limits apply.')}</p>
                   )}
-                  <p className="small">{verification.data.next}</p>
+                  <p className="small">{tr(verification.data.next)}</p>
                   <KV k={tr('Business (KYB)')} v={<StatusBadge status={verification.data.kybStatus} />} />
                   <div className="row wrap">
                     <Link className="btn secondary" to="/app/settings?tab=kyc">

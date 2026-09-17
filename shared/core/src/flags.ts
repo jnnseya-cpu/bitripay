@@ -3,7 +3,7 @@
  * them without an image. A currency shows the flag of the country that issues it; the euro shows the European Union
  * flag (never one member state); the CFA francs and other shared currencies that have no country show a globe.
  */
-import { COUNTRIES } from './countries';
+import { COUNTRIES, countryName } from './countries';
 
 /** 🇨🇩 for CD, 🇪🇺 for EU: the regional-indicator pair of an ISO 3166-1 alpha-2 code. */
 export function countryFlag(code: string | null | undefined): string {
@@ -50,5 +50,7 @@ export const currencyLabel = (code: string): string => `${currencyFlag(code)} ${
 export function countryLabel(code: string | null | undefined, name?: string | null): string {
   const c = (code ?? '').trim().toUpperCase();
   if (!c) return name ?? '—';
-  return `${countryFlag(c)} ${name ?? c}`;
+  // The name follows the display language: a caller passing the English name from the API (a country list, a KYB
+  // dossier) still shows it translated, and an unknown code keeps whatever name it was given.
+  return `${countryFlag(c)} ${countryName(c) || name || c}`;
 }

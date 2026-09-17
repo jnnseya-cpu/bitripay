@@ -69,10 +69,10 @@ export function Statements() {
                 ))}
               </Select>
             </Field>
-            <Field label="From">
+            <Field label={tr('From')}>
               <Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
             </Field>
-            <Field label="To">
+            <Field label={tr('To')}>
               <Input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
             </Field>
           </div>

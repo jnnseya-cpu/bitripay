@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import { useT, tr } from '../lib/i18n';
 import { Alert, AmountInput, Button, Empty, Field, Input, KV, PageHeader, PinModal, Select, StatusBadge, Tabs, useAsync, useDebounce } from '../components/ui';
-import { currencyFlag, countryFlag, countryLabel } from '@bitripay/shared';
+import { currencyFlag, countryLabel } from '@bitripay/shared';
 
 type Method = 'wallet' | 'bank' | 'cash_pickup';
 
@@ -151,7 +151,7 @@ export function Remittance() {
                 <option value="">—</option>
                 {(config?.countries ?? []).map((c) => (
                   <option key={c.code} value={c.code}>
-                    {countryFlag(c.code)} {c.name}
+                    {countryLabel(c.code, c.name)}
                   </option>
                 ))}
               </Select>

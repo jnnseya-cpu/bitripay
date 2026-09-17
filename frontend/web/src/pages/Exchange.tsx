@@ -53,10 +53,10 @@ export function Exchange() {
       <div className="grid cols-2">
         <div className="card">
           {error && <Alert kind="error">{error}</Alert>}
-          <Field label="From">
+          <Field label={tr('From')}>
             <AmountInput amount={amount} currency={from} onAmount={setAmount} onCurrency={setFrom} big />
           </Field>
-          <Field label="To">
+          <Field label={tr('To')}>
             <Select value={to} onChange={(e) => setTo(e.target.value)}>
               {(config?.currencies ?? []).map((c) => (
                 <option key={c.code} value={c.code}>

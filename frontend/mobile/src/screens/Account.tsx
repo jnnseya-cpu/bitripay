@@ -65,7 +65,7 @@ export function TxDetail({ route }: ScreenProps<'TxDetail'>) {
   const isIn = tx.direction === 'in';
   return (
     <Screen>
-      <Header title={TRANSACTION_TYPE_LABELS[tx.type]} />
+      <Header title={tr(TRANSACTION_TYPE_LABELS[tx.type])} />
       <Card style={{ alignItems: 'center' }}>
         <T bold size={32} color={isIn ? th.success : th.text}>
           {isIn ? '+' : tx.direction === 'out' ? '-' : ''}
@@ -91,7 +91,7 @@ export function TxDetail({ route }: ScreenProps<'TxDetail'>) {
         <Button
           title={tr('Share receipt')}
           variant="secondary"
-          onPress={() => Share.share({ message: `BitriPay ${TRANSACTION_TYPE_LABELS[tx.type]} ${tx.reference}: ${money(tx.amount, tx.currency)} · ${tx.status}` })}
+          onPress={() => Share.share({ message: `BitriPay ${tr(TRANSACTION_TYPE_LABELS[tx.type])} ${tx.reference}: ${money(tx.amount, tx.currency)} · ${tx.status}` })}
         />
         {d.receiver && tx.direction === 'out' && <Button title={tr('Send again')} variant="ghost" onPress={() => nav.navigate('Send', { to: d.receiver.tag })} />}
       </Row>

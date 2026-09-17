@@ -33,7 +33,7 @@ export function Transactions() {
             <option value="">{t('common.all')} types</option>
             {TRANSACTION_TYPES.map((ty) => (
               <option key={ty} value={ty}>
-                {TRANSACTION_TYPE_LABELS[ty]}
+                {tr(TRANSACTION_TYPE_LABELS[ty])}
               </option>
             ))}
           </Select>
@@ -99,7 +99,7 @@ export function TransactionDetail() {
   return (
     <div style={{ maxWidth: 640 }}>
       <PageHeader
-        title={TRANSACTION_TYPE_LABELS[tx.type]}
+        title={tr(TRANSACTION_TYPE_LABELS[tx.type])}
         subtitle={tx.reference}
         actions={
           <Link to="/app/transactions" className="btn secondary">
