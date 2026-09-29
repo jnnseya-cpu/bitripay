@@ -87,6 +87,7 @@ export const FOOTER_LINKS = {
     { label: 'Industries', href: '/industries' },
     { label: 'Enterprise groups', href: '/enterprise' },
     { label: 'Developers', href: '/developers' },
+    { label: 'API reference', href: '/developers/api' },
     { label: 'Get started', href: '/get-started' },
     { label: 'Growth & influencers', href: '/growth' },
     { label: 'Platform status', href: '/status' },

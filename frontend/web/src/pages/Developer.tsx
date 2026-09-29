@@ -53,9 +53,14 @@ export function Developer() {
               : tr('One integration, every eligible rail. Keys, webhooks, events, sandbox and docs.')
         }
         actions={
-          <a className="btn secondary" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">
-            {tr('OpenAPI ↗')}
-          </a>
+          <>
+            <a className="btn secondary" href="/developers/api" target="_blank" rel="noreferrer">
+              {tr('API reference ↗')}
+            </a>
+            <a className="btn ghost" href="/api/v1/openapi.json?format=json" target="_blank" rel="noreferrer">
+              {tr('OpenAPI ↗')}
+            </a>
+          </>
         }
       />
       <Tabs
@@ -503,7 +508,10 @@ function Docs() {
           {code}
         </pre>
         <div className="row">
-          <a className="btn secondary" href="/api/v1/openapi.json" target="_blank" rel="noreferrer">
+          <a className="btn secondary" href="/developers/api" target="_blank" rel="noreferrer">
+            {tr('API reference')}
+          </a>
+          <a className="btn ghost" href="/api/v1/openapi.json?format=json" target="_blank" rel="noreferrer">
             {tr('OpenAPI 3.1')}
           </a>
           <a className="btn ghost" href="/api/v1/keys" target="_blank" rel="noreferrer">

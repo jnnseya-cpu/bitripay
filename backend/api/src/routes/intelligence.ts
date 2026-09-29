@@ -38,11 +38,24 @@ import {
 } from '../services/diaspora';
 import { riskContext } from '../services/risk';
 import { openApiDocument } from '../docs/openapi';
+import { apiReferencePage } from '../docs/reference';
 import { MERCHANT_ROLES } from '../services/users';
 
 export const intelligenceRouter = Router();
-/** Machine-readable description of the whole v1 surface (cached for an hour). */
-intelligenceRouter.get('/openapi.json', (_req, res) => res.setHeader('Cache-Control', 'public, max-age=3600').json(openApiDocument()));
+/**
+ * Machine-readable description of the whole v1 surface (cached for an hour). A caller that asks for HTML rather than
+ * JSON — a person opening the link in a browser — gets the rendered reference instead of a wall of JSON; `?format=json`
+ * always returns the document. `Vary: Accept` keeps the two answers apart in every cache.
+ */
+intelligenceRouter.get('/openapi.json', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Vary', 'Accept');
+  res.setHeader('Link', '</v1/docs>; rel="alternate"; type="text/html"');
+  if (String(req.query.format ?? '') !== 'json' && req.accepts(['json', 'html']) === 'html') return res.type('html').send(apiReferencePage());
+  return res.json(openApiDocument());
+});
+/** The same document, rendered for a person: operations by group, scopes, parameters, bodies, webhooks, error codes. */
+intelligenceRouter.get('/docs', (_req, res) => res.setHeader('Cache-Control', 'public, max-age=3600').type('html').send(apiReferencePage()));
 const r = intelligenceRouter;
 const writeLimit = rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'intel' });
 

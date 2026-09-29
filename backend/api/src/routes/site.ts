@@ -1,6 +1,6 @@
 /**
  * Public, server-rendered marketing surface (behind the web domain via the reverse proxy):
- *   /blog, /blog/:slug, /legal/:slug, /about, /contact, /how-it-works, /industries, /enterprise, /developers, /get-started,
+ *   /blog, /blog/:slug, /legal/:slug, /about, /contact, /how-it-works, /industries, /enterprise, /developers (+ /developers/api), /get-started,
  *   /growth, /policies, /status (+ /status.json), /sitemap.xml, /feed.xml, /robots.txt, /llms.txt, /llms-full.txt
  * plus the JSON blog API under /api/blog for the apps.
  */
@@ -15,6 +15,7 @@ import { applyDynamicLinks, sitemapXml, robotsTxt, recordReferrer, bumpPageview 
 import { getSeoSettings } from '../services/settings';
 import { blogIndexPage, blogPostPage, legalPage, rssXml, llmsTxt } from '../site/render';
 import { howItWorksPage, industriesPage, enterprisePage, developersPage, getStartedPage, growthPage, policiesPage, statusPage, statusData, PRODUCT_PAGES } from '../site/pages';
+import { apiReferencePage } from '../docs/reference';
 
 export const siteRouter = Router();
 const publicLimit = rateLimit({ windowMs: 60_000, max: 240, keyPrefix: 'site' });
@@ -56,6 +57,8 @@ siteRouter.get('/how-it-works', publicLimit, (_req, res) => res.type('html').sen
 siteRouter.get('/industries', publicLimit, (_req, res) => res.type('html').send(industriesPage()));
 siteRouter.get('/enterprise', publicLimit, (_req, res) => res.type('html').send(enterprisePage()));
 siteRouter.get('/developers', publicLimit, (_req, res) => res.type('html').send(developersPage()));
+// The full API reference, readable: the same document served at /v1/openapi.json, rendered operation by operation.
+siteRouter.get('/developers/api', publicLimit, (_req, res) => res.setHeader('Cache-Control', 'public, max-age=3600').type('html').send(apiReferencePage()));
 siteRouter.get('/get-started', publicLimit, (_req, res) => res.type('html').send(getStartedPage()));
 siteRouter.get('/growth', publicLimit, (_req, res) => res.type('html').send(growthPage()));
 siteRouter.get('/policies', publicLimit, (_req, res) => res.type('html').send(policiesPage()));

@@ -485,6 +485,13 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
 - **SDKs and docs**: `shared/sdk-node` (`@bitripay/sdk`, zero dependencies, typed resources, webhook
   verification), `shared/sdk-php` (`bitripay/sdk`), `shared/sdk-python` (`bitripay`); the OpenAPI 3.1 document
   at `/api/v1/openapi.json` is generated from the same operation table the portal shows.
+- **API reference** (`/v1/docs`, `/api/v1/docs`, `/developers/api`): the same document rendered for a person —
+  operations grouped by tag with their scope, their idempotency requirement, their parameters, their body fields
+  and accepted values, their responses and a copy-ready `curl`, followed by the webhook catalogue, the error
+  families and every scope with the operations it opens. `backend/api/src/docs/reference.ts` builds it from
+  `openApiDocument()` through one `include` predicate, so the page can never describe an operation the document
+  does not publish. Opening `/v1/openapi.json` in a browser serves this page; every other client, and
+  `?format=json`, still gets the JSON (`Vary: Accept`).
 
 ### Savings, wellbeing and locale resolution
 

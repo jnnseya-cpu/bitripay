@@ -334,7 +334,8 @@ export function developersPage(): string {
 <section class="sect">${ctaRow([
     { href: '/register?role=developer', label: 'Create a developer account', primary: true },
     { href: '/login', label: 'Sign in to the developer portal' },
-    { href: '/v1/openapi.json', label: 'OpenAPI document' },
+    { href: '/developers/api', label: 'Read the API reference' },
+    { href: '/v1/openapi.json?format=json', label: 'OpenAPI JSON' },
   ])}<div class="steps">
 <div class="step"><b>1 · Get a key</b><h3>Sign in → Developer portal → Create key</h3><p>Secret keys (sk_) carry every scope, restricted keys (rk_) only the scopes you list, publishable keys (pk_) can only start a payment. The secret is shown once.</p></div>
 <div class="step"><b>2 · Authenticate</b><h3>Bearer on every request</h3><p><code>Authorization: Bearer sk_test_…</code> — test keys hit the sandbox, live keys the real rails, on the same base URL. Send <code>Idempotency-Key</code> on every money-moving POST.</p></div>
@@ -350,7 +351,7 @@ curl -X POST ${escapeHtml(base)}/payment_intents \\
 
 <span class="c"># 2. Send the customer to checkout_url (or render qr_payload), then</span>
 <span class="c"># 3. Verify the webhook: BitriPay-Signature (HMAC of the endpoint secret) and the platform Ed25519 key from /v1/keys</span></pre></section>
-<section class="sect"><h2>Endpoints you will use first</h2>${table(top)}<p class="lead" style="margin-top:12px">Every operation, every schema and every error code: <a href="/v1/openapi.json">OpenAPI 3.1 document</a> · <a href="/v1/keys">platform signing keys</a> · <a href="/v1/status">operating status</a>.</p></section>
+<section class="sect"><h2>Endpoints you will use first</h2>${table(top)}<p class="lead" style="margin-top:12px">Every operation, every field and every error code, written out for a person: <a href="/developers/api"><b>the API reference</b></a> · the same thing as a machine-readable <a href="/v1/openapi.json?format=json">OpenAPI 3.1 document</a> · <a href="/v1/keys">platform signing keys</a> · <a href="/v1/status">operating status</a>.</p></section>
 <section class="sect"><h2>Scopes</h2><p class="lead">A restricted key holds only the scopes you choose; a scope that is missing returns <code>scope_denied</code>.</p><div class="table-wrap"><table class="grid"><tr><th>Scope</th><th>Grants</th></tr>${API_KEY_SCOPES.map((s) => `<tr><td><code>${escapeHtml(s)}</code></td><td>${escapeHtml(SCOPE_NOTES[s] ?? s)}</td></tr>`).join('')}<tr><td><code>*</code></td><td>Full account scope (sk_ keys).</td></tr></table></div></section>
 <section class="sect"><h2>Drop-in checkout: pay by mobile money, automatically</h2><p class="lead">Add “Pay with BitriPay” to any website or marketplace. The customer picks the operator, pays to the collection number, and BitriPay matches the operator's confirmation; the order moves forward on its own. Two integration paths:</p><div class="tiles">
 <div class="tile"><h3>1 · Hosted checkout (recommended)</h3><p>Create an intent or a checkout session and redirect to its URL. BitriPay renders the operators, the reference, the QR and the confirmation step, then returns the customer to your success URL and sends the webhook.</p></div>
@@ -383,7 +384,8 @@ curl -X POST ${escapeHtml(base)}/accounts/acct_…/account_links -H "Authorizati
 <section class="sect"><h2>Everything else in the catalogue</h2>${table(rows.filter((r) => !featured.includes(r.path)))}${ctaRow([
     { href: '/register?role=developer', label: 'Create a developer account', primary: true },
     { href: '/register?role=merchant', label: 'Create a merchant account' },
-    { href: '/v1/openapi.json', label: 'OpenAPI document' },
+    { href: '/developers/api', label: 'Read the API reference' },
+    { href: '/v1/openapi.json?format=json', label: 'OpenAPI JSON' },
     { href: '/contact', label: 'Ask a question' },
   ])}</section>`;
   return page(
@@ -554,6 +556,7 @@ export const PRODUCT_PAGES: { path: string; title: string; note: string }[] = [
   { path: '/industries', title: 'Industries', note: 'markets, transport, utilities, telecom, e-commerce, schools, government, diaspora, agents' },
   { path: '/enterprise', title: 'Enterprise groups', note: 'organisations, roles, bulk payouts, settlement, integration, SLOs' },
   { path: '/developers', title: 'Developers', note: 'REST API, scopes, hosted and embedded checkout, sandbox, webhooks' },
+  { path: '/developers/api', title: 'API reference', note: 'every operation with its scope, parameters, body, responses, webhook events and error codes' },
   { path: '/get-started', title: 'Get started', note: 'personal, merchant, developer and agent onboarding' },
   { path: '/growth', title: 'Growth & influencers', note: 'referral rewards, partner attribution, merchant growth tools' },
   { path: '/policies', title: 'All policies', note: 'every legal document with its last update' },
