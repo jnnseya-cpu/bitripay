@@ -426,6 +426,15 @@ const OPS: Op[] = [
     query: ['refund'],
   },
   { method: 'post', path: '/payment_intents/{id}/split_refunds/retry', tag: 'Payment intents', summary: 'Retry failed split refund recoveries', scope: 'payment_intents:write' },
+  // Corridor network: what a corridor can carry, for a partner that integrates one.
+  {
+    method: 'get',
+    path: '/corridors',
+    tag: 'Corridors',
+    summary: 'Corridors open to you: declared collection and payout rails, limits, and whether each one is live or in sandbox',
+    scope: 'payment_intents:read',
+    query: ['status'],
+  },
   // Connected accounts: the aggregator / platform model
   {
     method: 'post',

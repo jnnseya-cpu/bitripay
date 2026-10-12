@@ -31,6 +31,7 @@ const NAV: { section: string; items: { to: string; label: string; ico: string; p
       { to: '/approvals', label: 'Approvals', ico: '✅', perm: 'approvals' },
       { to: '/verification', label: 'Verification console', ico: '🔎', perm: 'approvals' },
       { to: '/corridors', label: 'Corridors, liquidity & payouts', ico: '🌍', perm: 'approvals' },
+      { to: '/network', label: 'Corridor network', ico: '🛰️', perm: 'settings' },
       { to: '/emoney', label: 'E-money & reserves', ico: '🏦', perm: 'reports' },
       { to: '/kyc', label: 'KYC verification', ico: '🪪', perm: 'kyc' },
       { to: '/p2p', label: 'P2P & disputes', ico: '🤝', perm: 'p2p' },

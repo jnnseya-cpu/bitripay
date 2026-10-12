@@ -13,6 +13,7 @@ import { Comms } from './pages/Comms';
 import { Supervision } from './pages/Supervision';
 import { Analytics } from './pages/Analytics';
 import { Corridors } from './pages/Corridors';
+import { Network } from './pages/Network';
 import { Emoney } from './pages/Emoney';
 import { Seo } from './pages/Seo';
 import { Agents } from './pages/Agents';
@@ -111,6 +112,14 @@ export function App() {
           element={
             <P>
               <Corridors />
+            </P>
+          }
+        />
+        <Route
+          path="/network"
+          element={
+            <P>
+              <Network />
             </P>
           }
         />

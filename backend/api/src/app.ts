@@ -67,6 +67,8 @@ import { seedDefaultCatalogs } from './seedDefaults';
 import { ensureOfficialSanctionsSources, refreshAllSources } from './services/risk/compliance';
 // Loading the communication engine registers it with notify(), so every notice fans out across channels from the first request.
 import './services/comms/engine';
+import { seedCorridorNetwork } from './services/network/registry';
+import { seedGatesAndQuestions } from './services/network/gates';
 
 export function bootstrap() {
   getDb();
@@ -91,6 +93,10 @@ export function bootstrap() {
   // carry source SIMULATION and every pair says so); a production server that demonstrates the switch needs them too.
   if (!config.isProduction || connectionForCountry('CD')?.simulation) ensureSimulationParticipants();
   seedDefaultCatalogs();
+  // Corridor network: the phases, corridors, counterparty slots, gates and open questions of the build specification
+  // are inserted once and never overwritten, so the register exists before the module is ever switched on.
+  seedCorridorNetwork();
+  seedGatesAndQuestions();
   // Screening lists: the official consolidated lists are registered on first start and loaded straight away outside
   // tests, so a fresh deployment screens against them before its first customer (the compliance job refreshes daily).
   const seededLists = ensureOfficialSanctionsSources();

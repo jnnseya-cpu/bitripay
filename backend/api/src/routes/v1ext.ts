@@ -7,6 +7,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate, wrap } from '../lib/http';
 import { requireAuth, requireRole, requireScope } from '../middleware/auth';
+import { requireModule } from '../middleware/modules';
+import { listNetworkCorridors } from '../services/network/registry';
 import { rateLimit } from '../middleware/rateLimit';
 import { badRequest, notFound } from '../lib/errors';
 import { getCurrency } from '../services/currencies';
@@ -634,3 +636,25 @@ v1ExtRouter.post('/accounts/:id/account_links', ...merchantOnly, requireScope('a
   res.status(201).json(createAccountLink(platformOf(req), String(req.params.id))),
 );
 v1ExtRouter.post('/accounts/:id/detach', ...merchantOnly, requireScope('accounts:write'), platformOnly, writeLimit, (req, res) => res.json(detachByPlatform(platformOf(req), String(req.params.id))));
+
+// ---------------------------------------------------------------- corridors
+// What a corridor can carry today: the rails declared on it, its limits and whether it is live, sandbox or not open
+// at all. Read-only, and it never says who the partners are: a partner's name is a commercial fact of BitriPay's,
+// not part of a merchant's integration. Off until an administrator switches the corridor network on.
+v1ExtRouter.get('/corridors', requireAuth, requireModule('corridorNetwork'), requireScope('payment_intents:read', 'routes:read'), (req, res) => {
+  const requested = req.query.status ? String(req.query.status) : null;
+  const corridors = listNetworkCorridors(requested === 'live' || requested === 'sandbox' ? { status: requested } : {})
+    .filter((c) => c.status === 'live' || c.status === 'sandbox')
+    .map((c) => ({
+      code: c.code,
+      name: c.name,
+      source: { country: c.sourceCountry, currency: c.sourceCurrency },
+      destination: { country: c.destCountry, currency: c.destCurrency },
+      settlement_currency: c.settlementCurrency,
+      status: c.status,
+      collection_rails: c.collectionRails,
+      payout_rails: c.payoutRails,
+      limits: { per_payment_minor: c.limits.perPaymentMinor, per_day_minor: c.limits.perDayMinor, per_month_minor: c.limits.perMonthMinor, currency: c.limits.currency },
+    }));
+  res.json({ data: corridors });
+});

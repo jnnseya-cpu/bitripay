@@ -28,6 +28,13 @@ export interface ModuleFlags {
   openBanking: boolean;
   /** Restricted-purpose wallets (issuer function). */
   restrictedWallets: boolean;
+  /**
+   * Corridor network: the regulatory posture of a corridor, counterparty positions and settlement, treasury
+   * prefunding, ISO 20022 with a sponsor bank, safeguarding evidence, corridor P&L, phase gates. It describes
+   * capabilities that depend on authorisations and partners that do not exist yet, so unlike every other flag it is
+   * **off unless an administrator switches it on** — including on a platform whose stored flags predate it.
+   */
+  corridorNetwork: boolean;
 }
 
 export const DEFAULT_MODULES: ModuleFlags = {
@@ -54,6 +61,7 @@ export const DEFAULT_MODULES: ModuleFlags = {
   creditScore: true,
   openBanking: true,
   restrictedWallets: true,
+  corridorNetwork: false,
 };
 
 /** Stored flags may predate a key: an absent key means "on", exactly as the console shows it. */
@@ -69,6 +77,7 @@ export const getModules = (): ModuleFlags => ({ ...DEFAULT_MODULES, ...getSettin
  */
 export const AGGREGATOR_PERIMETER_ON: (keyof ModuleFlags)[] = ['qrPayments', 'paymentLinks', 'moneyRequests', 'merchantGateway', 'kyc', 'support', 'liveChat'];
 export const AGGREGATOR_PERIMETER_OFF: (keyof ModuleFlags)[] = [
+  'corridorNetwork',
   'transfers',
   'addMoney',
   'withdrawals',

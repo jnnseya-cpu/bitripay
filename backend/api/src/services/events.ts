@@ -15,7 +15,23 @@ export interface Actor {
   id?: string | null;
 }
 export type EventStream =
-  'payment' | 'auth' | 'evidence' | 'approval' | 'ledger' | 'admin' | 'risk' | 'route' | 'payout' | 'liquidity' | 'corridor' | 'chargeback' | 'issuance' | 'switch' | 'reconciliation';
+  | 'payment'
+  | 'auth'
+  | 'evidence'
+  | 'approval'
+  | 'ledger'
+  | 'admin'
+  | 'risk'
+  | 'route'
+  | 'payout'
+  | 'liquidity'
+  | 'corridor'
+  | 'chargeback'
+  | 'issuance'
+  | 'switch'
+  | 'reconciliation'
+  /** Corridor network: posture, counterparties, settlement batches, treasury, safeguarding. */
+  | 'network';
 
 export interface EventRow {
   seq: number;

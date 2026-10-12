@@ -485,6 +485,13 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
 - **SDKs and docs**: `shared/sdk-node` (`@bitripay/sdk`, zero dependencies, typed resources, webhook
   verification), `shared/sdk-php` (`bitripay/sdk`), `shared/sdk-python` (`bitripay`); the OpenAPI 3.1 document
   at `/api/v1/openapi.json` is generated from the same operation table the portal shows.
+- **Corridor network** (module `corridorNetwork`, off by default): the regulatory posture of each corridor — phase,
+  regulatory mode, licence basis, custody model, rails, limits and the settlement mechanisms permitted on it —
+  together with the counterparties that hold the money, their positions and settlement batches under four eyes,
+  treasury forecasting and prefunding, the ISO 20022 file exchange with a sponsor bank, the daily safeguarding
+  evidence an issuer must keep, corridor profitability and the phase gates. It adds posture and settlement on top of
+  the corridors, liquidity accounts, ledger and e-money engine that already exist; it replaces none of them.
+  `docs/CORRIDOR-NETWORK.md` maps every section of the build specification to what it became here.
 - **API reference** (`/v1/docs`, `/api/v1/docs`, `/developers/api`): the same document rendered for a person —
   operations grouped by tag with their scope, their idempotency requirement, their parameters, their body fields
   and accepted values, their responses and a copy-ready `curl`, followed by the webhook catalogue, the error
