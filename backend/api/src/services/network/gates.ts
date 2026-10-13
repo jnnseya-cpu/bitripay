@@ -213,9 +213,13 @@ export function setQuestionStatus(refOrId: string, status: QuestionStatus, admin
   return getQuestion(q.id);
 }
 
-/** The questions still open for a phase: what must be answered before that phase is built. */
-export function blockingQuestions(phase: number): NetworkQuestion[] {
-  return listQuestions({ phase }).filter((q) => q.status !== 'answered');
+/**
+ * The questions still open for a phase: what must be answered before that phase is built. `within` lets a caller
+ * that has already read the register filter it rather than query again.
+ */
+export function blockingQuestions(phase: number, within?: NetworkQuestion[]): NetworkQuestion[] {
+  const list = within ?? listQuestions({ phase });
+  return list.filter((q) => q.phase === phase && q.status !== 'answered');
 }
 
 export interface PhaseReadiness {
@@ -238,7 +242,7 @@ export function phaseReadiness(): PhaseReadiness[] {
   return NETWORK_PHASES.map((p) => {
     const own = gates.filter((g) => g.phase === p.phase && g.kind === 'gate');
     const previous = gates.filter((g) => g.phase === p.phase - 1 && g.kind === 'gate');
-    const open = questions.filter((q) => q.phase === p.phase && q.status !== 'answered');
+    const open = blockingQuestions(p.phase, questions);
     const previousUnmet = previous.filter((g) => g.status !== 'met');
     const blockedBy = [
       ...previousUnmet.map((g) => `Phase ${p.phase - 1} gate not met: ${g.criterion}`),
