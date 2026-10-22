@@ -35,6 +35,8 @@ export interface Feature {
   category: FeatureCategory;
   /** The flag that switches this on; null for the platform's own machinery, which is always present. */
   module: keyof ModuleFlags | null;
+  /** Other flags this same feature describes, so every module is covered without writing the same article twice. */
+  alsoCovers?: (keyof ModuleFlags)[];
   /** One sentence: what this does that the alternatives do not. */
   usp: string;
   /** A short line for a card or a list. */
@@ -2579,6 +2581,1163 @@ This is a deliberate line. A simulator that could be mistaken for a certified co
 Aggregation fees on switch payments are accrued per completed payment and invoiced per period and per currency.
 
 They are never posted onto the payment itself. The payment amount is the payment amount; the fee is a separate, visible obligation on a statement. A merchant can see what they were charged without reverse-engineering it from a net figure.`,
+  },
+
+  {
+    key: 'virtual-cards',
+    name: 'Virtual cards',
+    slug: 'virtual-cards',
+    category: 'move',
+    module: 'virtualCards',
+    usp: 'A card number for the sites that only take cards, issued against your own balance, with the card details never stored by BitriPay in a form that could be taken from it.',
+    tagline: 'A card number, without a bank card.',
+    headline: 'The internet still asks for a card number',
+    excerpt: 'Half the internet refuses mobile money and demands sixteen digits. A virtual card issued against your own balance closes that gap, with a spending limit and no plastic to lose.',
+    audience: 'Anyone buying online who has a wallet but no bank card: freelancers paying for software, students paying fees, traders buying stock from foreign sites.',
+    problem:
+      'Mobile money is how people here pay each other, and it is not how the internet takes payment. A great many online services simply cannot be bought without a card number, whatever else you hold.',
+    how: [
+      'Create a card against your balance and set a limit for it.',
+      'Use it where a card number is required.',
+      'Each payment is authorised against the balance behind it, so it cannot spend money you do not have.',
+      'Freeze or destroy the card at any moment; the balance stays with you.',
+    ],
+    proof: [
+      'Card details are handled so that BitriPay does not retain the sensitive values in a form that could be taken from it.',
+      'A card is backed by your balance, so a card payment cannot exceed what is actually there.',
+      'A card can be frozen or destroyed instantly, and destroying it does not touch the money behind it.',
+      'A separate card per subscription confines a leak or a rogue merchant to that one card.',
+    ],
+    cost: 'Card issuance and usage are priced in the dashboard before you create one, including any foreign-currency charge, so the cost of a purchase is known before it is made.',
+    faq: [
+      {
+        question: 'Why would I use several cards?',
+        answer:
+          'One per subscription confines any problem to one card. A leak, a merchant that will not let you cancel, a price rise you did not agree to — destroy that card and the problem ends, without touching anything else you pay for.',
+      },
+      {
+        question: 'Can it go overdrawn?',
+        answer: 'No. Each payment is authorised against the balance behind the card, so it cannot spend money that is not there. The failure mode is a declined card, not a debt.',
+      },
+      {
+        question: 'I lost my phone.',
+        answer: 'Freeze the card from any other device you can sign in on. A virtual card has no plastic to lose, which is most of its security advantage over the alternative.',
+      },
+    ],
+    keywords: ['virtual card', 'online shopping without bank card', 'card from mobile money', 'prepaid virtual card', 'card for subscriptions'],
+    related: ['wallets-and-transfers', 'restricted-wallets', 'add-money'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `The internet was built on card numbers and has never really got over it.
+
+You can hold a perfectly good balance, usable at every shop in your city, and still be unable to buy a software subscription, a plane ticket or a textbook, because the checkout wants sixteen digits and a date.
+
+## The gap
+
+Mobile money is how people here pay each other. It is not how the internet takes payment. Those two sentences describe most of the frustration of being online in this region with money that works everywhere except where you need it.
+
+A virtual card closes the gap. It is a card number issued against your own balance — no bank account, no credit check, no plastic.
+
+## It cannot go overdrawn
+
+Each payment is authorised against the balance behind the card. There is nothing to spend beyond what is there.
+
+The failure mode is a **declined card**, which is annoying for an afternoon. The alternative failure mode, on a credit product, is a **debt**, which is a different kind of problem entirely.
+
+For most people, a card that can be declined is considerably safer than one that cannot.
+
+## Use more than one
+
+This is the habit worth forming: a separate card for each subscription.
+
+One card for your software. One for the streaming service. One for the site you are not sure about.
+
+Then when something goes wrong — a leak, a merchant that makes cancelling impossible, a price rise nobody agreed to — you destroy **that** card. The problem ends immediately and nothing else you pay for is disturbed.
+
+Compare that with a single bank card feeding fifteen subscriptions, where cancelling one thing means replacing the card and re-entering it in fourteen places.
+
+## Freeze from anywhere
+
+Lost your phone? Freeze the card from any device you can sign in on.
+
+There is no plastic to lose in the first place, which removes an entire category of risk that the physical version carries by design.
+
+## About the card details
+
+Card data is handled so that BitriPay does not retain the sensitive values in a form that could be taken from it.
+
+That is a deliberately precise sentence. The strongest security claim anyone can honestly make about stored card data is that they are not storing the part that matters — and any company telling you their stored card data is unbreakable is telling you something nobody can know.
+
+## What it costs
+
+Issuance and usage are priced in the dashboard before you create a card, including any foreign-currency charge. You know what a purchase costs before you make it.`,
+  },
+
+  {
+    key: 'restricted-wallets',
+    name: 'Restricted wallets',
+    slug: 'restricted-wallets',
+    category: 'move',
+    module: 'restrictedWallets',
+    usp: 'Money that can only be spent on what it was given for, enforced at the posting rather than trusted to the recipient — so a school allowance buys school things.',
+    tagline: 'Give money for a purpose, not just to a person.',
+    headline: 'Giving money that can only be spent on what it was meant for',
+    excerpt:
+      'Parents, employers, NGOs and government programmes all face the same problem: money given for one thing gets spent on another. A wallet that refuses the wrong purchase solves it without anybody checking receipts.',
+    audience: 'Parents sending allowances, employers paying expenses, NGOs distributing aid, government programmes and cooperatives.',
+    problem: 'Money given for school fees, medicine or seed is fungible the moment it lands. The usual controls are receipts collected afterwards, which is slow, humiliating and easy to defeat.',
+    how: [
+      'Create a restricted wallet and say what it may be spent on — which merchants, which categories.',
+      'Fund it like any other wallet.',
+      'A purchase outside the restriction is refused at the posting, not flagged afterwards.',
+      'The holder sees what the wallet is for, so a refusal is understood rather than mysterious.',
+    ],
+    proof: [
+      'The restriction is enforced as a posting policy, so a purchase outside it is refused rather than recorded and reviewed later.',
+      'The holder can see the restriction, so a refusal explains itself instead of looking like a fault.',
+      'A restricted wallet is a wallet on the same ledger, with the same statements and the same reconciliation.',
+      'Restrictions are configuration on the wallet, so a programme can change what is permitted without a release.',
+    ],
+    cost: 'No charge for creating or holding restricted wallets. Payments from them carry the ordinary rate.',
+    faq: [
+      {
+        question: 'Is this not paternalistic?',
+        answer:
+          'It can be, and whoever creates the wallet should think about that. It is also what makes some money exist at all: an employer, a donor or a programme that cannot give cash can often give restricted funds. The alternative is frequently nothing rather than unrestricted money.',
+      },
+      {
+        question: 'What does the holder see?',
+        answer:
+          'What the wallet is for. A refusal then explains itself — "this wallet is for school expenses" — instead of looking like a broken payment, which is the difference between a control and an indignity.',
+      },
+      {
+        question: 'Can the restriction be changed later?',
+        answer: 'Yes, by whoever administers the wallet. It is configuration, so a programme can widen or narrow what is permitted without waiting for a software release.',
+      },
+    ],
+    keywords: ['restricted wallet', 'purpose-bound money', 'allowance control', 'aid distribution', 'expense wallet'],
+    related: ['wallets-and-transfers', 'virtual-cards', 'savings'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `A parent sends a student money for fees and books. An employer advances money for travel. An NGO distributes money for seed before planting season.
+
+In every case the money is given **for** something, and the moment it lands it is just money.
+
+## The usual control, and why it fails
+
+Collect receipts afterwards.
+
+This is slow, it is humiliating for the recipient, it arrives far too late to change anything, and it is trivially defeated by anybody who wants to. It also poisons the relationship: the student is a suspect, the employee is audited, the farmer is inspected.
+
+## Refuse at the posting
+
+A restricted wallet carries what it may be spent on — which merchants, which categories.
+
+A purchase outside that is **refused at the posting**. Not recorded and reviewed. Not flagged for somebody to chase next month. Refused, at the moment, before anything moves.
+
+Nobody collects receipts because there is nothing to check. The control happened instead of the purchase.
+
+## The holder knows
+
+This is the part that decides whether the feature is dignified or insulting.
+
+The holder of the wallet can see what it is for. So when a purchase is refused, the phone says *this wallet is for school expenses* — and the person understands immediately, rather than standing at a counter with a payment that failed for no visible reason.
+
+A control the subject can see is a rule. One they cannot is a trap.
+
+## It is honestly paternalistic
+
+Worth saying plainly, because pretending otherwise would be dishonest.
+
+Restricting how somebody may spend money is a constraint on them, and whoever creates the wallet should think about whether it is warranted.
+
+The counter-argument is simply that restricted money frequently exists where unrestricted money does not. An employer who cannot hand over cash can often give an expense wallet. A donor with reporting obligations can fund a restricted programme and not an unrestricted one. For the recipient the real comparison is usually not *restricted money versus free money* — it is *restricted money versus nothing*.
+
+## Still an ordinary wallet
+
+A restricted wallet sits on the same ledger as every other, with the same statements and the same reconciliation. The restriction is a policy on the posting, not a separate system with its own books.
+
+## What it costs
+
+Nothing to create or hold. Payments from them carry the ordinary rate.`,
+  },
+
+  {
+    key: 'savings',
+    name: 'Goal savings',
+    slug: 'goal-savings',
+    category: 'move',
+    module: 'savings',
+    usp: 'Savings kept in a separate balance with a named goal, so the money is out of the way of daily spending — and described honestly as a set-aside balance rather than an interest-bearing account.',
+    tagline: 'Money with a name on it.',
+    headline: 'Saving works better when the money is out of reach',
+    excerpt: 'The hardest part of saving is not earning more; it is not spending what you have already set aside. A separate balance with the goal written on it does most of that work.',
+    audience: 'Anyone saving for something specific: school fees, stock, a deposit, a wedding, an emergency fund.',
+    problem: 'Money saved inside a spending balance gets spent. Not through weakness — through the ordinary arithmetic of a difficult week, where the money is right there and the need is right now.',
+    how: [
+      'Create a goal with a name and, if you want, a target.',
+      'Move money into it; it leaves your spendable balance.',
+      'The goal shows what has been set aside and how close it is.',
+      'Take it back whenever you need to — it is your money, held aside, not locked away.',
+    ],
+    proof: [
+      'A goal balance is held apart from the spendable balance, so it does not appear as money available to spend.',
+      'It is on the same ledger with the same statements — saving is a set-aside, not a separate product with separate books.',
+      'The money is yours and withdrawable; nothing is locked and nothing is lent out.',
+      'A goal is described as a set-aside balance, not as an interest-bearing or investment account, because it is not one.',
+    ],
+    cost: 'Free to create and hold. Moving money in and out of a goal is a movement within your own account.',
+    faq: [
+      {
+        question: 'Does it pay interest?',
+        answer:
+          'No, and we will not imply otherwise. It is a set-aside balance: your own money, held apart from your spending balance so that it is harder to spend by accident. Anything describing a product like this as earning returns is describing something different.',
+      },
+      {
+        question: 'Can I take it out early?',
+        answer: 'Whenever you like. It is your money. The separation is psychological and practical, not a lock — and a savings product that traps people is not one we want to run.',
+      },
+      {
+        question: 'Why does a separate balance help at all?',
+        answer:
+          'Because the hardest moment in saving is a difficult Tuesday when the money is visible in the same place you pay for lunch. Moving it somewhere with a name on it adds a deliberate step, and a deliberate step is usually enough.',
+      },
+    ],
+    keywords: ['savings goal', 'set money aside', 'save for school fees', 'savings wallet', 'emergency fund'],
+    related: ['wallets-and-transfers', 'restricted-wallets'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `Almost nobody fails to save because they do not know they should. They fail on a Tuesday, when something is needed now and the money set aside is sitting in the same balance they pay for lunch from.
+
+That is not weakness. It is arithmetic. The money is there, the need is real, and the saving was never defended by anything except intention.
+
+## A name and a different place
+
+A goal is a separate balance with a name on it: *school fees*, *new freezer*, *emergency*.
+
+Money you move into it leaves your spendable balance. It does not show up when you are deciding what you can afford, because it is not, in the sense that matters, available.
+
+That is almost the entire mechanism, and it works better than it has any right to. The step of deliberately taking money **back out** of the goal is enough friction to make most people stop and think — and stopping to think is the whole battle.
+
+## Nothing is locked
+
+You can take it back whenever you want. It is your money.
+
+The separation is practical and psychological, not a lock. A savings product that traps people is a product that makes money from their emergencies, and that is not a business worth being in.
+
+## It does not pay interest, and we will not imply it does
+
+A goal is a **set-aside balance**: your own money, held apart from your spending balance.
+
+It does not earn interest. It is not invested. It is not lent out while you are not looking.
+
+Anybody describing a product like this with words like *returns*, *growth* or *yield* is describing something materially different, and the difference will eventually matter to somebody who did not read carefully.
+
+## Same ledger, same statements
+
+A goal is on the same ledger as everything else, with the same statements and the same reconciliation. It is a set-aside, not a separate product with separate books that have to be kept in step.
+
+## How to actually use it
+
+Two things work better than any feature:
+
+**Move money the day it arrives**, not at the end of the week. What is still there on Friday was never really saved.
+
+**Give it a specific name.** *School fees, January* defends itself on a difficult Tuesday in a way that *savings* does not.
+
+## What it costs
+
+Nothing to create or hold.`,
+  },
+
+  {
+    key: 'bills-and-topup',
+    name: 'Bills, airtime and vouchers',
+    slug: 'bills-airtime-and-vouchers',
+    category: 'move',
+    module: 'billPay',
+    alsoCovers: ['mobileTopup'],
+    usp: 'Fulfilment that is confirmed by evidence from the biller or the operator before it is called done, with the money returned automatically when the confirmation never comes.',
+    tagline: 'Paid means confirmed, not attempted.',
+    headline: 'When a bill payment fails, where does the money go?',
+    excerpt:
+      'Buying airtime or paying a bill is the commonest digital transaction there is, and the commonest place money gets stuck. Confirming on evidence — and returning it automatically when evidence does not arrive — is the whole feature.',
+    audience: 'Anyone paying a utility, buying airtime or data, or topping up somebody else’s phone.',
+    problem:
+      'The money leaves, the airtime does not arrive, and the customer is told to wait and then to contact the operator. The transaction sits in limbo because nothing in the system decides what to do about it.',
+    how: [
+      'Choose the biller or operator, the account or number and the amount.',
+      'The screen shows the total including any charge, before you confirm.',
+      'The payment completes when the biller or operator confirms fulfilment.',
+      'If confirmation does not arrive within the window, the money is returned rather than left pending.',
+    ],
+    proof: [
+      'Fulfilment is confirmed against evidence from the biller or the operator, not assumed from a successful request.',
+      'A transaction without confirmation is reversed by an opposing posting rather than left pending indefinitely.',
+      'The charge is shown before confirmation, so the total is known before the money moves.',
+      'The reference appears on the statement and on the fulfilment record, so a disputed top-up can be traced rather than argued about.',
+    ],
+    cost: 'The amount plus any charge, both shown before you confirm. Where a biller sets its own fee, it is shown as its own line.',
+    faq: [
+      {
+        question: 'I paid and the airtime never arrived.',
+        answer:
+          'If fulfilment was not confirmed within the window, the money is returned to your balance automatically and both the attempt and the return appear on your statement. If it shows as confirmed and the airtime is genuinely missing, the reference on the statement is what the operator needs to trace it.',
+      },
+      {
+        question: 'Can I top up somebody else’s number?',
+        answer: 'Yes. Enter their number instead of yours. The reference on your statement records which number was topped up, which settles most arguments about whether it was sent.',
+      },
+      {
+        question: 'Why is there sometimes a delay?',
+        answer:
+          'Because the payment waits for the biller or operator to confirm, rather than being marked done on a hopeful request. The wait is the reason the money is not lost when something goes wrong.',
+      },
+    ],
+    keywords: ['buy airtime', 'pay bills', 'mobile data top up', 'utility payment', 'failed airtime refund'],
+    related: ['wallets-and-transfers', 'add-money', 'disputes'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `Buying airtime is the commonest digital transaction in the region. It is also the commonest place that money quietly disappears for a week.
+
+The pattern is familiar to everybody: the balance goes down, the airtime does not arrive, the app shows *pending*, and somebody suggests you contact the operator.
+
+## Why it gets stuck
+
+Most systems treat the request as the event. They send the instruction, it is accepted, and they mark the payment done.
+
+But accepted is not fulfilled. If the operator never actually credits the number, there is now a transaction that the platform believes succeeded and the customer knows did not — and nothing in the system is responsible for resolving that disagreement.
+
+So it sits. Pending forever is not a state anyone designed; it is what you get when nobody decided what should happen.
+
+## Confirmed, or returned
+
+Here, the payment completes when the biller or the operator **confirms fulfilment**.
+
+And if confirmation does not arrive within the window, the money is **returned** — by an opposing posting, automatically, without anybody raising a ticket.
+
+Both the attempt and the return appear on your statement. You can see what happened rather than having to ask what happened.
+
+That is the entire feature. It is not clever. It is just the thing somebody has to decide in advance, and that most systems never do.
+
+## The total before you confirm
+
+The amount plus any charge is shown before the money moves. Where a biller sets its own fee, it is its own line rather than being folded into the total.
+
+You should not learn the cost of a transaction from your statement afterwards.
+
+## Topping up somebody else
+
+Enter their number instead of yours. Your statement records which number was topped up.
+
+That record settles the argument that follows roughly one top-up in fifty — *I sent it*, *I did not receive it* — with a fact instead of two memories.
+
+## When it genuinely goes wrong
+
+If a top-up shows as confirmed and the airtime is really missing, the reference on your statement is what the operator needs to trace it on their side.
+
+You are not asking them to take your word for it. You are giving them the reference their own system issued.
+
+## What it costs
+
+The amount, plus any charge, both shown before you confirm.`,
+  },
+
+  {
+    key: 'p2p-marketplace',
+    name: 'P2P marketplace',
+    slug: 'p2p-marketplace',
+    category: 'move',
+    module: 'p2p',
+    usp: 'Trades between people where the money is held in escrow until both sides have done their part, and a dispute goes to a human with the evidence already attached.',
+    tagline: 'Trade with a stranger, safely.',
+    headline: 'Trading with someone you have never met',
+    excerpt:
+      'Every peer-to-peer trade has the same standoff: whoever moves first can be cheated. Escrow removes the standoff, and a dispute process with the evidence already attached removes most of what follows it.',
+    audience: 'Anyone buying or selling between individuals: currency, goods, services, anything arranged between two people who do not know each other.',
+    problem: 'One side has to go first. Whoever that is carries all the risk, and the usual resolution — argue in a chat, then give up — favours whoever is most willing to behave badly.',
+    how: [
+      'Agree the trade and open it; the buyer’s money moves into escrow.',
+      'The seller can see the money is held, so they deliver.',
+      'The buyer confirms, and escrow releases to the seller.',
+      'If they disagree, it goes to a dispute where a person looks at the evidence attached to the trade.',
+    ],
+    proof: [
+      'Escrowed money is held on the ledger, not held as a promise — both sides can see it is there.',
+      'Release requires the buyer’s confirmation or a dispute decision; neither side can take it unilaterally.',
+      'A dispute carries the trade’s own evidence and history, so a reviewer is not reconstructing it from screenshots.',
+      'Counterparty history is visible, so a pattern of disputes is apparent before a trade rather than after.',
+    ],
+    cost: 'The fee for a completed trade is shown before you open it. A trade that is cancelled before delivery returns the escrowed money.',
+    faq: [
+      {
+        question: 'What stops the buyer taking the goods and refusing to confirm?',
+        answer:
+          'A dispute. Escrow does not release on silence — it goes to a person who reviews the evidence attached to the trade. A buyer who refuses to confirm a delivered trade is making a case they have to win rather than simply walking away with it.',
+      },
+      {
+        question: 'How is a dispute actually decided?',
+        answer: 'By a person, on the evidence attached to the trade and the history of both parties. It is not an algorithm, and it is not whoever complains loudest.',
+      },
+      {
+        question: 'Can I see who I am trading with?',
+        answer: 'You can see their trading history, including disputes. A pattern is visible before you trade, which is considerably more useful than discovering it afterwards.',
+      },
+    ],
+    keywords: ['p2p trading', 'escrow payment', 'peer to peer marketplace', 'safe trade with stranger', 'dispute resolution'],
+    related: ['disputes', 'wallets-and-transfers', 'kyc-and-identity'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `Every trade between two people who have never met contains the same standoff.
+
+If the buyer pays first, the seller can keep the money. If the seller delivers first, the buyer can keep the goods. Somebody has to go first, and whoever it is carries all of the risk.
+
+The usual resolution is an argument in a chat window followed by one party giving up, which systematically favours whoever is most comfortable behaving badly.
+
+## Escrow removes the standoff
+
+The buyer’s money moves into escrow when the trade opens. It is held on the ledger — genuinely held, not promised — and **both sides can see it is there**.
+
+The seller is no longer being asked to trust the buyer. They can see the money. So they deliver.
+
+The buyer confirms, and escrow releases.
+
+Neither side can take it unilaterally, which is the property that makes the whole thing work.
+
+## Silence is not a strategy
+
+The obvious attack: the buyer takes delivery and simply never confirms.
+
+Escrow does not release on silence. It goes to a **dispute**, where a person reviews it.
+
+So a buyer in that position is not quietly walking away with goods and money. They are making a case, in front of somebody, that they have to win. That changes the arithmetic of trying it.
+
+## Disputes with the evidence already there
+
+A dispute carries the trade’s own history and the evidence attached to it. A reviewer is not reassembling events from screenshots sent by two people with opposite interests.
+
+It is decided by a **person**, on that evidence and on the history of both parties. Not by an algorithm, and not by whoever complains most persistently.
+
+## History is visible before you trade
+
+You can see a counterparty’s trading history, including disputes.
+
+A pattern is apparent **before** you trade. Most bad actors are not clever; they are repetitive, and repetition is visible when history is.
+
+## When to use it
+
+Any trade with somebody you do not know and have no way to pursue if it goes wrong — currency, goods, services, anything arranged between two individuals.
+
+For a trade with your cousin, this is overhead. For one arranged in a group chat with a stranger, it is the difference between a trade and a hope.
+
+## What it costs
+
+The fee for a completed trade is shown before you open it. A trade cancelled before delivery returns the escrowed money.`,
+  },
+
+  {
+    key: 'open-banking',
+    name: 'Bank connections',
+    slug: 'bank-connections',
+    category: 'move',
+    module: 'openBanking',
+    usp: 'Linking a bank account to pay by bank and to verify income, with consent that is explicit, scoped and revocable from inside the app rather than buried on somebody else’s site.',
+    tagline: 'Your bank data, on your terms.',
+    headline: 'Connecting a bank account without signing away the keys',
+    excerpt: 'Bank connections let you pay by bank and prove income without uploading statements. The question worth asking is what you consented to, for how long, and how you take it back.',
+    audience: 'Anyone with a bank account who wants to fund from it, pay from it, or prove their income without printing anything.',
+    problem: 'Bank connections are usually agreed once, in a hurry, on a screen nobody reads, with no clear way to see later what was shared or to stop it.',
+    how: [
+      'Link the account through your bank’s own authorisation.',
+      'The consent names what is shared and for how long.',
+      'Use it to pay by bank, or to verify income without uploading statements.',
+      'Revoke it from inside the app whenever you choose.',
+    ],
+    proof: [
+      'Consent is explicit, scoped and time-limited rather than open-ended.',
+      'It can be revoked from inside the app, not only on the bank’s site.',
+      'Income verification uses the connection rather than asking you to upload documents that then have to be stored somewhere.',
+      'A mandate for recurring collection is a separate consent from reading the account, because they are different things.',
+    ],
+    cost: 'Linking is free. Where paying by bank carries a charge it is shown before you confirm.',
+    faq: [
+      {
+        question: 'What exactly can you see?',
+        answer:
+          'What the consent says, for the period it covers, and nothing else. The consent names the scope before you agree to it, and you can read it again afterwards rather than having to remember.',
+      },
+      {
+        question: 'How do I stop it?',
+        answer: 'Revoke it in the app. It should not require finding a setting on your bank’s website — a consent that is hard to withdraw is not really a consent.',
+      },
+      {
+        question: 'Is a mandate the same as letting you read my account?',
+        answer:
+          'No, and they are kept separate deliberately. Reading an account and being allowed to collect from it are different permissions, and agreeing to one should never quietly grant the other.',
+      },
+    ],
+    keywords: ['open banking', 'pay by bank', 'link bank account', 'income verification', 'revoke bank consent'],
+    related: ['add-money', 'credit-readiness', 'kyc-and-identity'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `A bank connection is genuinely useful. You can fund an account without typing a reference, pay directly from your bank, and prove your income without printing six months of statements and carrying them somewhere.
+
+It is also the permission people give with the least attention, on a screen designed to be clicked through.
+
+## Three questions worth asking
+
+Of any service asking to connect to your bank:
+
+1. **What exactly are you going to see?**
+2. **For how long?**
+3. **How do I stop it, and where is that button?**
+
+A service that cannot answer all three plainly has told you something about how it intends to use the answer.
+
+## Scoped and time-limited
+
+The consent names what is shared and for how long, before you agree, and you can read it again afterwards rather than relying on memory of a screen you saw once.
+
+Open-ended consent — everything, forever — is the industry’s default and it should not be.
+
+## Revocable where you are
+
+Revoke it **in the app**.
+
+Not by finding a buried page on your bank’s website. Not by emailing support and waiting. A consent that is hard to withdraw is not a consent; it is a signature you cannot take back, and the difficulty is usually deliberate.
+
+## Income without documents
+
+Verifying income through the connection means you do not upload bank statements — which also means nobody has to store those statements, and nobody can later lose them.
+
+The safest copy of a document is the one that was never made.
+
+## Reading is not collecting
+
+A **mandate** — permission to collect money from your account on a schedule — is a separate consent from reading the account.
+
+They are kept separate deliberately. Agreeing to let a service see your balance should never quietly include letting it take money, and anywhere those two are bundled into one tick box, somebody has made a choice you would not have made.
+
+## What it costs
+
+Linking is free. Where paying by bank carries a charge, it is shown before you confirm.`,
+  },
+
+  {
+    key: 'credit-readiness',
+    name: 'Credit readiness',
+    slug: 'credit-readiness',
+    category: 'trust',
+    module: 'creditScore',
+    usp: 'A signal built from your own payment history that you choose to share with a lender — not a score held about you, sold about you, and used to refuse you without explanation.',
+    tagline: 'Your history, shared on your terms.',
+    headline: 'Being invisible to lenders is not the same as being a bad risk',
+    excerpt:
+      'Millions of people with perfectly good payment histories cannot borrow, because their history is not written anywhere a lender can read. A signal you own and choose to share changes who can be seen.',
+    audience: 'Traders and small businesses who need working capital, and the lenders who cannot currently assess them.',
+    problem:
+      'A trader who has taken payments reliably for three years has a record of exactly that — and no way to show it to anybody. Lenders see no file and decline, not because the risk is bad but because it is unreadable.',
+    how: [
+      'Your payment history on the platform produces a readiness signal.',
+      'You see it, and what moves it.',
+      'You choose whether to share it with a specific lender.',
+      'The lender receives the signal you consented to share, not a file they hold about you.',
+    ],
+    proof: [
+      'The signal is informational and is described as such; it is not a credit bureau score and does not pretend to be.',
+      'It is shared only on your consent, with the party you choose, rather than sold on.',
+      'It is built from your own activity on the platform, which you can see in your own statements.',
+      'A lender’s access is scoped: reading a shared readiness signal is a specific permission, not general access to an account.',
+    ],
+    cost: 'Free to see and free to share. BitriPay does not sell it, and a lender’s own charges are a matter between you and them.',
+    faq: [
+      {
+        question: 'Is this a credit score?',
+        answer:
+          'No, and the distinction matters. A credit bureau score is held about you by somebody else and sold to people who ask. This is a signal from your own activity, that you see, and that you choose to share with a specific lender.',
+      },
+      {
+        question: 'Can it be used against me?',
+        answer: 'Only if you share it. If you never do, no lender receives it. That is the difference between a signal you control and a file that exists whether you like it or not.',
+      },
+      {
+        question: 'Will it get me a loan?',
+        answer:
+          'It is informational, not a decision. Lending is the lender’s decision on their own criteria. What this changes is whether you have anything to show at all — which for many people is the actual barrier.',
+      },
+    ],
+    keywords: ['credit readiness', 'alternative credit data', 'thin file borrower', 'working capital small business', 'share payment history'],
+    related: ['open-banking', 'kyc-and-identity', 'settlement-and-statements'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `A trader has taken payments six days a week for three years. Their takings are steady, their season is predictable, their customers come back.
+
+They apply for working capital and are declined in under a minute, because the lender has no file on them.
+
+The decline is not a judgement about the risk. It is a statement that the risk could not be read.
+
+## Invisible is not the same as bad
+
+This is the distinction the whole thing turns on, and it gets lost constantly.
+
+A thin file means **no information**. Lenders, reasonably, treat no information as risk — and so millions of people with genuinely good histories are indistinguishable from people with genuinely bad ones.
+
+The history exists. It is simply not written anywhere a lender can read.
+
+## A signal from your own activity
+
+Your payment history on the platform produces a readiness signal. You can see it, and you can see what moves it.
+
+That second part matters more than it sounds. A number you cannot influence and cannot interrogate is not information you can act on — it is a verdict.
+
+## You decide who sees it
+
+This is where it differs from a credit bureau, and the difference is the point.
+
+A bureau score is held **about** you by somebody else, and sold to whoever asks. You may not see it. You generally cannot correct it. You certainly did not agree to each disclosure.
+
+This signal is shared **only when you share it**, with the lender you choose. If you never share it, no lender receives it.
+
+Your data is not a product being sold over your head.
+
+## It is not a decision
+
+It is informational, and described as such.
+
+Lending remains the lender’s decision on their own criteria, and anyone promising that a score guarantees credit is misleading you.
+
+What changes is whether you have **anything to show at all**. For a trader who has been declined for three years because there was no file, that is not a marginal improvement. It is the whole barrier.
+
+## What it costs
+
+Free to see and free to share. BitriPay does not sell it. What a lender charges is between you and them.`,
+  },
+
+  {
+    key: 'gift-cards',
+    name: 'Gift cards and vouchers',
+    slug: 'gift-cards-and-vouchers',
+    category: 'move',
+    module: 'giftCards',
+    usp: 'A voucher that is a claim on the issuer recorded on the ledger, redeemable once and traceable — not a code in a message that may already have been spent by somebody else.',
+    tagline: 'A code that can only be spent once.',
+    headline: 'The problem with sending somebody a code',
+    excerpt:
+      'A voucher code in a message can be forwarded, screenshotted and redeemed by whoever gets there first. A voucher recorded on the ledger can be redeemed once, by one person, and you can see when it was.',
+    audience: 'Anyone giving money for an occasion, employers giving staff a bonus, businesses running promotions, and NGOs distributing value.',
+    problem: 'A voucher code is bearer value in plain text. Forwarded to a group, photographed over a shoulder or intercepted, it is gone — and nobody can prove who used it.',
+    how: [
+      'Issue a voucher for an amount, with an expiry if you want one.',
+      'It is recorded as a claim on the issuer, not just a string.',
+      'The holder redeems it into their balance; redemption happens once.',
+      'A second attempt is refused, and the record shows when and by whom it was redeemed.',
+    ],
+    proof: [
+      'A voucher is recorded on the ledger as a claim, so issuing it and redeeming it are postings rather than a database flag.',
+      'Redemption is single-use: a second attempt is refused rather than silently ignored.',
+      'The redemption record shows when it was redeemed and into which account.',
+      'Promotional value is tracked separately from customer e-money, because a marketing liability is not a redeemable claim and must not be counted as one.',
+    ],
+    cost: 'Issuing is priced in the dashboard before you create vouchers. Redeeming into a balance is free to the holder.',
+    faq: [
+      {
+        question: 'Somebody else used my code.',
+        answer:
+          'A voucher is bearer value, so whoever redeems it first gets it — which is exactly why it should be sent to one person rather than posted in a group. The record shows when it was redeemed and into which account, so it can at least be traced.',
+      },
+      {
+        question: 'Can a voucher be redeemed twice?',
+        answer: 'No. Redemption is single-use, and a second attempt is refused rather than quietly ignored. The failure is visible to whoever tried.',
+      },
+      {
+        question: 'Why is promotional value tracked separately?',
+        answer:
+          'Because credit you were given as a promotion is a marketing liability of the platform, and money you put in is a redeemable claim. Counting them together would overstate what customers are owed and understate what has to be backed.',
+      },
+    ],
+    keywords: ['gift card', 'voucher code', 'digital voucher', 'single use code', 'promotional credit'],
+    related: ['wallets-and-transfers', 'emoney-and-safeguarding', 'referrals'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `A voucher code is bearer value written in plain text. Whoever has the string has the money.
+
+That is fine when it travels from one person to one person. It is not fine in a group chat, in a photograph taken over a shoulder, or in a message forwarded once too often.
+
+## What goes wrong with a plain code
+
+The usual story: a code is posted somewhere slightly too public. Somebody who was not the intended recipient redeems it. The intended recipient finds an expired code and a conversation nobody can resolve, because there is no record of who used it.
+
+The code did its job perfectly. The job was simply never a safe one.
+
+## A claim on the ledger
+
+Here, a voucher is recorded as a **claim on the issuer** — a posting, not a flag in a table.
+
+Issuing it is a posting. Redeeming it is a posting. Both exist in the books, which means both can be examined later.
+
+## Redeemed once, visibly
+
+Redemption is single-use. A second attempt is **refused**, not silently ignored, so the person attempting it sees that it has already gone rather than wondering whether the app is working.
+
+And the record shows when it was redeemed and into which account.
+
+That does not undo a code posted in the wrong place — bearer value is bearer value — but it turns *somebody took it and we will never know* into a traceable fact.
+
+## Send it to a person
+
+The practical advice is dull and worth repeating: send a voucher to one person, in a message to that person.
+
+Not a group. Not a photograph. Not a caption. The security of a bearer instrument is entirely a matter of who can see it.
+
+## Promotional value is not your money
+
+Worth explaining, because it is the kind of accounting distinction that matters enormously and is invisible from outside.
+
+Credit the platform **gives** you as a promotion is a marketing liability of the platform. Money you **put in** is a redeemable claim backed by safeguarded funds.
+
+They are tracked separately. Counting them together would overstate what customers are owed and understate what has to be backed — and a platform that blurs them is a platform whose backing figure cannot be trusted.
+
+## What it costs
+
+Issuing is priced in the dashboard before you create vouchers. Redeeming into a balance is free to the holder.`,
+  },
+
+  {
+    key: 'referrals',
+    name: 'Referrals and growth',
+    slug: 'referrals',
+    category: 'operate',
+    module: 'referrals',
+    usp: 'Rewards that pay on a real outcome, not a signup, with the attribution and the reward both visible to the person who earned them.',
+    tagline: 'Paid for customers, not for clicks.',
+    headline: 'Referral programmes fail when they pay for the wrong thing',
+    excerpt:
+      'Pay for signups and you get signups: empty accounts, invented people, and a budget spent on nothing. Paying on a real outcome, with attribution anybody can audit, is the whole difference.',
+    audience: 'Merchants growing by word of mouth, agents building a customer base, influencers and partners with an audience.',
+    problem:
+      'A referral programme that pays on registration is an invitation to create registrations. The budget goes to whoever automates fastest, and the genuine referrer who brought three real customers gets the same as a script.',
+    how: [
+      'Share your referral link or code.',
+      'A person who joins through it is attributed to you.',
+      'The reward pays when the condition is met — an outcome, not an arrival.',
+      'You can see who was attributed and what was earned.',
+    ],
+    proof: [
+      'Attribution and rewards are visible to the referrer, so earnings can be checked rather than taken on trust.',
+      'Rewards are configured per programme and paid against the recorded outcome, not against a signup event.',
+      'Referred accounts go through the same identity checks as any other, so a referral cannot bypass verification.',
+      'Partner attribution is recorded for campaigns, so a channel’s real contribution is measurable rather than claimed.',
+    ],
+    cost: 'Rewards are paid by the programme that sets them. Referring costs nothing.',
+    faq: [
+      {
+        question: 'When do I actually get paid?',
+        answer: 'When the condition the programme sets is met — a real outcome rather than an arrival. The condition is visible before you refer anybody, so you are not guessing what counts.',
+      },
+      {
+        question: 'Can I see whether somebody used my link?',
+        answer: 'Yes. Attribution and earnings are visible to you, which is the only way a referral programme is checkable rather than something you hope is working.',
+      },
+      {
+        question: 'Do referred accounts skip verification?',
+        answer: 'No. A referred account goes through exactly the same identity checks as any other. A referral is a route in, not a shortcut past the controls.',
+      },
+    ],
+    keywords: ['referral programme', 'refer a friend', 'affiliate attribution', 'growth rewards', 'partner attribution'],
+    related: ['gift-cards', 'kyc-and-identity', 'agents-and-cash'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `Most referral programmes pay for a signup. Most referral budgets are therefore spent on signups, and signups are the cheapest thing in the world to manufacture.
+
+## What paying for arrivals buys you
+
+Empty accounts. Invented people. Real people persuaded to register who never return.
+
+The money goes disproportionately to whoever automates fastest, and the person who genuinely told three neighbours about something useful gets the same reward as a script — which is to say, they stop bothering.
+
+The programme has not failed because referrals do not work. It has failed because it was paying for the wrong event.
+
+## Pay on an outcome
+
+A reward here pays when the condition the programme sets is **met** — something real happening, not somebody arriving.
+
+The condition is visible before you refer anybody, so you are not guessing what counts and then feeling cheated.
+
+This is slower to pay. It is also the only version where the budget reaches the people actually growing the business.
+
+## Attribution you can check
+
+You can see who was attributed to you and what was earned.
+
+That sounds minor and is not. A referral programme whose workings are invisible to the referrer is one they have to take on trust, and people stop extending trust to systems that pay them unpredictable amounts for reasons they cannot inspect.
+
+If somebody used your link and you cannot see it, you will assume the system lost it — and you will be right often enough to stop referring.
+
+## Referrals do not skip the door
+
+A referred account goes through exactly the same identity checks as any other.
+
+This occasionally annoys referrers, who feel their recommendation should count for something. It should, and it does — but not as a shortcut past verification, because a referral route that bypassed controls would immediately become the preferred route for everybody with a reason to avoid them.
+
+## For partners and campaigns
+
+Partner attribution is recorded for campaigns, so a channel’s real contribution is measurable rather than claimed in a quarterly review by whoever presents most confidently.
+
+## What it costs
+
+Nothing to refer. Rewards are paid by the programme that sets them.`,
+  },
+
+  {
+    key: 'support',
+    name: 'Support and help',
+    slug: 'support',
+    category: 'operate',
+    module: 'support',
+    alsoCovers: ['liveChat'],
+    usp: 'Support that can see the same ledger and the same events you can, so an answer is read off the record rather than guessed — and cannot change your balance to make a problem go away.',
+    tagline: 'Answers from the record, not from guesswork.',
+    headline: 'Why support should not be able to fix your balance',
+    excerpt:
+      'The fastest way to resolve a complaint is to let an agent adjust the number. It is also how platforms lose the ability to trust their own books. Support that can read everything and change nothing is the harder, better answer.',
+    audience: 'Every customer who has had a payment go wrong, and every operator who has to answer for what their support team did.',
+    problem:
+      'Support teams under pressure are given tools to make problems go away. An agent who can adjust a balance can be socially engineered, can make mistakes, and leaves a platform unable to prove what actually happened.',
+    how: [
+      'Open a ticket, or chat where that is available.',
+      'The agent can see the payment, its attempts, its events and its state.',
+      'The answer is read from the record rather than estimated.',
+      'Where money genuinely needs to move, it is a posting under the ordinary controls — not an edit.',
+    ],
+    proof: [
+      'Agents read the ledger and the hash-chained event log; they cannot set a balance, because balances are derived from postings rather than stored.',
+      'A correction is a posting under the ordinary authority and maker-checker rules, so a fix is as auditable as the original.',
+      'Every payment carries its attempts and its state changes, so an agent can say what happened rather than what probably happened.',
+      'Administrative actions are written to the audit trail under the agent’s own name.',
+    ],
+    cost: 'Support is included. There is no paid priority queue that moves a customer with a broken payment behind one who paid more.',
+    faq: [
+      {
+        question: 'Why can support not just put the money back?',
+        answer:
+          'Because an agent who can set a balance can be talked into setting it by somebody who is not you, and because a platform whose balances can be edited cannot prove what it owes anybody. A genuine correction is a posting, under the same controls as any other movement.',
+      },
+      {
+        question: 'Will they actually know what happened to my payment?',
+        answer:
+          'They can see the payment, every attempt, every state change and the events around it. The answer comes from the record. Where the record genuinely does not say, they will tell you that rather than invent a reason.',
+      },
+      {
+        question: 'Is there a faster queue if I pay?',
+        answer: 'No. A broken payment is more urgent than a large account, and a priority queue that reorders those two is selling the wrong thing.',
+      },
+    ],
+    keywords: ['payment support', 'dispute a payment', 'customer service fintech', 'audit trail support', 'cannot edit balance'],
+    related: ['ledger', 'disputes', 'risk-and-compliance'],
+    cta: { label: 'Contact support', href: '/contact' },
+    article: `Every support team eventually gets asked the same question by its own management: why can you not just fix it?
+
+A customer is upset. The amount is small. The agent can see the problem. Giving them a button that adjusts the balance would end the call in thirty seconds.
+
+It is the single most tempting tool to build, and it should not exist.
+
+## What that button costs
+
+**It can be aimed at you.** An agent who can move balances is a target. Social engineering does not attack systems; it attacks people with permissions, under pressure, who want to be helpful.
+
+**It hides the real problem.** If a bug underpays customers and agents quietly top them up, the bug is never found. It is being paid for, invisibly, out of goodwill.
+
+**It destroys the books.** A platform whose balances can be edited cannot prove what it owes. Not to a regulator, not to an auditor, and ultimately not to itself.
+
+## Read everything, change nothing
+
+Support here can see the ledger, the payment, every attempt against it, every state change, and the hash-chained event log around it.
+
+They cannot set a balance — and not because of a permission flag that could be changed on a bad day. They cannot because **balances are not stored**. A balance is the sum of its postings. There is no number to set.
+
+## So what happens when you are genuinely owed money
+
+A posting. Under the ordinary authority and maker-checker rules, with a reason recorded and — for anything material — a second person approving.
+
+It is slower than a button. It is also auditable, reversible and attributable, which the button never was.
+
+## The answer comes from the record
+
+When you ask where your payment went, the agent is reading what happened: the attempts, the rail, the state changes, the timestamps.
+
+Not an estimate. Not *it is probably still processing*. And where the record genuinely does not say, you should be told that — an honest *we do not know yet, here is what we are doing* is worth more than a confident guess that turns out wrong.
+
+## Every action has a name on it
+
+Administrative actions are written to the audit trail under the agent’s own name.
+
+That protects you, and it protects them: an agent who did the right thing has a record proving it.
+
+## What it costs
+
+Nothing, and there is no paid priority queue. A broken payment is more urgent than a large account, and any system that reorders those two is optimising for the wrong customer.`,
+  },
+
+  {
+    key: 'bulk-payouts',
+    name: 'Bulk payouts',
+    slug: 'bulk-payouts',
+    category: 'operate',
+    module: null,
+    usp: 'A payout file that is validated before anybody approves it, approved as a batch, and reports per row — so one bad line does not fail the payroll and does not get paid twice on the retry.',
+    tagline: 'Pay a hundred people without a bad evening.',
+    headline: 'Paying many people at once, without paying anybody twice',
+    excerpt: 'Bulk payouts fail in two directions: the whole file stops because of one bad row, or the retry pays the good rows again. Validating first and reporting per row removes both.',
+    audience: 'Employers running payroll, NGOs distributing stipends, cooperatives paying members, platforms paying sellers.',
+    problem:
+      'A file of two hundred payments either fails entirely on one malformed line, or part-succeeds and leaves somebody guessing which half to re-run — and re-running the wrong half pays people twice.',
+    how: [
+      'Upload the file; it is validated and the errors are reported before anything is approved.',
+      'Fix the rows that are wrong and re-upload, or proceed without them.',
+      'Approve the batch; approval is a deliberate act, separate from uploading.',
+      'The batch executes and reports per row: paid, failed, with the reason.',
+    ],
+    proof: [
+      'The file is validated before approval, so errors are found while nothing has moved.',
+      'Outcomes are per row, so a failure is attributable to a line rather than to the file.',
+      'Approving is separate from uploading, so nobody pays two hundred people by pressing the wrong button once.',
+      'A batch has a bounded number of rows and a documented column layout, so a file either conforms or is rejected with a reason.',
+      'Batch events are published, so a payroll system can react to the outcome rather than polling somebody’s inbox.',
+    ],
+    cost: 'Payouts are priced individually at the ordinary rate for the rail; there is no separate charge for sending them as a batch.',
+    faq: [
+      {
+        question: 'One row failed. Do I re-run the file?',
+        answer: 'No — and this is the mistake that causes double payments. Outcomes are reported per row, so you re-run only the rows that failed. The file is not an all-or-nothing object.',
+      },
+      {
+        question: 'Who can approve a batch?',
+        answer: 'Approving is a separate action from uploading, so the person preparing payroll is not necessarily the person releasing it. For most organisations that separation is the point.',
+      },
+      {
+        question: 'What happens if my file is wrong?',
+        answer: 'You are told which rows and why, before anything is approved and before any money moves. Fix them and re-upload, or proceed without them.',
+      },
+    ],
+    keywords: ['bulk payouts', 'payroll payments', 'mass payout file', 'csv payout', 'stipend distribution'],
+    related: ['withdrawals', 'team-and-roles', 'webhooks'],
+    cta: { label: 'Open a merchant account', href: '/register?role=merchant' },
+    article: `Paying two hundred people at once has two classic failure modes, and most systems manage to have both.
+
+## Failure one: all or nothing
+
+Row 147 has a malformed phone number. The file is rejected.
+
+Nobody is paid. It is the 28th. The finance officer now has an evening ahead of them, and two hundred people have a worse one.
+
+## Failure two: the retry
+
+The file part-succeeds. A hundred and eighty people are paid, twenty are not, and the report says *completed with errors*.
+
+Somebody now has to work out which twenty. If they get it wrong and re-run the whole file, a hundred and eighty people are paid **twice** — and recovering an overpayment from someone who has already spent it is not a technical problem, it is a series of difficult conversations.
+
+## Validate before anybody approves
+
+The file is checked when it is uploaded, before approval and before anything moves.
+
+Errors are reported with the row and the reason. Fix them and re-upload, or proceed without them. This is a two-minute correction at a desk rather than an incident at eight in the evening.
+
+## Approval is a separate act
+
+Uploading and approving are different actions, so nobody pays two hundred people by clicking the wrong thing once.
+
+For most organisations this is also the control they actually want: the person who prepares payroll is not the person who releases it.
+
+## Outcomes per row
+
+Every row reports its own result: paid, or failed with a reason.
+
+So re-running means re-running **the rows that failed** — not the file. The double-payment failure mode simply does not arise, because there is no reason for anybody to resend a batch wholesale.
+
+## Events, not inboxes
+
+Batch outcomes are published as events, so a payroll system can react to them.
+
+Nobody should be refreshing a page to find out whether their staff were paid.
+
+## What it costs
+
+Payouts are priced individually at the ordinary rate for the rail. There is no surcharge for sending them together.`,
+  },
+
+  {
+    key: 'subscriptions',
+    name: 'Subscriptions and recurring billing',
+    slug: 'subscriptions',
+    category: 'operate',
+    module: null,
+    usp: 'Recurring collection on a mandate the customer confirmed, with dunning that retries on a published schedule and a cancellation that actually stops the money.',
+    tagline: 'Recurring revenue, without trapping anybody.',
+    headline: 'Recurring billing people do not have to fight to escape',
+    excerpt:
+      'Subscriptions fail twice: a payment that bounces loses a customer who wanted to stay, and a cancellation that does not work loses one for ever. Dunning fixes the first; honest cancellation prevents the second.',
+    audience: 'Anyone billing the same customers repeatedly: software, schools, gyms, insurance, service contracts, membership organisations.',
+    problem: 'A failed renewal usually ends a subscription that the customer intended to keep, and a cancellation that is hard to complete turns a lapsed customer into an angry one who tells people.',
+    how: [
+      'The customer confirms a mandate; that confirmation is what the collection rests on.',
+      'Invoices are raised on the plan’s schedule and collected from the wallet.',
+      'A failed collection enters dunning and is retried on a published schedule.',
+      'Cancellation stops the next collection — from the customer’s side, not only yours.',
+    ],
+    proof: [
+      'Collection rests on a mandate the customer confirmed, not on a card number kept on file.',
+      'A failed collection is retried on a published dunning schedule rather than being abandoned on the first failure.',
+      'Subscription lifecycle events — created, cancelled, invoice paid, payment failed — are published, so your system knows without polling.',
+      'Usage can be recorded against a subscription where a plan is metered rather than flat.',
+    ],
+    cost: 'Subscriptions carry the ordinary rate on the payments they collect. There is no separate charge for the schedule.',
+    faq: [
+      {
+        question: 'What happens when a payment fails?',
+        answer:
+          'It enters dunning and is retried on a published schedule. Most failed renewals are a temporary balance problem rather than a decision to leave, and abandoning on the first failure loses customers who wanted to stay.',
+      },
+      {
+        question: 'How does a customer cancel?',
+        answer:
+          'From their own side, and it stops the next collection. Cancellation that requires contacting support, or a phone call during office hours, is a dark pattern — it buys one more month and costs the relationship.',
+      },
+      {
+        question: 'Can I bill for usage rather than a flat amount?',
+        answer: 'Yes. Usage can be recorded against a subscription, so a metered plan invoices for what was actually used.',
+      },
+    ],
+    keywords: ['subscription billing', 'recurring payments', 'dunning retries', 'mandate', 'metered billing'],
+    related: ['payment-links', 'webhooks', 'developer-api'],
+    cta: { label: 'Read the API reference', href: '/developers/api' },
+    article: `Recurring revenue is the most attractive shape a business can have, which is why so many companies pursue it to the point of making their customers resent them.
+
+There are two failures worth designing against, and they pull in opposite directions.
+
+## The first failure: giving up too early
+
+A renewal fails. The balance was short that morning. The subscription is cancelled, access stops, and a customer who fully intended to keep paying is gone.
+
+Most failed renewals are not decisions. They are a Tuesday.
+
+**Dunning** is the fix: a failed collection is retried on a published schedule rather than abandoned on the first attempt. Spread across days, most of those payments simply succeed, and the customer never knows there was a problem.
+
+It is unglamorous and it is the single highest-return thing in recurring billing.
+
+## The second failure: not letting go
+
+The opposite temptation, and far more damaging: making cancellation difficult.
+
+Hide the button. Require a phone call. Only during office hours. Offer three retention screens before the real one.
+
+This works, in the sense that it buys one more month. It also produces a customer who tells everybody, and who will never come back — and increasingly, a regulator who takes an interest.
+
+**Cancellation here stops the next collection, from the customer’s own side.** No call, no retention maze, no support ticket.
+
+A business that only retains customers who cannot find the exit does not have recurring revenue. It has a countdown.
+
+## A mandate, not a stored card
+
+Collection rests on a **mandate the customer confirmed** — an explicit agreement to be charged on a schedule.
+
+That is a different thing from keeping a card number on file and hoping it still works. The customer agreed to the arrangement, can see it, and can end it.
+
+## Events, so your system knows
+
+Created, cancelled, invoice paid, payment failed — all published as events.
+
+Your product can suspend access when dunning finally fails, and restore it the moment a retry succeeds, without anybody polling anything.
+
+## Metered plans
+
+Usage can be recorded against a subscription, so a plan that charges for what was used invoices for what was used.
+
+## What it costs
+
+The ordinary rate on the payments collected. There is no charge for the schedule itself.`,
+  },
+
+  {
+    key: 'plugins-and-sdks',
+    name: 'SDKs and plugins',
+    slug: 'sdks-and-plugins',
+    category: 'build',
+    module: null,
+    usp: 'SDKs in three languages and a shop plugin generated against the same operation table as the API, so an SDK cannot describe a call the platform does not have.',
+    tagline: 'Start from working code, not from a specification.',
+    headline: 'The fastest integration is one you do not have to write',
+    excerpt:
+      'Most of an integration is the same every time: authentication, idempotency, signature verification, retries. SDKs and a shop plugin do that part, and they are built from the same table that serves the requests.',
+    audience: 'Developers who would rather ship this week, and shop owners who want a checkout without hiring one.',
+    problem:
+      'Every integration re-implements the same plumbing, and each re-implementation is a fresh opportunity to get webhook verification subtly wrong in a way that nobody notices until it matters.',
+    how: [
+      'Install the SDK for your language, or the plugin for your shop.',
+      'Authentication, idempotency and signature verification are handled for you.',
+      'Create an intent and handle the webhook with typed objects rather than raw JSON.',
+      'Test against the sandbox with the documented magic numbers before going near a real payment.',
+    ],
+    proof: [
+      'SDKs are generated against the same operation table that serves the requests, so they cannot describe a call the platform does not have.',
+      'Webhook signature verification is implemented in the SDK, which is where most hand-rolled integrations get it wrong.',
+      'The shop plugin ships in the repository rather than being distributed separately, so its version matches the API it was built against.',
+      'The Node SDK has no dependencies, so adding payments does not add a supply chain.',
+    ],
+    cost: 'Free. Open code in the repository, and no licence to use them.',
+    faq: [
+      {
+        question: 'Do I have to use an SDK?',
+        answer: 'No. The API is plain HTTP with JSON and is documented completely. The SDKs exist to save you from writing signature verification again, not to hide anything.',
+      },
+      {
+        question: 'Which languages?',
+        answer: 'Node, PHP and Python, plus a WooCommerce plugin for shops. The Node SDK deliberately has no dependencies.',
+      },
+      {
+        question: 'Will the SDK fall behind the API?',
+        answer:
+          'It is generated against the same operation table the API is served from, so it cannot describe a call that does not exist. Where a brand-new capability has not reached an SDK yet, the raw call always works.',
+      },
+    ],
+    keywords: ['payment sdk', 'woocommerce payment plugin', 'node payment library', 'php payment sdk', 'python payments'],
+    related: ['developer-api', 'webhooks', 'hosted-checkout'],
+    cta: { label: 'Read the API reference', href: '/developers/api' },
+    article: `Look at any two payment integrations and most of the code is identical.
+
+Authentication. Idempotency keys. Signature verification. Retries with backoff. Mapping errors onto something your application understands.
+
+None of that is your product. All of it has to be right.
+
+## The part that is always wrong
+
+Webhook signature verification is where hand-written integrations fail, and they fail quietly.
+
+Common mistakes, all seen in the wild: comparing signatures with a normal string comparison instead of a constant-time one; verifying against the parsed body rather than the raw bytes; forgetting to check the timestamp, which leaves replay wide open; checking the timestamp but never actually rejecting on it.
+
+Each of these produces an integration that works perfectly in testing and is wrong in a way that only matters on the day somebody is attacking you.
+
+The SDK does it correctly, once.
+
+## Generated from the same table
+
+The SDKs are generated against the same operation table that serves the requests and produces the documentation.
+
+So an SDK **cannot** describe a call the platform does not have. It is not a hand-maintained wrapper drifting slowly out of date behind the API — it is another rendering of the same thing.
+
+Where something brand new has not reached an SDK yet, the raw call always works. The SDK is a convenience, never a gate.
+
+## No dependencies
+
+The Node SDK has none.
+
+Adding payments to your project should not add a supply chain, a monthly round of advisories, and an upgrade you have to schedule. The fewer things you install to take money, the fewer things can go wrong in a way you did not choose.
+
+## For shops
+
+The WooCommerce plugin ships in the repository rather than being published separately, so its version matches the API it was built against.
+
+A shop owner installs it, enters a key, and takes payments. No developer required for the common case.
+
+## Test the failures first
+
+Every SDK works against the sandbox, and the sandbox publishes magic numbers for specific outcomes — including a timeout that later succeeds.
+
+Write your handler against that one first. It is the case that will find the bug in your retry logic, and it is much cheaper to find on a Tuesday afternoon than during your first busy weekend.
+
+## What it costs
+
+Nothing. Open code in the repository, no licence.`,
   },
 ];
 

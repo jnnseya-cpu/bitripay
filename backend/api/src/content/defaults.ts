@@ -103,9 +103,12 @@ export function ensureDefaultContent(): { pages: number; posts: number } {
   pages += retireOldMailboxes();
   let posts = 0;
   const day = 86_400_000;
-  // The launch articles, then one article per feature. Both are inserted only where the slug is absent, so an
-  // administrator's edits survive every boot and a new feature adds its article without disturbing the others.
-  const articles = [...DEFAULT_ARTICLES, ...featureArticles()];
+  // The feature articles are backdated behind the launch articles, so the blog's front page stays the human stories
+  // it was written to be rather than forty pages of feature marketing. The feature articles are reached from the
+  // /features hub, from their category and from the internal link rules. Both sets are inserted only where the slug
+  // is absent, so an administrator's edits survive every boot and a new feature adds its article without disturbing
+  // the others.
+  const articles = [...featureArticles(), ...DEFAULT_ARTICLES];
   articles.forEach((a, i) => {
     if (getDb().prepare('SELECT 1 FROM blog_posts WHERE slug = ?').get(a.slug!)) return;
     createPost({ ...a, status: 'published', source: 'seed', publishedAt: new Date(Date.now() - (articles.length - i) * 3 * day).toISOString() }, { type: 'system' });

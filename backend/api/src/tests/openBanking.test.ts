@@ -41,6 +41,9 @@ describe('open banking', () => {
     expect(tx.body.items).toHaveLength(5);
     const income = (await request(app).get('/api/open-banking/income').set(u.auth)).body.income;
     expect(income.confidence).toBe('high');
+    // Six whole months, whatever today's date is. A rolling day-count window used to yield five or six salary dates
+    // depending on the day of the month, which made this confidence drift with the calendar rather than the data.
+    expect(income.monthsCovered).toBe(6);
     expect(income.monthlyIncomeBase).toBeGreaterThan(0);
     expect(income.streams.some((s: any) => s.label.includes('EMPLOYER') && s.regular)).toBe(true);
     const r = computeReadiness(u.user.id);

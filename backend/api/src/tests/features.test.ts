@@ -50,10 +50,21 @@ describe('feature catalogue', () => {
         ).toBe(true);
   });
 
+  it('covers every module the platform has: no functionality is left without a feature', () => {
+    const covered = new Set<string>();
+    for (const f of FEATURES) {
+      if (f.module) covered.add(f.module);
+      for (const extra of f.alsoCovers ?? []) covered.add(extra);
+    }
+    const missing = Object.keys(DEFAULT_MODULES).filter((k) => !covered.has(k));
+    expect(missing, `modules with no feature: ${missing.join(', ')}`).toEqual([]);
+  });
+
   it('binds every gated feature to a real module flag', () => {
     for (const f of FEATURES) {
       if (f.module === null) continue;
       expect(Object.keys(DEFAULT_MODULES), `${f.key}`).toContain(f.module);
+      for (const extra of f.alsoCovers ?? []) expect(Object.keys(DEFAULT_MODULES), `${f.key} alsoCovers`).toContain(extra);
     }
   });
 

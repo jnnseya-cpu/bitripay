@@ -173,7 +173,10 @@ const sandboxBank: OpenBankingProvider = {
       balanceMinor: Math.round((300 + rand() * 2500) * 10 ** getCurrency(currency, false).decimals),
     }));
     const to = new Date();
-    const from = new Date(Date.now() - 180 * 86_400_000);
+    // Six WHOLE months, anchored to the first of the month. A rolling 180-day window lands mid-month and therefore
+    // contains five or six monthly salary dates depending on today's date, which makes the income confidence it
+    // produces drift between medium and high with the calendar rather than with the statements.
+    const from = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() - 6, 1));
     const transactions = accounts.flatMap((a) => sandboxStatement(link.id, a, from, to).map((t) => ({ ...t, externalId: `${a.id}:${t.externalId}` })));
     return { approved: true, consentToken: `sbx-consent-${shortCode(16)}`, consentExpiresAt: new Date(Date.now() + 90 * 86_400_000).toISOString(), accounts, transactions };
   },
