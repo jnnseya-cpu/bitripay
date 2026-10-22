@@ -12,12 +12,13 @@
  */
 import type { ModuleFlags } from '../services/modules';
 
-export type FeatureCategory = 'accept' | 'build' | 'move' | 'operate' | 'trust';
+export type FeatureCategory = 'accept' | 'build' | 'move' | 'reach' | 'operate' | 'trust';
 
 export const FEATURE_CATEGORIES: Record<FeatureCategory, { label: string; blurb: string }> = {
   accept: { label: 'Take the money', blurb: 'Every way a customer can hand money to a business, from a printed code on a wall to a hosted checkout.' },
   build: { label: 'Build on BitriPay', blurb: 'The API, the webhooks, the SDKs and the plugins that put payments inside somebody else’s product.' },
   move: { label: 'Move the money', blurb: 'What happens to money once it has arrived: wallets, transfers, payouts, cash and the journey across a border.' },
+  reach: { label: 'Reach everyone', blurb: 'The customers a payment platform normally gives up on: no smartphone, no data, no signal, no electricity, no reading.' },
   operate: { label: 'Run the business', blurb: 'The books, the settlement, the statements, the disputes and the people who look after them.' },
   trust: { label: 'Prove it', blurb: 'Identity, risk, the ledger’s own invariants and the evidence a regulator asks to see.' },
 };
@@ -2024,6 +2025,560 @@ A phase gate is met only against a **measurement** and the **evidence** behind i
 Alongside sit the open questions, each recording what it blocks. A board deciding whether to fund the next phase can see what is genuinely answered and what is still a hope.
 
 That is an uncomfortable document to maintain. It is a considerably more uncomfortable conversation to have without one.`,
+  },
+
+  // ------------------------------------------------------------------ reach
+  {
+    key: 'ussd-and-sms',
+    name: 'USSD and SMS',
+    slug: 'ussd-and-sms',
+    category: 'reach',
+    module: null,
+    usp: 'The same ledger, the same balances and the same limits reached from a feature phone with no data — not a reduced product for poorer customers, the same product through a different door.',
+    tagline: 'No smartphone. No data. Same account.',
+    headline: 'The customers everyone else designs out',
+    excerpt:
+      'Every payment product assumes a smartphone and a data bundle. Most of the people who most need digital money have neither. USSD and SMS are not a downgrade — they are the same account through a different door.',
+    audience: 'Anyone on a feature phone, anyone out of data, anyone in a place where the signal carries voice but not much else.',
+    problem:
+      'A product that requires an app and a data bundle has quietly decided who its customers are. In much of the region that decision excludes most of the market, and it excludes it permanently rather than temporarily.',
+    how: [
+      'Dial the short code from any phone, including a feature phone with no data.',
+      'Move through a numbered menu: balance, send, request, pay a code.',
+      'Confirm with the same PIN that guards the account in the app.',
+      'A command can also be sent by SMS, for places where even a session is unreliable.',
+    ],
+    proof: [
+      'USSD and SMS reach the same accounts, the same ledger and the same limits as the app — not a parallel system with its own balances.',
+      'The transaction PIN that protects the account in the app is the PIN that protects it over USSD.',
+      'A session that drops mid-flow does not leave a half-made payment: the posting either happened or it did not.',
+      'The command channel is simulated in the console, so a change can be tested without a handset.',
+    ],
+    cost: 'Operator charges for the session apply as they do for any USSD. BitriPay does not add a charge for using this door rather than the app.',
+    faq: [
+      {
+        question: 'Is this a cut-down version with lower limits?',
+        answer: 'No. Same account, same ledger, same limits, same PIN. The menu is smaller because a feature phone screen is smaller, not because the customer is worth less.',
+      },
+      {
+        question: 'My session dropped in the middle. Did I pay twice?',
+        answer: 'No. The posting either happened or it did not; there is no half-made payment. Check your balance and the last transaction, and you will see which.',
+      },
+      {
+        question: 'Why bother, when everyone is getting a smartphone?',
+        answer:
+          'Because "eventually" is not a payment strategy for somebody who needs to send money to their mother this afternoon. And a smartphone owner out of data is, for that afternoon, exactly the same customer.',
+      },
+    ],
+    keywords: ['ussd payments', 'feature phone mobile money', 'sms banking', 'send money without internet', 'ussd short code'],
+    related: ['bitripay-lite', 'offline-payments', 'agents-and-cash'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `Open almost any payment product’s onboarding and the first assumption is a smartphone. The second is a data bundle. Neither is stated, because neither is noticed.
+
+In much of the region BitriPay serves, those two unstated assumptions exclude most of the market.
+
+## The decision nobody writes down
+
+A product that requires an app has decided who its customers are. Not deliberately — nobody held a meeting about it — but the decision is made and it is permanent.
+
+The people excluded are not an edge case. They are the trader with a feature phone that lasts five days on a charge, the grandmother receiving money from her son, the rider whose data ran out on Tuesday and whose next bundle is Friday.
+
+They have money. They need to move it. They are not served.
+
+## Same account, different door
+
+USSD is the point here, and the point is worth stating precisely: **it is not a reduced product.**
+
+The same account. The same ledger. The same limits. The same transaction PIN that guards the account in the app.
+
+The menu is shorter because a feature phone screen is shorter. That is the whole difference. A customer on a feature phone is not worth less and does not get less.
+
+## Dropped sessions
+
+USSD sessions drop. The signal goes, the operator times out, somebody walks behind a wall.
+
+The question that matters is what happens to a payment that was halfway through. The answer is that there is no halfway: the posting either happened or it did not. Check the balance and the last transaction and you will know which.
+
+This is not special handling for USSD — it is what a balanced posting on a single ledger gives you for nothing. A payment that cannot be half-written cannot be half-written over a dropped session either.
+
+## SMS, for when even a session is too much
+
+Some places have a signal that carries a text and not much else. A command can be sent by SMS for exactly those places.
+
+It is the least elegant channel in the product and occasionally the only one that works.
+
+## And the smartphone owner with no data
+
+Worth saying, because it is easy to think of this as a feature for other people.
+
+A smartphone owner who has run out of data is, until Friday, exactly the same customer as somebody who has never owned one. The door that exists for one of them serves both.
+
+## What it costs
+
+The operator charges for the session, as they do for any USSD. BitriPay adds nothing for using this door rather than the app.`,
+  },
+
+  {
+    key: 'bitripay-lite',
+    name: 'BitriPay Lite',
+    slug: 'bitripay-lite',
+    category: 'reach',
+    module: null,
+    usp: 'A full web app that works with JavaScript switched off entirely, rendered on the server, so it loads on a slow connection and an old browser instead of showing a spinner.',
+    tagline: 'Works on the connection you actually have.',
+    headline: 'A payment app that works when the connection does not',
+    excerpt:
+      'A modern web app assumes megabytes of JavaScript and a connection that delivers them. Lite is the same account rendered on the server, no JavaScript at all, for the days the network is having one of those afternoons.',
+    audience: 'Anyone on a slow or expensive connection, an old phone, a cheap browser, or a network that is having a bad day.',
+    problem: 'A single-page app that fails to download is a blank screen. On a congested network that is not rare, and the customer concludes the service is broken rather than the connection.',
+    how: [
+      'Open the Lite address instead of the app.',
+      'Pages are rendered on the server and delivered as plain HTML.',
+      'Everything works through ordinary links and form submissions.',
+      'Nothing depends on JavaScript, so nothing breaks when it fails to arrive.',
+    ],
+    proof: [
+      'Lite is server-rendered and requires no JavaScript at all — not a degraded fallback, a working surface.',
+      'It reaches the same accounts and the same ledger as the full app.',
+      'Pages are small enough to arrive on a congested connection where a single-page bundle would not.',
+      'It works in browsers too old for a modern application framework.',
+    ],
+    cost: 'Free, and it uses markedly less data than the full app — which on a metered connection is the point.',
+    faq: [
+      {
+        question: 'Is it less secure because it is simpler?',
+        answer:
+          'No. The same sign-in, the same PIN, the same limits and the same server-side checks apply. Nothing about security lives in the JavaScript of the full app — if it did, that would be the problem, not Lite.',
+      },
+      {
+        question: 'Can I do everything in it?',
+        answer: 'The things that matter on a bad connection: balance, receiving, paying, requesting, and your statement. It is built for the afternoon when the network is bad.',
+      },
+      {
+        question: 'Why not just make the main app faster?',
+        answer: 'We do that too. But there is a level of connection below which no amount of optimisation delivers a megabyte of JavaScript, and above zero customers are at that level every day.',
+      },
+    ],
+    keywords: ['lightweight web app', 'no javascript web app', 'works on slow connection', 'low data payment app', 'server rendered app'],
+    related: ['ussd-and-sms', 'offline-payments', 'notifications'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `There is a particular failure that teaches customers a service is broken, and it is not an error message. It is a white screen.
+
+The application’s JavaScript did not finish downloading. Nothing rendered. There is nothing to read, nothing to tap and nothing to explain what went wrong.
+
+## Why it happens so often here
+
+A modern web application is a few megabytes of JavaScript that must arrive before anything appears on screen.
+
+On a good connection this is invisible. On a congested cell at five in the afternoon, on a bundle that has nearly run out, on a phone three generations old, it is a white screen for twenty seconds followed by a customer who has given up.
+
+Optimisation helps. It does not help below a certain floor, and a meaningful number of people are below that floor every single day.
+
+## Rendered where the computer is
+
+Lite is the same account, rendered on the server and delivered as plain HTML.
+
+No JavaScript. Not *degrades gracefully without JavaScript* — **none at all**. Ordinary links. Ordinary forms. The web as it worked before it needed a build step.
+
+A page arrives in kilobytes and renders the instant it lands. There is no bundle to wait for, because there is no bundle.
+
+## Not a lesser product
+
+It reaches the same accounts, the same ledger, the same balances. The same sign-in, the same PIN, the same limits, the same server-side checks.
+
+Nothing about the security of the full app lives in its JavaScript. If it did, that would be a defect in the full app rather than a reason to distrust Lite.
+
+## Old browsers
+
+Cheap phones ship with browsers that are already years behind, and they do not get updated. A framework that needs a current browser has excluded those customers as surely as if it had asked for a passport.
+
+Server-rendered HTML works in all of them, because it is the thing browsers have always done.
+
+## The data argument
+
+On a metered bundle, the difference between kilobytes and megabytes is not an engineering nicety. It is whether checking your balance costs you something you were saving for something else.
+
+## When to use it
+
+Keep the full app for ordinary days. Open Lite when the network is having one of those afternoons, when the bundle is nearly gone, or when you are using a phone that is not yours.
+
+It is the one that works when the other one does not.`,
+  },
+
+  {
+    key: 'offline-payments',
+    name: 'Offline payments',
+    slug: 'offline-payments',
+    category: 'reach',
+    module: null,
+    usp: 'A signed promise exchanged between two phones with no network at all, with counters and nonces so the same promise cannot be spent twice when the signal returns.',
+    tagline: 'Trade when the network is gone.',
+    headline: 'Paying when there is no network at all',
+    excerpt:
+      'Networks fail at exactly the wrong moments. A signed, counted promise exchanged between two phones lets a sale complete now and settle when the signal returns — without creating a way to spend the same money twice.',
+    audience: 'Traders in places with no reliable signal, markets that lose coverage at peak hours, anyone whose business stops when the network does.',
+    problem:
+      'When the network goes, digital payment stops and everybody falls back to cash. The obvious fix — let the phones agree and sync later — is also the obvious way to let somebody spend the same balance in four places.',
+    how: [
+      'The payer’s phone produces a signed promise carrying the amount, a nonce and a counter.',
+      'The merchant’s phone verifies the signature and records it, with no network involved.',
+      'Both sides see the payment as pending confirmation — and the screen says so rather than claiming it is done.',
+      'When either phone reaches a signal, promises are synchronised and settled, and gaps in the counter are visible.',
+    ],
+    proof: [
+      'A promise is signed by the payer’s enrolled device key, so it cannot be fabricated by the merchant’s phone.',
+      'Each promise carries a nonce and a per-device counter; a replayed promise is recognised and a missing counter value shows as a gap.',
+      'The pending state is shown to both sides in plain words rather than being presented as a completed payment.',
+      'Promises have an expiry, so an unsynchronised promise does not sit indefinitely as an open claim.',
+      'Counter gaps are listed per device, so a device that has stopped synchronising is visible rather than assumed healthy.',
+    ],
+    cost: 'No additional charge. The payment is priced as an ordinary payment when it settles.',
+    faq: [
+      {
+        question: 'What stops somebody spending the same money twice offline?',
+        answer:
+          'Each promise carries a nonce and a per-device counter. Replays are recognised, and a gap in the counter is visible when the device synchronises. It is not possible to make offline spending risk-free — which is why the exposure is bounded by limits and expiry, and why both sides are told the payment is pending rather than complete.',
+      },
+      {
+        question: 'Does the merchant have to trust the customer?',
+        answer:
+          'Less than with cash, and considerably less than with a screenshot. The promise is signed by the payer’s enrolled device and cannot be fabricated by the merchant’s phone — but it is a promise until it settles, and the screen says exactly that.',
+      },
+      {
+        question: 'What if a phone never comes back online?',
+        answer: 'Promises expire, and counter gaps per device are listed, so a device that has stopped synchronising is visible rather than quietly assumed to be fine.',
+      },
+    ],
+    keywords: ['offline payment', 'pay without internet', 'offline qr payment', 'signed payment promise', 'double spend offline'],
+    related: ['qr-payments', 'ussd-and-sms', 'bitripay-lite'],
+    cta: { label: 'Open an account', href: '/register' },
+    article: `Networks fail at the worst possible moments: market day, the hour before closing, the afternoon everyone is paid.
+
+When the signal goes, digital payment stops and everyone returns to cash — which is exactly when a trader is carrying the most of it.
+
+## The obvious fix and its obvious hole
+
+Let the two phones agree between themselves and synchronise later.
+
+This works beautifully until somebody realises they can make the same offline promise to four different merchants in four different parts of the market, and be gone before any of the phones find a signal.
+
+Offline payment is easy. Offline payment that is not a double-spend machine is the actual problem.
+
+## A signed, counted promise
+
+The payer’s phone produces a promise carrying the amount, a **nonce** and a **per-device counter**, signed by the device’s enrolled key.
+
+The merchant’s phone verifies that signature with no network at all. It cannot fabricate a promise, because it does not hold the payer’s key.
+
+The nonce means a replayed promise is recognised. The counter means a **gap** is visible: if a device synchronises promises 41, 42 and 44, somebody is holding 43 and the system knows to look for it.
+
+## The honest part
+
+You cannot make offline spending risk-free. Anybody claiming otherwise is selling something.
+
+What you can do is bound the exposure and tell the truth about it:
+
+- **Limits** cap how much can be promised offline before synchronising.
+- **Expiry** means an unsynchronised promise does not sit forever as an open claim.
+- **Counter gaps** are listed per device, so a phone that has stopped synchronising is visible rather than assumed healthy.
+- And both sides see the words **pending confirmation** rather than a green tick.
+
+That last one matters most. A merchant who knows a payment is a promise can decide whether to hand over the goods based on the size and the customer. A merchant shown a tick that means nothing has been lied to.
+
+## Which is still better than cash
+
+Cash on market day means carrying notes through a crowd and keeping them overnight. A signed promise from an enrolled device, pending confirmation, bounded by a limit, is a smaller risk than a full cash box — and considerably smaller than a screenshot on a stranger’s phone.
+
+## When the signal returns
+
+Promises synchronise and settle. Both sides see the payment move from pending to settled, and the merchant sees the money.
+
+The sale happened when the customer was standing there. The settlement happened when the network allowed it. Those are two different events, and the product does not pretend they are one.`,
+  },
+
+  {
+    key: 'notifications',
+    name: 'Alerts you cannot miss',
+    slug: 'alerts',
+    category: 'reach',
+    module: null,
+    usp: 'A loud alarm and a long vibration designed to be heard across a market and understood without reading, because the sound is the receipt a trader actually relies on.',
+    tagline: 'If there was no sound, there was no money.',
+    headline: 'Why the sound matters more than the screen',
+    excerpt:
+      'A trader with a queue does not read a notification. They hear one, or they do not. Making the alert loud, long and unmistakable is not polish — it is the control that stops screenshot fraud.',
+    audience: 'Market traders, riders, shopkeepers, agents — anyone taking payments with their hands full and their eyes elsewhere.',
+    problem:
+      'The standard fraud at a stall is a screenshot. The customer shows a convincing picture of a payment that never happened and walks off with the goods. A discreet notification is no defence; it was never seen.',
+    how: [
+      'A payment arrival plays a loud alarm and vibrates for several seconds, not a short chime.',
+      'The screen shows the amount in large figures, a green tick and the payer’s name.',
+      'The alert can be tested from settings, so the sound is familiar before it matters.',
+      'The same alert reaches the phone app, the web app and the payout device.',
+    ],
+    proof: [
+      'The alert is designed to be audible in a noisy market and to be understood without reading the screen.',
+      'It fires on the money arriving, not on a payment being started, so it cannot be triggered by a customer’s action alone.',
+      'It can be tested from settings, so a trader learns the sound before the first real payment.',
+      'The same event reaches every surface, so a merchant watching a till screen and a trader holding a phone hear the same thing.',
+    ],
+    cost: 'Included on every account and every surface. There is no premium tier that makes the alert louder, because an alert a trader cannot hear is not worth selling.',
+    faq: [
+      {
+        question: 'Can a customer fake the sound?',
+        answer:
+          'They can play a recording, which is why the sound comes from your phone and not theirs. Never accept a sound, a screen or a screenshot from the payer’s device — the alert that counts is the one your own phone makes.',
+      },
+      {
+        question: 'It is too loud / not loud enough.',
+        answer: 'Test it from settings and set the phone’s volume so you can hear it across your stall. Familiarity is the point: you should recognise it without looking.',
+      },
+      {
+        question: 'What if I genuinely did not hear it?',
+        answer: 'Check the transaction list before handing over goods. The rule is about what you can rely on in a hurry, not a reason to skip looking when you are unsure.',
+      },
+    ],
+    keywords: ['payment alert', 'loud payment notification', 'screenshot fraud', 'merchant payment confirmation', 'mobile money alert'],
+    related: ['qr-payments', 'point-of-sale', 'agents-and-cash'],
+    cta: { label: 'Open a merchant account', href: '/register?role=merchant' },
+    article: `A trader with six people in the queue does not read notifications. Their hands are full, their eyes are on the goods and the money, and the phone is somewhere on the table.
+
+They hear a sound, or they do not.
+
+## The fraud this exists to stop
+
+It is the simplest one in the market, and it works constantly.
+
+The customer taps at their phone for a moment, turns the screen around, and shows a convincing picture of a completed payment. The trader is busy. The picture looks right. The goods go across the table.
+
+The picture was a screenshot of somebody else’s payment, or an edited image, or a payment to a different number entirely.
+
+A discreet notification is no defence at all against this, because the discreet notification was never seen.
+
+## Loud, long, and from your own phone
+
+The alert is a genuine alarm and a vibration lasting several seconds. The screen shows the amount in large figures, a green tick and the payer’s name.
+
+It is designed to be heard across a noisy market and understood without reading, because a significant number of the people relying on it do not read easily, and none of them are looking at the screen when it matters.
+
+## One rule, for everybody
+
+> If there was no sound, there was no money.
+
+That is the whole of it, and it fits on a sign above a stall.
+
+Not a screenshot. Not the customer’s screen. Not *it has gone through, I promise*. Not a message from a number you do not know. **Your** phone makes the sound, or no money has arrived.
+
+## Why your phone and not theirs
+
+Anything the payer’s device shows you is a thing the payer controls — a screenshot, a recording, an edited image, a lookalike app.
+
+The alert that counts is the one your own phone makes, because that one comes from the payment actually arriving.
+
+## Test it before you need it
+
+There is a test alert in settings. Use it. Set your volume so you can hear it from the far end of your stall.
+
+The point is familiarity: you should know that sound without looking up, the way you know the sound of your own name.
+
+## Everywhere at once
+
+The same event reaches the phone app, the web app and the payout device, so a shopkeeper watching a till and a trader holding a phone are hearing the same thing about the same money.
+
+## What it costs
+
+Nothing. It is the receipt.`,
+  },
+
+  {
+    key: 'smart-route',
+    name: 'Smart Route',
+    slug: 'smart-route',
+    category: 'build',
+    module: null,
+    usp: 'Routing scored from measured success rates, cost and latency per connector, with a circuit breaker that takes a failing rail out before your customers find it.',
+    tagline: 'The rail that will work, not the rail that is first.',
+    headline: 'How a payment decides which way to go',
+    excerpt:
+      'A payment can usually travel several ways, and they are not equally good at two in the morning. Routing on measured success, cost and latency — with a breaker on failing rails — is the difference between resilience and a bad night.',
+    audience: 'Merchants who lose sales to failed payments, and developers who would otherwise build failover themselves.',
+    problem: 'Most integrations hard-code one provider. When it degrades, every payment degrades with it, and the business finds out from customers rather than from a dashboard.',
+    how: [
+      'Candidate connectors are assembled from what can actually carry this payment.',
+      'Each is scored on measured success rate, total cost, and observed latency.',
+      'The circuit breaker removes a connector that is failing, and lets it back gradually once it recovers.',
+      'A merchant policy can bias the choice towards cheapest, fastest or most reliable.',
+    ],
+    proof: [
+      'Scores come from telemetry kept in fifteen-minute buckets over twenty-four hours, optionally keyed by amount band and prefix, rather than from a static preference list.',
+      'The breaker moves closed → open after consecutive faults → half-open after a cooldown → closed on the next success, so a recovering rail is tested with one payment rather than all of them.',
+      'Health is a state per connector — healthy, degraded, unavailable, maintenance — derived from the circuit, the last probe and recent success.',
+      'Failover only happens for errors that guarantee no money moved; anything ambiguous triggers a status check first.',
+      'A merchant can bias routing towards cheapest, fastest or most reliable per payment.',
+    ],
+    cost: 'Included. You pay the rate of whichever rail carried the payment, and the dashboard shows which one did.',
+    faq: [
+      {
+        question: 'Could a retry charge my customer twice?',
+        answer:
+          'Failover happens only for errors that guarantee no money moved. For anything ambiguous — a timeout, an unknown code — the status is checked first. Not retrying is better than retrying into a double charge.',
+      },
+      {
+        question: 'Can I force a particular rail?',
+        answer:
+          'You can bias the routing policy towards cheapest, fastest or most reliable, and restrict which rails a payment may use. What you cannot do is force a rail whose breaker is open, which is the point of having one.',
+      },
+      {
+        question: 'How do I know which rail was used?',
+        answer: 'Every payment records the connector that carried it, along with the attempts before it. The dashboard shows the route a payment actually took, not the one it was supposed to take.',
+      },
+    ],
+    keywords: ['payment routing', 'smart routing', 'circuit breaker payments', 'payment failover', 'connector health'],
+    related: ['developer-api', 'hosted-checkout', 'national-switch'],
+    cta: { label: 'Read the API reference', href: '/developers/api' },
+    article: `Most payment integrations contain a decision nobody revisits: the provider chosen in the first week.
+
+It works. Then one night it does not — not down, just slow and failing one payment in five — and every payment degrades with it. The business finds out from customers.
+
+## Routing is a measurement problem
+
+A payment can usually go several ways. The ways are not equally good, and which one is best changes by the hour.
+
+So the question is not *which provider did we pick* but *which of these can carry this payment, right now, best*.
+
+## Scored on what actually happened
+
+Each candidate connector is scored on three measured things: its recent **success rate**, the **total cost** of using it, and its observed **latency**.
+
+Those numbers come from telemetry kept in fifteen-minute buckets over twenty-four hours — optionally keyed by amount band and prefix, because a rail that is excellent for small local payments is not necessarily excellent for large ones.
+
+It is a measurement, not a preference list somebody wrote once.
+
+## The breaker
+
+A connector that fails repeatedly has its circuit **opened**: it stops being offered at all.
+
+After a cooldown it goes **half-open** — one payment is allowed through as a test. If that succeeds the circuit closes and normal traffic resumes. If it fails, back to open.
+
+The effect is that a recovering rail is tested with a single payment rather than with all of your customers.
+
+## Failover that will not double-charge
+
+This is where naive retry logic causes real damage.
+
+Failover happens **only** for errors that guarantee no money moved. For anything ambiguous — a timeout, an unknown response code — the status is checked first.
+
+A payment that might have succeeded is not retried. Losing a sale to caution is recoverable. Charging a customer twice is a refund, a complaint and a reputation.
+
+## Your policy
+
+A merchant can bias routing towards **cheapest**, **fastest** or **most reliable**, and restrict which rails a payment may use at all.
+
+What you cannot do is force a rail whose breaker is open. That is not a limitation; it is the entire value of having a breaker.
+
+## You can see what happened
+
+Every payment records the connector that carried it and the attempts before it. The dashboard shows the route the payment actually took — not the route it was supposed to take, which is the number most systems give you and the one that is useless during an incident.
+
+## What it costs
+
+Nothing extra. You pay the rate of whichever rail carried the payment, and the dashboard tells you which one did.`,
+  },
+
+  {
+    key: 'national-switch',
+    name: 'National switch connection',
+    slug: 'national-switch',
+    category: 'build',
+    module: null,
+    usp: 'An adapter written against an internal contract rather than a protocol, with a simulator that reproduces the awkward cases — a timeout after a financial effect, a contradictory late rejection — before a real connection exists.',
+    tagline: 'Built to connect, and built to be tested first.',
+    headline: 'How to build for a switch you are not connected to yet',
+    excerpt:
+      'Waiting for a scheme to publish its profile before writing any code wastes a year. Writing against an internal contract, with a simulator for the ugly cases, means the connection becomes a codec rather than a rebuild.',
+    audience: 'Banks, e-money issuers and institutions that need to reach or join a national scheme, and the regulators supervising them.',
+    problem:
+      'Integrations with a scheme are usually written against its protocol. When the profile changes, or a second scheme appears, the business logic has to be rewritten because the protocol leaked into it.',
+    how: [
+      'Payments are expressed in an internal canonical form that presumes no particular protocol.',
+      'An adapter translates between that form and whatever the scheme actually speaks.',
+      'A simulator reproduces the awkward outcomes, labelled as simulation throughout.',
+      'The certified codec is loaded only for a connection whose certification is recorded.',
+    ],
+    proof: [
+      'The internal contract presumes nothing about the wire format — not ISO 8583, not ISO 20022, not REST — so the protocol never reaches the business logic.',
+      'The simulator reproduces a timeout after a financial effect, a provisional not-found, a duplicate success, a contradictory late rejection, an invalid signature and an acknowledgement without completion.',
+      'Everything the simulator produces is labelled as simulation and it never attests certification.',
+      'A certified adapter is loaded only for a connection whose certification state says so.',
+      'Aggregation fees on switch payments are accrued per completed payment and invoiced per period, never posted onto the payment itself.',
+    ],
+    cost: 'Scheme and aggregation fees are set in the console and shown on the merchant’s statement as their own line.',
+    faq: [
+      {
+        question: 'Why build before the profile is published?',
+        answer:
+          'Because the hard part is not the wire format — it is the behaviour around it: what happens on a timeout that had a financial effect, or a rejection that contradicts an earlier success. Those can be built and tested now, and the format becomes a codec later.',
+      },
+      {
+        question: 'Does the simulator prove you are certified?',
+        answer:
+          'No, and it says so on everything it produces. It proves the behaviour was built and tested. Certification is a separate, recorded state, and the certified adapter loads only for a connection that has it.',
+      },
+      {
+        question: 'How are the switch fees charged?',
+        answer:
+          'Accrued per completed payment and invoiced per period and per currency. They are never posted onto the payment itself, so the payment amount is the payment amount and the fee is a separate, visible obligation.',
+      },
+    ],
+    keywords: ['national payment switch', 'iso 20022 adapter', 'switch certification', 'interoperability', 'scheme connection'],
+    related: ['smart-route', 'corridor-network', 'developer-api'],
+    cta: { label: 'Read the API reference', href: '/developers/api' },
+    article: `There are two ways to build for a national scheme you are not yet connected to.
+
+The common one: wait for the profile, then write the integration against it. This is safe, and it costs a year, and at the end of the year you discover the interesting problems for the first time.
+
+## The protocol is the easy part
+
+Translating between message formats is work, but it is known work. Any competent team can do it once the specification exists.
+
+The hard part is the behaviour around the edges, and none of it depends on the format:
+
+- The switch **times out** — but the money moved.
+- A payment is reported **not found**, provisionally, and then found.
+- A **duplicate success** arrives for something already settled.
+- A **late rejection** contradicts a success you already acted on.
+- An acknowledgement arrives with **no completion** behind it.
+
+Every one of those is a decision about money, and every one can be designed, built and tested before anybody publishes anything.
+
+## An internal contract
+
+Payments are expressed in a canonical internal form that presumes nothing about the wire: not ISO 8583, not ISO 20022, not REST, not SOAP.
+
+An adapter translates between that form and whatever the scheme speaks. The protocol never reaches the business logic, which has two consequences:
+
+1. A change to the profile is a change to a codec.
+2. A second scheme, in a second country, is a second adapter rather than a second platform.
+
+## The simulator is for the ugly cases
+
+Our simulator does not simulate a successful payment, which is the easy case and tells you nothing.
+
+It reproduces the timeout after a financial effect. The provisional not-found. The duplicate success. The contradictory late rejection. The invalid signature. The acknowledgement with nothing behind it. The authorisation that never completes.
+
+These are the scenarios that, met for the first time in production, turn into a month of reconciliation and a difficult conversation with a regulator.
+
+## It never pretends
+
+Everything the simulator produces is labelled as simulation, and it never attests certification.
+
+This is a deliberate line. A simulator that could be mistaken for a certified connection is a liability — to us, and to anyone reading a report produced from it. Certification is a separate recorded state, and the certified adapter loads only for a connection that has it.
+
+## Fees stay off the payment
+
+Aggregation fees on switch payments are accrued per completed payment and invoiced per period and per currency.
+
+They are never posted onto the payment itself. The payment amount is the payment amount; the fee is a separate, visible obligation on a statement. A merchant can see what they were charged without reverse-engineering it from a net figure.`,
   },
 ];
 

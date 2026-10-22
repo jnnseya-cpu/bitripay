@@ -16,6 +16,7 @@ const CATEGORY_BLOG: Record<Feature['category'], string> = {
   accept: 'accepting payments',
   build: 'developers',
   move: 'moving money',
+  reach: 'reaching everyone',
   operate: 'running a business',
   trust: 'trust and compliance',
 };
