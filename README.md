@@ -37,7 +37,7 @@ a frontend. `npm run verify` builds and tests all three layers from a clean chec
 
 Engineer onboarding lives in [docs/DEVELOPER.md](docs/DEVELOPER.md) (run, verify, sandbox test data, partner API, where things live, how to add a processor / rail / agent / endpoint / page / migration).
 
-Requirements: Node.js 20+ (22 recommended).
+Requirements: Node.js 22.23.4 or later (22, 24 and 26 are supported lines; 20 is end of life and receives no security fixes).
 
 ```bash
 npm install

@@ -228,6 +228,14 @@ the same operator and SIM only adds the requested float.
 - Backups: nightly copies under the `backups` volume (30-day retention). Restore: stop the stack, `sqlite3 bitripay.db ".restore <file>"` on the `api-data` volume, start again.
 - Upgrades: `git pull && npm run deploy` (migrations run at start-up; default content is refreshed without touching administrator edits).
 - Certificates: automatic; Caddy renews them and serves HTTP/3.
+- Runtime patches: the containers build on `node:22-alpine`, so the host's own `node -v` says nothing about what the
+  API runs on. `npm run deploy` builds with `--pull`, which refetches the base image, so a Node or Alpine security
+  release reaches production on the next deploy. To apply one without waiting for a code change, run `npm run deploy`
+  on the host — nothing else is needed. To check what the running container actually has, read `process.runtime` in
+  the admin **System** page: it reports the version with a verdict (`supported`) against the floor the platform
+  declares, rather than a version string to look up. A production host that has not deployed since a security release
+  is still on the old runtime, however recently the OS itself was patched: an `apt upgrade` does not touch the inside
+  of a container.
 
 ## What is not automated on purpose
 

@@ -52,7 +52,14 @@ if [ "$MODE" = dedicated ]; then
   grep -Eq "^ACME_EMAIL=.+" "$ENV_FILE" || { echo "ACME_EMAIL is empty in $ENV_FILE (the address that receives TLS certificate notices)"; exit 1; }
 fi
 compose() { docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "${EXTRA_FILES[@]}" "$@"; }
-compose build
+# --pull refetches the base images named in the Dockerfiles (node:22-alpine, caddy:2-alpine, alpine:3.20) instead of
+# reusing whatever layer this host happened to cache. The Dockerfiles track the major line rather than pinning a
+# patch, so a Node or Alpine security release reaches production on the next deploy — but only if we ask for it.
+# Without --pull a host can rebuild for months on a base image it pulled once and stay vulnerable the whole time.
+compose build --pull
+# The images we do not build (caddy, alpine) are only fetched by `up` when absent, so refresh them too. Tolerated
+# rather than required: --ignore-buildable needs a recent Compose, and a host too old for it must still deploy.
+compose pull --ignore-buildable 2>/dev/null || compose pull --ignore-pull-failures 2>/dev/null || true
 compose up -d
 echo "Waiting for the API health check…"
 for i in $(seq 1 40); do

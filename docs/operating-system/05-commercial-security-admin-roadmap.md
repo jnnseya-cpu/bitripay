@@ -204,7 +204,7 @@ This document is delivered as a developer-ready set in `docs/operating-system/`,
 
 ### 17.2 Technical Requirements Document (TRD) summary
 
-- Language and runtime: TypeScript, Node 20+, React 19, Expo SDK 53 (as built). Database: SQLite (MVP) → PostgreSQL 16 with pgvector. Queue: BullMQ/Redis → Kafka-class. Models: Anthropic Claude family via the official SDK with streaming, adaptive thinking and structured outputs (as built), provider failover through connectors.
+- Language and runtime: TypeScript, Node 22+, React 19, Expo SDK 53 (as built). Database: SQLite (MVP) → PostgreSQL 16 with pgvector. Queue: BullMQ/Redis → Kafka-class. Models: Anthropic Claude family via the official SDK with streaming, adaptive thinking and structured outputs (as built), provider failover through connectors.
 - Interfaces: OpenAPI 3.1 from Zod; webhook signing as built; SSE for run streaming.
 - Data contracts: minor-unit integers; ULID ids with prefixes; append-only tables; hash-chained events.
 - Quality gates: type-check, lint, unit and integration tests (vitest + supertest as built), Playwright end-to-end (as built scripts), agent evals, security scans; all green before deploy.

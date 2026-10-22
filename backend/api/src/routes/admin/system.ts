@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { getDb } from '../../db';
 import { config } from '../../config';
 import { validate } from '../../lib/http';
+import { nodeSupport, MIN_NODE } from '../../lib/runtime';
 import { requirePermission } from '../../middleware/permissions';
 import { audit } from '../../services/audit';
 import { sloReport, flushSlo, SLO_TARGETS, SWITCH_AVAILABILITY_TARGET } from '../../middleware/slo';
@@ -79,6 +80,8 @@ r.get('/health', requirePermission('reports'), (_req, res) => {
       uptimeSeconds: Math.round(process.uptime()),
       pid: process.pid,
       node: process.version,
+      // The version alone makes an administrator go and look up whether it is patched. The verdict saves them the trip.
+      runtime: { ...nodeSupport(), engines: MIN_NODE },
       environment: config.isProduction ? 'production' : config.isTest ? 'test' : 'development',
     },
     memory: { rssBytes: mem.rss, heapUsedBytes: mem.heapUsed, heapTotalBytes: mem.heapTotal, externalBytes: mem.external },

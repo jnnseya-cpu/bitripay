@@ -63,7 +63,7 @@ Shared conventions: design tokens in `landing.css` extend to a full token set; e
 
 ### 9.4 Backend architecture
 
-- **Runtime**: Node 20+, TypeScript, Express 5 (as built). Services are plain functions taking a `db` handle and typed inputs; routes are thin. This is preserved because it is what makes tool exposure trivial: each service function that is safe for agents is registered as a tool with a Zod schema.
+- **Runtime**: Node 22+, TypeScript, Express 5 (as built). Services are plain functions taking a `db` handle and typed inputs; routes are thin. This is preserved because it is what makes tool exposure trivial: each service function that is safe for agents is registered as a tool with a Zod schema.
 - **Modules** (as built directories) become bounded contexts with explicit public interfaces: `ledger`, `emoney`, `routing`, `rails`, `evidence`, `fx`, `gateway`, `identity`, `kyc`, `support`, `content`, `notifications`, `admin`, plus new `agents`, `policy`, `memory`, `billing`, `intelligence`.
 - **Transactional outbox**: every state change that must emit an event writes the event in the same SQL transaction as the change (`event_log` as built) and a dispatcher publishes it to the bus. This guarantees at-least-once delivery without dual writes. (Pattern used by Uber, Airbnb and Stripe's internal event systems.)
 - **Idempotency**: `Idempotency-Key` middleware (as built) stores request hash and response; agents are required to supply keys derived from `run_id + step_id` so retries never double-execute.
