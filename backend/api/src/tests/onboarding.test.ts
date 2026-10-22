@@ -128,7 +128,10 @@ describe('live rate providers', () => {
       .put('/api/admin/settings/app')
       .set(admin.auth)
       .send({ value: { rateProvider: 'manual' } });
-  });
+    // This test deliberately attempts a real refresh against the live provider and asserts both outcomes, so it pays
+    // for one outbound HTTP round trip. The default 5s is a bet on runner latency rather than a budget: it passed for
+    // months and timed out on a slow runner, failing the whole suite over a network delay, not a defect.
+  }, 30_000);
 });
 
 describe('agent device enrolment', () => {
