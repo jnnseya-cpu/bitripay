@@ -12,7 +12,18 @@ import { escapeHtml } from '../services/markdown';
 import { absoluteUrl, breadcrumbJsonLd, pageTitle } from '../services/seo';
 import { getSeoSettings } from '../services/settings';
 import { getModules, aggregatorPerimeterApplied, AGGREGATOR_PERIMETER_OFF, MODULE_OFF_MESSAGE } from '../services/modules';
-import { FEATURES, FEATURE_CATEGORIES, FEATURE_BY_SLUG, featuresInCategory, type Feature, type FeatureCategory } from '../content/features';
+import {
+  FEATURES,
+  FEATURE_BY_KEY,
+  FEATURE_BY_SLUG,
+  FEATURE_CATEGORIES,
+  FEATURE_CATEGORIES_FR,
+  featureText,
+  featuresInCategory,
+  type Feature,
+  type FeatureCategory,
+  type FeatureLang,
+} from '../content/features';
 
 export type AvailabilityState = 'available' | 'awaiting_authorisation' | 'switched_off';
 
@@ -22,26 +33,42 @@ export interface Availability {
   note: string;
 }
 
+const AVAILABILITY_TEXT: Record<FeatureLang, Record<AvailabilityState, { label: string; note: string }> & { infrastructure: string; on: string }> = {
+  en: {
+    infrastructure: 'Part of the platform itself: it is present wherever BitriPay runs.',
+    on: 'Switched on for this deployment.',
+    available: { label: 'Available', note: '' },
+    awaiting_authorisation: {
+      label: 'Available on authorisation',
+      note: 'Built, tested and switched off. It is a function of an issuer or an acquirer, so it stays off until the corresponding authorisation is recorded, or until an authorised institution operates it on the platform. Nothing here is offered to a customer meanwhile.',
+    },
+    switched_off: { label: 'Switched off', note: 'An administrator has switched this off for this deployment. It can be switched back on in the console under Modules.' },
+  },
+  fr: {
+    infrastructure: 'Fait partie de la plateforme elle-même : présent partout où BitriPay tourne.',
+    on: 'Activé sur ce déploiement.',
+    available: { label: 'Disponible', note: '' },
+    awaiting_authorisation: {
+      label: 'Disponible sur autorisation',
+      note: 'Construit, testé et désactivé. C’est une fonction d’émetteur ou d’acquéreur : cela reste désactivé tant que l’autorisation correspondante n’est pas enregistrée, ou tant qu’une institution autorisée ne l’exploite pas sur la plateforme. Rien ici n’est proposé à un client entre-temps.',
+    },
+    switched_off: { label: 'Désactivé', note: 'Un administrateur a désactivé ceci sur ce déploiement. Cela peut être réactivé dans la console, sous Modules.' },
+  },
+};
+
 /**
  * What this deployment can actually do with this feature, right now. The three answers are deliberately distinct:
  * a capability held back by the aggregator perimeter is waiting on an authorisation, which is a different fact from
  * an administrator having turned something off, and both are different from it being available.
  */
-export function featureAvailability(feature: Feature, modules = getModules()): Availability {
-  if (!feature.module) {
-    return { state: 'available', label: 'Available', note: 'Part of the platform itself: it is present wherever BitriPay runs.' };
-  }
-  if (modules[feature.module] !== false) {
-    return { state: 'available', label: 'Available', note: 'Switched on for this deployment.' };
-  }
+export function featureAvailability(feature: Feature, modules = getModules(), lang: FeatureLang = 'en'): Availability {
+  const t = AVAILABILITY_TEXT[lang];
+  if (!feature.module) return { state: 'available', label: t.available.label, note: t.infrastructure };
+  if (modules[feature.module] !== false) return { state: 'available', label: t.available.label, note: t.on };
   if (aggregatorPerimeterApplied(modules) && AGGREGATOR_PERIMETER_OFF.includes(feature.module)) {
-    return {
-      state: 'awaiting_authorisation',
-      label: 'Available on authorisation',
-      note: 'Built, tested and switched off. It is a function of an issuer or an acquirer, so it stays off until the corresponding authorisation is recorded, or until an authorised institution operates it on the platform. Nothing here is offered to a customer meanwhile.',
-    };
+    return { state: 'awaiting_authorisation', label: t.awaiting_authorisation.label, note: t.awaiting_authorisation.note };
   }
-  return { state: 'switched_off', label: 'Switched off', note: 'An administrator has switched this off for this deployment. It can be switched back on in the console under Modules.' };
+  return { state: 'switched_off', label: t.switched_off.label, note: t.switched_off.note };
 }
 
 const CHIP_CLASS: Record<AvailabilityState, string> = { available: 'ok', awaiting_authorisation: 'warn', switched_off: 'muted' };
@@ -75,54 +102,123 @@ ul.proof li::before{content:"";position:absolute;left:4px;top:8px;width:8px;heig
 
 const seo = () => getSeoSettings();
 
+/** The page's own words, kept beside the catalogue's so a new language is one object rather than a second renderer. */
+const UI: Record<FeatureLang, Record<string, string>> = {
+  en: {
+    features: 'Features',
+    hubTitle: 'Everything BitriPay does',
+    hubUsp: 'One account, one API and one ledger behind every way money can reach a business in the markets we serve.',
+    hubSub: 'Where a capability is built but waiting on an authorisation, the page says so plainly rather than selling it — this list is generated from the platform’s own state, not written by hand.',
+    readMore: 'Read more →',
+    theProblem: 'The problem',
+    howItWorks: 'How it works',
+    whatYouCanCheck: 'What you can check',
+    checkLead: 'Facts about the running platform rather than adjectives. Each one is visible in the product, the API reference or the ledger.',
+    whatItCosts: 'What it costs',
+    questions: 'Questions',
+    readNext: 'Read next',
+    startSomewhere: 'Start somewhere',
+    allFeatures: 'All features',
+    askAQuestion: 'Ask a question',
+    openMerchant: 'Open a merchant account',
+    readApi: 'Read the API reference',
+    howItWorksLink: 'How it works',
+    availableOfTotal: '{a} of {t} are switched on for this deployment.',
+    inFrench: 'En français',
+  },
+  fr: {
+    features: 'Fonctionnalités',
+    hubTitle: 'Tout ce que fait BitriPay',
+    hubUsp: 'Un compte, une API et un grand livre derrière chaque façon dont l’argent peut atteindre une entreprise sur les marchés que nous servons.',
+    hubSub:
+      'Lorsqu’une capacité est construite mais attend une autorisation, la page le dit clairement au lieu de la vendre — cette liste est produite à partir de l’état réel de la plateforme, elle n’est pas écrite à la main.',
+    readMore: 'En savoir plus →',
+    theProblem: 'Le problème',
+    howItWorks: 'Comment cela fonctionne',
+    whatYouCanCheck: 'Ce que vous pouvez vérifier',
+    checkLead: 'Des faits sur la plateforme en fonctionnement, pas des adjectifs. Chacun est visible dans le produit, dans la référence de l’API ou dans le grand livre.',
+    whatItCosts: 'Ce que cela coûte',
+    questions: 'Questions',
+    readNext: 'À lire ensuite',
+    startSomewhere: 'Commencer quelque part',
+    allFeatures: 'Toutes les fonctionnalités',
+    askAQuestion: 'Poser une question',
+    openMerchant: 'Ouvrir un compte marchand',
+    readApi: 'Lire la référence de l’API',
+    howItWorksLink: 'Comment ça marche',
+    availableOfTotal: '{a} sur {t} sont activées sur ce déploiement.',
+    inFrench: 'In English',
+  },
+};
+
+/** `?lang=fr` is what the layout's own hreflang alternates point at, so the feature pages honour the same key. */
+export function langOf(raw: unknown): FeatureLang {
+  return String(raw ?? '')
+    .toLowerCase()
+    .startsWith('fr')
+    ? 'fr'
+    : 'en';
+}
+
+const categories = (lang: FeatureLang) => (lang === 'fr' ? FEATURE_CATEGORIES_FR : FEATURE_CATEGORIES);
+const counted = (lang: FeatureLang, available: number, total: number) => UI[lang].availableOfTotal.replace('{a}', String(available)).replace('{t}', String(total));
+const qs = (lang: FeatureLang) => (lang === 'fr' ? '?lang=fr' : '');
+
 function chip(a: Availability): string {
   return `<span class="chip ${CHIP_CLASS[a.state]}" title="${escapeHtml(a.note)}">${escapeHtml(a.label)}</span>`;
 }
 
-function card(f: Feature): string {
-  const a = featureAvailability(f);
+function card(f: Feature, lang: FeatureLang): string {
+  const a = featureAvailability(f, getModules(), lang);
+  const t = featureText(f, lang);
+  const href = `/features/${escapeHtml(f.slug)}${qs(lang)}`;
   return `<div class="fcard">
-<h3><a href="/features/${escapeHtml(f.slug)}">${escapeHtml(f.name)}</a></h3>
-<p>${escapeHtml(f.usp)}</p>
-<div class="foot">${chip(a)}<a href="/features/${escapeHtml(f.slug)}">Read more →</a></div>
+<h3><a href="${href}">${escapeHtml(t.name)}</a></h3>
+<p>${escapeHtml(t.usp)}</p>
+<div class="foot">${chip(a)}<a href="${href}">${escapeHtml(UI[lang].readMore)}</a></div>
 </div>`;
 }
 
 /** The hub: every feature, grouped by what a reader is trying to do, with its live availability. */
-export function featuresIndexPage(): string {
+export function featuresIndexPage(lang: FeatureLang = 'en'): string {
   const s = seo();
-  const categories = (Object.keys(FEATURE_CATEGORIES) as FeatureCategory[]).filter((c) => featuresInCategory(c).length > 0);
-  const counts = { total: FEATURES.length, available: FEATURES.filter((f) => featureAvailability(f).state === 'available').length };
+  const t = UI[lang];
+  const cats = categories(lang);
+  const list = (Object.keys(cats) as FeatureCategory[]).filter((c) => featuresInCategory(c).length > 0);
+  const modules = getModules();
+  const counts = { total: FEATURES.length, available: FEATURES.filter((f) => featureAvailability(f, modules, lang).state === 'available').length };
+  const other: FeatureLang = lang === 'fr' ? 'en' : 'fr';
   const body = `<style>${CSS}</style>
-<div class="breadcrumb"><a href="/">${escapeHtml(s.siteName)}</a> / Features</div>
-<div class="feat-hero"><h1>Everything BitriPay does</h1>
-<p class="feat-usp">One account, one API and one ledger behind every way money can reach a business in the markets we serve.</p>
-<p class="feat-sub">${counts.available} of ${counts.total} are switched on for this deployment. Where a capability is built but waiting on an authorisation, the page says so plainly rather than selling it — this list is generated from the platform's own state, not written by hand.</p>
-<div class="catnav">${categories.map((c) => `<a href="#${c}">${escapeHtml(FEATURE_CATEGORIES[c].label)}</a>`).join('')}</div></div>
-${categories
+<div class="breadcrumb"><a href="/">${escapeHtml(s.siteName)}</a> / ${escapeHtml(t.features)} · <a href="/features${other === 'fr' ? '?lang=fr' : ''}">${escapeHtml(t.inFrench)}</a></div>
+<div class="feat-hero"><h1>${escapeHtml(t.hubTitle)}</h1>
+<p class="feat-usp">${escapeHtml(t.hubUsp)}</p>
+<p class="feat-sub">${escapeHtml(counted(lang, counts.available, counts.total))} ${escapeHtml(t.hubSub)}</p>
+<div class="catnav">${list.map((c) => `<a href="#${c}">${escapeHtml(cats[c].label)}</a>`).join('')}</div></div>
+${list
   .map(
     (c) =>
-      `<section class="fsect" id="${c}"><h2>${escapeHtml(FEATURE_CATEGORIES[c].label)}</h2><p class="lead">${escapeHtml(FEATURE_CATEGORIES[c].blurb)}</p><div class="fgrid">${featuresInCategory(c)
-        .map(card)
+      `<section class="fsect" id="${c}"><h2>${escapeHtml(cats[c].label)}</h2><p class="lead">${escapeHtml(cats[c].blurb)}</p><div class="fgrid">${featuresInCategory(c)
+        .map((f) => card(f, lang))
         .join('')}</div></section>`,
   )
   .join('')}
-<section class="fsect"><h2>Start somewhere</h2><div class="cta-row"><a class="btn primary" href="/register?role=merchant">Open a merchant account</a><a class="btn ghost" href="/developers/api">Read the API reference</a><a class="btn ghost" href="/how-it-works">How it works</a></div></section>`;
+<section class="fsect"><h2>${escapeHtml(t.startSomewhere)}</h2><div class="cta-row"><a class="btn primary" href="/register?role=merchant">${escapeHtml(t.openMerchant)}</a><a class="btn ghost" href="/developers/api">${escapeHtml(t.readApi)}</a><a class="btn ghost" href="/how-it-works">${escapeHtml(t.howItWorksLink)}</a></div></section>`;
   return layout(
     {
-      title: pageTitle('Features'),
-      description: `Every BitriPay capability, feature by feature: what it does, who it is for, what it costs and whether it is switched on. ${counts.available} of ${counts.total} available on this deployment.`,
-      path: '/features',
+      title: pageTitle(t.features),
+      description: `${t.hubUsp} ${counted(lang, counts.available, counts.total)}`,
+      path: `/features${qs(lang)}`,
+      language: lang,
       jsonLd: [
         breadcrumbJsonLd([
           { name: s.siteName, url: '/' },
-          { name: 'Features', url: '/features' },
+          { name: t.features as string, url: '/features' },
         ]),
         {
           '@context': 'https://schema.org',
           '@type': 'ItemList',
           name: 'BitriPay features',
-          itemListElement: FEATURES.map((f, i) => ({ '@type': 'ListItem', position: i + 1, name: f.name, url: absoluteUrl(`/features/${f.slug}`) })),
+          itemListElement: FEATURES.map((f, i) => ({ '@type': 'ListItem', position: i + 1, name: featureText(f, lang).name, url: absoluteUrl(`/features/${f.slug}`) })),
         },
       ],
     },
@@ -131,45 +227,48 @@ ${categories
 }
 
 /** One feature, in full: the promise, the problem, how it works, what is checkable, what it costs. */
-export function featurePage(slug: string): string | null {
+export function featurePage(slug: string, lang: FeatureLang = 'en'): string | null {
   const f = FEATURE_BY_SLUG[slug];
   if (!f) return null;
   const s = seo();
-  const a = featureAvailability(f);
-  const related = f.related.map((k) => FEATURES.find((x) => x.key === k)).filter((x): x is Feature => Boolean(x));
+  const t = UI[lang];
+  const cats = categories(lang);
+  const txt = featureText(f, lang);
+  const a = featureAvailability(f, getModules(), lang);
+  const other: FeatureLang = lang === 'fr' ? 'en' : 'fr';
+  const related = f.related.map((k) => FEATURE_BY_KEY[k]).filter((x): x is Feature => Boolean(x));
   const body = `<style>${CSS}</style>
-<div class="breadcrumb"><a href="/">${escapeHtml(s.siteName)}</a> / <a href="/features">Features</a> / ${escapeHtml(f.name)}</div>
-<div class="feat-hero"><div class="catnav" style="margin:0 0 10px"><a href="/features#${f.category}">${escapeHtml(FEATURE_CATEGORIES[f.category].label)}</a>${chip(a)}</div>
-<h1>${escapeHtml(f.name)}</h1>
-<p class="feat-usp">${escapeHtml(f.usp)}</p>
-<p class="feat-sub">${escapeHtml(f.audience)}</p></div>
+<div class="breadcrumb"><a href="/">${escapeHtml(s.siteName)}</a> / <a href="/features${qs(lang)}">${escapeHtml(t.features)}</a> / ${escapeHtml(txt.name)} · <a href="/features/${escapeHtml(f.slug)}${other === 'fr' ? '?lang=fr' : ''}">${escapeHtml(t.inFrench)}</a></div>
+<div class="feat-hero"><div class="catnav" style="margin:0 0 10px"><a href="/features${qs(lang)}#${f.category}">${escapeHtml(cats[f.category].label)}</a>${chip(a)}</div>
+<h1>${escapeHtml(txt.name)}</h1>
+<p class="feat-usp">${escapeHtml(txt.usp)}</p>
+<p class="feat-sub">${escapeHtml(txt.audience)}</p></div>
 
 <div class="avail"><b>${escapeHtml(a.label)}</b><p>${escapeHtml(a.note)}${a.state !== 'available' ? ` ${escapeHtml(MODULE_OFF_MESSAGE)}` : ''}</p></div>
 
-<section class="fsect"><h2>The problem</h2><p class="lead">${escapeHtml(f.problem)}</p></section>
-<section class="fsect"><h2>How it works</h2><ol class="steps-n">${f.how.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ol></section>
-<section class="fsect"><h2>What you can check</h2><p class="lead">Facts about the running platform rather than adjectives. Each one is visible in the product, the API reference or the ledger.</p><ul class="proof">${f.proof
-    .map((p) => `<li>${escapeHtml(p)}</li>`)
-    .join('')}</ul></section>
-<section class="fsect"><h2>What it costs</h2><p class="lead">${escapeHtml(f.cost)}</p></section>
-<section class="fsect"><h2>Questions</h2>${f.faq.map((q) => `<div class="faq-q"><h3>${escapeHtml(q.question)}</h3><p>${escapeHtml(q.answer)}</p></div>`).join('')}</section>
-${related.length ? `<section class="fsect"><h2>Read next</h2><div class="fgrid">${related.map(card).join('')}</div></section>` : ''}
-<section class="fsect"><div class="cta-row"><a class="btn primary" href="${escapeHtml(f.cta.href)}">${escapeHtml(f.cta.label)}</a><a class="btn ghost" href="/features">All features</a><a class="btn ghost" href="/contact">Ask a question</a></div></section>`;
+<section class="fsect"><h2>${escapeHtml(t.theProblem)}</h2><p class="lead">${escapeHtml(txt.problem)}</p></section>
+<section class="fsect"><h2>${escapeHtml(t.howItWorks)}</h2><ol class="steps-n">${txt.how.map((h) => `<li>${escapeHtml(h)}</li>`).join('')}</ol></section>
+<section class="fsect"><h2>${escapeHtml(t.whatYouCanCheck)}</h2><p class="lead">${escapeHtml(t.checkLead)}</p><ul class="proof">${txt.proof.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul></section>
+<section class="fsect"><h2>${escapeHtml(t.whatItCosts)}</h2><p class="lead">${escapeHtml(txt.cost)}</p></section>
+<section class="fsect"><h2>${escapeHtml(t.questions)}</h2>${txt.faq.map((q) => `<div class="faq-q"><h3>${escapeHtml(q.question)}</h3><p>${escapeHtml(q.answer)}</p></div>`).join('')}</section>
+${related.length ? `<section class="fsect"><h2>${escapeHtml(t.readNext)}</h2><div class="fgrid">${related.map((r) => card(r, lang)).join('')}</div></section>` : ''}
+<section class="fsect"><div class="cta-row"><a class="btn primary" href="${escapeHtml(f.cta.href)}">${escapeHtml(f.cta.label)}</a><a class="btn ghost" href="/features${qs(lang)}">${escapeHtml(t.allFeatures)}</a><a class="btn ghost" href="/contact">${escapeHtml(t.askAQuestion)}</a></div></section>`;
   return layout(
     {
-      title: pageTitle(f.name),
-      description: f.usp.length > 300 ? `${f.usp.slice(0, 297)}…` : f.usp,
-      path: `/features/${f.slug}`,
+      title: pageTitle(txt.name),
+      description: txt.usp.length > 300 ? `${txt.usp.slice(0, 297)}…` : txt.usp,
+      path: `/features/${f.slug}${qs(lang)}`,
+      language: lang,
       jsonLd: [
         breadcrumbJsonLd([
           { name: s.siteName, url: '/' },
-          { name: 'Features', url: '/features' },
-          { name: f.name, url: `/features/${f.slug}` },
+          { name: t.features as string, url: '/features' },
+          { name: txt.name, url: `/features/${f.slug}` },
         ]),
         {
           '@context': 'https://schema.org',
           '@type': 'FAQPage',
-          mainEntity: f.faq.map((q) => ({ '@type': 'Question', name: q.question, acceptedAnswer: { '@type': 'Answer', text: q.answer } })),
+          mainEntity: txt.faq.map((q) => ({ '@type': 'Question', name: q.question, acceptedAnswer: { '@type': 'Answer', text: q.answer } })),
         },
       ],
     },

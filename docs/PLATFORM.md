@@ -490,7 +490,11 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
   blog articles are all generated from it, so a claim is written once. Availability is never written into the copy:
   the pages compute it per request from `getModules()` and the aggregator perimeter, and distinguish *available*,
   *available on authorisation* and *switched off by an administrator*. Selling something the platform would refuse
-  is therefore not a matter of remembering to update a page.
+  is therefore not a matter of remembering to update a page. The catalogue ships in **English and French**
+  (`content/featuresFr.ts`): every field of all 41 features is translated by hand, and `missingTranslations()` plus a
+  test refuse a partial language rather than let an English paragraph sit in the middle of a French page. `?lang=fr`
+  on the hub or a feature page renders the French copy with its own article slugs, the responses carry
+  `Vary: Accept-Language`, and both languages are seeded as blog articles (82 articles in all).
 - **Corridor network** (module `corridorNetwork`, off by default): the regulatory posture of each corridor — phase,
   regulatory mode, licence basis, custody model, rails, limits and the settlement mechanisms permitted on it —
   together with the counterparties that hold the money, their positions and settlement batches under four eyes,

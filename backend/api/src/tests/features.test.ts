@@ -7,9 +7,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import { setupApp, adminToken } from './helpers';
-import { FEATURES, FEATURE_BY_SLUG, FEATURE_CATEGORIES } from '../content/features';
-import { featureArticles } from '../content/featureArticles';
-import { featureAvailability, featurePage, featuresIndexPage, FEATURE_PATHS } from '../site/features';
+import { FEATURES, FEATURE_BY_SLUG, FEATURE_CATEGORIES, FEATURE_CATEGORIES_FR, featureText, missingTranslations } from '../content/features';
+import { featureArticles, allFeatureArticles } from '../content/featureArticles';
+import { featureAvailability, featurePage, featuresIndexPage, langOf, FEATURE_PATHS } from '../site/features';
 import { DEFAULT_MODULES, AGGREGATOR_PERIMETER_OFF, AGGREGATOR_PERIMETER_ON, type ModuleFlags } from '../services/modules';
 import { listPosts } from '../services/blog';
 
@@ -146,9 +146,81 @@ describe('feature pages', () => {
   });
 });
 
+describe('French', () => {
+  it('translates every field of every feature, with nothing falling back to English', () => {
+    const gaps = FEATURES.map((f) => ({ key: f.key, missing: missingTranslations(f, 'fr') })).filter((g) => g.missing.length > 0);
+    expect(
+      gaps.map((g) => `${g.key}: ${g.missing.join(', ')}`),
+      'features missing French',
+    ).toEqual([]);
+  });
+
+  it('gives the French text real substance rather than a copy of the English', () => {
+    for (const f of FEATURES) {
+      const en = featureText(f, 'en');
+      const fr = featureText(f, 'fr');
+      expect(fr.article.length, `${f.key} article`).toBeGreaterThan(900);
+      expect(fr.article, `${f.key} article is not the English one`).not.toBe(en.article);
+      expect(fr.usp, `${f.key} usp`).not.toBe(en.usp);
+      expect(fr.articleSlug, `${f.key} slug`).not.toBe(en.articleSlug);
+      expect(fr.how.length, `${f.key} how`).toBe(en.how.length);
+      expect(fr.proof.length, `${f.key} proof`).toBe(en.proof.length);
+      expect(fr.faq.length, `${f.key} faq`).toBe(en.faq.length);
+    }
+  });
+
+  it('keeps French article slugs unique and distinct from the English ones', () => {
+    const fr = featureArticles('fr').map((a) => a.slug!);
+    const en = featureArticles('en').map((a) => a.slug!);
+    expect(new Set(fr).size).toBe(fr.length);
+    expect(fr.filter((s) => en.includes(s))).toEqual([]);
+  });
+
+  it('states availability in French too, and still never claims it in the prose', () => {
+    const f = FEATURES.find((x) => x.module && x.module !== null)!;
+    const fr = featureAvailability(f, { ...DEFAULT_MODULES, [f.module!]: false } as ModuleFlags, 'fr');
+    expect(fr.label).toMatch(/Désactivé|Disponible/);
+    expect(fr.note).not.toMatch(/switched off for this deployment/i);
+    const forbidden = /\b(disponible (aujourd’hui|dès maintenant)|déjà activé)\b/i;
+    for (const f2 of FEATURES) expect(forbidden.test(featureText(f2, 'fr').article), `${f2.key}`).toBe(false);
+  });
+
+  it('renders the hub and a feature page in French, and links each to the other language', async () => {
+    const hub = await request(app).get('/features?lang=fr');
+    expect(hub.status).toBe(200);
+    expect(hub.text).toContain('Tout ce que fait BitriPay');
+    expect(hub.text).toContain('lang="fr"');
+    expect(hub.text).toContain(FEATURE_CATEGORIES_FR.accept.label);
+
+    const page = await request(app).get('/features/qr-code-payments?lang=fr');
+    expect(page.status).toBe(200);
+    expect(page.text).toContain(featureText(FEATURE_BY_SLUG['qr-code-payments'], 'fr').name);
+    expect(page.text).toContain('Le problème');
+    // and the English page still links across to it
+    const en = await request(app).get('/features/qr-code-payments');
+    expect(en.text).toContain('/features/qr-code-payments?lang=fr');
+  });
+
+  it('reads the language from ?lang the way the site’s own hreflang alternates point at it', () => {
+    expect(langOf('fr')).toBe('fr');
+    expect(langOf('fr-CD')).toBe('fr');
+    expect(langOf('en')).toBe('en');
+    expect(langOf(undefined)).toBe('en');
+    expect(langOf('sw')).toBe('en');
+  });
+
+  it('seeds the French articles beside the English ones', async () => {
+    const posts = listPosts({ status: 'all', pageSize: 300 }).items;
+    const slugs = new Set(posts.map((p) => p.slug));
+    for (const a of featureArticles('fr')) expect(slugs.has(a.slug!), a.slug!).toBe(true);
+    const fr = posts.filter((p) => p.slug === featureArticles('fr')[0].slug!)[0];
+    expect(fr.language).toBe('fr');
+  });
+});
+
 describe('feature articles', () => {
   it('writes one article per feature, with the proof, the price and a link to the live availability', () => {
-    const articles = featureArticles();
+    const articles = featureArticles('en');
     expect(articles).toHaveLength(FEATURES.length);
     for (const [i, a] of articles.entries()) {
       const f = FEATURES[i];
@@ -167,7 +239,7 @@ describe('feature articles', () => {
     await adminToken(app); // the app is booted, so content seeding has run
     const posts = listPosts({ status: 'all', pageSize: 200 }).items;
     const slugs = new Set(posts.map((p) => p.slug));
-    for (const a of featureArticles()) expect(slugs.has(a.slug!), a.slug!).toBe(true);
+    for (const a of allFeatureArticles()) expect(slugs.has(a.slug!), a.slug!).toBe(true);
     // The original launch articles are still there.
     expect(slugs.has('get-paid-by-qr-code-at-the-market')).toBe(true);
   });

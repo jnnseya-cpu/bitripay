@@ -11,8 +11,18 @@
  * exactly that instead of being sold as though it were running.
  */
 import type { ModuleFlags } from '../services/modules';
+import { FEATURES_FR } from './featuresFr';
 
 export type FeatureCategory = 'accept' | 'build' | 'move' | 'reach' | 'operate' | 'trust';
+
+export const FEATURE_CATEGORIES_FR: Record<FeatureCategory, { label: string; blurb: string }> = {
+  accept: { label: 'Encaisser', blurb: 'Toutes les façons dont un client peut remettre de l’argent à une entreprise, du code imprimé au mur à la page de paiement hébergée.' },
+  build: { label: 'Construire sur BitriPay', blurb: 'L’API, les notifications, les SDK et les extensions qui mettent le paiement à l’intérieur du produit de quelqu’un d’autre.' },
+  move: { label: 'Faire circuler l’argent', blurb: 'Ce qui arrive à l’argent une fois reçu : portefeuilles, transferts, décaissements, espèces et le passage d’une frontière.' },
+  reach: { label: 'Atteindre tout le monde', blurb: 'Les clients qu’une plateforme de paiement abandonne d’habitude : pas de smartphone, pas de données, pas de réseau, pas de lecture.' },
+  operate: { label: 'Tenir l’entreprise', blurb: 'Les comptes, le règlement, les relevés, les litiges et les personnes qui s’en occupent.' },
+  trust: { label: 'Le prouver', blurb: 'L’identité, le risque, les invariants du grand livre et les preuves qu’un régulateur demande à voir.' },
+};
 
 export const FEATURE_CATEGORIES: Record<FeatureCategory, { label: string; blurb: string }> = {
   accept: { label: 'Take the money', blurb: 'Every way a customer can hand money to a business, from a printed code on a wall to a hosted checkout.' },
@@ -26,6 +36,28 @@ export const FEATURE_CATEGORIES: Record<FeatureCategory, { label: string; blurb:
 export interface FeatureFaq {
   question: string;
   answer: string;
+}
+
+/**
+ * The translatable half of a feature. English lives on the `Feature` itself; another language supplies the same
+ * shape, so a page or an article is rendered from one object whichever language it is in and a missing field is a
+ * test failure rather than a paragraph that silently stays English.
+ */
+export interface FeatureText {
+  name: string;
+  tagline: string;
+  headline: string;
+  excerpt: string;
+  usp: string;
+  audience: string;
+  problem: string;
+  how: string[];
+  proof: string[];
+  cost: string;
+  faq: FeatureFaq[];
+  article: string;
+  /** The slug of the article in this language; the feature page keeps one canonical path and switches with ?lang=. */
+  articleSlug: string;
 }
 
 export interface Feature {
@@ -3740,6 +3772,49 @@ Write your handler against that one first. It is the case that will find the bug
 Nothing. Open code in the repository, no licence.`,
   },
 ];
+
+export type FeatureLang = 'en' | 'fr';
+
+/** The English text of a feature, in the shape a translation supplies. */
+export const englishText = (f: Feature): FeatureText => ({
+  name: f.name,
+  tagline: f.tagline,
+  headline: f.headline,
+  excerpt: f.excerpt,
+  usp: f.usp,
+  audience: f.audience,
+  problem: f.problem,
+  how: f.how,
+  proof: f.proof,
+  cost: f.cost,
+  faq: f.faq,
+  article: f.article,
+  articleSlug: `${f.slug}-explained`,
+});
+
+/**
+ * The text of a feature in one language. French falls back to English per field rather than per feature, so a
+ * half-translated entry degrades to a readable page instead of an empty one — and a test fails on any field that
+ * falls back, so the fallback is a safety net rather than a plan.
+ */
+export function featureText(f: Feature, lang: FeatureLang): FeatureText {
+  const en = englishText(f);
+  if (lang !== 'fr') return en;
+  const fr = FEATURES_FR[f.key];
+  return fr ? { ...en, ...fr } : en;
+}
+
+/** Which fields of a feature have no translation in this language. Empty is the only acceptable answer. */
+export function missingTranslations(f: Feature, lang: FeatureLang): string[] {
+  if (lang !== 'fr') return [];
+  const fr = FEATURES_FR[f.key];
+  if (!fr) return ['(the whole feature)'];
+  const keys: (keyof FeatureText)[] = ['name', 'tagline', 'headline', 'excerpt', 'usp', 'audience', 'problem', 'how', 'proof', 'cost', 'faq', 'article', 'articleSlug'];
+  return keys.filter((k) => {
+    const v = fr[k];
+    return v === undefined || v === null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && v.length === 0);
+  });
+}
 
 export const FEATURE_BY_KEY: Record<string, Feature> = Object.fromEntries(FEATURES.map((f) => [f.key, f]));
 export const FEATURE_BY_SLUG: Record<string, Feature> = Object.fromEntries(FEATURES.map((f) => [f.slug, f]));
