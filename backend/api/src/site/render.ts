@@ -84,6 +84,7 @@ export const FOOTER_LINKS = {
   ],
   explore: [
     { label: 'How it works', href: '/how-it-works' },
+    { label: 'Features', href: '/features' },
     { label: 'Industries', href: '/industries' },
     { label: 'Enterprise groups', href: '/enterprise' },
     { label: 'Developers', href: '/developers' },

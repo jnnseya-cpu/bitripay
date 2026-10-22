@@ -58,6 +58,14 @@
       "destination": "https://api.bitripay.com/developers/:path*"
     },
     {
+      "source": "/features",
+      "destination": "https://api.bitripay.com/features"
+    },
+    {
+      "source": "/features/:path*",
+      "destination": "https://api.bitripay.com/features/:path*"
+    },
+    {
       "source": "/get-started",
       "destination": "https://api.bitripay.com/get-started"
     },

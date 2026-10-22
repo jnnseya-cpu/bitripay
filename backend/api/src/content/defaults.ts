@@ -10,8 +10,9 @@ import { createPost } from '../services/blog';
 import { upsertLinkRule } from '../services/seo';
 import { DEFAULT_PAGES } from './policies';
 import { DEFAULT_ARTICLES } from './articles';
+import { featureArticles } from './featureArticles';
 
-const CONTENT_VERSION = 3;
+const CONTENT_VERSION = 4;
 
 /** The one mailbox BitriPay operates and the canonical public host; earlier defaults mentioned other addresses and domains. */
 export const SUPPORT_EMAIL = 'support@bitripay.com';
@@ -61,6 +62,12 @@ const LINK_RULES: { keyword: string; url: string; title: string }[] = [
   { keyword: 'fees', url: '/legal/fees', title: 'BitriPay fees and charges' },
   { keyword: 'open an account', url: '/register', title: 'Create a BitriPay account' },
   { keyword: 'statement', url: '/app/statements', title: 'Account statements' },
+  { keyword: 'payment link', url: '/features/payment-links', title: 'BitriPay payment links' },
+  { keyword: 'point of sale', url: '/features/point-of-sale', title: 'Point of sale on a phone' },
+  { keyword: 'hosted checkout', url: '/features/hosted-checkout', title: 'BitriPay hosted checkout' },
+  { keyword: 'webhook', url: '/features/signed-webhooks', title: 'Signed webhooks' },
+  { keyword: 'connected account', url: '/features/connected-accounts', title: 'Connected accounts for platforms' },
+  { keyword: 'payments API', url: '/features/payments-api', title: 'The BitriPay gateway API' },
 ];
 
 /** Test hook: lets a suite run the seeding again on the same in-memory database. */
@@ -96,9 +103,12 @@ export function ensureDefaultContent(): { pages: number; posts: number } {
   pages += retireOldMailboxes();
   let posts = 0;
   const day = 86_400_000;
-  DEFAULT_ARTICLES.forEach((a, i) => {
+  // The launch articles, then one article per feature. Both are inserted only where the slug is absent, so an
+  // administrator's edits survive every boot and a new feature adds its article without disturbing the others.
+  const articles = [...DEFAULT_ARTICLES, ...featureArticles()];
+  articles.forEach((a, i) => {
     if (getDb().prepare('SELECT 1 FROM blog_posts WHERE slug = ?').get(a.slug!)) return;
-    createPost({ ...a, status: 'published', source: 'seed', publishedAt: new Date(Date.now() - (DEFAULT_ARTICLES.length - i) * 3 * day).toISOString() }, { type: 'system' });
+    createPost({ ...a, status: 'published', source: 'seed', publishedAt: new Date(Date.now() - (articles.length - i) * 3 * day).toISOString() }, { type: 'system' });
     posts++;
   });
   for (const r of LINK_RULES) upsertLinkRule({ keyword: r.keyword, url: r.url, title: r.title, kind: 'internal', priority: 50 });

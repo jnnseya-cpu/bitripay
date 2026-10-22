@@ -1,6 +1,6 @@
 /**
  * Public, server-rendered marketing surface (behind the web domain via the reverse proxy):
- *   /blog, /blog/:slug, /legal/:slug, /about, /contact, /how-it-works, /industries, /enterprise, /developers (+ /developers/api), /get-started,
+ *   /blog, /blog/:slug, /legal/:slug, /about, /contact, /how-it-works, /industries, /enterprise, /developers (+ /developers/api), /features (+ /features/:slug), /get-started,
  *   /growth, /policies, /status (+ /status.json), /sitemap.xml, /feed.xml, /robots.txt, /llms.txt, /llms-full.txt
  * plus the JSON blog API under /api/blog for the apps.
  */
@@ -16,6 +16,7 @@ import { getSeoSettings } from '../services/settings';
 import { blogIndexPage, blogPostPage, legalPage, rssXml, llmsTxt } from '../site/render';
 import { howItWorksPage, industriesPage, enterprisePage, developersPage, getStartedPage, growthPage, policiesPage, statusPage, statusData, PRODUCT_PAGES } from '../site/pages';
 import { apiReferencePage } from '../docs/reference';
+import { featuresIndexPage, featurePage, FEATURE_PATHS } from '../site/features';
 
 export const siteRouter = Router();
 const publicLimit = rateLimit({ windowMs: 60_000, max: 240, keyPrefix: 'site' });
@@ -57,6 +58,14 @@ siteRouter.get('/how-it-works', publicLimit, (_req, res) => res.type('html').sen
 siteRouter.get('/industries', publicLimit, (_req, res) => res.type('html').send(industriesPage()));
 siteRouter.get('/enterprise', publicLimit, (_req, res) => res.type('html').send(enterprisePage()));
 siteRouter.get('/developers', publicLimit, (_req, res) => res.type('html').send(developersPage()));
+// Features: the hub and one page per capability. Availability is computed per request from the live module state,
+// so these pages are never cached into claiming something the platform would refuse.
+siteRouter.get('/features', publicLimit, (_req, res) => res.setHeader('Cache-Control', 'no-store').type('html').send(featuresIndexPage()));
+siteRouter.get('/features/:slug', publicLimit, (req, res, next) => {
+  const html = featurePage(String(req.params.slug));
+  if (!html) return next();
+  return res.setHeader('Cache-Control', 'no-store').type('html').send(html);
+});
 // The full API reference, readable: the same document served at /v1/openapi.json, rendered operation by operation.
 siteRouter.get('/developers/api', publicLimit, (_req, res) => res.setHeader('Cache-Control', 'public, max-age=3600').type('html').send(apiReferencePage()));
 siteRouter.get('/get-started', publicLimit, (_req, res) => res.type('html').send(getStartedPage()));
@@ -76,6 +85,7 @@ siteRouter.get('/sitemap.xml', (_req, res) => {
         { path: '/register', changefreq: 'monthly', priority: 0.8 },
         { path: '/about', changefreq: 'monthly', priority: 0.7 },
         ...PRODUCT_PAGES.map((p) => ({ path: p.path, changefreq: p.path === '/status' ? 'hourly' : 'monthly', priority: p.path === '/developers' || p.path === '/how-it-works' ? 0.8 : 0.6 })),
+        ...FEATURE_PATHS().map((path) => ({ path, changefreq: 'monthly', priority: path === '/features' ? 0.8 : 0.7 })),
         { path: '/blog', changefreq: 'daily', priority: 0.9 },
         ...posts.map((p) => ({ path: p.url, lastmod: p.updatedAt, changefreq: 'weekly', priority: 0.8 })),
         ...pages.map((p) => ({ path: `/legal/${p.slug}`, lastmod: p.updatedAt, changefreq: 'yearly', priority: 0.3 })),

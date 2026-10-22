@@ -553,6 +553,7 @@ function slo24Target(): number {
 /** Product pages for the sitemap and llms.txt. */
 export const PRODUCT_PAGES: { path: string; title: string; note: string }[] = [
   { path: '/how-it-works', title: 'How it works', note: 'account, funding, paying, cashing out, tiers, fees, controls' },
+  { path: '/features', title: 'Features', note: 'every capability with its unique selling point, what it costs and whether it is switched on' },
   { path: '/industries', title: 'Industries', note: 'markets, transport, utilities, telecom, e-commerce, schools, government, diaspora, agents' },
   { path: '/enterprise', title: 'Enterprise groups', note: 'organisations, roles, bulk payouts, settlement, integration, SLOs' },
   { path: '/developers', title: 'Developers', note: 'REST API, scopes, hosted and embedded checkout, sandbox, webhooks' },

@@ -485,6 +485,12 @@ agent float / trust / requests / onboarding); the console under `/api/admin/risk
 - **SDKs and docs**: `shared/sdk-node` (`@bitripay/sdk`, zero dependencies, typed resources, webhook
   verification), `shared/sdk-php` (`bitripay/sdk`), `shared/sdk-python` (`bitripay`); the OpenAPI 3.1 document
   at `/api/v1/openapi.json` is generated from the same operation table the portal shows.
+- **Feature catalogue and pages** (`/features`, `/features/<slug>`): one typed entry per capability carrying its
+  unique selling point, audience, problem, steps, checkable proof, price, FAQ and article body. The pages and the
+  blog articles are all generated from it, so a claim is written once. Availability is never written into the copy:
+  the pages compute it per request from `getModules()` and the aggregator perimeter, and distinguish *available*,
+  *available on authorisation* and *switched off by an administrator*. Selling something the platform would refuse
+  is therefore not a matter of remembering to update a page.
 - **Corridor network** (module `corridorNetwork`, off by default): the regulatory posture of each corridor — phase,
   regulatory mode, licence basis, custody model, rails, limits and the settlement mechanisms permitted on it —
   together with the counterparties that hold the money, their positions and settlement batches under four eyes,
