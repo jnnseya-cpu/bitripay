@@ -180,7 +180,7 @@ export function createApp() {
   app.use('/api/bills', billsRouter);
   app.use('/api/topups', topupRouter);
   app.use('/api/gift-cards', giftCardsRouter);
-  app.use('/api/kyc', kycRouter);
+  app.use('/api/kyc', requireModule('kyc'), kycRouter);
   app.use('/api/risk', riskRouter);
   app.use('/api/savings', requireModule('savings'), savingsRouter);
   app.use('/api/fx-tools', fxToolsRouter);

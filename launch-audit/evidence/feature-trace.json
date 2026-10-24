@@ -1,0 +1,330 @@
+[
+  {
+    "key": "qr-payments",
+    "modules": ["qrPayments"],
+    "default": ["true"],
+    "enforced_in": ["app.ts"],
+    "perimeter_gated": [],
+    "enforcement": ["app.ts:route-middleware"]
+  },
+  {
+    "key": "payment-links",
+    "modules": ["paymentLinks"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": ["paymentRequests.ts:service-guard"]
+  },
+  {
+    "key": "money-requests",
+    "modules": ["moneyRequests"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": ["paymentRequests.ts:service-guard"]
+  },
+  {
+    "key": "hosted-checkout",
+    "modules": ["merchantGateway"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": ["merchant.ts:service-guard"]
+  },
+  {
+    "key": "point-of-sale",
+    "modules": ["merchantGateway"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": ["merchant.ts:service-guard"]
+  },
+  {
+    "key": "developer-api",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "webhooks",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "connected-accounts",
+    "modules": ["merchantGateway"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": ["merchant.ts:service-guard"]
+  },
+  {
+    "key": "team-and-roles",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "wallets-and-transfers",
+    "modules": ["transfers"],
+    "default": ["true"],
+    "enforced_in": ["app.ts"],
+    "perimeter_gated": ["transfers"],
+    "enforcement": ["app.ts:route-middleware", "transfers.ts:service-guard"]
+  },
+  {
+    "key": "agents-and-cash",
+    "modules": ["agents"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": ["agents"],
+    "enforcement": ["agents.ts:service-guard"]
+  },
+  {
+    "key": "add-money",
+    "modules": ["addMoney"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": ["addMoney"],
+    "enforcement": ["payments.ts:service-guard"]
+  },
+  {
+    "key": "withdrawals",
+    "modules": ["withdrawals"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": ["withdrawals"],
+    "enforcement": ["withdrawals.ts:service-guard"]
+  },
+  {
+    "key": "remittance",
+    "modules": ["remittance"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": ["remittance"],
+    "enforcement": ["remittance.ts:service-guard"]
+  },
+  {
+    "key": "exchange",
+    "modules": ["exchange"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": ["exchange"],
+    "enforcement": ["transfers.ts:service-guard"]
+  },
+  {
+    "key": "ledger",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "settlement-and-statements",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "emoney-and-safeguarding",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "kyc-and-identity",
+    "modules": ["kyc"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "risk-and-compliance",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "disputes",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "corridor-network",
+    "modules": ["corridorNetwork"],
+    "default": ["false"],
+    "enforced_in": ["v1ext.ts"],
+    "perimeter_gated": ["corridorNetwork"],
+    "enforcement": ["v1ext.ts:route-middleware"]
+  },
+  {
+    "key": "ussd-and-sms",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "bitripay-lite",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "offline-payments",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "notifications",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "smart-route",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "national-switch",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "virtual-cards",
+    "modules": ["virtualCards"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": ["virtualCards"],
+    "enforcement": ["virtualCards.ts:service-guard"]
+  },
+  {
+    "key": "restricted-wallets",
+    "modules": ["restrictedWallets"],
+    "default": ["true"],
+    "enforced_in": ["app.ts"],
+    "perimeter_gated": ["restrictedWallets"],
+    "enforcement": ["app.ts:route-middleware"]
+  },
+  {
+    "key": "savings",
+    "modules": ["savings"],
+    "default": ["true"],
+    "enforced_in": ["app.ts"],
+    "perimeter_gated": ["savings"],
+    "enforcement": ["app.ts:route-middleware"]
+  },
+  {
+    "key": "bills-and-topup",
+    "modules": ["billPay", "mobileTopup"],
+    "default": ["true", "true"],
+    "enforced_in": [],
+    "perimeter_gated": ["billPay", "mobileTopup"],
+    "enforcement": ["services.ts:service-guard"]
+  },
+  {
+    "key": "p2p-marketplace",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "open-banking",
+    "modules": ["openBanking"],
+    "default": ["true"],
+    "enforced_in": ["app.ts"],
+    "perimeter_gated": ["openBanking"],
+    "enforcement": ["app.ts:route-middleware"]
+  },
+  {
+    "key": "credit-readiness",
+    "modules": ["creditScore"],
+    "default": ["true"],
+    "enforced_in": ["app.ts"],
+    "perimeter_gated": ["creditScore"],
+    "enforcement": ["app.ts:route-middleware"]
+  },
+  {
+    "key": "gift-cards",
+    "modules": ["giftCards"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": ["giftCards"],
+    "enforcement": ["services.ts:service-guard"]
+  },
+  {
+    "key": "referrals",
+    "modules": ["referrals"],
+    "default": ["true"],
+    "enforced_in": [],
+    "perimeter_gated": ["referrals"],
+    "enforcement": []
+  },
+  {
+    "key": "support",
+    "modules": ["support", "liveChat"],
+    "default": ["true", "true"],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": ["support.ts:service-guard"]
+  },
+  {
+    "key": "bulk-payouts",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "subscriptions",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  },
+  {
+    "key": "plugins-and-sdks",
+    "modules": [],
+    "default": [],
+    "enforced_in": [],
+    "perimeter_gated": [],
+    "enforcement": []
+  }
+]

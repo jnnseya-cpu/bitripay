@@ -2,13 +2,23 @@ import { getDb } from '../db';
 import { grantPromoCredit } from './emoney';
 import { uuid, now } from '../lib/ids';
 import { getReferralSettings } from './settings';
+import { getModules } from './modules';
 import { getBaseCurrency } from './currencies';
 import { notify } from './notifications';
 import { findUserById, type UserRow } from './users';
 import { formatMoney } from '@bitripay/shared';
 
+/**
+ * The console switch has to mean something here rather than only in the interface. It was read in one place — the web
+ * app hid a settings tab — so an administrator who switched the programme off still had rewards paid out of the
+ * treasury by every other surface. The check sits in the service, not on a route, because attribution happens during
+ * registration and payment happens on a deposit; neither is a referral endpoint anyone calls directly.
+ */
+const referralsOn = (): boolean => getModules().referrals !== false;
+
 /** Walk up the referral chain and pay each level its configured reward from the treasury. */
 function payRewards(referee: UserRow, trigger: 'registration' | 'first_deposit') {
+  if (!referralsOn()) return;
   const settings = getReferralSettings();
   if (!settings.enabled || settings.trigger !== trigger) return;
   const db = getDb();
@@ -45,10 +55,12 @@ function payRewards(referee: UserRow, trigger: 'registration' | 'first_deposit')
 }
 
 export function onUserRegistered(user: UserRow) {
+  if (!referralsOn()) return;
   if (user.referred_by) payRewards(user, 'registration');
 }
 
 export function onDepositCompleted(userId: string) {
+  if (!referralsOn()) return;
   const user = findUserById(userId);
   if (!user?.referred_by) return;
   const count = (
@@ -65,6 +77,9 @@ export function referralStats(userId: string) {
   const rewards = db.prepare('SELECT * FROM referral_rewards WHERE referrer_id = ? ORDER BY created_at DESC').all(userId) as any[];
   const totalEarned = rewards.reduce((s, r) => s + r.amount, 0);
   return {
+    // Past earnings stay readable with the programme off — they were earned — but the caller is told it is not
+    // running, so an interface cannot keep offering a share link that would attribute nobody.
+    enabled: referralsOn(),
     referredCount: referred.length,
     totalEarned,
     currency: getBaseCurrency().code,
