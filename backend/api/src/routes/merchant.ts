@@ -131,7 +131,7 @@ v1Router.post(
         successUrl: redirectUrl.optional().nullable(),
         cancelUrl: redirectUrl.optional().nullable(),
         customerEmail: z.string().email().optional().nullable(),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
         expiresInMinutes: z.number().int().positive().optional().nullable(),
         allowedMethods: z.array(z.enum(['wallet', 'card', 'mobile_money', 'bank', 'virtual_card'])).optional(),
       }),

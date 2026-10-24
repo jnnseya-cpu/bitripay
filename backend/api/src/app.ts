@@ -56,6 +56,7 @@ import { evidenceRouter } from './routes/evidence';
 import { payoutsRouter } from './routes/payouts';
 import { idempotency } from './middleware/idempotency';
 import { correlation } from './middleware/correlation';
+import { contentSecurityPolicy, isEmbeddablePath } from './lib/csp';
 import { sloMiddleware } from './middleware/slo';
 import { ensureParseTemplates } from './services/evidence';
 import { ensureMomoOperators } from './services/momo';
@@ -123,9 +124,13 @@ export function createApp() {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self), payment=(self)');
-    // JSON and feeds are never framed; server-rendered pages (checkout, Lite, site) may be framed only by the web app.
-    res.setHeader('X-Frame-Options', req.path.startsWith('/api/') || req.path.startsWith('/v1/') ? 'DENY' : 'SAMEORIGIN');
+    // JSON and feeds are never framed; server-rendered pages (Lite, site) may be framed only by the web app. Hosted
+    // checkout is the exception: it exists to be embedded in a merchant's page, so it carries no X-Frame-Options at
+    // all and states its framing rule in the Content-Security-Policy, which can express "any https site" where the
+    // older header cannot express anything but same-origin or nothing.
+    if (!isEmbeddablePath(req.path)) res.setHeader('X-Frame-Options', req.path.startsWith('/api/') || req.path.startsWith('/v1/') ? 'DENY' : 'SAMEORIGIN');
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    res.setHeader('Content-Security-Policy', contentSecurityPolicy(req, { production: config.isProduction }));
     next();
   });
   app.use(sloMiddleware);

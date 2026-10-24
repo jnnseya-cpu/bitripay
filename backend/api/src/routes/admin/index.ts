@@ -1458,8 +1458,8 @@ adminRouter.put(
         methods: z.array(z.enum(['card', 'mobile_money', 'bank', 'bitcoin'])),
         currencies: z.array(z.string().length(3)),
         countries: z.array(z.string().length(2)).optional(),
-        credentials: z.record(z.string()).optional(),
-        config: z.record(z.unknown()).optional(),
+        credentials: z.record(z.string(), z.string()).optional(),
+        config: z.record(z.string(), z.unknown()).optional(),
         sortOrder: z.number().int().optional(),
       }),
       req.body,
@@ -1643,7 +1643,7 @@ adminRouter.post(
   }),
 );
 adminRouter.put('/translations/:lang', requirePermission('cms'), (req, res) => {
-  const body = validate(z.record(z.string()), req.body?.overrides ?? req.body);
+  const body = validate(z.record(z.string(), z.string()), req.body?.overrides ?? req.body);
   setTranslationOverrides(String(req.params.lang), body);
   res.json({ ok: true });
 });

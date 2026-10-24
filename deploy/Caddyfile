@@ -16,6 +16,16 @@ www.{$DOMAIN} {
 		Referrer-Policy strict-origin-when-cross-origin
 		X-Frame-Options SAMEORIGIN
 	}
+	# Hosted checkout is the one page that exists to be embedded in a merchant's own site by @bitripay/checkout-js in
+	# embed mode. X-Frame-Options cannot say "any site", only same-origin or nothing, so SAMEORIGIN above made every
+	# cross-origin embed fail to render — the SDK's unit tests never load a page, so nothing caught it. The header is
+	# removed for this path only and the framing rule is stated in a Content-Security-Policy, which can express it.
+	@checkout path /checkout /checkout/*
+	handle @checkout {
+		header -X-Frame-Options
+		header Content-Security-Policy "frame-ancestors https:"
+		reverse_proxy web:80
+	}
 	# server-rendered pages, feeds, crawler files, BitriPay Lite and the partner API are served by the API container
 	@api path /api/* /v1/* /lite* /blog* /legal/* /about /contact /how-it-works /industries /enterprise /developers /developers/* /features /features/* /get-started /growth /policies /status /status.json /brand* /sitemap.xml /feed.xml /robots.txt /llms.txt /llms-full.txt
 	handle @api {

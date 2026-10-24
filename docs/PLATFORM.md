@@ -1052,7 +1052,11 @@ and sends the shopper to the hosted checkout; BitriPay sends them back with the 
 `shared/sdk-js` is a dependency-free browser package (ES2019 + DOM, CommonJS + `.d.ts`, also assigns
 `window.BitriPay`). `BitriPay.checkout({ url | sessionId + apiBase, mode: 'redirect' | 'embed',
 container?, height?, origin?, locale?, onSuccess?, onFailure?, onClose?, onMessage? })` either navigates
-to the hosted checkout or mounts it in an iframe on `<url>?embed=1&origin=<window.location.origin>`
+to the hosted checkout or mounts it in an iframe on `<url>?embed=1&origin=<window.location.origin>`. Embed mode needs the
+hosted page to be framable cross-origin, so `/checkout*` is the one path served without `X-Frame-Options`, carrying
+`frame-ancestors https:` instead (the edge proxy and the web image both state it). Any https site may therefore frame
+it — the protection is the origin-checked postMessage contract and the shopper authenticating inside the frame. A
+per-merchant origin allowlist would be stronger and is not implemented
 (`sessionId` resolves to `<apiBase>/checkout/<sessionId>`). `mountPayButton(el, options)` wires a
 click on any element to `checkout(options)`. `buildCheckoutUrl(options)` and
 `parseCheckoutMessage(event, expectedOrigin)` are pure, exported and unit-tested with `node:test`.

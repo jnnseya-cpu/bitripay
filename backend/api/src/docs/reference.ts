@@ -279,7 +279,7 @@ pre.sample{background:#0f172a;color:#e2e8f0;border-radius:11px;padding:13px 15px
 @media (max-width:900px){.ref{grid-template-columns:1fr}.ref aside{position:static;max-height:300px}}
 `;
 
-const FILTER_JS = `
+export const FILTER_JS = `
 (function(){
   var box=document.getElementById('ref-filter');if(!box)return;
   var ops=[].slice.call(document.querySelectorAll('article.op'));
@@ -400,7 +400,7 @@ export function apiReferencePage(model: ReferenceModel = referenceModel()): stri
     })
     .join('')}</table></div></div></section>
 </div></div>
-<script>${FILTER_JS}</script>`;
+<script src="/v1/docs/reference.js" defer></script>`;
   return layout(
     {
       title: pageTitle('API reference'),

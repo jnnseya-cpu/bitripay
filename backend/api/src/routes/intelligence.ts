@@ -38,7 +38,7 @@ import {
 } from '../services/diaspora';
 import { riskContext } from '../services/risk';
 import { openApiDocument } from '../docs/openapi';
-import { apiReferencePage } from '../docs/reference';
+import { apiReferencePage, FILTER_JS } from '../docs/reference';
 import { MERCHANT_ROLES } from '../services/users';
 
 export const intelligenceRouter = Router();
@@ -55,6 +55,9 @@ intelligenceRouter.get('/openapi.json', (req, res) => {
   return res.json(openApiDocument());
 });
 /** The same document, rendered for a person: operations by group, scopes, parameters, bodies, webhooks, error codes. */
+// The reference page's filter is served as a file rather than inlined, so the Content-Security-Policy can refuse
+// inline script outright instead of allowing it for one convenience.
+intelligenceRouter.get('/docs/reference.js', (_req, res) => res.setHeader('Cache-Control', 'public, max-age=3600').type('application/javascript').send(FILTER_JS));
 intelligenceRouter.get('/docs', (_req, res) => res.setHeader('Cache-Control', 'public, max-age=3600').type('html').send(apiReferencePage()));
 const r = intelligenceRouter;
 const writeLimit = rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'intel' });

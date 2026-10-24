@@ -476,7 +476,8 @@ export async function executeNeuralKernelTask<I, O>(ctx: KernelContext, spec: Ag
     try {
       const res = await callProvider(model, system, prompt.user, spec.maxTokens, r.timeoutMs);
       // 7. response normaliser
-      let parsedOut: z.SafeParseReturnType<unknown, O>;
+      // zod 4 renamed SafeParseReturnType; deriving it from the schema keeps this correct across either version.
+      let parsedOut: ReturnType<typeof spec.outputSchema.safeParse>;
       try {
         parsedOut = spec.outputSchema.safeParse(extractJson(res.text));
       } catch (err) {

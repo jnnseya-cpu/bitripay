@@ -115,8 +115,9 @@ export const goLiveProfileSchema = z.object({
     .optional(),
   smtp: z.object({ host: z.string().min(2), port: z.number().int().min(1).max(65535).default(587), user: z.string().default(''), pass: z.string().default(''), from: z.string().min(3) }).optional(),
   /** Tariff grid per operation: fee in basis points, fixed part / amount band in base-currency minor units, agent commission in bps. */
+  // partialRecord, not record: zod 4 makes an enum-keyed record exhaustive, and a profile names only the fees it sets.
   fees: z
-    .record(
+    .partialRecord(
       z.enum(FEE_TYPES),
       z.object({
         bps: z.number().int().min(0).max(10000),

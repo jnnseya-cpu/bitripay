@@ -28,7 +28,7 @@ const createSchema = z.object({
     .nullable(),
   successUrl: redirectUrl.optional().nullable(),
   cancelUrl: redirectUrl.optional().nullable(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   /** Point of sale: description lines with quantity and unit price (major units); VAT is added at `vatRate` percent. */
   items: z
     .array(z.object({ description: cleanText(120), quantity: z.number().int().positive().max(100000), unitPrice: z.string() }))

@@ -789,7 +789,8 @@ r.get('/capability-matrix', requirePermission('settings'), (req, res) =>
 r.put('/capability-matrix/:country', requirePermission('settings'), (req, res) => {
   const b = validate(
     z.object({
-      methods: z.record(z.enum(CAPABILITY_MATRIX_METHODS.map((m) => m.method) as [string, ...string[]]), z.boolean()).optional(),
+      // partialRecord, not record: zod 4 makes an enum-keyed record exhaustive, and an edit flips only the columns it names.
+      methods: z.partialRecord(z.enum(CAPABILITY_MATRIX_METHODS.map((m) => m.method) as [string, ...string[]]), z.boolean()).optional(),
       maxPerTransaction: z.number().int().min(0).optional(),
       nationalSwitchConnector: z.string().max(80).optional().nullable(),
     }),

@@ -54,7 +54,7 @@ adminMessagingRouter.post(
         key: z.string().min(2).max(60),
         channel: z.enum(TEMPLATE_CHANNELS),
         lang: z.string().min(2).max(5).optional().nullable(),
-        vars: z.record(z.unknown()).optional(),
+        vars: z.record(z.string(), z.unknown()).optional(),
         /** Preview unsaved text: when given, this body/subject is rendered instead of the stored template. */
         body: z.string().max(4000).optional().nullable(),
         subject: z.string().max(200).optional().nullable(),
