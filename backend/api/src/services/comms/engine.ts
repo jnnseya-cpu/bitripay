@@ -7,6 +7,7 @@
  * site.
  */
 import { getDb } from '../../db';
+import { credential } from '../credentials';
 import { uuid, now } from '../../lib/ids';
 import { config } from '../../config';
 import { parseJson } from '../../lib/json';
@@ -177,7 +178,7 @@ export function channelStatus(): Record<CommsChannel, { wired: boolean; detail: 
     email: { wired: !!smtp.host, detail: smtp.host ? `SMTP ${smtp.host}:${smtp.port} as ${smtp.from}` : 'No SMTP host: emails are logged, not sent' },
     inapp: { wired: true, detail: 'Notification centre in the web app and phone app' },
     sms: { wired: smsWired, detail: smsDetail },
-    push: { wired: true, detail: config.expoAccessToken ? 'Expo push service (access token set)' : 'Expo push service (no access token; fine for most volumes)' },
+    push: { wired: true, detail: credential('push.expoAccessToken') ? 'Expo push service (access token set)' : 'Expo push service (no access token; fine for most volumes)' },
     whatsapp: { wired: !!(wa.accessToken && wa.phoneNumberId), detail: wa.accessToken && wa.phoneNumberId ? 'WhatsApp Cloud API' : 'Not connected: Admin → Channels → WhatsApp' },
   };
 }

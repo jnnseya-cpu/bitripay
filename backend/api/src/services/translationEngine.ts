@@ -8,8 +8,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { LOCALES, LOCALE_FALLBACKS, PHRASES } from '@bitripay/shared';
 import { badRequest, unprocessable } from '../lib/errors';
-import { decrypt } from '../lib/crypto';
-import { config } from '../config';
+import { anthropicKey } from './credentials';
 import { getSeoSettings } from './settings';
 import { getTranslationOverrides, setTranslationOverrides, listLanguages } from './cms';
 import { audit } from './audit';
@@ -24,17 +23,8 @@ const LANGUAGE_NOTES: Record<string, string> = {
   ar: 'Modern Standard Arabic; the app renders right-to-left.',
 };
 
-function apiKey(): string | null {
-  const stored = getSeoSettings().agent.apiKey;
-  if (stored) {
-    try {
-      return decrypt(stored);
-    } catch {
-      return null;
-    }
-  }
-  return config.anthropicApiKey || null;
-}
+/** One resolver for the whole platform (services/credentials.ts); this file used to carry its own copy. */
+const apiKey = (): string | null => anthropicKey(null, getSeoSettings().agent.apiKey);
 
 /** Phrases the app would show in English (or in the regional fallback) for this language. */
 export function missingPhrases(lang: string): string[] {

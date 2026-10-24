@@ -17,6 +17,8 @@ import { listChargebacks, openChargeback, resolveChargeback } from '../../servic
 import { adminRouteView } from '../../services/routing';
 import { listPayments, getPayment, toPaymentView } from '../../services/payments';
 import { proposeVerification, approveVerification, declineVerification, listVerifications, verificationCase, assertAdminStepUp } from '../../services/verification';
+import { setCredentials, CREDENTIAL_MASK } from '../../services/credentials';
+import { credentialInventory } from '../../services/credentialInventory';
 import { listEvidence, ingestEvidence, listDevices, registerDevice, revokeDevice, listTemplates, upsertTemplate, deleteTemplate, parseEvidenceText } from '../../services/evidence';
 import { listEvents, verifyEventChain } from '../../services/events';
 import { addSanction, listSanctions, deleteSanction, listRiskEvents } from '../../services/risk';
@@ -1230,6 +1232,25 @@ adminRouter.get('/settings', requirePermission('settings'), (_req, res) => {
 adminRouter.get('/settings/modules/aggregator-perimeter', requirePermission('settings'), (_req, res) =>
   res.json({ applied: aggregatorPerimeterApplied(), on: AGGREGATOR_PERIMETER_ON, off: AGGREGATOR_PERIMETER_OFF, modules: getModules() }),
 );
+/**
+ * Credential readiness: every key the platform needs, whether it is set, where it is set and what is waiting on it.
+ * Values are never returned — a set secret reports as `set: true` and nothing more — so this is safe for the
+ * `settings` permission rather than needing treasury rights.
+ */
+adminRouter.get('/credentials', requirePermission('settings'), (_req, res) => res.json(credentialInventory()));
+
+/**
+ * Write the credentials that have no other console home. Step-up protected and audited by key, never by value:
+ * the audit record says which credential moved, and an administrator reading it later learns nothing secret.
+ */
+adminRouter.put('/credentials', requirePermission('settings'), (req, res) => {
+  const body = validate(z.object({ values: z.record(z.string(), z.string().max(400).nullable()), pin: z.string().optional() }), req.body);
+  assertAdminStepUp(req.user!, body.pin, req);
+  const { changed, cleared } = setCredentials(body.values, req.user!.id);
+  if (changed.length || cleared.length) audit(req.user!.id, 'credentials.update', 'settings', 'credentials', { changed, cleared });
+  res.json({ ...credentialInventory(), changed, cleared, mask: CREDENTIAL_MASK });
+});
+
 adminRouter.post('/settings/modules/aggregator-perimeter', requirePermission('settings'), (req, res) => {
   const before = getModules();
   const flags = aggregatorPerimeterFlags();

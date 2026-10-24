@@ -22,6 +22,7 @@ import { Currencies } from './pages/Currencies';
 import { Fees } from './pages/Fees';
 import { Gateways } from './pages/Gateways';
 import { Modules } from './pages/Modules';
+import { Credentials } from './pages/Credentials';
 import { Catalogs } from './pages/Catalogs';
 import { Site } from './pages/Site';
 import { Pages } from './pages/Pages';
@@ -200,6 +201,14 @@ export function App() {
           element={
             <P>
               <Modules />
+            </P>
+          }
+        />
+        <Route
+          path="/credentials"
+          element={
+            <P>
+              <Credentials />
             </P>
           }
         />

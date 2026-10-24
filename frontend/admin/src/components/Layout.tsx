@@ -47,6 +47,7 @@ const NAV: { section: string; items: { to: string; label: string; ico: string; p
       { to: '/channels', label: 'USSD, SMS & Lite', ico: '☎️', perm: 'settings' },
       { to: '/controls', label: 'Gateway controls & risk', ico: '🛡️', perm: 'settings' },
       { to: '/modules', label: 'Modules & methods', ico: '🧩', perm: 'settings' },
+      { to: '/credentials', label: 'API keys & credentials', ico: '🔑', perm: 'settings' },
       { to: '/catalogs', label: 'Bills, top-up & gift cards', ico: '🧾', perm: 'catalogs' },
     ],
   },

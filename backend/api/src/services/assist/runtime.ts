@@ -5,16 +5,16 @@
  * and streams progress to the client. When no model key is configured the same tools are driven by a deterministic
  * planner so every command centre works, and is testable, offline.
  */
-import { config } from '../../config';
 import { EventEmitter } from 'node:events';
 import Anthropic from '@anthropic-ai/sdk';
 import { getDb } from '../../db';
 import { uuid, now } from '../../lib/ids';
 import { parseJson } from '../../lib/json';
-import { decrypt, sha256 } from '../../lib/crypto';
+import { sha256 } from '../../lib/crypto';
 import { AppError, badRequest, forbidden, notFound } from '../../lib/errors';
 import { findUserById, toPublicUser, type UserRow } from '../users';
 import { getAssistSettings, getSeoSettings } from '../settings';
+import { anthropicKey } from '../credentials';
 import { getCurrency } from '../currencies';
 import { listWallets } from '../wallets';
 import { recordEvent } from '../events';
@@ -176,14 +176,7 @@ const toApproval = (r: any): ApprovalView => ({
 
 export function modelApiKey(): string | null {
   const s = getAssistSettings();
-  const tryDecrypt = (v: string) => {
-    try {
-      return v ? decrypt(v) : null;
-    } catch {
-      return null;
-    }
-  };
-  return tryDecrypt(s.apiKey) ?? tryDecrypt(getSeoSettings().agent.apiKey) ?? (config.anthropicApiKey || null);
+  return anthropicKey(s.apiKey, getSeoSettings().agent.apiKey);
 }
 /** Account holders never see a provider, a model, token counts or costs (rule 4); administrators keep the full view. */
 export function publicRunView<T extends Record<string, any>>(run: T, role: string): T {

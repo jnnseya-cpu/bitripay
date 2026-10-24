@@ -1,4 +1,8 @@
 import { getDb } from '../db';
+import { credential } from './credentials';
+
+/** Console value first, environment second (services/credentials.ts). */
+const expoToken = (): string => credential('push.expoAccessToken');
 import { uuid, now } from '../lib/ids';
 import { parseJson } from '../lib/json';
 import { config } from '../config';
@@ -302,7 +306,7 @@ export async function sendPush(userId: string, title: string, body: string, data
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        ...(config.expoAccessToken ? { Authorization: `Bearer ${config.expoAccessToken}` } : {}),
+        ...(expoToken() ? { Authorization: `Bearer ${expoToken()}` } : {}),
       },
       // Loud alerts: custom alarm sound on the max-importance channel with a long vibration pattern (the app registers the channel).
       body: JSON.stringify(

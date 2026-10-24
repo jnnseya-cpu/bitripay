@@ -6,9 +6,9 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { getDb } from '../db';
+import { anthropicKey } from './credentials';
 import { uuid, now } from '../lib/ids';
 import { parseJson } from '../lib/json';
-import { decrypt } from '../lib/crypto';
 import { badRequest } from '../lib/errors';
 import { config } from '../config';
 import { getSeoSettings } from './settings';
@@ -61,17 +61,8 @@ function logRun(r: Omit<AgentRun, 'id' | 'createdAt'>): AgentRun {
   return toRun(getDb().prepare('SELECT * FROM seo_runs WHERE id = ?').get(id));
 }
 
-function apiKey(): string | null {
-  const stored = getSeoSettings().agent.apiKey;
-  if (stored) {
-    try {
-      return decrypt(stored);
-    } catch {
-      return null;
-    }
-  }
-  return config.anthropicApiKey || null;
-}
+/** One resolver for the whole platform (services/credentials.ts); this file used to carry its own copy. */
+const apiKey = (): string | null => anthropicKey(null, getSeoSettings().agent.apiKey);
 export function agentStatus() {
   const s = getSeoSettings().agent;
   return {
