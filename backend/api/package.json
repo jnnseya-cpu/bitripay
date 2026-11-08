@@ -14,7 +14,8 @@
     "docs:http": "tsx src/docs/httpFile.ts",
     "go-live": "tsx src/goLive.ts",
     "demo-accounts": "tsx src/demoAccounts.ts",
-    "payout-float": "tsx src/payoutFloat.ts"
+    "payout-float": "tsx src/payoutFloat.ts",
+    "test:clock": "vitest run --config vitest.clock.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
@@ -27,7 +28,7 @@
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^10.0.9",
+    "nodemailer": "^10.2.1",
     "qrcode": "^1.5.4",
     "stripe": "^19.1.0",
     "zod": "^4.6.7"

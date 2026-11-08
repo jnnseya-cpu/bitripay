@@ -21,6 +21,14 @@ beforeAll(async () => {
   admin = await adminToken(app);
 });
 
+/**
+ * A review date that is still in the future whenever this runs. It was written as 2027-01-31, which made the
+ * suite pass until the calendar reached it and then report the review as overdue — the same way an absolute
+ * fixture in the open-banking income test slid out of its six-month window. The overdue case below keeps an
+ * absolute past date on purpose, because it has to be past.
+ */
+const FUTURE_REVIEW = new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10);
+
 describe('SLO measurement', () => {
   it('classifies partner, QR, KODA, money and switch routes into their SLO classes', () => {
     expect(classifyRoute('POST', '/api/v1/payment_intents')).toBe('intent_create');
@@ -228,7 +236,7 @@ describe('SLA register', () => {
       escalationContact: '+243 000 000 000 (duty manager)',
       maintenanceWindow: 'Sunday 02:00–04:00 UTC',
       incidentContact: 'incidents@processor.example',
-      reviewDate: '2027-01-31',
+      reviewDate: FUTURE_REVIEW,
       documentRef: 'MSA-2026-014 §7',
     });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
@@ -238,7 +246,7 @@ describe('SLA register', () => {
       kind: 'processor',
       railId: 'wallet',
       availabilityTarget: 0.999,
-      reviewDate: '2027-01-31',
+      reviewDate: FUTURE_REVIEW,
       createdBy: expect.any(String),
     });
 

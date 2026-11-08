@@ -55,7 +55,15 @@ describe('open banking', () => {
 
   it('imports a CSV statement as real bank data and verifies the recurring income in it', async () => {
     const u = await registerUser(app, { country: 'GB' });
-    const months = ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08'];
+    // Relative to today, never absolute. The income window is six whole months anchored to the first, so a fixture
+    // with fixed dates slides out of it as the calendar advances: these months were written in April and by November
+    // the earliest salary fell outside the window, turning five detected months into four. The five whole months
+    // before this one are inside the window on any date, and day 28 exists in every month.
+    const now = new Date();
+    const months = Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (5 - i), 1));
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    });
     const rows = ['date,description,amount', ...months.flatMap((m) => [`${m}-28,ACME LTD SALARY,1500.00`, `${m}-01,RENT,-650.00`, `${m}-10,TESCO,-82.40`]), 'bad-date,OOPS,x'].join('\n');
     const imp = await request(app).post('/api/open-banking/statements').set(u.auth).send({ institutionName: 'My High Street Bank', currency: 'GBP', csv: rows });
     expect(imp.status, JSON.stringify(imp.body)).toBe(201);

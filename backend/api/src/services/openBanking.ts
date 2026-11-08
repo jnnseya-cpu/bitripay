@@ -451,12 +451,19 @@ const normalise = (s: string) =>
 /** Recurring credits (three or more months, amounts within a quarter of the median) become verified income streams. */
 export function verifyIncome(userId: string): IncomeReport {
   const db = getDb();
-  const since = new Date(Date.now() - 190 * 86_400_000).toISOString();
+  // The six COMPLETE calendar months before this one, anchored to the first — the same basis the statement
+  // generator uses, so the two cannot disagree. This was a rolling 190-day window, which reaches back into either
+  // the sixth or the seventh month depending on today's date, so `monthsCovered` reported 6 on most days and 7 on
+  // others and the income confidence moved with the calendar rather than with the statements. The current month is
+  // excluded on purpose: it is incomplete, and counting a part-month of credits understates a monthly income.
+  const today = new Date();
+  const since = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 6, 1)).toISOString();
+  const until = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)).toISOString();
   const credits = db
     .prepare(
-      "SELECT booked_at, amount_minor, currency, description, counterparty FROM open_banking_transactions t JOIN open_banking_links l ON l.id = t.link_id WHERE t.user_id = ? AND l.status = 'LINKED' AND t.amount_minor > 0 AND t.booked_at >= ? ORDER BY booked_at",
+      "SELECT booked_at, amount_minor, currency, description, counterparty FROM open_banking_transactions t JOIN open_banking_links l ON l.id = t.link_id WHERE t.user_id = ? AND l.status = 'LINKED' AND t.amount_minor > 0 AND t.booked_at >= ? AND t.booked_at < ? ORDER BY booked_at",
     )
-    .all(userId, since) as any[];
+    .all(userId, since, until) as any[];
   const groups = new Map<string, any[]>();
   for (const c of credits) {
     const key = `${c.currency}:${normalise(c.counterparty || c.description)}`;
