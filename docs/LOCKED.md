@@ -92,6 +92,7 @@ checked as well as the lockfile, because a lockfile can be regenerated: a fix th
 | The collector invents no baseline for days the platform was not counting, and never reads the day in progress | `trend_platform.test.ts` |
 | Re-running the daily collection lands nothing twice | `trend_platform.test.ts` |
 | Every support category and event type the collector maps resolves to a real, public feature, a category the support form offers and an event the platform emits | `trend_platform.test.ts` — a mistyped key would otherwise attribute real interest to nothing, silently |
+| Observations are swept after 400 days; frozen snapshots, briefs and claims never are | `trend_platform.test.ts` — the audit trail that answers "why did it write that" must outlive the counts behind it |
 | Every agent that writes public copy inherits the same claim boundary, not only the article writer | `trend_steering.test.ts`, `trend_platform.test.ts` (`claimBoundary`) |
 | Changing a claim's text adds a revision; an approval keeps meaning what its approver read | `trend_intelligence.test.ts` |
 

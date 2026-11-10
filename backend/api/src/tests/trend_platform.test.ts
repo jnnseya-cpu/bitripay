@@ -27,8 +27,10 @@ import {
   SUPPORT_CATEGORY_FEATURE,
   autoProposeBriefs,
   claimsForFeature,
+  OBSERVATION_RETENTION_DAYS,
   collectPlatformSignals,
   featurePaths,
+  pruneObservations,
   platformProfile,
   platformTrendStatus,
   runPlatformTrendCycle,
@@ -343,6 +345,33 @@ describe('the loop, with nobody operating it', () => {
 
     setSetting('modules', { ...DEFAULT_MODULES, trendIntelligence: true });
     expect(platformTrendStatus().observations, 'what it read is still there').toBe(before);
+  });
+
+  it('keeps a bounded window of its own counts, and never sweeps the audit trail', () => {
+    seedRisingInterest();
+    runPlatformTrendCycle();
+    const db = getDb();
+    const before = db.prepare('SELECT COUNT(*) c FROM ti_observations').pluck().get() as number;
+    const briefsBefore = listBriefs({}, 100).length;
+    const snapshotsBefore = db.prepare('SELECT COUNT(*) c FROM ti_opportunities').pluck().get() as number;
+    expect(before).toBeGreaterThan(0);
+    expect(briefsBefore).toBeGreaterThan(0);
+
+    // Nothing is old enough yet, so an ordinary pass removes nothing.
+    expect(pruneObservations()).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) c FROM ti_observations').pluck().get()).toBe(before);
+
+    // Age one row past the window and it goes.
+    const victim = db.prepare('SELECT id FROM ti_observations LIMIT 1').pluck().get() as string;
+    const old = new Date(Date.now() - (OBSERVATION_RETENTION_DAYS + 5) * 86_400_000).toISOString();
+    db.prepare('UPDATE ti_observations SET window_end = ? WHERE id = ?').run(old, victim);
+    expect(pruneObservations()).toBe(1);
+    expect(db.prepare('SELECT COUNT(*) c FROM ti_observations').pluck().get()).toBe(before - 1);
+
+    // What must never be swept: the frozen decision and what the platform was allowed to say.
+    expect(db.prepare('SELECT COUNT(*) c FROM ti_opportunities').pluck().get()).toBe(snapshotsBefore);
+    expect(listBriefs({}, 100)).toHaveLength(briefsBefore);
+    expect(db.prepare('SELECT COUNT(*) c FROM ti_claims').pluck().get() as number).toBeGreaterThan(0);
   });
 
   it('drafts one brief per topic, not one per run', () => {

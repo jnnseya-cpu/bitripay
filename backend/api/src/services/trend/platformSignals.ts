@@ -480,6 +480,25 @@ export interface PlatformRunResult {
   topics: number;
   scored: ScoreRunResult | null;
   proposed: number;
+  pruned: number;
+}
+
+/**
+ * How long the platform's own observations are kept.
+ *
+ * Long enough to compare a period against the same period last year, and no longer. The rows hold nothing but
+ * counts, so this is housekeeping rather than a privacy control — but a table that only ever grows is a table
+ * somebody has to deal with later, and "we never decided" is not a retention policy.
+ *
+ * Frozen snapshots and briefs are deliberately **not** swept. An opportunity records what the platform decided and
+ * a brief records what it was allowed to say; deleting those would erase the audit trail that answers "why did it
+ * write that", which is the opposite of what retention is for.
+ */
+export const OBSERVATION_RETENTION_DAYS = 400;
+
+export function pruneObservations(retainDays = OBSERVATION_RETENTION_DAYS): number {
+  const cutoff = new Date(Date.now() - retainDays * 86_400_000).toISOString();
+  return getDb().prepare('DELETE FROM ti_observations WHERE window_end < ?').run(cutoff).changes;
 }
 
 /**
@@ -487,12 +506,13 @@ export interface PlatformRunResult {
  * Called once a day by the scheduler. Off means off: it does nothing at all rather than accumulating quietly.
  */
 export function runPlatformTrendCycle(): PlatformRunResult {
-  if (!trendIntelligenceOn()) return { ran: false, collected: null, topics: 0, scored: null, proposed: 0 };
+  if (!trendIntelligenceOn()) return { ran: false, collected: null, topics: 0, scored: null, proposed: 0, pruned: 0 };
   const collected = collectPlatformSignals();
   const { topics } = syncPlatformTopics();
   const scored = scorePlatformTopics();
   const proposed = autoProposeBriefs();
-  return { ran: true, collected, topics, scored, proposed: proposed.proposed.length };
+  const pruned = pruneObservations();
+  return { ran: true, collected, topics, scored, proposed: proposed.proposed.length, pruned };
 }
 
 /** What the console shows about the automatic side: whether it has run, and what it is holding. */
