@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { setupApp } from './helpers';
 import { getSeoSettings, setSetting } from '../services/settings';
 import { DEFAULT_MODULES } from '../services/modules';
-import { resolveSteer, briefInstructions, agentStatus } from '../services/seoAgent';
+import { resolveSteer, briefInstructions, claimBoundary, agentStatus } from '../services/seoAgent';
 import { upsertSource, ingestObservations, upsertTopic, snapshotTopic } from '../services/trend/detect';
 import { proposeBrief, approveBrief, revokeBrief, payloadHash, effectiveBrief, upsertClaim, type GrowthBrief } from '../services/trend/briefs';
 
@@ -137,22 +137,43 @@ describe('what the content agent writes next', () => {
   });
 });
 
-describe('the editor note a brief becomes', () => {
-  it('carries the approved claims and the prohibitions, and nothing else from the brief', () => {
+describe('what the writer is allowed to say', () => {
+  it('carries the approved claims and the prohibitions to every agent that writes public copy', () => {
     const claim = upsertClaim({ code: 'fee_shown', text: 'Fees are shown before every payment.', evidence: 'The fee line is rendered on every confirmation screen.' }, 'admin_checker');
     const brief = approvedBrief({ approvedClaimIds: [claim.id], prohibitedClaims: ['any ranking promise', 'any guaranteed arrival time'] });
+    // The boundary lives in the shared site rules, so the article writer, the keyword planner and the auditor
+    // all inherit it — not just whichever call site remembered to pass it.
+    for (const channel of ['content', 'seo'] as const) {
+      const bound = claimBoundary(channel);
+      expect(bound, channel).toContain(claim.text);
+      expect(bound, channel).toContain('(FEE_SHOWN)');
+      expect(bound, channel).toContain('any ranking promise');
+      expect(bound, channel).toContain(brief.briefId);
+      expect(bound, channel).toContain(brief.expiresAt);
+    }
+    // A channel the brief does not allow gets nothing at all.
+    expect(claimBoundary('organic_social')).toBe('');
+
+    // The assignment is separate from the boundary, and says so rather than repeating it into the prompt twice.
     const note = briefInstructions(brief);
-    expect(note).toContain(claim.text);
-    expect(note).toContain('(FEE_SHOWN)');
-    expect(note).toContain('any ranking promise');
     expect(note).toContain(brief.briefId);
-    // The expiry travels with it: the writer is told the brief is dated.
-    expect(note).toContain(brief.expiresAt);
+    expect(note).toContain(brief.audience);
+    expect(note).toContain('set out in the site rules above');
+    expect(note, 'the claim text must not be duplicated into the same prompt twice').not.toContain(claim.text);
   });
 
   it('tells the writer to assert nothing when no claim has been approved', () => {
-    const note = briefInstructions(approvedBrief());
-    expect(note).toMatch(/No claim has been approved/);
-    expect(note).toMatch(/without asserting any outcome/);
+    approvedBrief();
+    const bound = claimBoundary('content');
+    expect(bound).toMatch(/No claim has been approved/);
+    expect(bound).toMatch(/without asserting any outcome/);
+  });
+
+  it('bounds nothing while trend intelligence is off, so the agents behave exactly as before', () => {
+    approvedBrief();
+    expect(claimBoundary('content')).not.toBe('');
+    setSetting('modules', { ...DEFAULT_MODULES, trendIntelligence: false });
+    expect(claimBoundary('content')).toBe('');
+    expect(claimBoundary('seo')).toBe('');
   });
 });

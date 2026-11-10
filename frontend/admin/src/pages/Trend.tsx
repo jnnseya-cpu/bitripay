@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { tr } from '../lib/i18n';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
-import { Alert, Button, Chip, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, StepUpButton, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
+import { Alert, Button, Chip, Field, Input, KV, Modal, PageHeader, Select, StatusBadge, StepUpButton, Switch, Table, Tabs, Textarea, fmtDate, useAsync } from '../components/ui';
 
 type Tab = 'opportunities' | 'briefs' | 'sources' | 'claims' | 'audit';
 
@@ -42,6 +42,9 @@ export function Trend() {
   const [scoring, setScoring] = useState<{ topicId: string; label: string; fit: string; commercialIntent: string; timing: string; readiness: string } | null>(null);
   const [drafting, setDrafting] = useState<any>(null);
   const [claim, setClaim] = useState<{ code: string; text: string; evidence: string; validUntil: string } | null>(null);
+  // Every topic is scored every day, so most rows read `archive` by design. Listing all of them buries the one
+  // worth acting on, so they are counted rather than listed until somebody asks for them.
+  const [showArchived, setShowArchived] = useState(false);
 
   const err = (e: any) => toast(e.message, 'error');
   const ok = (m: string) => {
@@ -94,6 +97,35 @@ export function Trend() {
         </Alert>
       )}
 
+      {on && o?.platform && (
+        <div className="card mb">
+          <h4>{tr('What the platform has read about itself')}</h4>
+          <p className="muted">
+            {tr(
+              'This runs once a day on its own. Nothing here is registered, typed or scored by hand: it reads pages this platform served, support tickets by category and product events, clusters them onto the feature catalogue and scores them. Ticket subjects, message bodies and identities are never read. The one human step is approving a draft, because nothing else may decide what this platform claims about itself.',
+            )}
+          </p>
+          <div className="grid cols-2">
+            <KV k={tr('Observations held')} v={o.platform.observations} />
+            <KV k={tr('Most recent complete day')} v={o.platform.lastWindowEnd ? fmtDate(o.platform.lastWindowEnd) : tr('nothing read yet')} />
+            <KV k={tr('Topics tracked')} v={o.platform.topics} />
+            <KV k={tr('Drafts awaiting your approval')} v={o.platform.draftsAwaitingApproval} />
+            <KV k={tr('Briefs live now')} v={o.platform.liveBriefs} />
+            <KV k={tr('Signals read')} v={(o.platform.builtInSources ?? []).map((x: any) => x.name).join(' · ')} />
+          </div>
+          {!o.platform.hasEnoughHistory && (
+            <Alert kind="info">
+              {tr(
+                'Nothing has been read yet. The platform needs its own history before it can say anything: a few complete days of traffic, tickets and events. Until then the content agent runs its own topic list, exactly as before.',
+              )}
+            </Alert>
+          )}
+          {o.platform.draftsAwaitingApproval > 0 && (
+            <Alert kind="warning">{`${o.platform.draftsAwaitingApproval} ${tr('draft brief(s) are waiting for a second administrator to approve. Until one is approved, nothing is steered.')}`}</Alert>
+          )}
+        </div>
+      )}
+
       {on && (
         <Tabs
           tabs={[
@@ -117,42 +149,49 @@ export function Trend() {
           <div className="nowrap-head">
             <Table
               head={[tr('Topic'), tr('Market'), tr('Opportunity'), tr('Confidence'), tr('Demand'), tr('Families'), tr('Band'), tr('Window end'), '']}
-              rows={(o?.opportunities ?? []).map((row: any) => [
-                row.label,
-                row.market ?? '—',
-                score(row.opportunity_score),
-                score(row.confidence),
-                score(row.demand),
-                <Chip key="f">{(JSON.parse(row.families || '[]') as string[]).join(', ') || tr('none')}</Chip>,
-                <Chip key="b" kind={BAND_KIND[row.band]}>
-                  {String(row.band).replace(/_/g, ' ')}
-                </Chip>,
-                fmtDate(row.window_end),
-                row.band === 'brief' || row.band === 'auto_eligible' ? (
-                  <Button
-                    key="d"
-                    size="sm"
-                    onClick={() =>
-                      setDrafting({
-                        topicId: row.topic_id,
-                        opportunityId: row.id,
-                        label: row.label,
-                        market: row.market ?? 'CD',
-                        locale: '',
-                        audience: '',
-                        intent: row.label,
-                        objective: '',
-                        ttlHours: '',
-                      })
-                    }
-                  >
-                    {tr('Draft a brief')}
-                  </Button>
-                ) : null,
-              ])}
-              empty={tr('No topic has been scored yet. Register a source, ingest observations, then score a topic.')}
+              rows={(o?.opportunities ?? [])
+                .filter((row: any) => showArchived || row.band !== 'archive')
+                .map((row: any) => [
+                  row.label,
+                  row.market ?? '—',
+                  score(row.opportunity_score),
+                  score(row.confidence),
+                  score(row.demand),
+                  <Chip key="f">{(JSON.parse(row.families || '[]') as string[]).join(', ') || tr('none')}</Chip>,
+                  <Chip key="b" kind={BAND_KIND[row.band]}>
+                    {String(row.band).replace(/_/g, ' ')}
+                  </Chip>,
+                  fmtDate(row.window_end),
+                  row.band === 'brief' || row.band === 'auto_eligible' ? (
+                    <Button
+                      key="d"
+                      size="sm"
+                      onClick={() =>
+                        setDrafting({
+                          topicId: row.topic_id,
+                          opportunityId: row.id,
+                          label: row.label,
+                          market: row.market ?? 'CD',
+                          locale: '',
+                          audience: '',
+                          intent: row.label,
+                          objective: '',
+                          ttlHours: '',
+                        })
+                      }
+                    >
+                      {tr('Draft a brief')}
+                    </Button>
+                  ) : null,
+                ])}
+              empty={
+                (o?.opportunities ?? []).length
+                  ? tr('Nothing is in a band worth acting on today. Everything scored sits in archive, which is the ordinary answer.')
+                  : tr('Nothing has been scored yet. The platform reads itself once a day; it needs a few complete days of its own history first.')
+              }
             />
           </div>
+          <Switch on={showArchived} onChange={setShowArchived} label={`${tr('Also show archived topics')} (${(o?.opportunities ?? []).filter((x: any) => x.band === 'archive').length})`} />
           <h4 className="mt">{tr('Score a topic')}</h4>
           <p className="muted">
             {tr(

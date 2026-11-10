@@ -393,10 +393,16 @@ export function snapshotTopic(topicId: string, profile: ProfileInputs, at = now(
   return { ...result, id, topicId, windowEnd, scoringVersion: SCORING_VERSION, inputDigest, evidenceIds, notes };
 }
 
+/**
+ * Newest first was the wrong order once the platform started scoring every topic it has: forty archived rows
+ * buried the one thing worth reading. Banded first, highest first — the console shows what to act on.
+ */
 export const listOpportunities = (limit = 50): Record<string, unknown>[] =>
   getDb()
     .prepare(
       `SELECT o.*, t.label, t.slug, t.market, t.locale, t.status AS topic_status FROM ti_opportunities o JOIN ti_topics t ON t.id = o.topic_id
-       WHERE o.superseded_by IS NULL ORDER BY o.created_at DESC LIMIT ?`,
+       WHERE o.superseded_by IS NULL
+       ORDER BY CASE o.band WHEN 'auto_eligible' THEN 0 WHEN 'brief' THEN 1 WHEN 'watch' THEN 2 ELSE 3 END, o.opportunity_score DESC, o.created_at DESC
+       LIMIT ?`,
     )
     .all(Math.min(200, Math.max(1, limit))) as Record<string, unknown>[];

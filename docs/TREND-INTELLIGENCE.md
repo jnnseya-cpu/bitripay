@@ -11,7 +11,84 @@ write refuses with `module_disabled` and the content agent runs on its own topic
 
 ---
 
-## 1. The one thing this module actually changes
+## 1. Where it lives: inside the platform, invisible to customers
+
+Two rules govern the shape of this module, and both are absolute.
+
+**It is part of BitriPay, not a thing beside it.** Nothing here is registered, typed or scored by hand. It reads
+data the platform already collects, clusters it onto the catalogue the platform already publishes, scores it
+against module state the platform already holds, and steers agents the platform already runs — on the scheduler
+the platform already has. An administrator who never opens its console still gets the whole loop.
+
+**A customer never sees it.** The catalogue entry is marked `internal`, which keeps it out of the `/features` hub,
+out of `/features/<slug>` (404, exactly as an unknown slug), out of the sitemap, out of blog seeding and out of
+every other feature's related links. The entry still exists so the module-coverage invariant can trace the flag to
+an enforced code path — `features.test.ts` sweeps both halves, so "invisible" is a property of the build rather
+than of whoever wrote the page.
+
+### What it reads, and what it refuses to read
+
+| Signal | Source family | What is read | Table |
+| --- | --- | --- | --- |
+| Pages this platform served | `site_traffic` | views per day per path, for each feature's own page and articles | `seo_pageviews` |
+| Support queue | `support` | **count of tickets per category per day** | `support_tickets` |
+| Product events | `product_events` | count of domain events per type per day | `domain_events` |
+
+Three distinct families, because that is what corroboration counts: somebody reading a page, somebody opening a
+ticket and somebody using the product are three independent observations of one interest, while a hundred page
+views are one.
+
+No ticket subject, no message body, no user id and no country ever reaches a trend table. The only reliable way to
+guarantee that is never to read it, so the collector never selects those columns, and a test greps the stored rows
+for the fixture's own private strings.
+
+These signals carry no country — a page view does not say where the reader was, and asking would mean reading more
+than is needed. They are recorded against `ZZ`, the ISO 3166 code for an unknown country, which the brief resolver
+already treats as "any market".
+
+### What it decides for itself, and what it will not
+
+| Decided automatically | How |
+| --- | --- |
+| Which sources exist | the three above, registered by the collector |
+| Which topics are tracked | one per public feature; the vocabulary is the catalogue's own keywords, never free text |
+| Demand, source quality, corroboration, coverage, freshness | measured from the observations |
+| Fit and readiness | read from `featureAvailability()` — live module state |
+| Commercial intent | the feature's own category |
+| Timing | where the latest period sits against the highest the platform has seen |
+| Which topics become draft briefs | anything the scorer puts in the brief band with none live |
+| Which claims the writer may restate | the feature's own published `proof` lines, registered with their evidence |
+
+**One thing is never automatic: approval.** A draft steers nothing. A person approves it, under step-up, bound to
+the payload hash — because nothing else may decide what this platform claims about itself. The platform proposes
+(`proposed_by: 'platform'`), which is also why any administrator may approve: the maker was not a person who could
+rubber-stamp their own work.
+
+### The veto that matters most
+
+A capability **awaiting an authorisation**, or **switched off by an administrator**, carries a veto and can never
+carry a brief. Interest in it may be real; marketing it is not allowed. Writing copy for a function the platform's
+own API would refuse is the single failure in this module that could cost the licence, so it is refused by the
+scorer rather than left to whoever reads the console.
+
+### Every agent that writes public copy is bounded, not just one
+
+The approved claims and the prohibitions are appended inside `siteContext()` — the one string every agent prompt
+already carries. So the article writer, the keyword planner, the page auditor, the social writer and anything
+added later inherit the same boundary, instead of it being passed at whichever call site remembered. The site's own
+hard rules still apply on top: **a brief narrows what may be said and never widens it.**
+
+Alongside the brief's own prohibitions, every platform-proposed brief carries these, always:
+
+- no promise of a search ranking or of traffic
+- no guaranteed arrival time for money
+- no claim that the platform is unhackable, fully secure or risk-free
+- no licence, authorisation or partner the feature page does not already name
+- no figure, statistic, price or customer quote the platform has not already published
+
+---
+
+## 2. The one thing this module actually changes
 
 Before it, `runContentSchedule()` in `services/seoAgent.ts` did this:
 
@@ -42,7 +119,7 @@ page.
 
 ---
 
-## 2. What the specification asked for, and where it now lives
+## 3. What the specification asked for, and where it now lives
 
 | Specification | Already in BitriPay | Added by this module |
 | --- | --- | --- |
@@ -67,7 +144,7 @@ page.
 
 ---
 
-## 3. Where the implementation deliberately differs
+## 4. Where the implementation deliberately differs
 
 These are decisions, not omissions. Each one is the same decision taken for the corridor-network specification, and
 for the same reason: **everything remains BitriPay.**
@@ -97,7 +174,7 @@ them:**
 
 ---
 
-## 4. The scoring, in full, because a score nobody can reproduce is an opinion
+## 5. The scoring, in full, because a score nobody can reproduce is an opinion
 
 Pinned at `SCORING_VERSION = 'ti-1.0.0'`. Every snapshot stores the version and a digest of its inputs, so the same
 inputs at the same window end return the same row rather than a second one.
@@ -128,7 +205,7 @@ veto on a snapshot refuses a brief outright.
 
 ---
 
-## 5. Controls
+## 6. Controls
 
 | Control | Where it is enforced |
 | --- | --- |
@@ -148,23 +225,32 @@ veto on a snapshot refuses a brief outright.
 
 ---
 
-## 6. What is not locked, because it is not verified
+## 7. What is not locked, because it is not verified
 
 - **The 80 % actionable-precision gate of §11 stage 2 has not been run.** It needs hand-labelled historical periods
   from this platform's own data, and no observation has been ingested on production. Until that replay exists, the
   scorer is deterministic and tested but not calibrated, and the module should stay off.
 - **`auto_eligible` has no automatic path behind it.** The band exists and is scored; nothing acts on it without an
   approval. `autoActionOptIn` is recorded and never implied.
-- **No source is registered on production.** The source registry ships empty on purpose: which first-party signals
-  this platform may use is a decision about its own data, not a default.
+- **The platform has read nothing yet.** The collector only reads days the platform was actually counting — no
+  page view row means there is no evidence of nothing, and inventing a zero there would manufacture a baseline that
+  makes the first real visit look like a spike. Until several complete days of traffic, tickets and events exist,
+  the scorer skips every topic and the content agent runs its own backlog.
+- **The support-category and event-type maps are judgements, not measurements.** `payments → QR payments`,
+  `payment.captured → QR payments` and the rest are stated in `platformSignals.ts` and are readable in one screen.
+  An unmapped category or event type contributes to nothing rather than being guessed at, which is the safe
+  direction, but a wrong mapping would attribute real interest to the wrong feature. They should be reviewed
+  against this platform's actual ticket mix before the module is switched on.
 
 ---
 
-## 7. Tests
+## 8. Tests
 
 | File | What it holds |
 | --- | --- |
 | `trend_scoring.test.ts` | 19 cases: the specification's worked example to the decimal, the gates, the MAD floor, the single-family cap |
 | `trend_intelligence.test.ts` | 23 cases: ingestion rules, frozen snapshots, the brief lifecycle, the module switch, the claim registry |
 | `trend_steering.test.ts` | 10 cases: the handover to the content agent and every fallback |
-| `trend_routes.test.ts` | 7 cases: the module switch over HTTP, maker-checker with step-up and the payload hash, the permission split |
+| `trend_routes.test.ts` | 8 cases: the module switch over HTTP, maker-checker with step-up and the payload hash, the permission split, and every field the console renders |
+| `trend_platform.test.ts` | 17 cases: the whole loop from the platform's own tables with nothing typed, the privacy sweep, the invented-baseline guard, the day-in-progress exclusion, the veto on an unauthorised capability, the single-family refusal, and the boundary reaching every agent |
+| `features.test.ts` | the invisibility sweep: internal machinery absent from the hub, the page, the sitemap, both languages' articles and every public feature's related links |

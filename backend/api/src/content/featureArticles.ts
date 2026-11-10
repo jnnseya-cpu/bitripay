@@ -10,7 +10,7 @@
  * there for it.
  */
 import type { PostInput } from '../services/blog';
-import { FEATURES, FEATURE_BY_KEY, FEATURE_CATEGORIES, FEATURE_CATEGORIES_FR, featureText, missingTranslations, type Feature, type FeatureLang } from './features';
+import { PUBLIC_FEATURES, FEATURE_BY_KEY, FEATURE_CATEGORIES, FEATURE_CATEGORIES_FR, featureText, missingTranslations, type Feature, type FeatureLang } from './features';
 
 const CATEGORY_BLOG: Record<FeatureLang, Record<Feature['category'], string>> = {
   en: {
@@ -61,7 +61,8 @@ function body(f: Feature, lang: FeatureLang): string {
   const suffix = lang === 'fr' ? '?lang=fr' : '';
   const related = f.related
     .map((k) => FEATURE_BY_KEY[k])
-    .filter((x): x is Feature => Boolean(x))
+    // A published article never links to internal machinery, whatever a catalogue entry lists as its neighbours.
+    .filter((x): x is Feature => Boolean(x) && !x.internal)
     .map((r) => {
       const rt = featureText(r, lang);
       return `- [${rt.name}](/features/${r.slug}${suffix}) — ${rt.tagline}`;
@@ -92,7 +93,8 @@ ${related.length ? `## ${sec.next}\n\n${related.join('\n')}\n` : ''}`;
  */
 export function featureArticles(lang: FeatureLang = 'en'): PostInput[] {
   const cats = lang === 'fr' ? FEATURE_CATEGORIES_FR : FEATURE_CATEGORIES;
-  return FEATURES.filter((f) => missingTranslations(f, lang).length === 0).map((f) => {
+  // PUBLIC_FEATURES, not FEATURES: internal machinery is never seeded as an article.
+  return PUBLIC_FEATURES.filter((f) => missingTranslations(f, lang).length === 0).map((f) => {
     const t = featureText(f, lang);
     return {
       title: t.headline,

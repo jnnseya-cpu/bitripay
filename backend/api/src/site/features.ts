@@ -13,7 +13,7 @@ import { absoluteUrl, breadcrumbJsonLd, pageTitle } from '../services/seo';
 import { getSeoSettings } from '../services/settings';
 import { getModules, aggregatorPerimeterApplied, AGGREGATOR_PERIMETER_OFF, MODULE_OFF_MESSAGE } from '../services/modules';
 import {
-  FEATURES,
+  PUBLIC_FEATURES,
   FEATURE_BY_KEY,
   FEATURE_BY_SLUG,
   FEATURE_CATEGORIES,
@@ -186,7 +186,7 @@ export function featuresIndexPage(lang: FeatureLang = 'en'): string {
   const cats = categories(lang);
   const list = (Object.keys(cats) as FeatureCategory[]).filter((c) => featuresInCategory(c).length > 0);
   const modules = getModules();
-  const counts = { total: FEATURES.length, available: FEATURES.filter((f) => featureAvailability(f, modules, lang).state === 'available').length };
+  const counts = { total: PUBLIC_FEATURES.length, available: PUBLIC_FEATURES.filter((f) => featureAvailability(f, modules, lang).state === 'available').length };
   const other: FeatureLang = lang === 'fr' ? 'en' : 'fr';
   const body = `<style>${CSS}</style>
 <div class="breadcrumb"><a href="/">${escapeHtml(s.siteName)}</a> / ${escapeHtml(t.features)} · <a href="/features${other === 'fr' ? '?lang=fr' : ''}">${escapeHtml(t.inFrench)}</a></div>
@@ -218,7 +218,7 @@ ${list
           '@context': 'https://schema.org',
           '@type': 'ItemList',
           name: 'BitriPay features',
-          itemListElement: FEATURES.map((f, i) => ({ '@type': 'ListItem', position: i + 1, name: featureText(f, lang).name, url: absoluteUrl(`/features/${f.slug}`) })),
+          itemListElement: PUBLIC_FEATURES.map((f, i) => ({ '@type': 'ListItem', position: i + 1, name: featureText(f, lang).name, url: absoluteUrl(`/features/${f.slug}`) })),
         },
       ],
     },
@@ -229,14 +229,16 @@ ${list
 /** One feature, in full: the promise, the problem, how it works, what is checkable, what it costs. */
 export function featurePage(slug: string, lang: FeatureLang = 'en'): string | null {
   const f = FEATURE_BY_SLUG[slug];
-  if (!f) return null;
+  // Internal machinery answers 404 here exactly as an unknown slug does: it is catalogued, not published.
+  if (!f || f.internal) return null;
   const s = seo();
   const t = UI[lang];
   const cats = categories(lang);
   const txt = featureText(f, lang);
   const a = featureAvailability(f, getModules(), lang);
   const other: FeatureLang = lang === 'fr' ? 'en' : 'fr';
-  const related = f.related.map((k) => FEATURE_BY_KEY[k]).filter((x): x is Feature => Boolean(x));
+  // A public page never links to internal machinery, however a catalogue entry lists its neighbours.
+  const related = f.related.map((k) => FEATURE_BY_KEY[k]).filter((x): x is Feature => Boolean(x) && !x.internal);
   const body = `<style>${CSS}</style>
 <div class="breadcrumb"><a href="/">${escapeHtml(s.siteName)}</a> / <a href="/features${qs(lang)}">${escapeHtml(t.features)}</a> / ${escapeHtml(txt.name)} · <a href="/features/${escapeHtml(f.slug)}${other === 'fr' ? '?lang=fr' : ''}">${escapeHtml(t.inFrench)}</a></div>
 <div class="feat-hero"><div class="catnav" style="margin:0 0 10px"><a href="/features${qs(lang)}#${f.category}">${escapeHtml(cats[f.category].label)}</a>${chip(a)}</div>
@@ -277,4 +279,4 @@ ${related.length ? `<section class="fsect"><h2>${escapeHtml(t.readNext)}</h2><di
 }
 
 /** Every feature path, for the sitemap. */
-export const FEATURE_PATHS = (): string[] => ['/features', ...FEATURES.map((f) => `/features/${f.slug}`)];
+export const FEATURE_PATHS = (): string[] => ['/features', ...PUBLIC_FEATURES.map((f) => `/features/${f.slug}`)];

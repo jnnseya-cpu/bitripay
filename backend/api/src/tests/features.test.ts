@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import { setupApp, adminToken } from './helpers';
-import { FEATURES, FEATURE_BY_SLUG, FEATURE_CATEGORIES, FEATURE_CATEGORIES_FR, featureText, missingTranslations } from '../content/features';
+import { FEATURES, PUBLIC_FEATURES, FEATURE_BY_SLUG, FEATURE_CATEGORIES, FEATURE_CATEGORIES_FR, featureText, missingTranslations } from '../content/features';
 import { featureArticles, allFeatureArticles } from '../content/featureArticles';
 import { featureAvailability, featurePage, featuresIndexPage, langOf, FEATURE_PATHS } from '../site/features';
 import { DEFAULT_MODULES, AGGREGATOR_PERIMETER_OFF, AGGREGATOR_PERIMETER_ON, type ModuleFlags } from '../services/modules';
@@ -48,6 +48,41 @@ describe('feature catalogue', () => {
           FEATURES.some((x) => x.key === r),
           `${f.key} → ${r}`,
         ).toBe(true);
+  });
+
+  /**
+   * Internal machinery is catalogued so the module-coverage invariant above still traces it to an enforced code
+   * path — and it must reach no public surface at all. The sweep is the point: it fails for any future feature
+   * marked internal that leaks into the hub, a page, an article, the sitemap or another feature's related links,
+   * so "invisible" is a property of the build rather than of whoever wrote the page.
+   */
+  it('keeps internal machinery off every public surface, in both languages', () => {
+    const internal = FEATURES.filter((f) => f.internal);
+    expect(internal.length, 'this test is meaningless with nothing marked internal').toBeGreaterThan(0);
+    expect(PUBLIC_FEATURES.some((f) => f.internal)).toBe(false);
+
+    for (const lang of ['en', 'fr'] as const) {
+      const hub = featuresIndexPage(lang);
+      for (const f of internal) {
+        expect(hub, `${f.key} on the hub`).not.toContain(`/features/${f.slug}`);
+        expect(hub, `${f.key} named on the hub`).not.toContain(featureText(f, lang).name);
+        // Its own page answers exactly as an unknown slug does.
+        expect(featurePage(f.slug, lang), `${f.key} page`).toBeNull();
+        // No article, in either language, under either slug.
+        const slugs = featureArticles(lang).map((a) => a.slug);
+        expect(slugs, `${f.key} article`).not.toContain(featureText(f, lang).articleSlug);
+      }
+    }
+
+    for (const f of internal) {
+      expect(FEATURE_PATHS(), `${f.key} in the sitemap`).not.toContain(`/features/${f.slug}`);
+      // And nothing public points at it, in a page or inside a published article.
+      for (const pub of PUBLIC_FEATURES) {
+        expect(pub.related, `${pub.key} → ${f.key}`).not.toContain(f.key);
+        expect(featurePage(pub.slug)!, `${pub.key} page links ${f.key}`).not.toContain(`/features/${f.slug}`);
+      }
+      for (const a of allFeatureArticles()) expect(a.bodyMd, `an article links ${f.key}`).not.toContain(`/features/${f.slug}`);
+    }
   });
 
   it('covers every module the platform has: no functionality is left without a feature', () => {
@@ -109,13 +144,13 @@ describe('availability is computed, not claimed', () => {
 });
 
 describe('feature pages', () => {
-  it('renders the hub with every feature and a link to each page', () => {
+  it('renders the hub with every public feature and a link to each page', () => {
     const html = featuresIndexPage();
-    for (const f of FEATURES) {
+    for (const f of PUBLIC_FEATURES) {
       expect(html).toContain(`/features/${f.slug}`);
       expect(html).toContain(f.name);
     }
-    expect(FEATURE_PATHS()).toHaveLength(FEATURES.length + 1);
+    expect(FEATURE_PATHS()).toHaveLength(PUBLIC_FEATURES.length + 1);
   });
 
   it('renders a feature page carrying its selling point, proof, price and questions, and nothing for an unknown slug', () => {
@@ -221,9 +256,9 @@ describe('French', () => {
 describe('feature articles', () => {
   it('writes one article per feature, with the proof, the price and a link to the live availability', () => {
     const articles = featureArticles('en');
-    expect(articles).toHaveLength(FEATURES.length);
+    expect(articles).toHaveLength(PUBLIC_FEATURES.length);
     for (const [i, a] of articles.entries()) {
-      const f = FEATURES[i];
+      const f = PUBLIC_FEATURES[i];
       expect(a.title).toBe(f.headline);
       expect(a.slug).toBe(`${f.slug}-explained`);
       expect(a.bodyMd).toContain(f.cost);

@@ -16,7 +16,7 @@ import { createPost, getPost, updatePost, listPosts, type Post } from './blog';
 import { listLinkRules, upsertLinkRule, listBacklinks, siteUrl, pingIndexNow } from './seo';
 import { recordEvent, type Actor } from './events';
 import { slugify } from './markdown';
-import { effectiveBrief, recordBriefUse, type GrowthBrief } from './trend/briefs';
+import { effectiveBrief, recordBriefUse, type BriefChannel, type GrowthBrief } from './trend/briefs';
 import { trendIntelligenceOn } from './trend/gate';
 
 export interface AgentRun {
@@ -94,8 +94,50 @@ function steeringStatus(): { source: 'brief' | 'backlog' | 'idle'; topic: string
   };
 }
 
+/**
+ * The brief in force for one channel, across the markets this platform publishes to.
+ *
+ * One resolver, used by every agent entry point, so a brief cannot steer the article writer while leaving the
+ * keyword planner and the social writer unbounded. Null whenever trend intelligence is off, nothing is approved,
+ * the brief has lapsed, or it does not allow this channel — and null is simply the platform's ordinary behaviour.
+ */
+export function activeBrief(channel: BriefChannel = 'content'): GrowthBrief | null {
+  if (!trendIntelligenceOn()) return null;
+  const s = getSeoSettings();
+  for (const market of s.agent.markets) {
+    const brief = effectiveBrief({ market, channel });
+    if (brief) return brief;
+  }
+  return null;
+}
+
+/**
+ * What the writer may and may not say, rendered for the prompt.
+ *
+ * This lives in `siteContext()` rather than at one call site, so every agent that produces public copy — the
+ * article writer, the keyword planner, the auditor, the social writer, and anything added later — inherits the
+ * same boundary. The site's own hard rules still apply on top: a brief narrows what may be said and never widens
+ * it, which is the whole reason a brief is allowed to steer anything.
+ */
+export function claimBoundary(channel: BriefChannel = 'content'): string {
+  const b = activeBrief(channel);
+  if (!b) return '';
+  const lines = [`\n\nApproved growth brief ${b.briefId} v${b.briefVersion} is in force for this channel until ${b.expiresAt}.`];
+  if (b.approvedClaims.length) {
+    lines.push('Claims an administrator has approved — you may state these, and nothing beyond them:');
+    for (const c of b.approvedClaims) lines.push(`- (${c.code}) ${c.text}`);
+  } else {
+    lines.push('No claim has been approved for this topic: describe how the product works without asserting any outcome, figure or comparison.');
+  }
+  if (b.prohibitedClaims.length) {
+    lines.push('Claims you must not make, in any wording:');
+    for (const c of b.prohibitedClaims) lines.push(`- ${c}`);
+  }
+  return lines.join('\n');
+}
+
 /** Site facts the model must stay inside – no invented numbers, partners or licences. */
-function siteContext(): string {
+function siteContext(channel: BriefChannel = 'content'): string {
   const s = getSeoSettings();
   const posts = listPosts({ status: 'published', pageSize: 50 })
     .items.map((p) => `- ${p.title} (${siteUrl()}${p.url})`)
@@ -112,7 +154,7 @@ Hard rules: never invent statistics, licence numbers, partner names, prices or c
 Existing articles (link to them where relevant, using their exact URLs):
 ${posts || '- none yet'}
 Site links to use as internal links where natural:
-${rules || '- /app/send (Send money), /app/add-money (Add money), /app/cards (Virtual cards), /app/remittance (Remittance), /register (Create account)'}`;
+${rules || '- /app/send (Send money), /app/add-money (Add money), /app/cards (Virtual cards), /app/remittance (Remittance), /register (Create account)'}${claimBoundary(channel)}`;
 }
 
 interface Draft {
@@ -488,7 +530,7 @@ export async function socialPack(postId: string, actor: Actor): Promise<{ social
   try {
     const r = await callClaude<Record<string, string>>(
       'social_pack',
-      `Write platform-native social posts announcing an article. X under 260 characters with 2 hashtags; LinkedIn 3 short paragraphs with a hook; Facebook conversational; WhatsApp one friendly line for a broadcast list; Instagram caption with 5 hashtags; TikTok a 30-second script outline. Include the URL ${url} where the platform allows links. Return JSON only.`,
+      `Write platform-native social posts announcing an article. X under 260 characters with 2 hashtags; LinkedIn 3 short paragraphs with a hook; Facebook conversational; WhatsApp one friendly line for a broadcast list; Instagram caption with 5 hashtags; TikTok a 30-second script outline. Include the URL ${url} where the platform allows links. Return JSON only.\n\n${siteContext('organic_social')}`,
       `Title: ${post.title}\nExcerpt: ${post.excerpt}\nKey points:\n${post.bodyMd.slice(0, 3000)}`,
       schema,
       actor.id ?? null,
@@ -538,17 +580,8 @@ export function briefInstructions(b: GrowthBrief): string {
     `Search intent to answer completely: ${b.intent}`,
     `What a reader should be able to do afterwards: ${b.objective}`,
     `Market: ${b.market}${b.locale ? ` · locale ${b.locale}` : ''}`,
+    'What you may and may not claim is set out in the site rules above, and applies whether or not it is repeated here.',
   ];
-  if (b.approvedClaims.length) {
-    lines.push('Claims an administrator has approved for this topic — you may state these, and nothing beyond them:');
-    for (const c of b.approvedClaims) lines.push(`- (${c.code}) ${c.text}`);
-  } else {
-    lines.push('No claim has been approved for this topic: describe how the product works without asserting any outcome, figure or comparison.');
-  }
-  if (b.prohibitedClaims.length) {
-    lines.push('Claims you must not make, in any wording:');
-    for (const c of b.prohibitedClaims) lines.push(`- ${c}`);
-  }
   if (b.degraded) lines.push('This brief was produced without a model, so keep the article strictly descriptive.');
   return lines.join('\n');
 }
@@ -574,20 +607,18 @@ interface Steer {
  */
 export function resolveSteer(s = getSeoSettings()): Steer | null {
   const languages = s.agent.languages.length ? s.agent.languages : ['en'];
-  if (trendIntelligenceOn()) {
-    for (const market of s.agent.markets) {
-      const brief = effectiveBrief({ market, channel: 'seo' });
-      if (!brief) continue;
-      // The brief may ask for a locale the platform does not publish in. Its market evidence does not make that
-      // language live, so the configured language wins and the downgrade is recorded rather than hidden.
-      const wanted = (brief.locale || '').split('-')[0].toLowerCase();
-      const language = wanted && languages.includes(wanted) ? wanted : languages[0];
-      const detail =
-        wanted && language !== wanted
-          ? `brief ${brief.briefId} for ${brief.market}; locale ${brief.locale} is not an enabled content language, drafted in ${language}`
-          : `brief ${brief.briefId} for ${brief.market} in ${language}`;
-      return { topic: brief.intent, language, instructions: briefInstructions(brief), brief, outcome: 'used', detail };
-    }
+  // One resolver for the whole file: the same call the keyword planner, the auditor and the social writer make.
+  const brief = activeBrief('seo');
+  if (brief) {
+    // The brief may ask for a locale the platform does not publish in. Its market evidence does not make that
+    // language live, so the configured language wins and the downgrade is recorded rather than hidden.
+    const wanted = (brief.locale || '').split('-')[0].toLowerCase();
+    const language = wanted && languages.includes(wanted) ? wanted : languages[0];
+    const detail =
+      wanted && language !== wanted
+        ? `brief ${brief.briefId} for ${brief.market}; locale ${brief.locale} is not an enabled content language, drafted in ${language}`
+        : `brief ${brief.briefId} for ${brief.market} in ${language}`;
+    return { topic: brief.intent, language, instructions: briefInstructions(brief), brief, outcome: 'used', detail };
   }
   if (!s.agent.topics.length) return null;
   return {

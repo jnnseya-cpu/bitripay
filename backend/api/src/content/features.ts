@@ -69,6 +69,13 @@ export interface Feature {
   module: keyof ModuleFlags | null;
   /** Other flags this same feature describes, so every module is covered without writing the same article twice. */
   alsoCovers?: (keyof ModuleFlags)[];
+  /**
+   * Internal machinery: catalogued so every module flag still traces to an enforced code path, but **never rendered
+   * on a public surface** — no hub card, no feature page, no seeded article, no sitemap entry. Use it for a
+   * capability that runs the platform rather than one a customer buys. The catalogue entry is what keeps the
+   * traceability invariant honest; `internal` is what keeps the capability out of the shop window.
+   */
+  internal?: boolean;
   /** One sentence: what this does that the alternatives do not. */
   usp: string;
   /** A short line for a card or a list. */
@@ -3777,6 +3784,8 @@ Nothing. Open code in the repository, no licence.`,
     slug: 'trend-intelligence',
     category: 'operate',
     module: 'trendIntelligence',
+    // Runs the platform; a customer never buys it and never sees it. Catalogued for traceability only.
+    internal: true,
     usp: 'The platform reads the demand it can already see in its own data, scores it the same way every time, and hands the writing agent an approved brief that expires — instead of a hand-written topic queue.',
     tagline: 'Demand, scored the same way every time.',
     headline: 'How a platform decides what to write about next, without guessing',
@@ -3929,4 +3938,10 @@ export function missingTranslations(f: Feature, lang: FeatureLang): string[] {
 export const FEATURE_BY_KEY: Record<string, Feature> = Object.fromEntries(FEATURES.map((f) => [f.key, f]));
 export const FEATURE_BY_SLUG: Record<string, Feature> = Object.fromEntries(FEATURES.map((f) => [f.slug, f]));
 
-export const featuresInCategory = (category: FeatureCategory): Feature[] => FEATURES.filter((f) => f.category === category);
+/**
+ * Everything a visitor may see. Every public surface reads this, never `FEATURES`, so adding an internal feature
+ * cannot put it in front of a customer by omission.
+ */
+export const PUBLIC_FEATURES: Feature[] = FEATURES.filter((f) => !f.internal);
+
+export const featuresInCategory = (category: FeatureCategory): Feature[] => PUBLIC_FEATURES.filter((f) => f.category === category);

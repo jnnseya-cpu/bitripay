@@ -85,6 +85,13 @@ checked as well as the lockfile, because a lockfile can be regenerated: a fix th
 | The scorer reproduces the specification's worked example unrounded (86.25 / 83.5) | `trend_scoring.test.ts` (TI-03) |
 | Trend intelligence requests no credential: an unreachable source is recorded unavailable with its reason | `trend_routes.test.ts` (TI-22) |
 | The claim registry sits behind `compliance`, not behind content editing | `trend_routes.test.ts` |
+| Internal machinery never reaches a public surface: no hub card, no feature page, no article, no sitemap entry, no related link, in either language | **`features.test.ts`** — a sweep over everything marked `internal`, so a future one cannot leak by omission |
+| No support-ticket subject, message body, user id or country ever reaches a trend table | **`trend_platform.test.ts`** — greps the stored rows for the fixture's own private strings |
+| A capability awaiting an authorisation, or switched off, carries a veto and can never carry a brief | `trend_platform.test.ts` — the rule that keeps a growth tool from marketing what the API would refuse |
+| One source family alone never produces a brief, however steep the rise | `trend_platform.test.ts`, `trend_scoring.test.ts` |
+| The collector invents no baseline for days the platform was not counting, and never reads the day in progress | `trend_platform.test.ts` |
+| Re-running the daily collection lands nothing twice | `trend_platform.test.ts` |
+| Every agent that writes public copy inherits the same claim boundary, not only the article writer | `trend_steering.test.ts`, `trend_platform.test.ts` (`claimBoundary`) |
 | Changing a claim's text adds a revision; an approval keeps meaning what its approver read | `trend_intelligence.test.ts` |
 
 ## Calendar drift

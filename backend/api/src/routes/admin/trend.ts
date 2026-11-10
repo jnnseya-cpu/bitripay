@@ -34,6 +34,7 @@ import {
 } from '../../services/trend/briefs';
 import { SCORING_VERSION } from '../../services/trend/scoring';
 import { agentStatus } from '../../services/seoAgent';
+import { PLATFORM_MARKET, PLATFORM_SOURCES, platformTrendStatus, runPlatformTrendCycle } from '../../services/trend/platformSignals';
 
 export const adminTrendRouter = Router();
 const r = adminTrendRouter;
@@ -61,6 +62,26 @@ r.get('/overview', cms, (_req, res) =>
     briefs: listBriefs({}, 100),
     /** What the content agent would write next, so the console answers the question without a second call. */
     steering: agentStatus().steering,
+    /** The automatic side: what the platform has read about itself, with nobody operating it. */
+    platform: { ...platformTrendStatus(), market: PLATFORM_MARKET, builtInSources: PLATFORM_SOURCES.map((x) => ({ id: x.id, family: x.family, name: x.name, terms: x.terms })) },
+  }),
+);
+
+/**
+ * Run the daily cycle now. The scheduler does this unattended; this exists so an administrator does not have to
+ * wait a day to see what the platform already knows about itself. It reads and scores; it approves nothing.
+ */
+r.post(
+  '/run',
+  cms,
+  wrap(async (req, res) => {
+    const result = runPlatformTrendCycle();
+    audit(req.user!.id, 'trend.cycle.run', 'ti_observations', undefined, {
+      accepted: result.collected?.accepted ?? 0,
+      scored: result.scored?.scored ?? 0,
+      proposed: result.proposed,
+    });
+    res.json(result);
   }),
 );
 

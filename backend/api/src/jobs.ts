@@ -14,6 +14,7 @@ import { reconcileReserves, expirePromoCredits } from './services/emoney';
 import { publishScheduled } from './services/blog';
 import { runContentSchedule } from './services/seoAgent';
 import { expireLapsedBriefs } from './services/trend/briefs';
+import { runPlatformTrendCycle } from './services/trend/platformSignals';
 import { getModules } from './services/modules';
 import { pingIndexNow, verifyBacklinks } from './services/seo';
 import { runScheduledAgents, expireApprovals } from './services/assist/runtime';
@@ -201,11 +202,24 @@ export function startJobs() {
       }
       if (new Date().getUTCHours() === 6 && lastContentDay !== dayKey) {
         lastContentDay = dayKey;
-        // Housekeeping only: a lapsed brief already steers nothing, because expiry is checked on the read. This
-        // marks it so the console shows the state, and runs before drafting so the two agree.
+        // The platform reads itself before it writes: collect yesterday's own signals, cluster them onto the
+        // catalogue, score, and draft a brief for anything that clears the bar. Nobody operates this; the only
+        // human step is approving a draft, because nothing else may decide what this platform claims.
         if (getModules().trendIntelligence) {
           const marked = expireLapsedBriefs();
           if (marked) console.log(`[jobs] trend intelligence: ${marked} lapsed brief(s) marked expired`);
+          try {
+            const cycle = runPlatformTrendCycle();
+            if (cycle.ran) {
+              console.log(
+                `[jobs] trend intelligence: ${cycle.collected?.accepted ?? 0} observation(s) over ${cycle.collected?.days ?? 0} day(s), ` +
+                  `${cycle.scored?.scored ?? 0} topic(s) scored, ${cycle.proposed} brief(s) drafted for approval`,
+              );
+            }
+          } catch (err) {
+            // A growth loop must never stop the platform from publishing: the backlog still runs below.
+            console.error(`[jobs] trend intelligence cycle failed: ${(err as Error).message}`);
+          }
         }
         const c = await runContentSchedule();
         if (c.drafted) console.log('[jobs] content agent drafted a new article');
