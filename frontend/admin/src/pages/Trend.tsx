@@ -9,6 +9,23 @@ type Tab = 'opportunities' | 'briefs' | 'sources' | 'claims' | 'audit';
 const BAND_KIND: Record<string, 'success' | 'warning' | 'primary' | undefined> = { auto_eligible: 'success', brief: 'primary', watch: 'warning', archive: undefined };
 
 /**
+ * Scores are read, not computed, here. The engine deliberately does not round before deciding a band — that is why
+ * the specification's worked example reproduces exactly — so the full value arrives as a float like 91.0833296875.
+ * Showing it raw squeezes every other column and tells a reader nothing. One decimal is displayed; the exact value
+ * stays on the cell, so nothing is hidden from anyone who needs it.
+ */
+const score = (v: unknown) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return <span>—</span>;
+  const exact = String(v);
+  return (
+    <span title={exact} style={{ fontVariantNumeric: 'tabular-nums' }}>
+      {n.toFixed(1)}
+    </span>
+  );
+};
+
+/**
  * Trend intelligence: what the market is asking for, what the platform scored it at, and the one approved brief
  * that steers the content agent. Nothing here publishes — a brief changes what the agent is asked to write, and the
  * existing editorial review still decides whether a draft goes anywhere.
@@ -97,62 +114,66 @@ export function Trend() {
           <p className="muted">
             {tr('A snapshot is frozen: the same inputs at the same window end always give the same row. Only a snapshot in the brief band can carry a brief — watch and archive exist to be read.')}
           </p>
-          <Table
-            head={[tr('Topic'), tr('Market'), tr('Opportunity'), tr('Confidence'), tr('Demand'), tr('Families'), tr('Band'), tr('Window end'), '']}
-            rows={(o?.opportunities ?? []).map((row: any) => [
-              row.label,
-              row.market ?? '—',
-              row.opportunity_score,
-              row.confidence,
-              row.demand,
-              <Chip key="f">{(JSON.parse(row.families || '[]') as string[]).join(', ') || tr('none')}</Chip>,
-              <Chip key="b" kind={BAND_KIND[row.band]}>
-                {String(row.band).replace(/_/g, ' ')}
-              </Chip>,
-              fmtDate(row.window_end),
-              row.band === 'brief' || row.band === 'auto_eligible' ? (
-                <Button
-                  key="d"
-                  size="sm"
-                  onClick={() =>
-                    setDrafting({
-                      topicId: row.topic_id,
-                      opportunityId: row.id,
-                      label: row.label,
-                      market: row.market ?? 'CD',
-                      locale: '',
-                      audience: '',
-                      intent: row.label,
-                      objective: '',
-                      ttlHours: '',
-                    })
-                  }
-                >
-                  {tr('Draft a brief')}
-                </Button>
-              ) : null,
-            ])}
-            empty={tr('No topic has been scored yet. Register a source, ingest observations, then score a topic.')}
-          />
+          <div className="nowrap-head">
+            <Table
+              head={[tr('Topic'), tr('Market'), tr('Opportunity'), tr('Confidence'), tr('Demand'), tr('Families'), tr('Band'), tr('Window end'), '']}
+              rows={(o?.opportunities ?? []).map((row: any) => [
+                row.label,
+                row.market ?? '—',
+                score(row.opportunity_score),
+                score(row.confidence),
+                score(row.demand),
+                <Chip key="f">{(JSON.parse(row.families || '[]') as string[]).join(', ') || tr('none')}</Chip>,
+                <Chip key="b" kind={BAND_KIND[row.band]}>
+                  {String(row.band).replace(/_/g, ' ')}
+                </Chip>,
+                fmtDate(row.window_end),
+                row.band === 'brief' || row.band === 'auto_eligible' ? (
+                  <Button
+                    key="d"
+                    size="sm"
+                    onClick={() =>
+                      setDrafting({
+                        topicId: row.topic_id,
+                        opportunityId: row.id,
+                        label: row.label,
+                        market: row.market ?? 'CD',
+                        locale: '',
+                        audience: '',
+                        intent: row.label,
+                        objective: '',
+                        ttlHours: '',
+                      })
+                    }
+                  >
+                    {tr('Draft a brief')}
+                  </Button>
+                ) : null,
+              ])}
+              empty={tr('No topic has been scored yet. Register a source, ingest observations, then score a topic.')}
+            />
+          </div>
           <h4 className="mt">{tr('Score a topic')}</h4>
           <p className="muted">
             {tr(
               'Demand, source quality, corroboration, coverage and freshness are measured from the observations. Fit, commercial intent, timing and readiness come from this platform’s own mapping — a model never sets them.',
             )}
           </p>
-          <Table
-            head={[tr('Topic'), tr('Market'), tr('Terms'), tr('Updated'), '']}
-            rows={(o?.topics ?? []).map((t: any) => [
-              t.label,
-              t.market,
-              (JSON.parse(t.terms || '[]') as string[]).join(', '),
-              fmtDate(t.updated_at),
-              <Button key="s" size="sm" variant="secondary" onClick={() => setScoring({ topicId: t.id, label: t.label, fit: '', commercialIntent: '', timing: '', readiness: '' })}>
-                {tr('Score now')}
-              </Button>,
-            ])}
-            empty={tr('No topic yet.')}
-          />
+          <div className="nowrap-head">
+            <Table
+              head={[tr('Topic'), tr('Market'), tr('Terms'), tr('Updated'), '']}
+              rows={(o?.topics ?? []).map((t: any) => [
+                t.label,
+                t.market,
+                (JSON.parse(t.terms || '[]') as string[]).join(', '),
+                fmtDate(t.updated_at),
+                <Button key="s" size="sm" variant="secondary" onClick={() => setScoring({ topicId: t.id, label: t.label, fit: '', commercialIntent: '', timing: '', readiness: '' })}>
+                  {tr('Score now')}
+                </Button>,
+              ])}
+              empty={tr('No topic yet.')}
+            />
+          </div>
         </div>
       )}
 
@@ -164,52 +185,54 @@ export function Trend() {
               'One approved brief per market, locale and topic, for a short window. Approval needs a different administrator under step-up, and binds to the exact payload shown here: editing a brief after approval invalidates it.',
             )}
           </p>
-          <Table
-            head={[tr('Topic / intent'), tr('Market'), tr('Version'), tr('Status'), tr('Opportunity'), tr('Confidence'), tr('Expires'), tr('Channels'), '']}
-            rows={(o?.briefs ?? []).map((b: any) => [
-              b.intent,
-              `${b.market}${b.locale ? ` · ${b.locale}` : ''}`,
-              `v${b.version}`,
-              <StatusBadge key="s" status={b.expired && b.status === 'approved' ? 'expired' : b.status} />,
-              b.opportunity_score,
-              b.confidence,
-              fmtDate(b.expires_at),
-              (JSON.parse(b.allowed_channels || '[]') as string[]).join(', '),
-              <div key="a" className="row">
-                {b.status === 'draft' && (
-                  <StepUpButton
-                    size="sm"
-                    title={tr('Approve this brief')}
-                    onConfirm={(pin) =>
-                      api
-                        .post(`/api/admin/trend/briefs/${b.id}/approve`, { payloadHash: b.payloadHash, pin })
-                        .then(() => ok(tr('Brief approved: it now steers the content agent')))
-                        .catch(err)
-                    }
-                  >
-                    {tr('Approve')}
-                  </StepUpButton>
-                )}
-                {b.status === 'approved' && (
-                  <StepUpButton
-                    size="sm"
-                    variant="danger"
-                    title={tr('Revoke this brief')}
-                    prompt={tr('Why is it being revoked?')}
-                    onConfirm={(pin, reason) =>
-                      api
-                        .post(`/api/admin/trend/briefs/${b.id}/revoke`, { reason, pin })
-                        .then(() => ok(tr('Brief revoked: the agent is back on its backlog')))
-                        .catch(err)
-                    }
-                  >
-                    {tr('Revoke')}
-                  </StepUpButton>
-                )}
-              </div>,
-            ])}
-            empty={tr('No brief yet. Score a topic into the brief band, then draft one from the Opportunities tab.')}
-          />
+          <div className="nowrap-head">
+            <Table
+              head={[tr('Topic / intent'), tr('Market'), tr('Version'), tr('Status'), tr('Opportunity'), tr('Confidence'), tr('Expires'), tr('Channels'), '']}
+              rows={(o?.briefs ?? []).map((b: any) => [
+                b.intent,
+                `${b.market}${b.locale ? ` · ${b.locale}` : ''}`,
+                `v${b.version}`,
+                <StatusBadge key="s" status={b.expired && b.status === 'approved' ? 'expired' : b.status} />,
+                score(b.opportunity_score),
+                score(b.confidence),
+                fmtDate(b.expires_at),
+                (JSON.parse(b.allowed_channels || '[]') as string[]).join(', '),
+                <div key="a" className="row">
+                  {b.status === 'draft' && (
+                    <StepUpButton
+                      size="sm"
+                      title={tr('Approve this brief')}
+                      onConfirm={(pin) =>
+                        api
+                          .post(`/api/admin/trend/briefs/${b.id}/approve`, { payloadHash: b.payloadHash, pin })
+                          .then(() => ok(tr('Brief approved: it now steers the content agent')))
+                          .catch(err)
+                      }
+                    >
+                      {tr('Approve')}
+                    </StepUpButton>
+                  )}
+                  {b.status === 'approved' && (
+                    <StepUpButton
+                      size="sm"
+                      variant="danger"
+                      title={tr('Revoke this brief')}
+                      prompt={tr('Why is it being revoked?')}
+                      onConfirm={(pin, reason) =>
+                        api
+                          .post(`/api/admin/trend/briefs/${b.id}/revoke`, { reason, pin })
+                          .then(() => ok(tr('Brief revoked: the agent is back on its backlog')))
+                          .catch(err)
+                      }
+                    >
+                      {tr('Revoke')}
+                    </StepUpButton>
+                  )}
+                </div>,
+              ])}
+              empty={tr('No brief yet. Score a topic into the brief band, then draft one from the Opportunities tab.')}
+            />
+          </div>
         </div>
       )}
 
@@ -221,26 +244,28 @@ export function Trend() {
               'A source family contributes once however many records it sends, so four syndicated copies of one announcement are not four sources agreeing. A source whose terms this platform cannot meet is recorded as unavailable with its reason — never as a request for a new key.',
             )}
           </p>
-          <Table
-            head={[tr('Source'), tr('Family'), tr('Access'), tr('Quality'), tr('Stale after'), tr('State')]}
-            rows={(o?.sources ?? []).map((s: any) => [
-              s.name,
-              s.family,
-              String(s.access_path).replace(/_/g, ' '),
-              s.quality,
-              `${s.stale_after_hours} h`,
-              s.enabled ? (
-                <Chip key="e" kind="success">
-                  {s.context_only ? tr('context only') : tr('contributing')}
-                </Chip>
-              ) : (
-                <Chip key="u" kind="warning">
-                  {s.unavailable_reason || tr('unavailable')}
-                </Chip>
-              ),
-            ])}
-            empty={tr('No source registered yet.')}
-          />
+          <div className="nowrap-head">
+            <Table
+              head={[tr('Source'), tr('Family'), tr('Access'), tr('Quality'), tr('Stale after'), tr('State')]}
+              rows={(o?.sources ?? []).map((s: any) => [
+                s.name,
+                s.family,
+                String(s.access_path).replace(/_/g, ' '),
+                s.quality,
+                `${s.stale_after_hours} h`,
+                s.enabled ? (
+                  <Chip key="e" kind="success">
+                    {s.context_only ? tr('context only') : tr('contributing')}
+                  </Chip>
+                ) : (
+                  <Chip key="u" kind="warning">
+                    {s.unavailable_reason || tr('unavailable')}
+                  </Chip>
+                ),
+              ])}
+              empty={tr('No source registered yet.')}
+            />
+          </div>
         </div>
       )}
 
@@ -253,11 +278,13 @@ export function Trend() {
             )}
           </p>
           <Button onClick={() => setClaim({ code: '', text: '', evidence: '', validUntil: '' })}>{tr('Register a claim')}</Button>
-          <Table
-            head={[tr('Code'), tr('Revision'), tr('Text'), tr('Evidence'), tr('Valid until'), tr('Registered')]}
-            rows={(claims.data?.data ?? []).map((c: any) => [c.code, c.revision, c.text, c.evidence || '—', fmtDate(c.valid_until), fmtDate(c.created_at)])}
-            empty={tr('No claim registered. A brief with no approved claim tells the writer to assert nothing.')}
-          />
+          <div className="nowrap-head">
+            <Table
+              head={[tr('Code'), tr('Revision'), tr('Text'), tr('Evidence'), tr('Valid until'), tr('Registered')]}
+              rows={(claims.data?.data ?? []).map((c: any) => [c.code, c.revision, c.text, c.evidence || '—', fmtDate(c.valid_until), fmtDate(c.created_at)])}
+              empty={tr('No claim registered. A brief with no approved claim tells the writer to assert nothing.')}
+            />
+          </div>
         </div>
       )}
 
@@ -265,18 +292,20 @@ export function Trend() {
         <div className="card">
           <h4>{tr('Why it wrote that')}</h4>
           <p className="muted">{tr('Every time the content agent resolved a brief, and what it did. This is the answer to “where did this article come from”.')}</p>
-          <Table
-            head={[tr('When'), tr('Channel'), tr('Outcome'), tr('Brief'), tr('Detail'), tr('Article')]}
-            rows={(uses.data?.data ?? []).map((u: any) => [
-              fmtDate(u.resolved_at),
-              u.channel,
-              <StatusBadge key="o" status={u.outcome} />,
-              u.brief_id ? `${u.brief_id.slice(0, 8)} v${u.brief_version}` : '—',
-              u.detail || '—',
-              u.post_id ? u.post_id.slice(0, 8) : '—',
-            ])}
-            empty={tr('The content agent has not run since trend intelligence was switched on.')}
-          />
+          <div className="nowrap-head">
+            <Table
+              head={[tr('When'), tr('Channel'), tr('Outcome'), tr('Brief'), tr('Detail'), tr('Article')]}
+              rows={(uses.data?.data ?? []).map((u: any) => [
+                fmtDate(u.resolved_at),
+                u.channel,
+                <StatusBadge key="o" status={u.outcome} />,
+                u.brief_id ? `${u.brief_id.slice(0, 8)} v${u.brief_version}` : '—',
+                u.detail || '—',
+                u.post_id ? u.post_id.slice(0, 8) : '—',
+              ])}
+              empty={tr('The content agent has not run since trend intelligence was switched on.')}
+            />
+          </div>
         </div>
       )}
 

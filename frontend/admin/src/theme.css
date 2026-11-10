@@ -1212,3 +1212,9 @@ th {
 .md p {
   margin-bottom: 1em;
 }
+
+/* A table with many short columns: let the header keep its words together and the wrapper scroll, rather than
+   squeezing "Market" into "MARKE / T". Opt-in, so no existing table changes. */
+.nowrap-head th {
+  white-space: nowrap;
+}
