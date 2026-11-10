@@ -99,3 +99,63 @@ enforcing it is now a failing test.
   explicit that it ships off.
 - **Regression test** The existing `features.test.ts` coverage test, unchanged.
 - **Residual risk** None known.
+
+## LA-008 · The collector invented a baseline of zero
+
+- **Severity** P2 (high, correctness of a signal) · **Blocker** No · **Area** trend intelligence · **Status** FIXED, retested
+- **Steps** Switch trend intelligence on for a platform that has never recorded a support ticket or a domain event, and run the daily cycle.
+- **Expected** No observation for a period the platform was not counting.
+- **Actual (before)** Forty-five days of zeros per mapped feature, for every signal with no history.
+- **Root cause** `completedDays(null, days)` returned the whole window when there was no first row. The page-view
+  path had the guard; the ticket and event paths did not.
+- **Impact** Every mapped feature got a flat zero baseline, so the first real ticket or event would read as an
+  enormous spike against it. The module's whole claim is that it refuses to assert what it cannot support, and this
+  manufactured exactly the kind of confident number it exists to avoid.
+- **Fix** No row means no history; those days are skipped entirely.
+- **Regression test** `trend_platform.test.ts` — "invents no baseline for days the platform was not counting".
+- **Residual risk** None known.
+
+## LA-009 · A scheduled pass overruled an administrator
+
+- **Severity** P2 (high) · **Blocker** No · **Area** trend intelligence / claims · **Status** FIXED, retested
+- **Steps** Register the catalogue claims, close one claim's validity window by hand (the sentence stopped being
+  true), wait for the next daily cycle.
+- **Expected** The claim stays retired, and any brief citing it is refused.
+- **Actual (before)** `claimsForFeature` re-registered every proof line each pass, and `upsertClaim` treats a
+  changed validity window as a new revision — so the retired claim came back the next morning as a fresh, open
+  revision, and the brief citing it was approved.
+- **Impact** The automatic loop silently reversed a human decision about **what the platform is allowed to claim**,
+  which is the one thing in this module that is supposed to be a person's to decide.
+- **Fix** A revision is created only when the catalogue *text* differs. An existing revision with the same words is
+  reused whatever its window, so a retired claim stays retired, is still cited, and `proposeBrief` refuses by name.
+- **Regression test** `trend_platform.test.ts` — "says why a topic in the brief band was not drafted…".
+- **Residual risk** None known. Found only because the test for LA-010 could not be made to fail.
+
+## LA-010 · Briefs were declined in silence
+
+- **Severity** P3 (medium, observability) · **Blocker** No · **Area** trend intelligence · **Status** FIXED, retested
+- **Actual (before)** `autoProposeBriefs` swallowed every refusal into a counter. A veto is on the snapshot, but a
+  lapsed claim or a band that moved is not, so an administrator saw "nothing drafted" and no reason.
+- **Impact** None directly; but a module that insists on saying why it scored something and then declines to act
+  without explanation has given up the property it is built on.
+- **Fix** Refusals carry the topic and the reason, through the cycle result and into the daily log. A topic skipped
+  because it already has a live brief is not a refusal — that is the one-brief-per-topic rule working.
+- **Regression test** `trend_platform.test.ts`, same case as LA-009.
+- **Residual risk** None known.
+
+## LA-011 · The daily collector scanned the platform's busiest table
+
+- **Severity** P3 (medium, performance) · **Blocker** No · **Area** trend intelligence · **Status** FIXED, retested
+- **Steps** `EXPLAIN QUERY PLAN` on the collector's three aggregate queries.
+- **Actual (before)** `SCAN domain_events` (covering index, but the whole history) and `SCAN support_tickets` (no
+  index at all). The retention sweep deleted by an unindexed column.
+- **Root cause** `domain_events` was indexed `(type, occurred_at)`, which cannot seek a range on `occurred_at`
+  alone. `support_tickets` had no date index.
+- **Impact** The morning cycle read every event the platform had ever emitted, getting slower every month. It
+  returned the right answer throughout, so there was no symptom to notice.
+- **Fix** Migration `046_trend_signal_indexes.sql`, grouping column second so each index covers its query. All
+  three plans are now `SEARCH … USING COVERING INDEX`.
+- **Regression test** `trend_platform.test.ts` — asserts the query plan, not a timing.
+- **Residual risk** None known. Cycle cost measured at 282 ms cold / 126 ms warm against a year of synthetic data
+  (49,200 page-view rows, 200,000 events, 8,000 tickets) on an in-memory database — a scale check, not a VPS
+  prediction.
