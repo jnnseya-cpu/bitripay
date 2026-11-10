@@ -238,9 +238,11 @@ veto on a snapshot refuses a brief outright.
   the scorer skips every topic and the content agent runs its own backlog.
 - **The support-category and event-type maps are judgements, not measurements.** `payments → QR payments`,
   `payment.captured → QR payments` and the rest are stated in `platformSignals.ts` and are readable in one screen.
-  An unmapped category or event type contributes to nothing rather than being guessed at, which is the safe
-  direction, but a wrong mapping would attribute real interest to the wrong feature. They should be reviewed
-  against this platform's actual ticket mix before the module is switched on.
+  A test now checks that every one resolves to a real, public feature, to a category the support form actually
+  offers and to an event this platform actually emits — so a typo fails the suite instead of silently attributing
+  real interest to nothing. What a test cannot check is whether the judgement is *right* for this platform's
+  ticket mix. An unmapped category or event contributes to nothing rather than being guessed at, which is the safe
+  direction, but the maps should be read against real tickets before the module is switched on.
 
 ---
 

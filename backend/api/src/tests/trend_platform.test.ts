@@ -21,8 +21,10 @@ import { DEFAULT_MODULES, type ModuleFlags } from '../services/modules';
 import { FEATURES, PUBLIC_FEATURES } from '../content/features';
 import { uuid } from '../lib/ids';
 import {
+  EVENT_TYPE_FEATURE,
   PLATFORM_MARKET,
   PLATFORM_SOURCES,
+  SUPPORT_CATEGORY_FEATURE,
   autoProposeBriefs,
   claimsForFeature,
   collectPlatformSignals,
@@ -35,6 +37,7 @@ import {
   timingFromSeries,
 } from '../services/trend/platformSignals';
 import { listSources, listTopics } from '../services/trend/detect';
+import { DOMAIN_EVENT_TYPES } from '../services/bus';
 import { approveBrief, listBriefs, payloadHash } from '../services/trend/briefs';
 import { resolveSteer, claimBoundary, agentStatus } from '../services/seoAgent';
 
@@ -189,6 +192,34 @@ describe('topics and the profile, from the catalogue', () => {
     const off = platformProfile(qr);
     expect(off.readiness).toBe(0);
     expect(off.vetoes.join(' ')).toContain('module_off');
+  });
+
+  /**
+   * The two maps are judgements rather than measurements, and a wrong one is silent: a mistyped feature key
+   * attributes real interest to nothing at all, and nobody notices because the figure simply stays flat. They are
+   * small enough to read in one screen, so they are checked here instead of being trusted.
+   */
+  it('maps only to features and event types that actually exist', () => {
+    const publicKeys = new Set(PUBLIC_FEATURES.map((f) => f.key));
+    for (const [category, key] of Object.entries(SUPPORT_CATEGORY_FEATURE)) {
+      expect(
+        FEATURES.some((f) => f.key === key),
+        `support category "${category}" → unknown feature "${key}"`,
+      ).toBe(true);
+      expect(publicKeys.has(key), `support category "${category}" → internal feature "${key}"`).toBe(true);
+    }
+    for (const [type, key] of Object.entries(EVENT_TYPE_FEATURE)) {
+      expect(DOMAIN_EVENT_TYPES as readonly string[], `"${type}" is not an event this platform emits`).toContain(type);
+      expect(
+        FEATURES.some((f) => f.key === key),
+        `event "${type}" → unknown feature "${key}"`,
+      ).toBe(true);
+      expect(publicKeys.has(key), `event "${type}" → internal feature "${key}"`).toBe(true);
+    }
+    // The support vocabulary is the one the support form offers; an unmapped category contributes to nothing
+    // rather than being guessed at, which is deliberate, but a category that does not exist is a typo.
+    const offered = ['general', 'payments', 'kyc', 'withdrawals', 'merchant', 'agent', 'security', 'other'];
+    for (const category of Object.keys(SUPPORT_CATEGORY_FEATURE)) expect(offered, `"${category}" is not a category the support form offers`).toContain(category);
   });
 
   it('reads the window from the series, not from a constant somebody chose', () => {

@@ -109,7 +109,7 @@ export function featurePaths(f: Feature): string[] {
  * Support categories, mapped to the feature that owns them. The vocabulary is the one the support form offers;
  * anything else contributes to no feature rather than being guessed at.
  */
-const SUPPORT_CATEGORY_FEATURE: Record<string, string> = {
+export const SUPPORT_CATEGORY_FEATURE: Record<string, string> = {
   payments: 'qr-payments',
   kyc: 'kyc-and-identity',
   withdrawals: 'withdrawals',
@@ -119,7 +119,7 @@ const SUPPORT_CATEGORY_FEATURE: Record<string, string> = {
 };
 
 /** Domain event types, mapped to the feature whose code emits them. Unmapped types contribute to nothing. */
-const EVENT_TYPE_FEATURE: Record<string, string> = {
+export const EVENT_TYPE_FEATURE: Record<string, string> = {
   'transaction.created': 'wallets-and-transfers',
   'transaction.settled': 'wallets-and-transfers',
   'wallet.credited': 'add-money',
