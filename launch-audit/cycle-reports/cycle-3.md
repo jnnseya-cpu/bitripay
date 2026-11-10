@@ -55,6 +55,25 @@ LA-009 is the one worth remembering. The automatic loop was quietly overruling a
 this module that is supposed to be a person's to decide — what the platform may claim — and it was invisible
 because the brief it produced looked perfectly ordinary.
 
+## The upgrade path, tested rather than assumed
+
+This cycle adds a migration, and the VPS has a populated database rather than a fresh one — which is the case none
+of the test suites exercise, because every suite starts from `:memory:`.
+
+Built a database at the previous release (45 migrations), populated the two tables the new indexes touch (5,000
+domain events, 300 tickets), then applied only what a deploy would apply:
+
+- `046_trend_signal_indexes.sql` was the single pending migration, applied in **2 ms**
+- re-applying it is a no-op, so a re-run deploy is safe
+- row counts unchanged, `PRAGMA integrity_check` returns `ok`
+- both query plans use the new covering indexes afterwards
+
+**The gap that revealed:** this repository has 46 migrations and no standing test that the upgrade path works on a
+populated database. Every suite builds from nothing, so a migration that breaks only on existing data — a `NOT
+NULL` column with no default, a unique index that existing rows violate — would pass CI and fail on the VPS. This
+one was checked by hand; the class is not covered. Recorded here rather than fixed, because a migration-upgrade
+harness is its own piece of work.
+
 ## Judgements, not measurements
 
 - A fixture that looked like a surge produced `watch` and no brief, **correctly**: support and event volumes sat

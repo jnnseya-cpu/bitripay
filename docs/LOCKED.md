@@ -131,6 +131,10 @@ These are recorded so the gap is visible rather than assumed closed. Detail and 
 - Real payment-provider webhook signatures, idempotency and pending-state behaviour: sandbox credentials needed.
 - Accessibility (WCAG 2.2 AA) and the cross-browser/device matrix.
 - Both administrator accounts still have no second factor; one has no PIN.
+- **No standing test applies migrations to a populated database.** Every suite builds from `:memory:`, so a
+  migration that breaks only on existing data — a `NOT NULL` column with no default, a unique index that existing
+  rows violate — passes CI and fails on the VPS. Migration 046 was checked by hand against a populated
+  previous-release database (applied in 2 ms, idempotent, integrity `ok`, no rows lost); the class is not covered.
 - The trend-intelligence scorer is deterministic and tested but **not calibrated**: §11 stage 2 of its specification
   asks for ≥80 % actionable precision replayed against hand-labelled historical periods, and no observation has been
   ingested on production. The module ships off, and should stay off until that replay exists.
