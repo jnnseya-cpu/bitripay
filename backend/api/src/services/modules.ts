@@ -35,6 +35,13 @@ export interface ModuleFlags {
    * **off unless an administrator switches it on** — including on a platform whose stored flags predate it.
    */
   corridorNetwork: boolean;
+  /**
+   * Trend intelligence: keyless demand detection from sources the platform already holds, deterministic scoring,
+   * and the approved growth brief that steers the SEO and content agents. It changes what the platform publishes
+   * about itself, so like the corridor network it is **off unless an administrator switches it on** — including on
+   * a platform whose stored flags predate it. Off means the agents run on their existing hand-written backlog.
+   */
+  trendIntelligence: boolean;
 }
 
 export const DEFAULT_MODULES: ModuleFlags = {
@@ -62,6 +69,7 @@ export const DEFAULT_MODULES: ModuleFlags = {
   openBanking: true,
   restrictedWallets: true,
   corridorNetwork: false,
+  trendIntelligence: false,
 };
 
 /** Stored flags may predate a key: an absent key means "on", exactly as the console shows it. */
