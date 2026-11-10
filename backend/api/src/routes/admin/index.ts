@@ -54,6 +54,7 @@ import { adminSystemRouter } from './system';
 import { adminWhatsAppRouter } from './whatsapp';
 import { adminSupervisionRouter } from './supervision';
 import { adminNetworkRouter } from './network';
+import { adminTrendRouter } from './trend';
 import { closeAccount, closureBlockers } from '../../services/accountClosure';
 import { isPictureKind, removePicture } from '../../services/pictures';
 import { assertPricingAboveFloor } from '../../services/assist/gateway';
@@ -197,6 +198,7 @@ adminRouter.use('/system', adminSystemRouter);
 adminRouter.use('/channels/whatsapp', adminWhatsAppRouter);
 adminRouter.use('/supervision', adminSupervisionRouter);
 adminRouter.use('/network', adminNetworkRouter);
+adminRouter.use('/trend', adminTrendRouter);
 
 // ---------------- Dashboard ----------------
 adminRouter.get('/stats', requirePermission('reports'), (_req, res) => {

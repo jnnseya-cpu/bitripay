@@ -3771,6 +3771,116 @@ Write your handler against that one first. It is the case that will find the bug
 
 Nothing. Open code in the repository, no licence.`,
   },
+  {
+    key: 'trend-intelligence',
+    name: 'Trend intelligence',
+    slug: 'trend-intelligence',
+    category: 'operate',
+    module: 'trendIntelligence',
+    usp: 'The platform reads the demand it can already see in its own data, scores it the same way every time, and hands the writing agent an approved brief that expires — instead of a hand-written topic queue.',
+    tagline: 'Demand, scored the same way every time.',
+    headline: 'How a platform decides what to write about next, without guessing',
+    excerpt:
+      'Most content calendars are somebody’s hunch, written down. This one starts from what people actually asked for, scores it against rules that do not move, and hands the writer a brief that an administrator approved and that expires on its own.',
+    audience: 'The people who have to justify a content calendar: founders, growth leads, editors, and the board member who asks why this article and not another.',
+    problem:
+      'A content plan is usually a list somebody typed. It is not wrong, but nobody can say why item three is above item four, and when it stops being true nothing tells you. Meanwhile the questions real people are asking sit unread in the platform’s own search logs.',
+    how: [
+      'Signals the platform already holds are registered as sources, each with what it is allowed to prove and how quickly it goes stale.',
+      'Observations land once per source record: an exact replay is a duplicate, and a changed value under the same key is a conflict for a person to decide, never an overwrite.',
+      'A topic is scored from the movement in those signals, with the platform’s own judgement of fit, intent, timing and readiness alongside — and the score is reproducible from its inputs.',
+      'A topic that scores high enough can carry a brief: who it is for, what question to answer, which claims may be stated and which may not, and until when.',
+      'One administrator drafts the brief and a different one approves it under step-up. Only then does the writing agent use it, and it stops the moment the brief is revoked or lapses.',
+    ],
+    proof: [
+      'The score is pinned to a version and stores a digest of its inputs, so the same inputs at the same window end return the same row rather than a second one.',
+      'One source family counts once however many records it sends, and a single family alone cannot reach the band that carries a brief — four syndicated copies of one announcement are not four sources agreeing.',
+      'A movement counts only with at least four comparable periods behind it and a rise large enough not to be noise; short of that it is labelled with the reason, not scored.',
+      'An approval binds to the exact brief its approver read: editing it afterwards invalidates the approval, and a stale version is refused.',
+      'Expiry is checked when the brief is read, not by a job, so a lapsed brief steers nothing even if no sweeper has run.',
+      'Only claims registered with their evidence can be put in front of the writer, and changing a claim’s text adds a revision rather than editing the one an approval covered.',
+      'Nothing here asks for a new credential: a signal the platform cannot reach is recorded as unavailable with its reason.',
+    ],
+    cost: 'Not a customer-facing product. It is how this platform decides what to write about, and the audit trail that answers “where did this article come from”. It is switched off until an administrator turns it on, and while it is off the writing agent runs on its own topic list exactly as before.',
+    faq: [
+      {
+        question: 'Does this let an AI publish on its own?',
+        answer:
+          'No. A brief changes what the writer is asked to write. The draft still lands in editorial review, and the review still decides whether anything is published. A brief can narrow what a writer may say; it cannot widen it.',
+      },
+      {
+        question: 'What stops it inventing a claim?',
+        answer:
+          'The writer only ever sees claims that were registered with their evidence and approved, plus the list of things it must not say. A claim whose validity window has closed is refused when a brief is drafted, because it stopped being true.',
+      },
+      {
+        question: 'What happens when the signal is weak?',
+        answer:
+          'It says so. A topic with too little history, or with only one family of sources behind it, is recorded with that reason and cannot carry a brief. The platform would rather publish nothing than publish on a number it cannot defend.',
+      },
+      {
+        question: 'Can it measure whether an article worked?',
+        answer:
+          'It records which brief produced which article, which answers where an article came from. It does not claim the article caused anything: incremental lift needs a control group and a mature window, and calling a correlation a lift would be exactly the false confidence this is meant to replace.',
+      },
+    ],
+    keywords: ['content strategy from first-party data', 'demand detection scoring', 'growth brief approval', 'SEO topic prioritisation', 'AI content governance'],
+    related: ['corridor-network', 'developer-api', 'risk-and-compliance'],
+    cta: { label: 'Read how the platform is run', href: '/features' },
+    article: `Ask anyone how their content calendar was made and you get a version of the same answer: we talked about it and wrote a list.
+
+The list is not stupid. It usually contains sensible things. But nobody can say why the third item is above the fourth, and when one of them stops being worth writing, nothing tells you. The list just sits there looking authoritative.
+
+Meanwhile the questions people are actually asking are already in the building. They are in the search box on the website, in the support queue, in the things customers type before they give up. Nobody reads them, because reading them is work and the list already exists.
+
+## Starting from what is already there
+
+The first move is to treat those signals as sources, and to be honest about each one. A source has a family, a quality, and a point at which it goes stale. It records what it is allowed to prove: some signals can tell you demand moved, and some can only tell you a conversation happened.
+
+That last distinction does more work than it sounds like it should. A feed that reports an index rather than a count can tell you something changed; it cannot tell you how much. If you let it set demand anyway, you have invented a number. So it informs the reader and stops there.
+
+## Counting once
+
+The rule that matters most is boring: the same record lands exactly once.
+
+Four news sites carrying one press release is not four sources agreeing. It is one announcement, copied. A pipeline that counts it four times does not merely over-report — it manufactures confidence, which is worse, because somebody acts on it. So a source family contributes once however many records it sends, and one family alone can never reach the level that justifies writing something.
+
+The other half of counting once is replay. Imports get retried. A retried import that adds to every total it touches is a slow-motion disaster, and it is invisible, because the numbers only ever go up. So an exact replay is recognised as a duplicate, and the same key arriving with a different value is a conflict that a person decides rather than an overwrite that nobody sees.
+
+## Scoring, and refusing to score
+
+A score is only useful if it is reproducible. This one is pinned to a version and keeps a digest of what went into it, so the same inputs at the same moment give the same answer rather than a new one. Run it twice and you get one row, not two.
+
+Half of the inputs are measured: how far the signal moved, how good the sources are, how many independent families agree, how much of the period is actually covered, how fresh it is. The other half are the platform’s own judgement — does what we already offer answer this, how close is it to somebody acting, how much of the window is left, could we serve the demand today. Those are set by a mapping an administrator maintains. A model may suggest them. Only the mapping sets them, because a model that scores its own relevance will always find itself relevant.
+
+And the scorer refuses more often than it scores. Not enough comparable history, and the topic is recorded with that reason. Only one family of sources, and confidence is capped below the level that would justify writing. A rise too small to be distinguished from ordinary variation is not a rise. In each case the output says what was missing, which is far more useful than a confident number nobody can trace.
+
+## The brief, and its expiry date
+
+When a topic does clear the bar, it can carry a brief: who this is for, what question to answer completely, what the reader should be able to do afterwards, which claims may be stated, which may not, and until when.
+
+Two things about that object are deliberate. First, one administrator drafts it and a different one approves it, under step-up, and the approval binds to the exact text the approver read — edit it afterwards and the approval is void. An approval that survives an edit is not an approval; it is a formality.
+
+Second, it expires. Not "we should review this"; it has a date, the date is checked every time the brief is read, and a lapsed brief steers nothing even if no cleanup job has run. Revoke it and the writer is back on the ordinary list on its next run, with nothing to redeploy and nothing to remember.
+
+## What the writer actually receives
+
+The brief does not go to the writer as a paragraph of instructions. It goes as a closed object, and only the approved claim text and the list of prohibitions travel into the drafting prompt. The site’s own rules — never invent a statistic, a licence number, a partner or a price — still apply on top of it.
+
+So a brief can narrow what gets written. It cannot licence a sentence the platform would otherwise refuse. That asymmetry is the whole safety argument, and it is why a brief is allowed to steer anything at all.
+
+## What it does not claim
+
+It does not say an article worked. It records which brief produced which article, which answers the question an editor actually asks six months later: where did this come from, and who approved the claim in the second paragraph.
+
+Whether that article caused a single new account is a different question, and answering it honestly needs a control group and a window long enough to mean something. Calling a correlation a lift would be the same false confidence this was built to replace, only with better formatting.
+
+## What it costs
+
+Nothing to a customer; it is not a product. It is how this platform decides what to write about, and the record that makes the decision defensible afterwards.
+
+It ships switched off, and it should stay off until it has been checked against this platform’s own history. Until then the writing agent runs on its ordinary topic list, exactly as it did before any of this existed — which is the point. A control you cannot switch off without breaking something is not a control.`,
+  },
 ];
 
 export type FeatureLang = 'en' | 'fr';

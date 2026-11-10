@@ -3459,4 +3459,109 @@ Chaque SDK fonctionne contre le bac à sable, et le bac à sable publie des nomb
 
 Rien. Code ouvert dans le dépôt, pas de licence.`,
   },
+  'trend-intelligence': {
+    name: 'Intelligence des tendances',
+    tagline: 'La demande, notée de la même façon à chaque fois.',
+    headline: 'Comment une plateforme décide de quoi écrire ensuite, sans deviner',
+    excerpt:
+      'La plupart des calendriers éditoriaux sont l’intuition de quelqu’un, mise par écrit. Celui-ci part de ce que les gens ont réellement demandé, le note selon des règles qui ne bougent pas, et remet au rédacteur un brief qu’un administrateur a approuvé et qui expire de lui-même.',
+    usp: 'La plateforme lit la demande qu’elle voit déjà dans ses propres données, la note de la même façon à chaque fois, et remet à l’agent rédacteur un brief approuvé qui expire — au lieu d’une file de sujets écrite à la main.',
+    audience:
+      'Celles et ceux qui doivent justifier un calendrier éditorial : fondateurs, responsables de croissance, rédacteurs en chef, et le membre du conseil qui demande pourquoi cet article et pas un autre.',
+    problem:
+      'Un plan éditorial est d’ordinaire une liste que quelqu’un a tapée. Elle n’est pas fausse, mais personne ne peut dire pourquoi le troisième point passe avant le quatrième, et quand il cesse d’être vrai rien ne vous le signale. Pendant ce temps, les questions que de vraies personnes posent dorment, non lues, dans les journaux de recherche de la plateforme.',
+    how: [
+      'Les signaux que la plateforme détient déjà sont enregistrés comme sources, chacune avec ce qu’elle est autorisée à prouver et la vitesse à laquelle elle se périme.',
+      'Une observation n’entre qu’une fois par enregistrement source : une relecture exacte est un doublon, et une valeur modifiée sous la même clé est un conflit qu’une personne tranche, jamais un écrasement.',
+      'Un sujet est noté d’après le mouvement de ces signaux, avec à côté le jugement propre de la plateforme sur l’adéquation, l’intention, le moment et la capacité à servir — et la note est reproductible depuis ses entrées.',
+      'Un sujet qui obtient une note suffisante peut porter un brief : pour qui il est, à quelle question répondre, quelles affirmations peuvent être faites et lesquelles ne peuvent pas, et jusqu’à quand.',
+      'Un administrateur rédige le brief et un autre l’approuve sous authentification renforcée. L’agent rédacteur ne l’utilise qu’ensuite, et s’arrête dès que le brief est révoqué ou arrive à échéance.',
+    ],
+    proof: [
+      'La note est rattachée à une version et conserve une empreinte de ses entrées : les mêmes entrées à la même fin de fenêtre renvoient la même ligne plutôt qu’une seconde.',
+      'Une famille de sources compte une fois quel que soit le nombre d’enregistrements qu’elle envoie, et une famille seule ne peut pas atteindre la tranche qui porte un brief — quatre reprises syndiquées d’une annonce ne sont pas quatre sources d’accord.',
+      'Un mouvement ne compte qu’avec au moins quatre périodes comparables derrière lui et une hausse assez forte pour ne pas être du bruit ; en deçà, il est étiqueté avec son motif, pas noté.',
+      'Une approbation est liée au brief exact que son approbateur a lu : le modifier ensuite invalide l’approbation, et une version périmée est refusée.',
+      'L’échéance est vérifiée à la lecture du brief, pas par une tâche de fond : un brief échu ne pilote rien, même si aucun balayage n’a eu lieu.',
+      'Seules les affirmations enregistrées avec leurs preuves peuvent être placées devant le rédacteur, et changer le texte d’une affirmation ajoute une révision au lieu de modifier celle qu’une approbation couvrait.',
+      'Rien ici ne réclame de nouvel identifiant : un signal que la plateforme ne peut pas atteindre est inscrit comme indisponible avec son motif.',
+    ],
+    cost: 'Ce n’est pas un produit destiné aux clients. C’est la façon dont cette plateforme décide de quoi écrire, et la piste d’audit qui répond à « d’où vient cet article ». C’est désactivé jusqu’à ce qu’un administrateur l’active, et tant que c’est désactivé l’agent rédacteur suit sa propre liste de sujets exactement comme avant.',
+    faq: [
+      {
+        question: 'Est-ce que cela laisse une IA publier toute seule ?',
+        answer:
+          'Non. Un brief change ce qu’on demande au rédacteur d’écrire. Le brouillon passe toujours en revue éditoriale, et cette revue décide toujours si quelque chose est publié. Un brief peut restreindre ce qu’un rédacteur peut dire ; il ne peut pas l’élargir.',
+      },
+      {
+        question: 'Qu’est-ce qui l’empêche d’inventer une affirmation ?',
+        answer:
+          'Le rédacteur ne voit jamais que des affirmations enregistrées avec leurs preuves et approuvées, plus la liste de ce qu’il ne doit pas dire. Une affirmation dont la fenêtre de validité est close est refusée au moment de rédiger un brief, parce qu’elle a cessé d’être vraie.',
+      },
+      {
+        question: 'Que se passe-t-il quand le signal est faible ?',
+        answer:
+          'Il le dit. Un sujet avec trop peu d’historique, ou avec une seule famille de sources derrière lui, est inscrit avec ce motif et ne peut pas porter de brief. La plateforme préfère ne rien publier que publier sur un chiffre qu’elle ne peut pas défendre.',
+      },
+      {
+        question: 'Peut-elle mesurer si un article a fonctionné ?',
+        answer:
+          'Elle enregistre quel brief a produit quel article, ce qui répond à la question de l’origine. Elle n’affirme pas que l’article a causé quoi que ce soit : mesurer un effet incrémental demande un groupe témoin et une fenêtre mûre, et appeler une corrélation un effet serait exactement la fausse assurance que tout ceci doit remplacer.',
+      },
+    ],
+    articleSlug: 'intelligence-des-tendances-explique',
+    article: `Demandez à n’importe qui comment son calendrier éditorial a été fait et vous obtenez une version de la même réponse : on en a parlé et on a écrit une liste.
+
+La liste n’est pas bête. Elle contient d’ordinaire des choses sensées. Mais personne ne peut dire pourquoi le troisième point passe avant le quatrième, et quand l’un d’eux cesse de valoir la peine, rien ne vous le signale. La liste reste là, avec son air d’autorité.
+
+Pendant ce temps, les questions que les gens posent réellement sont déjà dans la maison. Elles sont dans la barre de recherche du site, dans la file du support, dans ce que les clients tapent avant d’abandonner. Personne ne les lit, parce que les lire est du travail et que la liste existe déjà.
+
+## Partir de ce qui est déjà là
+
+Le premier geste est de traiter ces signaux comme des sources, et d’être honnête sur chacune. Une source a une famille, une qualité, et un moment à partir duquel elle se périme. Elle inscrit ce qu’elle est autorisée à prouver : certains signaux savent dire que la demande a bougé, d’autres ne savent dire qu’une conversation a eu lieu.
+
+Cette dernière distinction fait plus de travail qu’il n’y paraît. Un flux qui rapporte un indice plutôt qu’un décompte peut dire que quelque chose a changé ; il ne peut pas dire de combien. Si on le laisse quand même fixer la demande, on a inventé un chiffre. Il informe donc le lecteur et s’arrête là.
+
+## Compter une seule fois
+
+La règle qui compte le plus est ennuyeuse : le même enregistrement n’entre qu’une fois.
+
+Quatre sites d’information reprenant un communiqué, ce ne sont pas quatre sources d’accord. C’est une annonce, recopiée. Un pipeline qui la compte quatre fois ne surévalue pas seulement : il fabrique de l’assurance, ce qui est pire, parce que quelqu’un agit en conséquence. Une famille de sources compte donc une fois quel que soit le nombre d’enregistrements qu’elle envoie, et une famille seule ne peut jamais atteindre le niveau qui justifie d’écrire quelque chose.
+
+L’autre moitié du problème, c’est la relecture. Les imports sont rejoués. Un import rejoué qui s’ajoute à chaque total qu’il touche est un désastre au ralenti, et il est invisible, parce que les chiffres ne font que monter. Une relecture exacte est donc reconnue comme un doublon, et la même clé qui arrive avec une valeur différente est un conflit qu’une personne tranche plutôt qu’un écrasement que personne ne voit.
+
+## Noter, et refuser de noter
+
+Une note n’est utile que si elle est reproductible. Celle-ci est rattachée à une version et garde une empreinte de ce qui est entré dedans : les mêmes entrées au même instant donnent la même réponse plutôt qu’une nouvelle. Lancez-la deux fois et vous obtenez une ligne, pas deux.
+
+La moitié des entrées est mesurée : de combien le signal a bougé, la qualité des sources, combien de familles indépendantes sont d’accord, quelle part de la période est réellement couverte, la fraîcheur. L’autre moitié est le jugement propre de la plateforme — est-ce que ce que nous proposons déjà répond à cela, à quelle distance sommes-nous de quelqu’un qui agit, combien de fenêtre reste-t-il, pourrions-nous servir cette demande aujourd’hui. Ce sont des valeurs posées par une correspondance qu’un administrateur tient à jour. Un modèle peut les suggérer. Seule la correspondance les fixe, parce qu’un modèle qui note sa propre pertinence se trouvera toujours pertinent.
+
+Et le noteur refuse plus souvent qu’il ne note. Pas assez d’historique comparable, et le sujet est inscrit avec ce motif. Une seule famille de sources, et la confiance est plafonnée en dessous du niveau qui justifierait d’écrire. Une hausse trop faible pour se distinguer d’une variation ordinaire n’est pas une hausse. Dans chaque cas la sortie dit ce qui manquait, ce qui est bien plus utile qu’un chiffre assuré que personne ne peut retracer.
+
+## Le brief, et sa date d’échéance
+
+Quand un sujet passe la barre, il peut porter un brief : pour qui c’est, à quelle question répondre complètement, ce que le lecteur doit pouvoir faire ensuite, quelles affirmations peuvent être faites, lesquelles ne peuvent pas, et jusqu’à quand.
+
+Deux choses dans cet objet sont volontaires. D’abord, un administrateur le rédige et un autre l’approuve, sous authentification renforcée, et l’approbation est liée au texte exact que l’approbateur a lu — modifiez-le ensuite et l’approbation est nulle. Une approbation qui survit à une modification n’est pas une approbation ; c’est une formalité.
+
+Ensuite, il expire. Pas « il faudrait revoir ceci » : il a une date, la date est vérifiée chaque fois que le brief est lu, et un brief échu ne pilote rien même si aucune tâche de nettoyage n’a tourné. Révoquez-le et le rédacteur retrouve la liste ordinaire au passage suivant, sans rien à redéployer et rien à retenir.
+
+## Ce que le rédacteur reçoit réellement
+
+Le brief ne part pas vers le rédacteur sous forme de paragraphe d’instructions. Il part comme un objet fermé, et seuls le texte des affirmations approuvées et la liste des interdits entrent dans la consigne de rédaction. Les règles propres du site — ne jamais inventer une statistique, un numéro de licence, un partenaire ou un prix — s’appliquent toujours par-dessus.
+
+Un brief peut donc restreindre ce qui est écrit. Il ne peut pas autoriser une phrase que la plateforme refuserait par ailleurs. Cette asymétrie est tout l’argument de sécurité, et c’est pour cela qu’un brief est autorisé à piloter quoi que ce soit.
+
+## Ce qu’elle n’affirme pas
+
+Elle ne dit pas qu’un article a fonctionné. Elle enregistre quel brief a produit quel article, ce qui répond à la question qu’un rédacteur en chef pose vraiment six mois plus tard : d’où vient ceci, et qui a approuvé l’affirmation du deuxième paragraphe.
+
+Savoir si cet article a causé un seul compte nouveau est une autre question, et y répondre honnêtement demande un groupe témoin et une fenêtre assez longue pour signifier quelque chose. Appeler une corrélation un effet serait la même fausse assurance que celle-ci a été construite pour remplacer, avec une meilleure mise en page.
+
+## Ce que cela coûte
+
+Rien pour un client ; ce n’est pas un produit. C’est la façon dont cette plateforme décide de quoi écrire, et la trace qui rend la décision défendable ensuite.
+
+Elle est livrée désactivée, et elle devrait rester désactivée jusqu’à ce qu’elle ait été confrontée à l’historique de cette plateforme. D’ici là, l’agent rédacteur suit sa liste de sujets ordinaire, exactement comme avant que tout ceci existe — et c’est le point. Un contrôle qu’on ne peut pas désactiver sans casser quelque chose n’est pas un contrôle.`,
+  },
 };

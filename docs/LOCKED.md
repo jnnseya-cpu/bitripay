@@ -61,12 +61,31 @@ checked as well as the lockfile, because a lockfile can be regenerated: a fix th
 
 | Invariant | Guard |
 | --- | --- |
-| 41 features, each tracing to an enforced code path; every module flag covered by some feature | `features.test.ts` |
+| 42 features, each tracing to an enforced code path; every module flag covered by some feature | `features.test.ts` |
 | Availability is computed from live module state, never asserted in prose | `features.test.ts` — a test forbids the copy from claiming availability at all |
-| French is complete for all 41 features, with nothing falling back to English | `features.test.ts` (`missingTranslations`) |
+| French is complete for all 42 features, with nothing falling back to English | `features.test.ts` (`missingTranslations`) |
 | No dead files, duplicate exports, or unused/unlisted dependencies | `npm run deps:check` (knip) in CI |
 | The suite does not rot with the calendar: no test or service window gives a different answer because of today's date | **`npm run test:clock -w @bitripay/api`** with `CLOCK_FORWARD_DAYS` — run it before trusting a green suite after a quiet period |
 | Formatting and lint are uniform | `npm run format:check`, `npm run lint` in CI |
+
+## Growth and the agents
+
+| Invariant | Guard |
+| --- | --- |
+| The content agent falls back to its own topic backlog whenever no approved brief resolves — revoked, lapsed, out of market, or the module switched off | **`trend_steering.test.ts`** — each of the four cases asserted separately |
+| `effectiveBrief()` never throws; a switched-off growth control cannot take the content schedule down | `trend_intelligence.test.ts`, `trend_steering.test.ts` |
+| A brief never consumes a queued backlog topic | `trend_steering.test.ts` |
+| Only approved claim strings and prohibitions reach the drafting prompt; the site's own hard rules still apply on top | `trend_steering.test.ts` (`briefInstructions`) |
+| A brief cannot add a publishing language the platform has not enabled | `trend_steering.test.ts` |
+| One approved brief per market, locale and topic | partial unique index; `trend_intelligence.test.ts` |
+| An approval covers the exact payload its approver read, is made by a different administrator, and takes step-up | **`trend_routes.test.ts`** — stale hash, self-approval and missing PIN each refused distinctly |
+| A brief's expiry is checked on the read, not by a sweeper | `trend_intelligence.test.ts` (TI-05) |
+| An exact source-record replay lands once; a changed payload under the same key is a conflict, never an overwrite | `trend_intelligence.test.ts` (TI-01) |
+| One source family contributes once however many records it sends, and alone caps confidence below the brief band | `trend_scoring.test.ts`, `trend_intelligence.test.ts` (TI-04) |
+| The scorer reproduces the specification's worked example unrounded (86.25 / 83.5) | `trend_scoring.test.ts` (TI-03) |
+| Trend intelligence requests no credential: an unreachable source is recorded unavailable with its reason | `trend_routes.test.ts` (TI-22) |
+| The claim registry sits behind `compliance`, not behind content editing | `trend_routes.test.ts` |
+| Changing a claim's text adds a revision; an approval keeps meaning what its approver read | `trend_intelligence.test.ts` |
 
 ## Calendar drift
 
@@ -101,6 +120,9 @@ These are recorded so the gap is visible rather than assumed closed. Detail and 
 - Real payment-provider webhook signatures, idempotency and pending-state behaviour: sandbox credentials needed.
 - Accessibility (WCAG 2.2 AA) and the cross-browser/device matrix.
 - Both administrator accounts still have no second factor; one has no PIN.
+- The trend-intelligence scorer is deterministic and tested but **not calibrated**: §11 stage 2 of its specification
+  asks for ≥80 % actionable precision replayed against hand-labelled historical periods, and no observation has been
+  ingested on production. The module ships off, and should stay off until that replay exists.
 
 A reminder that applies to the whole file: these guards prove the platform still behaves as it did when it was
 verified. They do not prove it is safe to launch. The verdict in `launch-audit/` is unchanged.

@@ -14,6 +14,7 @@ import { Supervision } from './pages/Supervision';
 import { Analytics } from './pages/Analytics';
 import { Corridors } from './pages/Corridors';
 import { Network } from './pages/Network';
+import { Trend } from './pages/Trend';
 import { Emoney } from './pages/Emoney';
 import { Seo } from './pages/Seo';
 import { Agents } from './pages/Agents';
@@ -121,6 +122,14 @@ export function App() {
           element={
             <P>
               <Network />
+            </P>
+          }
+        />
+        <Route
+          path="/trend"
+          element={
+            <P>
+              <Trend />
             </P>
           }
         />

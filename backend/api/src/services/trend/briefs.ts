@@ -232,6 +232,21 @@ export function proposeBrief(input: ProposeBriefInput, proposedBy: string): Brie
 export const getBrief = (id: string): BriefRow | undefined => getDb().prepare('SELECT * FROM ti_briefs WHERE id = ?').get(id) as BriefRow | undefined;
 
 /**
+ * The console's list. The payload hash travels with every row because an approval binds to it: the console must
+ * send back the hash of the exact brief it displayed, or the approval is refused.
+ */
+export const listBriefs = (filter: { status?: BriefRow['status']; market?: string } = {}, limit = 100): (BriefRow & { payloadHash: string; expired: boolean })[] => {
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM ti_briefs WHERE (? IS NULL OR status = ?) AND (? IS NULL OR market = ?)
+       ORDER BY CASE status WHEN 'draft' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, updated_at DESC LIMIT ?`,
+    )
+    .all(filter.status ?? null, filter.status ?? null, filter.market ?? null, filter.market ?? null, Math.min(500, Math.max(1, limit))) as BriefRow[];
+  const at = now();
+  return rows.map((row) => ({ ...row, payloadHash: payloadHash(row), expired: expired(row, at) }));
+};
+
+/**
  * Approve one exact version. The caller passes the hash it was shown; if the brief has changed since, the approval
  * is refused rather than applied to something the approver never read. Approving supersedes the previous active
  * brief for the same scope in the same transaction, so there is never a moment with two or none.
@@ -377,7 +392,6 @@ export interface ClaimRow {
 }
 
 export const listClaims = (): ClaimRow[] => getDb().prepare('SELECT * FROM ti_claims ORDER BY code, revision DESC').all() as ClaimRow[];
-export const claimById = (id: string): ClaimRow | undefined => getDb().prepare('SELECT * FROM ti_claims WHERE id = ?').get(id) as ClaimRow | undefined;
 
 export function upsertClaim(input: { code: string; text: string; evidence?: string | null; validFrom?: string | null; validUntil?: string | null }, approvedBy: string): ClaimRow {
   assertTrendIntelligence();

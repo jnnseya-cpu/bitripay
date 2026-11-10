@@ -15,7 +15,7 @@
 import { getDb } from '../../db';
 import { uuid, now } from '../../lib/ids';
 import { sha256 } from '../../lib/crypto';
-import { badRequest, conflict, notFound } from '../../lib/errors';
+import { badRequest, notFound } from '../../lib/errors';
 import { parseJson } from '../../lib/json';
 import { score, movement, demandFromZ, SCORING_VERSION, type FamilyEvidence, type Score } from './scoring';
 import { assertTrendIntelligence } from './gate';
@@ -400,8 +400,3 @@ export const listOpportunities = (limit = 50): Record<string, unknown>[] =>
        WHERE o.superseded_by IS NULL ORDER BY o.created_at DESC LIMIT ?`,
     )
     .all(Math.min(200, Math.max(1, limit))) as Record<string, unknown>[];
-
-/** A conflict surfaced by ingestion is an operator decision, not something to resolve by overwriting. */
-export const observationConflict = (sourceRecordId: string): never => {
-  throw conflict(`Source record ${sourceRecordId} already exists with a different payload`, 'observation_conflict');
-};
