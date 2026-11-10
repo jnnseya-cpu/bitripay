@@ -11,7 +11,20 @@ import { setSetting } from '../services/settings';
 import { DEFAULT_MODULES } from '../services/modules';
 import { getDb } from '../db';
 import { upsertSource, ingestObservations, upsertTopic, snapshotTopic, canonicalise, listSources, markSourceUnavailable } from '../services/trend/detect';
-import { proposeBrief, approveBrief, effectiveBrief, revokeBrief, payloadHash, getBrief, expireLapsedBriefs, recordBriefUse, listBriefUses, BRIEF_TTL_HOURS } from '../services/trend/briefs';
+import {
+  proposeBrief,
+  approveBrief,
+  effectiveBrief,
+  revokeBrief,
+  payloadHash,
+  getBrief,
+  expireLapsedBriefs,
+  recordBriefUse,
+  listBriefUses,
+  upsertClaim,
+  listClaims,
+  BRIEF_TTL_HOURS,
+} from '../services/trend/briefs';
 import { uuid } from '../lib/ids';
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
@@ -324,5 +337,43 @@ describe('the module switch', () => {
     expect(effectiveBrief({ market: 'CD', locale: 'fr-CD', channel: 'seo' })).toBeNull();
     setSetting('modules', { ...DEFAULT_MODULES, trendIntelligence: true });
     expect(effectiveBrief({ market: 'CD', locale: 'fr-CD', channel: 'seo' })?.briefId).toBe(draft.id);
+  });
+});
+
+describe('the claim registry', () => {
+  beforeEach(seedEligible);
+
+  const hoursFromNow = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
+
+  it('revises rather than edits, so an approval keeps meaning what its approver read', () => {
+    const first = upsertClaim({ code: 'fee_shown', text: 'Fees are shown before every payment.' }, 'admin_checker');
+    expect(first.revision).toBe(1);
+    // The same text is the same claim: no revision churn from an idempotent save.
+    expect(upsertClaim({ code: 'FEE_SHOWN', text: 'Fees are shown before every payment.' }, 'admin_checker').id).toBe(first.id);
+
+    const second = upsertClaim({ code: 'fee_shown', text: 'Every fee is shown before the payment is confirmed.' }, 'admin_checker');
+    expect(second.revision).toBe(2);
+    expect(second.id).not.toBe(first.id);
+    // Revision 1 is still there, with its original text, because a brief may have cited it.
+    expect(listClaims().find((c) => c.id === first.id)!.text).toBe('Fees are shown before every payment.');
+  });
+
+  it('refuses a brief that cites a claim the platform does not hold, or one whose window has closed', () => {
+    expect(() => propose({ approvedClaimIds: ['claim_does_not_exist'] })).toThrowError(/Unknown approved claim/);
+
+    const lapsed = upsertClaim({ code: 'promo_2024', text: 'The launch promotion is running.', validUntil: hoursAgo(1) }, 'admin_checker');
+    expect(() => propose({ approvedClaimIds: [lapsed.id] })).toThrowError(/expired/i);
+
+    const future = upsertClaim({ code: 'promo_next', text: 'The next promotion is running.', validFrom: hoursFromNow(48) }, 'admin_checker');
+    expect(() => propose({ approvedClaimIds: [future.id] })).toThrowError(/not valid yet/i);
+
+    const live = upsertClaim({ code: 'fee_shown', text: 'Fees are shown before every payment.', validUntil: hoursFromNow(48) }, 'admin_checker');
+    expect(propose({ approvedClaimIds: [live.id] }).status).toBe('draft');
+  });
+
+  it('refuses a claim with no code, no text, or a window that closes before it opens', () => {
+    expect(() => upsertClaim({ code: '  ', text: 'x' }, 'a')).toThrowError(/code/i);
+    expect(() => upsertClaim({ code: 'c', text: '   ' }, 'a')).toThrowError(/text/i);
+    expect(() => upsertClaim({ code: 'c', text: 'x', validFrom: hoursFromNow(48), validUntil: hoursFromNow(2) }, 'a')).toThrowError(/before it starts/i);
   });
 });

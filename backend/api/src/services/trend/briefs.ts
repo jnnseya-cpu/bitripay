@@ -165,11 +165,16 @@ export function proposeBrief(input: ProposeBriefInput, proposedBy: string): Brie
   const channels = input.allowedChannels?.length ? input.allowedChannels : (['seo', 'content'] as BriefChannel[]);
   for (const c of channels) if (!BRIEF_CHANNELS.includes(c)) throw badRequest(`Unknown channel ${c}`, 'unknown_channel');
 
-  // Claims resolve server-side. A claim id the platform does not hold is refused rather than passed to a model.
+  // Claims resolve server-side. A claim id the platform does not hold is refused rather than passed to a model, and
+  // a claim whose own validity window has closed is refused too: it stopped being true, which is the whole point of
+  // giving a claim a window.
   const claimIds = input.approvedClaimIds ?? [];
+  const at = now();
   for (const id of claimIds) {
-    const claim = db.prepare('SELECT id FROM ti_claims WHERE id = ?').get(id);
+    const claim = db.prepare('SELECT id, code, valid_from, valid_until FROM ti_claims WHERE id = ?').get(id) as ClaimRow | undefined;
     if (!claim) throw badRequest(`Unknown approved claim ${id}`, 'unknown_claim');
+    if (claim.valid_from && claim.valid_from > at) throw badRequest(`Claim ${claim.code} is not valid yet`, 'claim_not_valid');
+    if (claim.valid_until && claim.valid_until <= at) throw badRequest(`Claim ${claim.code} has expired`, 'claim_expired');
   }
 
   const existing = db.prepare('SELECT brief_ref, MAX(version) v FROM ti_briefs WHERE topic_id = ? AND market = ? AND locale = ? GROUP BY brief_ref').get(input.topicId, input.market, input.locale) as
@@ -350,3 +355,68 @@ export const listBriefUses = (limit = 50): Record<string, unknown>[] =>
   getDb()
     .prepare('SELECT * FROM ti_brief_uses ORDER BY resolved_at DESC LIMIT ?')
     .all(Math.min(200, Math.max(1, limit))) as Record<string, unknown>[];
+
+/**
+ * The claim registry: the sentences this platform is prepared to stand behind, each with its evidence and its own
+ * validity window.
+ *
+ * A revision is never an edit in place. A brief that was approved citing revision 1 must keep meaning exactly what
+ * its approver read, so changing the text of a claim adds a revision with a new id and leaves the old one where it
+ * is. That is also why `proposeBrief` resolves claims by id rather than by code.
+ */
+export interface ClaimRow {
+  id: string;
+  code: string;
+  revision: number;
+  text: string;
+  evidence: string | null;
+  valid_from: string | null;
+  valid_until: string | null;
+  approved_by: string | null;
+  created_at: string;
+}
+
+export const listClaims = (): ClaimRow[] => getDb().prepare('SELECT * FROM ti_claims ORDER BY code, revision DESC').all() as ClaimRow[];
+export const claimById = (id: string): ClaimRow | undefined => getDb().prepare('SELECT * FROM ti_claims WHERE id = ?').get(id) as ClaimRow | undefined;
+
+export function upsertClaim(input: { code: string; text: string; evidence?: string | null; validFrom?: string | null; validUntil?: string | null }, approvedBy: string): ClaimRow {
+  assertTrendIntelligence();
+  const db = getDb();
+  const code = input.code.trim().toUpperCase();
+  if (!code) throw badRequest('A claim needs a code', 'claim_code_required');
+  if (!input.text.trim()) throw badRequest('A claim needs its exact text', 'claim_text_required');
+  if (input.validFrom && input.validUntil && input.validUntil <= input.validFrom) throw badRequest('A claim cannot expire before it starts', 'invalid_window');
+
+  const latest = db.prepare('SELECT * FROM ti_claims WHERE code = ? ORDER BY revision DESC LIMIT 1').get(code) as ClaimRow | undefined;
+  const same =
+    latest &&
+    latest.text === input.text &&
+    (latest.evidence ?? null) === (input.evidence ?? null) &&
+    (latest.valid_from ?? null) === (input.validFrom ?? null) &&
+    (latest.valid_until ?? null) === (input.validUntil ?? null);
+  if (same) return latest!;
+
+  const row: ClaimRow = {
+    id: uuid(),
+    code,
+    revision: (latest?.revision ?? 0) + 1,
+    text: input.text,
+    evidence: input.evidence ?? null,
+    valid_from: input.validFrom ?? null,
+    valid_until: input.validUntil ?? null,
+    approved_by: approvedBy,
+    created_at: now(),
+  };
+  db.prepare('INSERT INTO ti_claims (id, code, revision, text, evidence, valid_from, valid_until, approved_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    row.id,
+    row.code,
+    row.revision,
+    row.text,
+    row.evidence,
+    row.valid_from,
+    row.valid_until,
+    row.approved_by,
+    row.created_at,
+  );
+  return row;
+}

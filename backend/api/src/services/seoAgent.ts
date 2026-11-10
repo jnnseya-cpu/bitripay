@@ -16,6 +16,8 @@ import { createPost, getPost, updatePost, listPosts, type Post } from './blog';
 import { listLinkRules, upsertLinkRule, listBacklinks, siteUrl, pingIndexNow } from './seo';
 import { recordEvent, type Actor } from './events';
 import { slugify } from './markdown';
+import { effectiveBrief, recordBriefUse, type GrowthBrief } from './trend/briefs';
+import { trendIntelligenceOn } from './trend/gate';
 
 export interface AgentRun {
   id: string;
@@ -74,6 +76,21 @@ export function agentStatus() {
     postsPerWeek: s.postsPerWeek,
     topicsQueued: s.topics.length,
     mode: apiKey() ? 'live' : 'fallback',
+    /** What the next scheduled run would write, and why. The same `resolveSteer` call the scheduler makes. */
+    steering: steeringStatus(),
+  };
+}
+
+/** The console's answer to "what will the agent write next, and who decided that". Status only; it changes nothing. */
+function steeringStatus(): { source: 'brief' | 'backlog' | 'idle'; topic: string | null; language: string | null; briefId: string | null; detail: string } {
+  const steer = resolveSteer();
+  if (!steer) return { source: 'idle', topic: null, language: null, briefId: null, detail: 'no approved brief and an empty topic backlog' };
+  return {
+    source: steer.brief ? 'brief' : 'backlog',
+    topic: steer.topic,
+    language: steer.language,
+    briefId: steer.brief?.briefId ?? null,
+    detail: steer.detail,
   };
 }
 
@@ -506,17 +523,113 @@ export async function socialPack(postId: string, actor: Actor): Promise<{ social
   }
 }
 
-/** Scheduler: work through the topic backlog at the configured cadence. */
+/**
+ * The editor note an approved growth brief becomes.
+ *
+ * A brief is a closed object, and this is where it stays closed: the agent is told the audience, the intent, the
+ * objective, the claims an administrator approved and the claims it may not make — nothing free-text travels from
+ * the brief into the prompt beyond those approved strings. The hard rules in `siteContext()` still apply on top, so
+ * a brief can narrow what the agent writes but never licence a claim the site rules forbid.
+ */
+export function briefInstructions(b: GrowthBrief): string {
+  const lines = [
+    `This article is written against an approved growth brief (${b.briefId} v${b.briefVersion}), valid until ${b.expiresAt}.`,
+    `Audience: ${b.audience}`,
+    `Search intent to answer completely: ${b.intent}`,
+    `What a reader should be able to do afterwards: ${b.objective}`,
+    `Market: ${b.market}${b.locale ? ` · locale ${b.locale}` : ''}`,
+  ];
+  if (b.approvedClaims.length) {
+    lines.push('Claims an administrator has approved for this topic — you may state these, and nothing beyond them:');
+    for (const c of b.approvedClaims) lines.push(`- (${c.code}) ${c.text}`);
+  } else {
+    lines.push('No claim has been approved for this topic: describe how the product works without asserting any outcome, figure or comparison.');
+  }
+  if (b.prohibitedClaims.length) {
+    lines.push('Claims you must not make, in any wording:');
+    for (const c of b.prohibitedClaims) lines.push(`- ${c}`);
+  }
+  if (b.degraded) lines.push('This brief was produced without a model, so keep the article strictly descriptive.');
+  return lines.join('\n');
+}
+
+/** What the scheduler decided to write next, and why — the two are recorded together. */
+interface Steer {
+  topic: string;
+  language: string;
+  instructions: string | null;
+  brief: GrowthBrief | null;
+  outcome: 'used' | 'baseline';
+  detail: string;
+}
+
+/**
+ * What the agent writes next.
+ *
+ * Until this existed the answer was `s.agent.topics[0]`: a hand-written queue was the platform's entire judgement
+ * about what its market wanted. An approved, unexpired brief for one of the configured markets now takes
+ * precedence, highest opportunity score first in the order the markets are configured. Everything else is
+ * unchanged — no brief, or the module switched off, and the backlog runs exactly as before. That fallback is the
+ * point: a growth control must be revocable without stopping the platform from publishing.
+ */
+export function resolveSteer(s = getSeoSettings()): Steer | null {
+  const languages = s.agent.languages.length ? s.agent.languages : ['en'];
+  if (trendIntelligenceOn()) {
+    for (const market of s.agent.markets) {
+      const brief = effectiveBrief({ market, channel: 'seo' });
+      if (!brief) continue;
+      // The brief may ask for a locale the platform does not publish in. Its market evidence does not make that
+      // language live, so the configured language wins and the downgrade is recorded rather than hidden.
+      const wanted = (brief.locale || '').split('-')[0].toLowerCase();
+      const language = wanted && languages.includes(wanted) ? wanted : languages[0];
+      const detail =
+        wanted && language !== wanted
+          ? `brief ${brief.briefId} for ${brief.market}; locale ${brief.locale} is not an enabled content language, drafted in ${language}`
+          : `brief ${brief.briefId} for ${brief.market} in ${language}`;
+      return { topic: brief.intent, language, instructions: briefInstructions(brief), brief, outcome: 'used', detail };
+    }
+  }
+  if (!s.agent.topics.length) return null;
+  return {
+    topic: s.agent.topics[0],
+    language: languages[0],
+    instructions: null,
+    brief: null,
+    outcome: 'baseline',
+    detail: trendIntelligenceOn() ? 'no approved brief resolved for any configured market' : 'trend intelligence is switched off',
+  };
+}
+
+/** Scheduler: an approved growth brief if one resolves, otherwise the topic backlog, at the configured cadence. */
 export async function runContentSchedule(): Promise<{ drafted: number }> {
   const s = getSeoSettings();
-  if (!s.agent.enabled || s.agent.postsPerWeek <= 0 || !s.agent.topics.length || config.isTest) return { drafted: 0 };
+  if (!s.agent.enabled || s.agent.postsPerWeek <= 0 || config.isTest) return { drafted: 0 };
   const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const thisWeek = (getDb().prepare("SELECT COUNT(*) c FROM seo_runs WHERE task = 'draft_article' AND created_at >= ?").get(since) as any).c as number;
   if (thisWeek >= s.agent.postsPerWeek) return { drafted: 0 };
-  const topic = s.agent.topics[0];
-  await draftArticle({ topic }, { type: 'system' }, 'scheduler');
-  const { setSetting } = await import('./settings');
-  setSetting('seo', { ...s, agent: { ...s.agent, topics: s.agent.topics.slice(1) } });
+
+  const steer = resolveSteer(s);
+  if (!steer) return { drafted: 0 };
+  const { post } = await draftArticle({ topic: steer.topic, language: steer.language, extraInstructions: steer.instructions }, { type: 'system' }, 'scheduler');
+
+  // Why the agent wrote this, recorded beside the article itself. Only while the module is on: switched off, the
+  // switch is the whole answer and there is nothing to log against every scheduler tick.
+  if (trendIntelligenceOn()) {
+    recordBriefUse({
+      briefId: steer.brief?.briefId ?? null,
+      briefVersion: steer.brief?.briefVersion ?? null,
+      channel: 'seo',
+      outcome: steer.outcome,
+      detail: steer.detail,
+      postId: post.id,
+    });
+  }
+
+  // The backlog is consumed only when the backlog was what drafted: a brief must not silently eat a queued topic.
+  if (!steer.brief) {
+    const { setSetting } = await import('./settings');
+    setSetting('seo', { ...s, agent: { ...s.agent, topics: s.agent.topics.slice(1) } });
+  }
   return { drafted: 1 };
 }
 
