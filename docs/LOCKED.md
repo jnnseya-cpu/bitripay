@@ -93,6 +93,7 @@ checked as well as the lockfile, because a lockfile can be regenerated: a fix th
 | Re-running the daily collection lands nothing twice | `trend_platform.test.ts` |
 | Every support category and event type the collector maps resolves to a real, public feature, a category the support form offers and an event the platform emits | `trend_platform.test.ts` — a mistyped key would otherwise attribute real interest to nothing, silently |
 | Observations are swept after 400 days; frozen snapshots, briefs and claims never are | `trend_platform.test.ts` — the audit trail that answers "why did it write that" must outlive the counts behind it |
+| The daily collector seeks its date window instead of scanning `domain_events`, `support_tickets` or `ti_observations` | `trend_platform.test.ts` — asserts the query plan, because a missing index fails nothing and just gets slower every month |
 | Every agent that writes public copy inherits the same claim boundary, not only the article writer | `trend_steering.test.ts`, `trend_platform.test.ts` (`claimBoundary`) |
 | Changing a claim's text adds a revision; an approval keeps meaning what its approver read | `trend_intelligence.test.ts` |
 

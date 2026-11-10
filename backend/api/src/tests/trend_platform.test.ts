@@ -347,6 +347,31 @@ describe('the loop, with nobody operating it', () => {
     expect(platformTrendStatus().observations, 'what it read is still there').toBe(before);
   });
 
+  /**
+   * The collector runs daily against the platform's live tables, and `domain_events` is the highest-volume table
+   * here — every transaction adds to it. A missing index does not fail anything; it just reads the entire history
+   * every morning and gets slower every month, which is the kind of regression nobody notices until it hurts. So
+   * the plan itself is asserted: these three queries must seek their window, never scan.
+   */
+  it('seeks its date window instead of scanning the platform’s busiest tables', () => {
+    const db = getDb();
+    const plan = (sql: string, ...p: unknown[]) => (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...p) as { detail: string }[]).map((r) => r.detail).join(' | ');
+
+    const events = plan('SELECT substr(occurred_at, 1, 10) day, type, COUNT(*) c FROM domain_events WHERE occurred_at >= ? GROUP BY day, type', 'x');
+    expect(events, `domain_events plan: ${events}`).toMatch(/SEARCH .*USING COVERING INDEX/);
+    expect(events).not.toMatch(/SCAN domain_events(?! USING COVERING)/);
+
+    const tickets = plan('SELECT substr(created_at, 1, 10) day, category, COUNT(*) c FROM support_tickets WHERE created_at >= ? GROUP BY day, category', 'x');
+    expect(tickets, `support_tickets plan: ${tickets}`).toMatch(/SEARCH .*USING COVERING INDEX/);
+
+    const sweep = plan('DELETE FROM ti_observations WHERE window_end < ?', 'x');
+    expect(sweep, `retention plan: ${sweep}`).toMatch(/SEARCH .*USING COVERING INDEX/);
+
+    // And the two the module owns outright.
+    expect(plan('SELECT day, path, SUM(views) v FROM seo_pageviews WHERE day >= ? GROUP BY day, path', 'x')).toMatch(/SEARCH/);
+    expect(plan('SELECT window_end, SUM(value) v FROM ti_observations WHERE term_canonical = ? AND market = ? GROUP BY window_end', 'x', 'ZZ')).toMatch(/SEARCH/);
+  });
+
   it('keeps a bounded window of its own counts, and never sweeps the audit trail', () => {
     seedRisingInterest();
     runPlatformTrendCycle();
