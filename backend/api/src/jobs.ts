@@ -215,6 +215,9 @@ export function startJobs() {
                 `[jobs] trend intelligence: ${cycle.collected?.accepted ?? 0} observation(s) over ${cycle.collected?.days ?? 0} day(s), ` +
                   `${cycle.scored?.scored ?? 0} topic(s) scored, ${cycle.proposed} brief(s) drafted for approval`,
               );
+              // A topic the scorer put in the brief band but that could not be drafted is worth a line: "nothing
+              // was drafted today" with no reason is the silence this module exists to avoid.
+              for (const r of cycle.refusals) console.log(`[jobs] trend intelligence: ${r.topic} not drafted — ${r.reason}`);
             }
           } catch (err) {
             // A growth loop must never stop the platform from publishing: the backlog still runs below.

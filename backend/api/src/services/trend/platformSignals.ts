@@ -30,7 +30,7 @@ import { getModules } from '../modules';
 import { getSeoSettings } from '../settings';
 import { canonicalise, ingestObservations, listTopics, snapshotTopic, upsertSource, upsertTopic, type ObservationInput, type ProfileInputs, type TopicRow } from './detect';
 import { MIN_COMPARABLE_PERIODS } from './scoring';
-import { listBriefs, proposeBrief, upsertClaim } from './briefs';
+import { listBriefs, listClaims, proposeBrief, upsertClaim } from './briefs';
 import { trendIntelligenceOn } from './gate';
 
 /** Signals have no country, so they belong to no country. ZZ is "unknown", and the resolver reads it as "any". */
@@ -396,7 +396,16 @@ export function scorePlatformTopics(): ScoreRunResult {
  * nothing beyond it, with the provenance recorded as the catalogue rather than as a person who typed it.
  */
 export function claimsForFeature(f: Feature): string[] {
-  return f.proof.map((text, i) => upsertClaim({ code: `FEATURE_${f.key.replace(/-/g, '_').toUpperCase()}_${i + 1}`, text, evidence: `Published on /features/${f.slug}` }, 'catalogue').id);
+  return f.proof.map((text, i) => {
+    const code = `FEATURE_${f.key.replace(/-/g, '_').toUpperCase()}_${i + 1}`;
+    // If a revision of this claim already exists with exactly this text, reuse it whatever its validity window.
+    // An administrator who closed that window decided the sentence had stopped being true, and a scheduled pass
+    // must not quietly undo that by registering a fresh, open revision of the same words. The expired claim is
+    // still returned, so `proposeBrief` refuses the brief and says why — which is the point.
+    const existing = listClaims().find((c) => c.code === code && c.text === text);
+    if (existing) return existing.id;
+    return upsertClaim({ code, text, evidence: `Published on /features/${f.slug}` }, 'catalogue').id;
+  });
 }
 
 /** What a brief must never say about a payment platform, whatever the topic. */
@@ -411,6 +420,12 @@ export const PLATFORM_PROHIBITED_CLAIMS = [
 export interface ProposeResult {
   proposed: string[];
   skipped: number;
+  /**
+   * Why each topic was not drafted. A veto is on the snapshot, but a lapsed claim or a band that moved is not —
+   * and "nothing was drafted today" with no reason is exactly the confident silence this module is supposed to
+   * refuse. One line per refusal, kept short enough to log.
+   */
+  refusals: { topic: string; reason: string }[];
 }
 
 /**
@@ -421,7 +436,7 @@ export interface ProposeResult {
  * here approves anything, and a draft steers nothing.
  */
 export function autoProposeBriefs(): ProposeResult {
-  const out: ProposeResult = { proposed: [], skipped: 0 };
+  const out: ProposeResult = { proposed: [], skipped: 0, refusals: [] };
   const live = listBriefs({}, 500);
   const openFor = new Set(live.filter((b) => (b.status === 'approved' && !b.expired) || b.status === 'draft').map((b) => b.topic_id));
 
@@ -435,12 +450,14 @@ export function autoProposeBriefs(): ProposeResult {
 
   for (const row of rows) {
     if (openFor.has(row.topic_id)) {
+      // Not a refusal: one brief per topic is the rule, and the live one is still doing its job.
       out.skipped++;
       continue;
     }
     const f = PUBLIC_FEATURES.find((x) => featureTopicSlug(x) === row.slug);
     if (!f) {
       out.skipped++;
+      out.refusals.push({ topic: row.slug, reason: 'no public feature matches this topic any more' });
       continue;
     }
     try {
@@ -461,10 +478,12 @@ export function autoProposeBriefs(): ProposeResult {
       );
       out.proposed.push(brief.id);
       openFor.add(row.topic_id);
-    } catch {
-      // A veto, a band that moved under us, or a claim that lapsed. The snapshot keeps the reason; this is a
-      // scheduled pass, not a request, so one topic refusing must not stop the rest.
+    } catch (err) {
+      // A veto, a band that moved under us, or a claim that lapsed. This is a scheduled pass rather than a
+      // request, so one topic refusing must not stop the rest — but the reason is kept, because a module that
+      // insists on saying why it scored something must also say why it declined to act on it.
       out.skipped++;
+      out.refusals.push({ topic: f.key, reason: (err as Error).message });
     }
   }
   return out;
@@ -481,6 +500,8 @@ export interface PlatformRunResult {
   scored: ScoreRunResult | null;
   proposed: number;
   pruned: number;
+  /** Why a topic in the brief band was not drafted. Empty is the ordinary answer. */
+  refusals: { topic: string; reason: string }[];
 }
 
 /**
@@ -506,13 +527,13 @@ export function pruneObservations(retainDays = OBSERVATION_RETENTION_DAYS): numb
  * Called once a day by the scheduler. Off means off: it does nothing at all rather than accumulating quietly.
  */
 export function runPlatformTrendCycle(): PlatformRunResult {
-  if (!trendIntelligenceOn()) return { ran: false, collected: null, topics: 0, scored: null, proposed: 0, pruned: 0 };
+  if (!trendIntelligenceOn()) return { ran: false, collected: null, topics: 0, scored: null, proposed: 0, pruned: 0, refusals: [] };
   const collected = collectPlatformSignals();
   const { topics } = syncPlatformTopics();
   const scored = scorePlatformTopics();
   const proposed = autoProposeBriefs();
   const pruned = pruneObservations();
-  return { ran: true, collected, topics, scored, proposed: proposed.proposed.length, pruned };
+  return { ran: true, collected, topics, scored, proposed: proposed.proposed.length, pruned, refusals: proposed.refusals };
 }
 
 /** What the console shows about the automatic side: whether it has run, and what it is holding. */

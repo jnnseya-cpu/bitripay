@@ -399,6 +399,37 @@ describe('the loop, with nobody operating it', () => {
     expect(db.prepare('SELECT COUNT(*) c FROM ti_claims').pluck().get() as number).toBeGreaterThan(0);
   });
 
+  it('says why a topic in the brief band was not drafted, rather than simply drafting nothing', () => {
+    seedRisingInterest();
+    collectPlatformSignals();
+    syncPlatformTopics();
+    scorePlatformTopics();
+
+    // A claim whose window closed while the topic was rising: the brief is refused, and the reason has to survive.
+    const qr = FEATURES.find((f) => f.key === QR)!;
+    const ids = claimsForFeature(qr);
+    getDb()
+      .prepare('UPDATE ti_claims SET valid_until = ? WHERE id = ?')
+      .run(new Date(Date.now() - 3_600_000).toISOString(), ids[0]);
+
+    const res = autoProposeBriefs();
+    expect(res.proposed, 'the lapsed claim must stop the draft').toHaveLength(0);
+    expect(res.refusals.length).toBeGreaterThan(0);
+    const refusal = res.refusals.find((r) => r.topic === QR)!;
+    expect(refusal, 'the refusal must name the topic it refused').toBeTruthy();
+    expect(refusal.reason).toMatch(/expired/i);
+
+    // A topic already carrying a live brief is skipped, which is the rule working and not a refusal.
+    getDb().prepare('UPDATE ti_claims SET valid_until = NULL').run();
+    const ok = autoProposeBriefs();
+    expect(ok.proposed.length).toBeGreaterThan(0);
+    expect(ok.refusals).toHaveLength(0);
+    const again = autoProposeBriefs();
+    expect(again.proposed).toHaveLength(0);
+    expect(again.skipped).toBeGreaterThan(0);
+    expect(again.refusals, 'one brief per topic is the rule, not a failure to explain').toHaveLength(0);
+  });
+
   it('drafts one brief per topic, not one per run', () => {
     seedRisingInterest();
     runPlatformTrendCycle();
