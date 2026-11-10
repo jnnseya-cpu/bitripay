@@ -13,6 +13,8 @@ import { config } from './config';
 import { reconcileReserves, expirePromoCredits } from './services/emoney';
 import { publishScheduled } from './services/blog';
 import { runContentSchedule } from './services/seoAgent';
+import { expireLapsedBriefs } from './services/trend/briefs';
+import { getModules } from './services/modules';
 import { pingIndexNow, verifyBacklinks } from './services/seo';
 import { runScheduledAgents, expireApprovals } from './services/assist/runtime';
 import { renewSubscriptions } from './services/assist/addon';
@@ -199,6 +201,12 @@ export function startJobs() {
       }
       if (new Date().getUTCHours() === 6 && lastContentDay !== dayKey) {
         lastContentDay = dayKey;
+        // Housekeeping only: a lapsed brief already steers nothing, because expiry is checked on the read. This
+        // marks it so the console shows the state, and runs before drafting so the two agree.
+        if (getModules().trendIntelligence) {
+          const marked = expireLapsedBriefs();
+          if (marked) console.log(`[jobs] trend intelligence: ${marked} lapsed brief(s) marked expired`);
+        }
         const c = await runContentSchedule();
         if (c.drafted) console.log('[jobs] content agent drafted a new article');
       }
