@@ -224,6 +224,19 @@ veto on a snapshot refuses a brief outright.
 | No credential is ever requested | an unreachable source is recorded unavailable with its reason (TI-22) |
 | A brief cannot add a publishing language | the configured languages win; the downgrade is recorded in the brief-use detail |
 
+### What the daily cycle costs
+
+Measured, because the obvious worry is real: `better-sqlite3` is synchronous, so a slow cycle blocks the API, and
+the collector deliberately re-reads its whole window every day rather than trusting a cursor.
+
+Against a year of synthetic data — 49,200 page-view rows, 200,000 domain events, 8,000 tickets, 41 features — the
+whole cycle (collect, cluster, score 41 topics, draft, prune) takes **282 ms cold and 126 ms thereafter**, the
+later runs being almost entirely duplicate detection. Re-reading the window is therefore cheap enough to be worth
+the idempotence it buys, and no cursor or incremental watermark is justified.
+
+That figure is from an in-memory database in a container, not production hardware, and it is a scale check rather
+than a benchmark: it says the design is not accidentally quadratic, not that it will be 126 ms on the VPS.
+
 ---
 
 ## 7. What is not locked, because it is not verified
