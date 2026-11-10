@@ -396,7 +396,7 @@ export function snapshotTopic(topicId: string, profile: ProfileInputs, at = now(
 export const listOpportunities = (limit = 50): Record<string, unknown>[] =>
   getDb()
     .prepare(
-      `SELECT o.*, t.label, t.slug, t.status AS topic_status FROM ti_opportunities o JOIN ti_topics t ON t.id = o.topic_id
+      `SELECT o.*, t.label, t.slug, t.market, t.locale, t.status AS topic_status FROM ti_opportunities o JOIN ti_topics t ON t.id = o.topic_id
        WHERE o.superseded_by IS NULL ORDER BY o.created_at DESC LIMIT ?`,
     )
     .all(Math.min(200, Math.max(1, limit))) as Record<string, unknown>[];

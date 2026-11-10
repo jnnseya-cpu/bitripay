@@ -222,6 +222,39 @@ describe('the trend console API', () => {
     expect(allowed.body.claim.revision).toBe(1);
   });
 
+  /**
+   * The console renders columns from this payload, and a column reading from a field the query never selected shows
+   * an em dash rather than failing — silent, and only visible to somebody who knows what the number should be. So
+   * every field the page reads is asserted present here.
+   */
+  it('returns every field the console page renders', async () => {
+    const ids = await eligible();
+    const draft = await request(app).post('/api/admin/trend/briefs').set(admin.auth).send(proposeBody(ids));
+    expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+
+    const res = await request(app).get('/api/admin/trend/overview').set(admin.auth);
+    expect(res.status).toBe(200);
+    expect(res.body.scoringVersion).toMatch(/^ti-/);
+    expect(res.body.ttlHours).toMatchObject({ persistent: expect.any(Number), breaking: expect.any(Number) });
+    expect(res.body.channels).toContain('seo');
+
+    for (const k of ['label', 'market', 'opportunity_score', 'confidence', 'demand', 'families', 'band', 'window_end', 'topic_id', 'id']) {
+      expect(res.body.opportunities[0], `opportunity.${k}`).toHaveProperty(k);
+    }
+    expect(res.body.opportunities[0].market, 'the market the console shows comes from the topic, not the snapshot').toBe('CD');
+    for (const k of ['label', 'market', 'terms', 'updated_at', 'id']) expect(res.body.topics[0], `topic.${k}`).toHaveProperty(k);
+    for (const k of ['name', 'family', 'access_path', 'quality', 'stale_after_hours', 'enabled', 'context_only', 'unavailable_reason']) {
+      expect(res.body.sources[0], `source.${k}`).toHaveProperty(k);
+    }
+    for (const k of ['intent', 'market', 'locale', 'version', 'status', 'opportunity_score', 'confidence', 'expires_at', 'allowed_channels', 'payloadHash', 'expired']) {
+      expect(res.body.briefs[0], `brief.${k}`).toHaveProperty(k);
+    }
+    // The JSON columns the page parses must really be JSON text, not already-parsed arrays.
+    expect(() => JSON.parse(res.body.opportunities[0].families)).not.toThrow();
+    expect(() => JSON.parse(res.body.topics[0].terms)).not.toThrow();
+    expect(() => JSON.parse(res.body.briefs[0].allowed_channels)).not.toThrow();
+  });
+
   it('refuses a brief citing a claim the platform does not hold', async () => {
     const ids = await eligible();
     const res = await request(app)
